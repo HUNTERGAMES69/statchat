@@ -70,31 +70,36 @@
   supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY'){
       showView('setPasswordView');
+    } else if (event === 'INITIAL_SESSION'){
+      // Fires once automatically right after the client loads and finishes
+      // parsing whatever was in the URL (an invite/recovery token, or
+      // nothing at all). This is the ONLY place we check "is anyone
+      // already logged in" -- deliberately never calling getSession()
+      // separately, since doing so around this same moment is a known
+      // supabase-js deadlock trigger that can hang forever with no error.
+      if (session){
+        showLoggedIn(session);
+      } else if (document.getElementById('setPasswordView').classList.contains('hidden')){
+        showView('loginView');
+      }
     } else if (event === 'SIGNED_IN' && session){
-      // Could be a normal login OR the moment right after accepting an
-      // invite (Supabase signs the user in automatically once the invite
-      // link is verified). Either way, if there's no password-set step
-      // pending, just show the logged-in state.
-      if (document.getElementById('setPasswordView').classList.contains('hidden') === false) return;
+      if (!document.getElementById('setPasswordView').classList.contains('hidden')) return;
       showLoggedIn(session);
     } else if (event === 'SIGNED_OUT'){
       showView('loginView');
     }
   });
 
-  async function init(){
-    const { data } = await supabase.auth.getSession();
-    if (data.session){
-      showLoggedIn(data.session);
-      return;
-    }
-    // Give onAuthStateChange a brief moment to fire for invite/recovery
-    // links before falling back to the plain login form.
+  function init(){
+    // Ultimate safety net only -- if onAuthStateChange never fires at all
+    // for some reason, fall back to the login form. Deliberately makes NO
+    // Supabase calls here, to avoid re-triggering the same deadlock class
+    // this whole rewrite exists to avoid.
     setTimeout(() => {
       if (!document.getElementById('loading').classList.contains('hidden')){
         showView('loginView');
       }
-    }, 600);
+    }, 3000);
   }
 
   function showLoggedIn(session){
@@ -113,8 +118,10 @@
       showMsg('setPasswordMsg', error.message, 'error');
     } else {
       showMsg('setPasswordMsg', 'Password set. You\'re all set.', 'success');
-      const { data: sessionData } = await supabase.auth.getSession();
-      setTimeout(() => showLoggedIn(sessionData.session), 800);
+      // Build the logged-in view straight from what updateUser already
+      // returned -- deliberately not making a second, separate Supabase
+      // call here for the same deadlock-avoidance reason as above.
+      setTimeout(() => showLoggedIn({ user: data.user }), 800);
     }
   });
 
