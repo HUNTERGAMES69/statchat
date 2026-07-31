@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StatChat — Sign in</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:24px; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .card { background:#fff; border-radius:12px; padding:32px; max-width:380px; width:100%; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:22px; margin:0 0 6px; }
+  p.sub { color:#888; margin:0 0 20px; font-size:14px; }
+  label { display:block; font-size:14px; margin-bottom:6px; color:#444; }
+  input { width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:15px; margin-bottom:14px; box-sizing:border-box; }
+  button { width:100%; padding:11px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:15px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:0.6; cursor:default; }
+  .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
+  .msg.error { background:#fdecea; color:#a32d2d; }
+  .msg.success { background:#e8f5e9; color:#1a7a4c; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div id="loading">
+    <h1>Loading…</h1>
+  </div>
+
+  <div id="setPasswordView" class="hidden">
+    <h1>Set your password</h1>
+    <p class="sub">You're accepting an invite. Choose a password to finish setting up your account.</p>
+    <div id="setPasswordMsg"></div>
+    <label>New password<input type="password" id="newPassword" minlength="6"></label>
+    <button id="setPasswordBtn">Set password</button>
+  </div>
+
+  <div id="loginView" class="hidden">
+    <h1>StatChat</h1>
+    <p class="sub">Sign in to enter or review game stats.</p>
+    <div id="loginMsg"></div>
+    <label>Email<input type="email" id="loginEmail"></label>
+    <label>Password<input type="password" id="loginPassword"></label>
+    <button id="loginBtn">Sign in</button>
+  </div>
+
+  <div id="loggedInView" class="hidden">
+    <h1>You're signed in</h1>
+    <p class="sub" id="loggedInAs"></p>
+    <p style="font-size:13px; color:#999;">The real dashboard isn't built yet — this confirms login itself is working end to end.</p>
+    <button id="signOutBtn" style="background:#fff; color:#a32d2d; border:1px solid #a32d2d;">Sign out</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+  // --- Your real project credentials ---
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  const views = ['loading', 'setPasswordView', 'loginView', 'loggedInView'];
+  function showView(name){
+    views.forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+  }
+  function showMsg(elId, text, type){
+    document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+  }
+
+  // Supabase's JS client automatically parses invite/recovery tokens out of
+  // the URL on load and fires this event -- no manual token handling needed.
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY'){
+      showView('setPasswordView');
+    } else if (event === 'SIGNED_IN' && session){
+      // Could be a normal login OR the moment right after accepting an
+      // invite (Supabase signs the user in automatically once the invite
+      // link is verified). Either way, if there's no password-set step
+      // pending, just show the logged-in state.
+      if (document.getElementById('setPasswordView').classList.contains('hidden') === false) return;
+      showLoggedIn(session);
+    } else if (event === 'SIGNED_OUT'){
+      showView('loginView');
+    }
+  });
+
+  async function init(){
+    const { data } = await supabase.auth.getSession();
+    if (data.session){
+      showLoggedIn(data.session);
+      return;
+    }
+    // Give onAuthStateChange a brief moment to fire for invite/recovery
+    // links before falling back to the plain login form.
+    setTimeout(() => {
+      if (!document.getElementById('loading').classList.contains('hidden')){
+        showView('loginView');
+      }
+    }, 600);
+  }
+
+  function showLoggedIn(session){
+    document.getElementById('loggedInAs').textContent = 'Signed in as ' + session.user.email;
+    showView('loggedInView');
+  }
+
+  document.getElementById('setPasswordBtn').addEventListener('click', async () => {
+    const pw = document.getElementById('newPassword').value;
+    if (pw.length < 6){
+      showMsg('setPasswordMsg', 'Password needs to be at least 6 characters.', 'error');
+      return;
+    }
+    const { data, error } = await supabase.auth.updateUser({ password: pw });
+    if (error){
+      showMsg('setPasswordMsg', error.message, 'error');
+    } else {
+      showMsg('setPasswordMsg', 'Password set. You\'re all set.', 'success');
+      const { data: sessionData } = await supabase.auth.getSession();
+      setTimeout(() => showLoggedIn(sessionData.session), 800);
+    }
+  });
+
+  document.getElementById('loginBtn').addEventListener('click', async () => {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error){
+      showMsg('loginMsg', error.message, 'error');
+    } else {
+      showLoggedIn(data.session);
+    }
+  });
+
+  document.getElementById('signOutBtn').addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    showView('loginView');
+  });
+
+  init();
+</script>
+</body>
+</html>
