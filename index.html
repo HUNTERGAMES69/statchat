@@ -55,7 +55,7 @@
   // --- Your real project credentials ---
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
   const views = ['loading', 'setPasswordView', 'loginView', 'loggedInView'];
   function showView(name){
@@ -67,7 +67,7 @@
 
   // Supabase's JS client automatically parses invite/recovery tokens out of
   // the URL on load and fires this event -- no manual token handling needed.
-  supabase.auth.onAuthStateChange((event, session) => {
+  supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY'){
       showView('setPasswordView');
     } else if (event === 'INITIAL_SESSION'){
@@ -113,7 +113,7 @@
       showMsg('setPasswordMsg', 'Password needs to be at least 6 characters.', 'error');
       return;
     }
-    const { data, error } = await supabase.auth.updateUser({ password: pw });
+    const { data, error } = await supabaseClient.auth.updateUser({ password: pw });
     if (error){
       showMsg('setPasswordMsg', error.message, 'error');
     } else {
@@ -128,7 +128,7 @@
   document.getElementById('loginBtn').addEventListener('click', async () => {
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error){
       showMsg('loginMsg', error.message, 'error');
     } else {
@@ -137,7 +137,7 @@
   });
 
   document.getElementById('signOutBtn').addEventListener('click', async () => {
-    await supabase.auth.signOut();
+    await supabaseClient.auth.signOut();
     showView('loginView');
   });
 
