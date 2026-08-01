@@ -227,13 +227,16 @@
   async function init(){
     document.getElementById('seasonYear').value = new Date().getFullYear();
     const { data: teams, error: teamError } = await supabaseClient
-      .from('teams').select('id, name').eq('is_our_team', true).limit(1);
+      .from('teams').select('id, name, current_season_year').eq('is_our_team', true).limit(1);
     if (teamError || !teams || teams.length === 0){
       showView('mainView');
       showMsg('setupMsg', 'No team found yet — set up your Team Roster first.', 'error');
       return;
     }
     ourTeamId = teams[0].id;
+    if (teams[0].current_season_year){
+      document.getElementById('seasonYear').value = teams[0].current_season_year;
+    }
 
     const { data: players, error: playersError } = await supabaseClient
       .from('players').select('name, primary_position, default_jersey_number, id').eq('team_id', ourTeamId);
