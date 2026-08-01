@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StatChat — Team Roster</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:24px; }
+  .wrap { max-width:720px; margin:0 auto; }
+  .card { background:#fff; border-radius:12px; padding:28px; margin-bottom:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:22px; margin:0 0 6px; }
+  h2 { font-size:16px; margin:0 0 14px; color:#444; }
+  p.sub { color:#888; margin:0 0 20px; font-size:14px; }
+  label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
+  input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; }
+  button { padding:9px 16px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+  button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
+  button.danger { background:#fff; color:#a32d2d; border:1px solid #a32d2d; }
+  button:disabled { opacity:0.5; cursor:default; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-size:12px; color:#888; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid #eee; }
+  td { padding:8px; border-bottom:1px solid #f2f2f2; vertical-align:middle; }
+  .unit-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
+  .unit-offense { background:#e3f2fd; color:#1565c0; }
+  .unit-defense { background:#fdecea; color:#a32d2d; }
+  .unit-special { background:#fff8e1; color:#a37a00; }
+  .unit-none { background:#eee; color:#999; }
+  .add-row { display:flex; gap:8px; align-items:flex-end; margin-top:16px; flex-wrap:wrap; }
+  .add-row > div { flex:1; min-width:100px; }
+  .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
+  .msg.error { background:#fdecea; color:#a32d2d; }
+  .msg.success { background:#e8f5e9; color:#1a7a4c; }
+  .hidden { display:none; }
+  .row-actions { display:flex; gap:6px; }
+  .row-actions button { padding:5px 10px; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="loading" class="card">
+    <h1>Loading…</h1>
+  </div>
+
+  <div id="teamSetupView" class="hidden card">
+    <h1>Set up your team</h1>
+    <p class="sub">One-time setup — this is your team's identity for the whole season.</p>
+    <div id="teamSetupMsg"></div>
+    <label>Team name<input type="text" id="teamNameInput" placeholder="Neville" style="width:100%;"></label>
+    <button id="createTeamBtn" style="margin-top:10px;">Create team</button>
+  </div>
+
+  <div id="rosterView" class="hidden">
+    <div class="card">
+      <h1 id="rosterTitle">Team Roster</h1>
+      <p class="sub">This roster is used every week — no need to re-upload it per game.</p>
+      <div id="rosterMsg"></div>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Name</th><th>Position</th><th>Unit</th><th></th></tr>
+        </thead>
+        <tbody id="rosterBody"></tbody>
+      </table>
+      <div class="add-row">
+        <div><label>#</label><input type="text" id="newNumber" style="width:100%;"></div>
+        <div style="flex:2;"><label>Name</label><input type="text" id="newName" style="width:100%;"></div>
+        <div><label>Position</label>
+          <select id="newPosition" style="width:100%;">
+            <option value="">—</option>
+            <optgroup label="Offense">
+              <option value="QB">QB</option><option value="RB">RB</option><option value="FB">FB</option>
+              <option value="WR">WR</option><option value="TE">TE</option><option value="OL">OL</option>
+              <option value="C">C</option>
+            </optgroup>
+            <optgroup label="Defense">
+              <option value="DB">DB</option><option value="CB">CB</option><option value="S">S</option>
+              <option value="LB">LB</option><option value="DE">DE</option><option value="DT">DT</option>
+              <option value="NT">NT</option>
+            </optgroup>
+            <optgroup label="Special Teams">
+              <option value="K">K</option><option value="P">P</option><option value="LS">LS</option>
+            </optgroup>
+          </select>
+        </div>
+        <div><button id="addPlayerBtn">Add player</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <button class="secondary" id="backBtn">← Back to dashboard</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  // Same position vocabulary as the live entry app, so a roster built
+  // here resolves identically once games start using it.
+  const OFFENSE_POS = ['QB','RB','FB','HB','WR','TE','OL','OT','OG','C'];
+  const DEFENSE_POS = ['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE'];
+  const SPECIAL_POS = ['K','P','LS','H','KR','PR'];
+  function posToUnit(pos){
+    if (!pos) return null;
+    const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
+    if (SPECIAL_POS.includes(first)) return 'special';
+    if (OFFENSE_POS.includes(first)) return 'offense';
+    if (DEFENSE_POS.includes(first)) return 'defense';
+    return null;
+  }
+  function unitBadge(unit){
+    const label = unit === 'offense' ? 'Offense' : unit === 'defense' ? 'Defense' : unit === 'special' ? 'Special' : '—';
+    const cls = unit ? 'unit-' + unit : 'unit-none';
+    return '<span class="unit-badge ' + cls + '">' + label + '</span>';
+  }
+
+  let ourTeamId = null;
+
+  function showView(name){
+    ['loading', 'teamSetupView', 'rosterView'].forEach(v => {
+      document.getElementById(v).classList.toggle('hidden', v !== name);
+    });
+  }
+  function showMsg(elId, text, type){
+    document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+  }
+  function clearMsg(elId){
+    document.getElementById(elId).innerHTML = '';
+  }
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION'){
+      if (session){
+        loadTeam();
+      } else {
+        window.location.href = 'login.html';
+      }
+    } else if (event === 'SIGNED_OUT'){
+      window.location.href = 'login.html';
+    }
+  });
+
+  async function loadTeam(){
+    const { data, error } = await supabaseClient
+      .from('teams')
+      .select('id, name')
+      .eq('is_our_team', true)
+      .limit(1);
+    if (error){
+      showView('teamSetupView');
+      showMsg('teamSetupMsg', 'Could not check for an existing team: ' + error.message, 'error');
+      return;
+    }
+    if (data && data.length > 0){
+      ourTeamId = data[0].id;
+      document.getElementById('rosterTitle').textContent = data[0].name + ' Roster';
+      showView('rosterView');
+      loadRoster();
+    } else {
+      showView('teamSetupView');
+    }
+  }
+
+  document.getElementById('createTeamBtn').addEventListener('click', async () => {
+    const name = document.getElementById('teamNameInput').value.trim();
+    if (!name){
+      showMsg('teamSetupMsg', 'Enter a team name first.', 'error');
+      return;
+    }
+    const { data, error } = await supabaseClient
+      .from('teams')
+      .insert({ name, is_our_team: true })
+      .select('id, name')
+      .single();
+    if (error){
+      showMsg('teamSetupMsg', error.message, 'error');
+      return;
+    }
+    ourTeamId = data.id;
+    document.getElementById('rosterTitle').textContent = data.name + ' Roster';
+    showView('rosterView');
+    loadRoster();
+  });
+
+  async function loadRoster(){
+    clearMsg('rosterMsg');
+    const { data, error } = await supabaseClient
+      .from('players')
+      .select('id, name, primary_position, default_jersey_number')
+      .eq('team_id', ourTeamId)
+      .order('default_jersey_number', { ascending: true });
+    if (error){
+      showMsg('rosterMsg', 'Could not load roster: ' + error.message, 'error');
+      return;
+    }
+    renderRoster(data || []);
+  }
+
+  function renderRoster(players){
+    const body = document.getElementById('rosterBody');
+    if (players.length === 0){
+      body.innerHTML = '<tr><td colspan="5" style="color:#999;">No players yet — add your first one below.</td></tr>';
+      return;
+    }
+    body.innerHTML = players.map(p => {
+      const unit = posToUnit(p.primary_position);
+      return '<tr data-id="' + p.id + '">' +
+        '<td>' + (p.default_jersey_number || '') + '</td>' +
+        '<td>' + p.name + '</td>' +
+        '<td>' + (p.primary_position || '') + '</td>' +
+        '<td>' + unitBadge(unit) + '</td>' +
+        '<td class="row-actions">' +
+          '<button class="secondary editBtn" data-id="' + p.id + '">Edit</button>' +
+          '<button class="danger removeBtn" data-id="' + p.id + '">Remove</button>' +
+        '</td></tr>';
+    }).join('');
+    body.querySelectorAll('.editBtn').forEach(b => b.addEventListener('click', () => startEdit(b.dataset.id, players)));
+    body.querySelectorAll('.removeBtn').forEach(b => b.addEventListener('click', () => removePlayer(b.dataset.id)));
+  }
+
+  function startEdit(id, players){
+    const p = players.find(pl => pl.id === id);
+    if (!p) return;
+    const row = document.querySelector('tr[data-id="' + id + '"]');
+    row.innerHTML =
+      '<td><input type="text" class="editNumber" value="' + (p.default_jersey_number || '') + '" style="width:40px;"></td>' +
+      '<td><input type="text" class="editName" value="' + p.name + '" style="width:100%;"></td>' +
+      '<td><input type="text" class="editPosition" value="' + (p.primary_position || '') + '" style="width:60px;"></td>' +
+      '<td></td>' +
+      '<td class="row-actions"><button class="saveEditBtn">Save</button><button class="secondary" onclick="location.reload()">Cancel</button></td>';
+    row.querySelector('.saveEditBtn').addEventListener('click', async () => {
+      const newNumber = row.querySelector('.editNumber').value.trim();
+      const newName = row.querySelector('.editName').value.trim();
+      const newPosition = row.querySelector('.editPosition').value.trim().toUpperCase();
+      const { error } = await supabaseClient
+        .from('players')
+        .update({ name: newName, primary_position: newPosition, default_jersey_number: newNumber })
+        .eq('id', id);
+      if (error){
+        showMsg('rosterMsg', error.message, 'error');
+        return;
+      }
+      loadRoster();
+    });
+  }
+
+  async function removePlayer(id){
+    if (!confirm('Remove this player from the roster? This does not affect any past game data.')) return;
+    const { error } = await supabaseClient.from('players').delete().eq('id', id);
+    if (error){
+      showMsg('rosterMsg', error.message, 'error');
+      return;
+    }
+    loadRoster();
+  }
+
+  document.getElementById('addPlayerBtn').addEventListener('click', async () => {
+    const number = document.getElementById('newNumber').value.trim();
+    const name = document.getElementById('newName').value.trim();
+    const position = document.getElementById('newPosition').value;
+    if (!name){
+      showMsg('rosterMsg', 'Enter a name before adding a player.', 'error');
+      return;
+    }
+    const { error } = await supabaseClient
+      .from('players')
+      .insert({ team_id: ourTeamId, name, primary_position: position || null, default_jersey_number: number || null });
+    if (error){
+      showMsg('rosterMsg', error.message, 'error');
+      return;
+    }
+    document.getElementById('newNumber').value = '';
+    document.getElementById('newName').value = '';
+    document.getElementById('newPosition').value = '';
+    loadRoster();
+  });
+
+  document.getElementById('backBtn').addEventListener('click', () => {
+    window.location.href = 'login.html';
+  });
+</script>
+</body>
+</html>
