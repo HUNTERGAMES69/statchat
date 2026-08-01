@@ -70,6 +70,7 @@
       <h2>Opponent roster</h2>
       <p class="sub" style="margin-bottom:10px;">Fresh upload for this specific game, same as always.</p>
       <button id="uploadOpponentBtn" class="secondary">Upload opponent roster (.xlsx)</button>
+      <button id="skipOpponentBtn" class="secondary" style="margin-left:8px;">Skip roster (manual entry only)</button>
       <input type="file" id="opponentFile" accept=".xlsx,.xls" style="display:none;">
       <div id="opponentRosterStatus"></div>
       <div id="opponentAssignments"></div>
@@ -246,6 +247,7 @@
 
   let ourTeamId = null;
   let ourResolved = {}, ourConflictsList = [];
+  let oppRosterSkipped = false;
   let oppResolved = {}, oppConflictsList = [];
 
   function showView(name){
@@ -308,6 +310,22 @@
     document.getElementById('opponentFile').click();
   });
 
+  document.getElementById('skipOpponentBtn').addEventListener('click', () => {
+    const ok = confirm(
+      'Skip uploading a roster for the opponent?\n\n' +
+      'Entry for their team will be 100% manual for this whole game — you\'ll enter jersey numbers only, with no player names shown, and no offense/defense/special-teams sorting.\n\n' +
+      'You can still upload a roster afterward if you change your mind. Continue without one for now?'
+    );
+    if (!ok) return;
+    oppRosterSkipped = true;
+    oppResolved = {};
+    oppConflictsList = [];
+    document.getElementById('opponentAssignments').innerHTML = '';
+    document.getElementById('opponentConflicts').innerHTML = '';
+    document.getElementById('opponentRosterStatus').innerHTML =
+      '<div class="roster-summary" style="color:#a37a00;">No roster — entry for the opponent will be manual (numbers only) for this game.</div>';
+  });
+
   document.getElementById('opponentFile').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -338,6 +356,7 @@
       }
       const { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
       oppResolved = resolved;
+      oppRosterSkipped = false;
       oppConflictsList = conflicts;
       document.getElementById('opponentRosterStatus').innerHTML =
         '<div class="roster-summary">' + entries.length + ' players loaded' +
@@ -454,8 +473,8 @@
       showMsg('setupMsg', 'Game designator and opponent name are both required.', 'error');
       return;
     }
-    if (Object.keys(oppResolved).length === 0){
-      showMsg('setupMsg', 'Upload the opponent roster before creating the game.', 'error');
+    if (Object.keys(oppResolved).length === 0 && !oppRosterSkipped){
+      showMsg('setupMsg', 'Upload the opponent roster, or click "Skip roster" to continue with manual entry.', 'error');
       return;
     }
 
