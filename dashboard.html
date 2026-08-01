@@ -239,19 +239,85 @@
       } else {
         rightHtml = '<div class="status-notstarted">Not started</div>';
       }
-      return '<div class="game-row" data-id="' + g.id + '">' +
+      return '<div class="game-row" data-id="' + g.id + '" data-designator="' + g.designator + '" data-status="' + g.status + '">' +
         '<div class="game-left">' +
         '<span class="game-num">' + g.designator + '</span>' +
         '<div><div class="game-matchup">' + matchup + '</div><div class="game-meta">' + homeAway + ' · ' + dateStr + '</div></div>' +
         '</div>' +
         '<div class="game-right">' + rightHtml + '</div>' +
+        '<div style="position:relative;">' +
+          '<button class="secondary rowMenuBtn" data-id="' + g.id + '" style="padding:4px 10px; font-size:16px; line-height:1;">⋮</button>' +
+          '<div class="rowMenu hidden" data-id="' + g.id + '" style="position:absolute; right:0; top:100%; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:10; min-width:140px;">' +
+            '<button class="deleteGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a32d2d; font-weight:600; font-size:13px;">Delete game</button>' +
+          '</div>' +
+        '</div>' +
         '</div>';
     }).join('');
+
     body.querySelectorAll('.game-row').forEach(row => {
-      row.addEventListener('click', () => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.rowMenuBtn') || e.target.closest('.rowMenu')) return;
         window.location.href = 'game.html?id=' + row.dataset.id;
       });
     });
+    body.querySelectorAll('.rowMenuBtn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const menu = body.querySelector('.rowMenu[data-id="' + btn.dataset.id + '"]');
+        const isOpen = !menu.classList.contains('hidden');
+        body.querySelectorAll('.rowMenu').forEach(m => m.classList.add('hidden'));
+        if (!isOpen) menu.classList.remove('hidden');
+      });
+    });
+    body.querySelectorAll('.deleteGameBtn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        body.querySelectorAll('.rowMenu').forEach(m => m.classList.add('hidden'));
+        deleteGame(btn.dataset.id);
+      });
+    });
+    document.addEventListener('click', () => {
+      body.querySelectorAll('.rowMenu').forEach(m => m.classList.add('hidden'));
+    });
+  }
+
+  async function deleteGame(gameId){
+    const row = document.querySelector('.game-row[data-id="' + gameId + '"]');
+    const designator = row.dataset.designator;
+    const status = row.dataset.status;
+
+    const { data: existingPlays } = await supabaseClient.from('plays').select('id').eq('game_id', gameId);
+    const playCount = existingPlays ? existingPlays.length : 0;
+
+    const ok1 = confirm(
+      'Delete game ' + designator + '?\n\n' +
+      'This permanently deletes ' + playCount + ' play(s) and the roster snapshot for this game. This cannot be undone.\n\nContinue?'
+    );
+    if (!ok1) return;
+
+    if (status === 'final'){
+      const ok2 = confirm(
+        'This game is marked FINAL — it represents a completed, finished game, not a work in progress.\n\n' +
+        'Deleting it is permanent. There is no way to recover it afterward.\n\nAre you absolutely sure?'
+      );
+      if (!ok2) return;
+
+      // Deleting a finalized game requires briefly un-finalizing it first --
+      // only an admin account can do this, same rule as anywhere else in
+      // the app that touches a finalized game.
+      const { error: unlockError } = await supabaseClient.from('games').update({ status: 'in_progress' }).eq('id', gameId);
+      if (unlockError){
+        showMsg('dashboardMsg', 'Could not delete: ' + unlockError.message, 'error');
+        return;
+      }
+    }
+
+    const { error: deleteError } = await supabaseClient.from('games').delete().eq('id', gameId);
+    if (deleteError){
+      showMsg('dashboardMsg', 'Could not delete: ' + deleteError.message, 'error');
+      return;
+    }
+    loadDashboard();
   }
 </script>
 </body>
