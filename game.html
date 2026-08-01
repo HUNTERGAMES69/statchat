@@ -30,6 +30,8 @@
   .banner .score { font-size:20px; font-weight:700; }
   .banner .downdist { font-size:15px; font-weight:500; }
   .hint { font-size:12px; color:#888; margin:6px 0; }
+  .floating-actions { position:fixed; bottom:16px; right:16px; z-index:90; display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
+  .floating-actions button { box-shadow:0 2px 8px rgba(0,0,0,0.2); }
   #playPanel, #utilPanel { background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:10px; }
   #confirmCard { background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:8px; }
   .logline { font-size:14px; padding:6px 0; border-bottom:1px solid #f2f2f2; }
@@ -115,9 +117,6 @@
         <button id="penUtilBtn">Penalty</button>
         <button id="driveUtilBtn">New drive / correct down</button>
         <button id="quarterUtilBtn">Quarter marker</button>
-        <button class="secondary" id="undoBtn">Undo last</button>
-        <button class="secondary" id="manualBtn">Manual entry</button>
-        <button class="secondary" id="flipBtn">Flip possession</button>
       </div>
 
       <div id="playPanel" style="display:none;"></div>
@@ -144,7 +143,10 @@
     </div>
 
     <div class="card">
-      <h2>Current drive</h2>
+      <div style="display:flex; justify-content:space-between; align-items:baseline;">
+        <h2 style="margin:0;">Current drive</h2>
+        <button class="secondary" id="undoBtn" style="padding:6px 12px; font-size:12px;">Undo last</button>
+      </div>
       <div id="driveLogScroll"></div>
     </div>
 
@@ -157,6 +159,11 @@
       <h2>All plays</h2>
       <div id="logScroll"></div>
     </div>
+  </div>
+
+  <div class="floating-actions">
+    <button class="secondary" id="manualBtn">Manual entry</button>
+    <button class="secondary" id="flipBtn">Flip possession</button>
   </div>
 
 </div>
@@ -254,10 +261,15 @@
   function buildTeams(game, rosterRows, ourBranding){
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
     const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    const seeds = game.seed_starters || {};
+    const seedOrderFor = (side) => {
+      const s = seeds[side] || {};
+      return ['QB','RB1','RB2','WR1','WR2','WR3'].map(role => s[role]).filter(Boolean);
+    };
     TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null, seedOrder: seedOrderFor('teamA') };
     TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#8B0000', text: game.opponent_secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null, seedOrder: seedOrderFor('teamB') };
     rosterRows.forEach(r => {
       const team = TEAMS[r.team_side];
       if (!team) return;
@@ -324,7 +336,8 @@ function extractNameTag(rawName){
   const cleanName = String(rawName).slice(0, m.index).trim();
   return { cleanName, explicitUnit: tag.toLowerCase() };
 }
-function computeState(){
+function computeState(playsList){
+  const list = playsList || plays;
   const state = {
     possession: startingPossession,
     quarter: 1,
@@ -334,7 +347,7 @@ function computeState(){
     penalties: { teamA: { count: 0, yds: 0 }, teamB: { count: 0, yds: 0 } }
   };
   const pendingClockStart = { teamA: null, teamB: null };
-  for (const p of plays){
+  for (const p of list){
     const e = p.effect;
     if (!e) continue;
     if (e.isReset){
@@ -680,9 +693,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const isGoalToGo = state.down && state.fieldPos !== null && (state.fieldPos + state.distance >= 100);
     const distDisplay = isGoalToGo ? 'Goal' : state.distance;
     document.getElementById('scoreText').textContent = TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' + TEAMS.teamB.name + ' ' + state.scores.teamB;
-    document.getElementById('downText').textContent = state.down
-      ? (ordinal(state.down) + ' & ' + distDisplay + ' at the ' + markerLabel(state.fieldPos) + ' — ' + TEAMS[state.possession].name + ' ball')
-      : ('no active drive — ' + TEAMS[state.possession].name + ' ball');
+    let downMsg;
+    if (state.down){
+      downMsg = ordinal(state.down) + ' & ' + distDisplay + ' at the ' + markerLabel(state.fieldPos) + ' — ' + TEAMS[state.possession].name + ' ball';
+    } else if (gamePhase === 'firstHalf' || gamePhase === 'secondHalf'){
+      downMsg = 'No active drive — ' + TEAMS[state.possession].name + ' needs to kick off next';
+    } else {
+      downMsg = 'no active drive — ' + TEAMS[state.possession].name + ' ball';
+    }
+    document.getElementById('downText').textContent = downMsg;
     document.getElementById('quarterText').textContent = 'Q' + state.quarter + ' (' + (state.quarter <= 2 ? '1st half' : state.quarter <= 4 ? '2nd half' : 'OT') + ')';
     document.getElementById('topText').textContent = 'Time of possession — ' + TEAMS.teamA.name + ' ' + formatDuration(state.possessionTime.teamA) + ' · ' + TEAMS.teamB.name + ' ' + formatDuration(state.possessionTime.teamB);
     const banner = document.getElementById('banner');
@@ -1147,12 +1166,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     } else if (type === 'fumble'){
       if (!sel.carrier) return;
       const rec = document.querySelector('input[name=pp_fumrec]:checked').value;
-      if (rec === 'own'){ code = sel.carrier + 'f'; roles = {}; }
+      if (rec === 'own'){ code = sel.carrier + 'f'; roles = { carrier: { team: off, num: sel.carrier } }; }
       else {
         if (!sel.credit) return;
         const yds = yards('pp_yards');
         code = sel.carrier + 'f ' + sel.credit + (yds ? ' ' + yds : '') + (td ? ' td' : '');
-        roles = { defense: { team: def, num: sel.credit } };
+        roles = { carrier: { team: off, num: sel.carrier }, defense: { team: def, num: sel.credit } };
       }
     } else if (type === 'kickoff'){
       if (!sel.kicker) return;
