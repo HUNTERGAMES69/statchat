@@ -56,7 +56,9 @@
 
   <div id="mainView" class="hidden">
     <div class="banner" id="banner">
+      <img id="bannerLogoA" style="display:none; height:28px; width:28px; object-fit:contain; border-radius:4px;">
       <span class="score" id="scoreText"></span>
+      <img id="bannerLogoB" style="display:none; height:28px; width:28px; object-fit:contain; border-radius:4px;">
       <span class="downdist" id="downText"></span>
       <span class="downdist" id="quarterText"></span>
     </div>
@@ -249,8 +251,8 @@
     const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
     TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null };
-    TEAMS.teamB = { name: oppName, bg: '#8B0000', text: '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: null };
+    TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#8B0000', text: game.opponent_secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null };
     rosterRows.forEach(r => {
       const team = TEAMS[r.team_side];
       if (!team) return;
@@ -682,6 +684,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const c = TEAMS[state.possession];
     banner.style.background = c.bg;
     banner.style.color = c.text;
+    const logoA = document.getElementById('bannerLogoA');
+    const logoB = document.getElementById('bannerLogoB');
+    if (TEAMS.teamA.logo){ logoA.src = TEAMS.teamA.logo; logoA.style.display = 'inline-block'; } else { logoA.style.display = 'none'; }
+    if (TEAMS.teamB.logo){ logoB.src = TEAMS.teamB.logo; logoB.style.display = 'inline-block'; } else { logoB.style.display = 'none'; }
 
     function renderLogLines(list){
       return list.map(p => {
