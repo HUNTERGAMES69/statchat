@@ -146,6 +146,11 @@
     </div>
 
     <div class="card">
+      <h2>Previous drive</h2>
+      <div id="prevDriveLogScroll"></div>
+    </div>
+
+    <div class="card">
       <h2>All plays</h2>
       <div id="logScroll"></div>
     </div>
@@ -693,12 +698,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }).join('');
     }
     document.getElementById('logScroll').innerHTML = renderLogLines(plays.slice().reverse()) || '<div style="color:#999;">no plays logged yet</div>';
-    let lastResetIdx = -1;
-    for (let i = plays.length - 1; i >= 0; i--){
-      if (plays[i].effect && plays[i].effect.isReset){ lastResetIdx = i; break; }
+
+    // Every play with effect.isReset marks the start of a new drive --
+    // current and previous drive are just the last two segments between
+    // those markers.
+    const resetIdxs = [];
+    for (let i = 0; i < plays.length; i++){
+      if (plays[i].effect && plays[i].effect.isReset) resetIdxs.push(i);
     }
-    const drivePlays = lastResetIdx >= 0 ? plays.slice(lastResetIdx) : [];
-    document.getElementById('driveLogScroll').innerHTML = renderLogLines(drivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
+    const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
+    const previousDrivePlays = resetIdxs.length >= 2 ? plays.slice(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1]) : [];
+    document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
+    document.getElementById('prevDriveLogScroll').innerHTML = renderLogLines(previousDrivePlays.slice().reverse()) || '<div style="color:#999;">no previous drive yet</div>';
   }
 
   function updatePhaseUI(){
