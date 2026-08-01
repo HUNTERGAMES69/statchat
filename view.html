@@ -15,7 +15,7 @@
   .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:20px; margin:0; }
   h2 { font-size:16px; margin:0 0 10px; color:#444; }
-  h3 { font-size:13px; margin:14px 0 6px; color:#888; text-transform:uppercase; }
+  h3 { font-size:18px; font-weight:700; margin:20px 0 10px; color:#1a1a1a; letter-spacing:0.02em; }
   p.sub { color:#888; margin:0 0 14px; font-size:13px; }
   .banner { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border-radius:10px; padding:12px 16px; margin-bottom:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
   .banner .score { font-size:20px; font-weight:700; }
@@ -25,9 +25,13 @@
   .msg.error { background:#fdecea; color:#a32d2d; }
   .hidden { display:none; }
   .logline { font-size:14px; padding:6px 0; border-bottom:1px solid #f2f2f2; }
-  table.stattable { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:12px; }
-  table.stattable th { text-align:left; font-size:11px; color:#888; text-transform:uppercase; padding:4px 6px; border-bottom:1px solid #eee; }
-  table.stattable td { padding:5px 6px; border-bottom:1px solid #f5f5f5; }
+  table.stattable { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:18px; }
+  table.stattable th { text-align:right; font-size:11px; color:#5b7ca8; font-weight:600; padding:5px 8px; border-bottom:2px solid #d8dde3; white-space:nowrap; }
+  table.stattable th:first-child, table.stattable td:first-child { text-align:left; }
+  table.stattable td { text-align:right; padding:6px 8px; border-bottom:1px solid #f0f0f0; }
+  table.stattable tbody tr:nth-child(even) { background:#f5f7fa; }
+  table.stattable tr.totalRow { font-weight:700; border-top:2px solid #333; }
+  table.stattable tr.totalRow td { border-bottom:none; }
   .live-badge { display:inline-block; font-size:11px; font-weight:700; color:#a37a00; background:#fff3cd; padding:2px 8px; border-radius:10px; margin-left:8px; vertical-align:middle; }
   @media (min-width: 640px) { body { padding:24px; } .card { padding:24px; } }
 </style>
@@ -74,10 +78,6 @@
         <div class="card">
           <h2>Previous drive</h2>
           <div id="prevDriveLogScroll"></div>
-        </div>
-        <div class="card">
-          <h2>All plays</h2>
-          <div id="logScroll"></div>
         </div>
       </div>
     </div>
@@ -399,43 +399,60 @@ function computeState(playsList){
       const s = box[teamKey];
       html += '<h3>' + team.name + '</h3>';
 
+      const sum = (nums, obj, key) => nums.reduce((t, n) => t + ((obj[n] && obj[n][key]) || 0), 0);
+
       const rushNums = Object.keys(s.rushing);
       if (rushNums.length){
+        const tAtt = sum(rushNums, s.rushing, 'att'), tYds = sum(rushNums, s.rushing, 'yds');
         html += '<table class="stattable"><tr><th>Rushing</th><th>Att</th><th>Yds</th><th>Y/C</th><th>TD</th><th>Fum</th></tr>' +
           rushNums.map(n => {
             const d = s.rushing[n];
             const ypc = d.att ? (d.yds / d.att).toFixed(1) : '0.0';
             return statRow([playerName(teamKey, n), d.att||0, d.yds||0, ypc, d.td||0, d.fum||0]);
-          }).join('') + '</table>';
+          }).join('') +
+          '<tr class="totalRow">' + ['Total', tAtt, tYds, tAtt ? (tYds/tAtt).toFixed(1) : '0.0', sum(rushNums,s.rushing,'td'), sum(rushNums,s.rushing,'fum')].map(c => '<td>'+c+'</td>').join('') + '</tr>' +
+          '</table>';
       }
       const passNums = Object.keys(s.passing);
       if (passNums.length){
+        const tAtt = sum(passNums, s.passing, 'att'), tComp = sum(passNums, s.passing, 'comp'), tYds = sum(passNums, s.passing, 'yds');
+        const tRushTd = passNums.reduce((t, n) => t + ((s.rushing[n] && s.rushing[n].td) || 0), 0);
         html += '<table class="stattable"><tr><th>Passing</th><th>Att</th><th>Comp</th><th>Comp%</th><th>Yds</th><th>TD</th><th>Int</th><th>Sacked</th><th>Rush TD</th></tr>' +
           passNums.map(n => {
             const d = s.passing[n];
             const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) + '%' : '—';
             const rushTd = (s.rushing[n] && s.rushing[n].td) || 0;
             return statRow([playerName(teamKey, n), d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0, d.sacked||0, rushTd]);
-          }).join('') + '</table>';
+          }).join('') +
+          '<tr class="totalRow">' + ['Total', tAtt, tComp, tAtt ? Math.round(100*tComp/tAtt)+'%' : '—', tYds, sum(passNums,s.passing,'td'), sum(passNums,s.passing,'intThrown'), sum(passNums,s.passing,'sacked'), tRushTd].map(c => '<td>'+c+'</td>').join('') + '</tr>' +
+          '</table>';
       }
       const recNums = Object.keys(s.receiving);
       if (recNums.length){
+        const tRec = sum(recNums, s.receiving, 'rec'), tYds = sum(recNums, s.receiving, 'yds');
         html += '<table class="stattable"><tr><th>Receiving</th><th>Rec</th><th>Yds</th><th>Y/C</th><th>TD</th><th>Fum</th></tr>' +
           recNums.map(n => {
             const d = s.receiving[n];
             const ypc = d.rec ? (d.yds / d.rec).toFixed(1) : '0.0';
             return statRow([playerName(teamKey, n), d.rec||0, d.yds||0, ypc, d.td||0, d.fum||0]);
-          }).join('') + '</table>';
+          }).join('') +
+          '<tr class="totalRow">' + ['Total', tRec, tYds, tRec ? (tYds/tRec).toFixed(1) : '0.0', sum(recNums,s.receiving,'td'), sum(recNums,s.receiving,'fum')].map(c => '<td>'+c+'</td>').join('') + '</tr>' +
+          '</table>';
       }
       const stNums = Object.keys(s.specialTeams);
       if (stNums.length){
+        const tFgAtt = sum(stNums, s.specialTeams, 'fgAtt'), tFgMade = sum(stNums, s.specialTeams, 'fgMade');
+        const tPuntYds = sum(stNums, s.specialTeams, 'puntYds'), tPuntsWithYards = sum(stNums, s.specialTeams, 'puntsWithYards');
+        const tLongFg = stNums.reduce((m, n) => Math.max(m, s.specialTeams[n].fgLong||0), 0);
         html += '<table class="stattable"><tr><th>Special Teams</th><th>FG Att</th><th>FG Made</th><th>Long FG</th><th>FG%</th><th>Punts</th><th>Y/P</th><th>Blocked</th></tr>' +
           stNums.map(n => {
             const d = s.specialTeams[n];
             const fgPct = d.fgAtt ? Math.round(100 * (d.fgMade||0) / d.fgAtt) + '%' : '—';
             const ypp = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
             return statRow([playerName(teamKey, n), d.fgAtt||0, d.fgMade||0, d.fgLong||0, fgPct, d.punts||0, ypp, d.blocked||0]);
-          }).join('') + '</table>';
+          }).join('') +
+          '<tr class="totalRow">' + ['Total', tFgAtt, tFgMade, tLongFg, tFgAtt ? Math.round(100*tFgMade/tFgAtt)+'%' : '—', sum(stNums,s.specialTeams,'punts'), tPuntsWithYards ? (tPuntYds/tPuntsWithYards).toFixed(1) : '0.0', sum(stNums,s.specialTeams,'blocked')].map(c => '<td>'+c+'</td>').join('') + '</tr>' +
+          '</table>';
       }
       const defNums = Object.keys(s.defense);
       if (defNums.length){
@@ -443,7 +460,9 @@ function computeState(playsList){
           defNums.map(n => {
             const d = s.defense[n];
             return statRow([playerName(teamKey, n), d.int||0, d.fumRec||0, d.sacks||0]);
-          }).join('') + '</table>';
+          }).join('') +
+          '<tr class="totalRow">' + ['Total', sum(defNums,s.defense,'int'), sum(defNums,s.defense,'fumRec'), sum(defNums,s.defense,'sacks')].map(c => '<td>'+c+'</td>').join('') + '</tr>' +
+          '</table>';
       }
       const od = s.oppDowns;
       html += '<table class="stattable"><tr><th>Opponent on 3rd/4th down</th><th></th></tr>' +
@@ -481,8 +500,6 @@ function computeState(playsList){
         return '<div class="logline">' + qtag + p.text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
       }).join('');
     }
-    document.getElementById('logScroll').innerHTML = renderLogLines(plays.slice().reverse()) || '<div style="color:#999;">no plays logged yet</div>';
-
     const resetIdxs = [];
     for (let i = 0; i < plays.length; i++){
       if (plays[i].effect && plays[i].effect.isReset) resetIdxs.push(i);
