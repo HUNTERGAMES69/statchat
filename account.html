@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StatChat">
+<title>StatChat — Account</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:14px; }
+  .wrap { max-width:600px; margin:0 auto; }
+  .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:20px; margin:0; }
+  h2 { font-size:16px; margin:0 0 10px; color:#444; }
+  p.sub { color:#888; margin:0 0 14px; font-size:13px; }
+  label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
+  input { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
+  button { padding:9px 16px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+  button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
+  button.danger { background:#a32d2d; }
+  button:disabled { opacity:0.5; cursor:default; }
+  .row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
+  .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
+  .msg.error { background:#fdecea; color:#a32d2d; }
+  .msg.success { background:#e8f5e9; color:#1a7a4c; }
+  .hidden { display:none; }
+  #avatarPreview { width:64px; height:64px; border-radius:50%; object-fit:cover; background:#eee; }
+  .danger-zone { border:1px solid #f0d0a0; background:#fffaf0; border-radius:10px; padding:16px; margin-top:8px; }
+  @media (min-width: 640px) { body { padding:24px; } .card { padding:24px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="loading" class="card"><h1>Loading…</h1></div>
+
+  <div id="mainView" class="hidden">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:baseline;">
+        <h1>Account</h1>
+        <a href="dashboard.html" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600;">← Dashboard</a>
+      </div>
+      <p class="sub" id="accountEmail"></p>
+    </div>
+
+    <div class="card">
+      <h2>Avatar</h2>
+      <div id="avatarMsg"></div>
+      <div class="row">
+        <img id="avatarPreview" alt="">
+        <div>
+          <button type="button" id="chooseAvatarBtn" class="secondary">Choose photo</button>
+          <input type="file" id="avatarInput" accept="image/*" style="display:none;">
+        </div>
+        <button id="saveAvatarBtn">Save avatar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Password</h2>
+      <div id="passwordMsg"></div>
+      <label>New password<input type="password" id="newPasswordInput"></label>
+      <label style="margin-top:10px;">Confirm new password<input type="password" id="confirmPasswordInput"></label>
+      <button id="savePasswordBtn" style="margin-top:14px;">Change password</button>
+    </div>
+
+    <div id="resetCard" class="card hidden">
+      <h2>Reset for production</h2>
+      <p class="sub">Permanently deletes every game, play, and roster snapshot in the database. Your team roster and branding are not touched. Only use this once, when you're done testing and ready to track real games.</p>
+      <div id="resetMsg"></div>
+      <button class="danger" id="startResetBtn">Reset for production…</button>
+
+      <div id="resetStep2" class="hidden danger-zone">
+        <p style="font-weight:600; margin:0 0 10px;">Confirm your password to continue</p>
+        <input type="password" id="resetPasswordInput" placeholder="Your current password">
+        <div class="row" style="margin-top:10px;">
+          <button class="danger" id="resetPasswordContinueBtn">Continue</button>
+          <button class="secondary" id="resetCancelBtn1">Cancel</button>
+        </div>
+      </div>
+
+      <div id="resetStep3" class="hidden danger-zone">
+        <p style="font-weight:600; margin:0 0 6px;">This cannot be undone</p>
+        <p class="sub" style="margin:0 0 10px;">Every game, every play, every roster snapshot — gone permanently. Type <strong>I agree</strong> exactly to confirm.</p>
+        <input type="text" id="resetAgreeInput" placeholder="I agree">
+        <div class="row" style="margin-top:10px;">
+          <button class="danger" id="resetFinalBtn">Delete everything</button>
+          <button class="secondary" id="resetCancelBtn2">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  let currentUserId = null, currentUserEmail = null;
+
+  function showView(name){
+    ['loading', 'mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+  }
+  function showMsg(elId, text, type){
+    document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+  }
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION'){
+      if (session){
+        currentUserId = session.user.id;
+        currentUserEmail = session.user.email;
+        init();
+      } else {
+        window.location.href = '/';
+      }
+    } else if (event === 'SIGNED_OUT'){
+      window.location.href = '/';
+    }
+  });
+
+  async function init(){
+    document.getElementById('accountEmail').textContent = currentUserEmail;
+    const { data, error } = await supabaseClient
+      .from('profiles').select('avatar_url, is_admin').eq('id', currentUserId).limit(1);
+    if (!error && data && data.length > 0){
+      const profile = data[0];
+      if (profile.avatar_url) document.getElementById('avatarPreview').src = profile.avatar_url;
+      if (profile.is_admin){
+        document.getElementById('resetCard').classList.remove('hidden');
+        if (window.location.hash === '#reset'){
+          setTimeout(() => {
+            const card = document.getElementById('resetCard');
+            if (card.scrollIntoView) try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(e){}
+          }, 100);
+        }
+      }
+    }
+    showView('mainView');
+  }
+
+  let pendingAvatarFile = null;
+  document.getElementById('chooseAvatarBtn').addEventListener('click', () => document.getElementById('avatarInput').click());
+  document.getElementById('avatarInput').addEventListener('change', (e) => {
+    pendingAvatarFile = e.target.files[0] || null;
+    if (pendingAvatarFile && URL.createObjectURL){
+      try { document.getElementById('avatarPreview').src = URL.createObjectURL(pendingAvatarFile); } catch(e){}
+    }
+  });
+
+  document.getElementById('saveAvatarBtn').addEventListener('click', async () => {
+    if (!pendingAvatarFile){
+      showMsg('avatarMsg', 'Choose a photo first.', 'error');
+      return;
+    }
+    try {
+      const ext = pendingAvatarFile.name.split('.').pop();
+      const path = 'avatars/' + currentUserId + '/avatar.' + ext;
+      const { error: uploadError } = await supabaseClient.storage.from('team-logos').upload(path, pendingAvatarFile, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabaseClient.storage.from('team-logos').getPublicUrl(path);
+      const { error: updateError } = await supabaseClient.from('profiles').update({ avatar_url: data.publicUrl }).eq('id', currentUserId);
+      if (updateError) throw updateError;
+      showMsg('avatarMsg', 'Avatar saved.', 'success');
+    } catch (err){
+      showMsg('avatarMsg', err.message, 'error');
+    }
+  });
+
+  document.getElementById('savePasswordBtn').addEventListener('click', async () => {
+    const pw = document.getElementById('newPasswordInput').value;
+    const confirmPw = document.getElementById('confirmPasswordInput').value;
+    if (pw.length < 6){
+      showMsg('passwordMsg', 'Password needs to be at least 6 characters.', 'error');
+      return;
+    }
+    if (pw !== confirmPw){
+      showMsg('passwordMsg', 'Passwords do not match.', 'error');
+      return;
+    }
+    const { error } = await supabaseClient.auth.updateUser({ password: pw });
+    if (error){
+      showMsg('passwordMsg', error.message, 'error');
+      return;
+    }
+    document.getElementById('newPasswordInput').value = '';
+    document.getElementById('confirmPasswordInput').value = '';
+    showMsg('passwordMsg', 'Password changed.', 'success');
+  });
+
+  // --- Reset for production: password re-entry, then a typed agreement,
+  // before anything is actually touched. ---
+  document.getElementById('startResetBtn').addEventListener('click', () => {
+    document.getElementById('resetStep2').classList.remove('hidden');
+  });
+  document.getElementById('resetCancelBtn1').addEventListener('click', () => {
+    document.getElementById('resetStep2').classList.add('hidden');
+    document.getElementById('resetPasswordInput').value = '';
+  });
+  document.getElementById('resetCancelBtn2').addEventListener('click', () => {
+    document.getElementById('resetStep3').classList.add('hidden');
+    document.getElementById('resetAgreeInput').value = '';
+  });
+
+  document.getElementById('resetPasswordContinueBtn').addEventListener('click', async () => {
+    const pw = document.getElementById('resetPasswordInput').value;
+    if (!pw){
+      showMsg('resetMsg', 'Enter your password.', 'error');
+      return;
+    }
+    const { error } = await supabaseClient.auth.signInWithPassword({ email: currentUserEmail, password: pw });
+    if (error){
+      showMsg('resetMsg', 'Incorrect password.', 'error');
+      return;
+    }
+    document.getElementById('resetMsg').innerHTML = '';
+    document.getElementById('resetStep2').classList.add('hidden');
+    document.getElementById('resetPasswordInput').value = '';
+    document.getElementById('resetStep3').classList.remove('hidden');
+  });
+
+  document.getElementById('resetFinalBtn').addEventListener('click', async () => {
+    const typed = document.getElementById('resetAgreeInput').value;
+    if (typed !== 'I agree'){
+      showMsg('resetMsg', 'Type "I agree" exactly to continue.', 'error');
+      return;
+    }
+    document.getElementById('resetFinalBtn').disabled = true;
+    showMsg('resetMsg', 'Deleting everything…', 'success');
+
+    const { data: allGames, error: fetchError } = await supabaseClient.from('games').select('id, status');
+    if (fetchError){
+      showMsg('resetMsg', 'Could not load games: ' + fetchError.message, 'error');
+      document.getElementById('resetFinalBtn').disabled = false;
+      return;
+    }
+
+    // Any finalized game needs to be un-finalized first -- same admin-only
+    // mechanism used everywhere else in the app that touches a final game.
+    const finalized = (allGames || []).filter(g => g.status === 'final');
+    for (const g of finalized){
+      const { error: unlockError } = await supabaseClient.from('games').update({ status: 'in_progress' }).eq('id', g.id);
+      if (unlockError){
+        showMsg('resetMsg', 'Could not reset: ' + unlockError.message, 'error');
+        document.getElementById('resetFinalBtn').disabled = false;
+        return;
+      }
+    }
+
+    const ids = (allGames || []).map(g => g.id);
+    if (ids.length > 0){
+      const { error: deleteError } = await supabaseClient.from('games').delete().in('id', ids);
+      if (deleteError){
+        showMsg('resetMsg', 'Could not delete: ' + deleteError.message, 'error');
+        document.getElementById('resetFinalBtn').disabled = false;
+        return;
+      }
+    }
+
+    document.getElementById('resetStep3').classList.add('hidden');
+    document.getElementById('resetAgreeInput').value = '';
+    document.getElementById('resetFinalBtn').disabled = false;
+    showMsg('resetMsg', 'Done — ' + ids.length + ' game(s) and all their plays and rosters were deleted. Ready for production.', 'success');
+  });
+</script>
+</body>
+</html>
