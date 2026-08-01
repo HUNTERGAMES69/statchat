@@ -320,6 +320,16 @@
         '<div class="roster-summary" style="color:#888;">' +
         (oppCount > 0 ? 'Currently saved: ' + oppCount + ' opponent player(s). Upload a new file below only if you need to replace it.' : 'No opponent roster currently saved for this game.') +
         '</div>';
+    } else {
+      // New game: default the quarter length to the standard 12 minutes,
+      // and figure out the next designator from how many games already
+      // exist this season (G1 if none yet, G2 if one exists, and so on).
+      document.getElementById('quarterLen').value = 12;
+      const seasonYearVal = parseInt(document.getElementById('seasonYear').value);
+      const { data: existingSeasonGames } = await supabaseClient
+        .from('games').select('id').eq('season_year', seasonYearVal);
+      const nextNum = (existingSeasonGames ? existingSeasonGames.length : 0) + 1;
+      document.getElementById('designator').value = 'G' + nextNum;
     }
 
     const { data: players, error: playersError } = await supabaseClient
@@ -504,14 +514,16 @@
 
   document.getElementById('createGameBtn').addEventListener('click', async () => {
     const designator = document.getElementById('designator').value.trim();
-    const seasonYear = parseInt(document.getElementById('seasonYear').value);
+    const seasonYearRaw = document.getElementById('seasonYear').value;
+    const seasonYear = parseInt(seasonYearRaw);
     const gameDate = document.getElementById('gameDate').value || null;
     const opponentName = document.getElementById('opponentName').value.trim();
     const isHome = document.getElementById('homeAway').value === 'home';
-    const quarterLenMin = parseInt(document.getElementById('quarterLen').value) || 12;
+    const quarterLenRaw = document.getElementById('quarterLen').value;
+    const quarterLenMin = parseInt(quarterLenRaw);
 
-    if (!designator || !opponentName){
-      showMsg('setupMsg', 'Game designator and opponent name are both required.', 'error');
+    if (!designator || !seasonYearRaw || isNaN(seasonYear) || !gameDate || !opponentName || !quarterLenRaw || isNaN(quarterLenMin) || quarterLenMin <= 0){
+      showMsg('setupMsg', 'Fill in every field above before creating the game — designator, season, date, opponent name, and quarter length all need a value.', 'error');
       return;
     }
     // In edit mode, leaving the opponent roster untouched just keeps
