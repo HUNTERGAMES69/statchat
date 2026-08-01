@@ -85,7 +85,6 @@
       <input type="text" id="code" style="display:none;">
 
       <div class="row" style="margin-bottom:8px;">
-        <button id="backToSetupBtn" class="secondary">Game setup</button>
         <button class="primary" id="startGameBtn">Start game</button>
         <button class="primary" id="endFirstHalfBtn" style="display:none;">End 1st half</button>
         <button class="primary" id="startHalfBtn" style="display:none;">Start 2nd half</button>
@@ -230,16 +229,13 @@
     }));
     nextSequenceNumber = plays.length ? Math.max(...plays.map(p => p._seq || 0)) + 1 : 1;
 
-    // Resuming an already-started game: figure out roughly which phase
-    // we're in from what's already been played, rather than asking again.
-    if (currentGameStatus === 'final'){
-      gamePhase = 'ended';
-    } else if (plays.length === 0){
-      gamePhase = 'notStarted';
-    } else {
-      const maxQuarter = Math.max(...plays.map(p => p.quarter || 1));
-      gamePhase = maxQuarter <= 2 ? 'firstHalf' : 'secondHalf';
-    }
+    // Resume exactly where we left off -- read the persisted phase and
+    // any in-progress guided step directly, rather than guessing from
+    // play history (which can't tell "kickoff in progress" from "kickoff
+    // never started", and would silently drop an interrupted kickoff).
+    gamePhase = game.game_phase || (plays.length === 0 ? 'notStarted' : 'firstHalf');
+    if (currentGameStatus === 'final') gamePhase = 'ended';
+    guided = (game.guided_state && game.guided_state.active) ? game.guided_state : { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
     showView('mainView');
     renderAll();
     renderGuided();
@@ -717,13 +713,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('startHalfBtn').style.display = (gamePhase === 'halftime' && !guided.active) ? 'inline-block' : 'none';
     document.getElementById('endGameBtn').style.display = (gamePhase === 'secondHalf' && !guided.active) ? 'inline-block' : 'none';
     document.getElementById('otUtilBtn').style.display = (gamePhase === 'secondHalf' && !guided.active && computeState().quarter < 5) ? 'inline-block' : 'none';
-    document.getElementById('backToSetupBtn').style.display = (!guided.active && !clockPrompt) ? 'inline-block' : 'none';
+
   }
 
   async function setGameStatus(status){
     currentGameStatus = status;
     const { error } = await supabaseClient.from('games').update({ status }).eq('id', currentGameId);
     if (error) showMsg('gameMsg', 'Phase changed here, but failed to sync to the server: ' + error.message, 'error');
+  }
+
+  // Persists exactly where we are in the live flow -- including any
+  // in-progress guided step (mid-kickoff, mid-overtime-setup) -- so
+  // navigating away and back resumes exactly here instead of guessing
+  // from play history, which can silently drop an incomplete kickoff.
+  async function persistUiState(){
+    const { error } = await supabaseClient.from('games')
+      .update({ game_phase: gamePhase, guided_state: guided })
+      .eq('id', currentGameId);
+    if (error) showMsg('gameMsg', 'State changed here, but failed to sync to the server: ' + error.message, 'error');
   }
 
   function showClockPrompt(ctx, thenFn){
@@ -777,6 +784,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   function startGuided(quarterNum, targetPhase){
     guided = { active: true, quarter: quarterNum, kickingTeam: null, receivingTeam: null, step: 'pickKicker', targetPhase };
+    persistUiState();
     pushAndPersist({ id: nextId++, text: 'Quarter marker — start of Q' + quarterNum, effect: { setQuarter: quarterNum }, quarter: quarterNum });
     renderAll();
     renderGuided();
@@ -790,6 +798,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
     pushAndPersist({ id: nextId++, text: 'End of 1st half', effect: {}, isDivider: true });
     gamePhase = 'halftime';
+    persistUiState();
     renderAll();
     updatePhaseUI();
   });
@@ -805,6 +814,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
     pushAndPersist({ id: nextId++, text: 'Final', effect: {}, isDivider: true });
     gamePhase = 'ended';
+    persistUiState();
     setGameStatus('final');
     renderAll();
     updatePhaseUI();
@@ -816,13 +826,51 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (!guided.active){ panel.style.display = 'none'; return; }
     panel.style.display = 'block';
 
+    if (guided.step === 'otPickTeam'){
+      content.innerHTML =
+        '<p class="hint">Overtime — no kickoff. Who gets the ball first? Possession will keep alternating from here as normal (turnovers, New Drive after each score) until someone\'s actually ahead.</p>' +
+        '<button type="button" id="ot_pickA">' + TEAMS.teamA.name + '</button> ' +
+        '<button type="button" id="ot_pickB">' + TEAMS.teamB.name + '</button>';
+      function pickTeam(team){
+        pushAndPersist({ id: nextId++, text: 'Quarter marker — start of overtime', effect: { setQuarter: 5 }, quarter: 5 });
+        guided.receivingTeam = team;
+        guided.step = 'otSpot';
+        persistUiState();
+        renderGuided();
+      }
+      document.getElementById('ot_pickA').addEventListener('click', () => pickTeam('teamA'));
+      document.getElementById('ot_pickB').addEventListener('click', () => pickTeam('teamB'));
+      return;
+    }
+
+    if (guided.step === 'otSpot'){
+      const team = guided.receivingTeam;
+      content.innerHTML =
+        '<p class="hint">' + TEAMS[team].name + ' starts overtime. Starting spot (most rule sets: opponent\'s 10 — adjust to your association\'s format):</p>' +
+        startingSpotFieldsHtml('ot_spot', 'Starting spot') +
+        '<div class="row" style="margin-top:12px;"><button class="primary" id="ot_review">Set drive</button></div>';
+      const getReset = wireStartingSpot(content, 'ot_spot');
+      document.getElementById('ot_review').addEventListener('click', () => {
+        const reset = getReset();
+        if (!reset) return;
+        pushAndPersist({ id: nextId++, text: 'Overtime — ' + TEAMS[team].name + ' to start at the ' + markerLabel(reset.fieldPos), effect: { forcePossession: team }, quarter: 5 });
+        pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(reset.down) + ' & ' + reset.distance + ' at the ' + markerLabel(reset.fieldPos) + ' (' + TEAMS[team].name + ')', effect: { isReset: true, down: reset.down, distance: reset.distance, fieldPos: reset.fieldPos }, quarter: 5 });
+        guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
+        persistUiState();
+        renderAll();
+        renderGuided();
+        updatePhaseUI();
+      });
+      return;
+    }
+
     if (guided.step === 'pickKicker'){
       content.innerHTML =
         '<div style="font-size:16px; margin-bottom:8px;">Q' + guided.quarter + ' kickoff — who kicks off?</div>' +
         '<div class="row"><button class="primary" id="pickA">' + TEAMS.teamA.name + ' kicks</button>' +
         '<button class="primary" id="pickB">' + TEAMS.teamB.name + ' kicks</button></div>';
-      document.getElementById('pickA').addEventListener('click', () => { guided.kickingTeam = 'teamA'; guided.receivingTeam = 'teamB'; guided.step = 'kickoff'; renderGuided(); });
-      document.getElementById('pickB').addEventListener('click', () => { guided.kickingTeam = 'teamB'; guided.receivingTeam = 'teamA'; guided.step = 'kickoff'; renderGuided(); });
+      document.getElementById('pickA').addEventListener('click', () => { guided.kickingTeam = 'teamA'; guided.receivingTeam = 'teamB'; guided.step = 'kickoff'; persistUiState(); renderGuided(); });
+      document.getElementById('pickB').addEventListener('click', () => { guided.kickingTeam = 'teamB'; guided.receivingTeam = 'teamA'; guided.step = 'kickoff'; persistUiState(); renderGuided(); });
       return;
     }
     if (guided.step === 'kickoff'){
@@ -849,6 +897,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const text = nameInSpecialTeams(guided.kickingTeam, kickerNum) + ' kicks off ' + yds;
         pushAndPersist({ id: nextId++, text, effect: {}, team: guided.kickingTeam, quarter: guided.quarter });
         guided.step = 'return';
+        persistUiState();
         renderAll(); renderGuided();
       });
       return;
@@ -899,6 +948,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
         gamePhase = guided.targetPhase;
         guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
+        persistUiState();
         renderAll(); renderGuided(); updatePhaseUI();
         if (reset && !td){
           document.getElementById('code').placeholder = '15p 22 25 7';
@@ -911,39 +961,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   }
 
   document.getElementById('otUtilBtn').addEventListener('click', () => {
-    document.getElementById('confirmCard').style.display = 'none';
-    const panel = document.getElementById('playPanel');
-    panel.style.display = 'block';
-    panel.innerHTML =
-      '<p class="hint">Overtime — no kickoff. Who gets the ball first? Possession will keep alternating from here as normal (turnovers, New Drive after each score) until someone\'s actually ahead.</p>' +
-      '<button type="button" id="ot_pickA">' + TEAMS.teamA.name + '</button> ' +
-      '<button type="button" id="ot_pickB">' + TEAMS.teamB.name + '</button>';
-    function pickTeam(team){
-      pushAndPersist({ id: nextId++, text: 'Quarter marker — start of overtime', effect: { setQuarter: 5 }, quarter: 5 });
-      renderOtSpotStep(team, 5);
-    }
-    document.getElementById('ot_pickA').addEventListener('click', () => pickTeam('teamA'));
-    document.getElementById('ot_pickB').addEventListener('click', () => pickTeam('teamB'));
+    guided = { active: true, quarter: 5, kickingTeam: null, receivingTeam: null, step: 'otPickTeam', targetPhase: 'secondHalf' };
+    persistUiState();
+    renderGuided();
   });
-
-  function renderOtSpotStep(team, quarterNum){
-    const panel = document.getElementById('playPanel');
-    panel.innerHTML =
-      '<p class="hint">' + TEAMS[team].name + ' starts overtime. Starting spot (most rule sets: opponent\'s 10 — adjust to your association\'s format):</p>' +
-      startingSpotFieldsHtml('ot_spot', 'Starting spot') +
-      '<div class="row" style="margin-top:12px;"><button class="primary" id="ot_review">Set drive</button></div>';
-    const getReset = wireStartingSpot(panel, 'ot_spot');
-    document.getElementById('ot_review').addEventListener('click', () => {
-      const reset = getReset();
-      if (!reset) return;
-      pushAndPersist({ id: nextId++, text: 'Overtime — ' + TEAMS[team].name + ' to start at the ' + markerLabel(reset.fieldPos), effect: { forcePossession: team }, quarter: quarterNum });
-      pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(reset.down) + ' & ' + reset.distance + ' at the ' + markerLabel(reset.fieldPos) + ' (' + TEAMS[team].name + ')', effect: { isReset: true, down: reset.down, distance: reset.distance, fieldPos: reset.fieldPos }, quarter: quarterNum });
-      renderAll();
-      updatePhaseUI();
-      document.getElementById('playPanel').style.display = 'none';
-      document.getElementById('playPanel').innerHTML = '';
-    });
-  }
 
   document.querySelectorAll('.ptypeBtn').forEach(b => b.addEventListener('click', () => renderPlayPanel(b.dataset.type)));
   let currentSpotGetter = null;
@@ -1402,9 +1423,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
   });
 
-  document.getElementById('backToSetupBtn').addEventListener('click', () => {
-    window.location.href = 'dashboard.html';
-  });
 </script>
 </body>
 </html>
