@@ -45,7 +45,16 @@
     </div>
 
     <div class="card">
-      <h2>Avatar</h2>
+      <h2>Full name</h2>
+      <div id="nameMsg"></div>
+      <div class="row">
+        <div style="flex:1;"><input type="text" id="fullNameInput" placeholder="Your name"></div>
+        <button id="saveNameBtn">Save</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Photo</h2>
       <div id="avatarMsg"></div>
       <div class="row">
         <img id="avatarPreview" alt="">
@@ -53,14 +62,15 @@
           <button type="button" id="chooseAvatarBtn" class="secondary">Choose photo</button>
           <input type="file" id="avatarInput" accept="image/*" style="display:none;">
         </div>
-        <button id="saveAvatarBtn">Save avatar</button>
+        <button id="saveAvatarBtn">Save photo</button>
       </div>
     </div>
 
     <div class="card">
       <h2>Password</h2>
       <div id="passwordMsg"></div>
-      <label>New password<input type="password" id="newPasswordInput"></label>
+      <label>Current password<input type="password" id="oldPasswordInput"></label>
+      <label style="margin-top:10px;">New password<input type="password" id="newPasswordInput"></label>
       <label style="margin-top:10px;">Confirm new password<input type="password" id="confirmPasswordInput"></label>
       <button id="savePasswordBtn" style="margin-top:14px;">Change password</button>
     </div>
@@ -126,9 +136,10 @@
   async function init(){
     document.getElementById('accountEmail').textContent = currentUserEmail;
     const { data, error } = await supabaseClient
-      .from('profiles').select('avatar_url, is_admin').eq('id', currentUserId).limit(1);
+      .from('profiles').select('display_name, avatar_url, is_admin').eq('id', currentUserId).limit(1);
     if (!error && data && data.length > 0){
       const profile = data[0];
+      if (profile.display_name) document.getElementById('fullNameInput').value = profile.display_name;
       if (profile.avatar_url) document.getElementById('avatarPreview').src = profile.avatar_url;
       if (profile.is_admin){
         document.getElementById('resetCard').classList.remove('hidden');
@@ -142,6 +153,20 @@
     }
     showView('mainView');
   }
+
+  document.getElementById('saveNameBtn').addEventListener('click', async () => {
+    const name = document.getElementById('fullNameInput').value.trim();
+    if (!name){
+      showMsg('nameMsg', 'Enter your name.', 'error');
+      return;
+    }
+    const { error } = await supabaseClient.from('profiles').update({ display_name: name }).eq('id', currentUserId);
+    if (error){
+      showMsg('nameMsg', error.message, 'error');
+      return;
+    }
+    showMsg('nameMsg', 'Saved.', 'success');
+  });
 
   let pendingAvatarFile = null;
   document.getElementById('chooseAvatarBtn').addEventListener('click', () => document.getElementById('avatarInput').click());
@@ -165,21 +190,31 @@
       const { data } = supabaseClient.storage.from('team-logos').getPublicUrl(path);
       const { error: updateError } = await supabaseClient.from('profiles').update({ avatar_url: data.publicUrl }).eq('id', currentUserId);
       if (updateError) throw updateError;
-      showMsg('avatarMsg', 'Avatar saved.', 'success');
+      showMsg('avatarMsg', 'Photo saved.', 'success');
     } catch (err){
       showMsg('avatarMsg', err.message, 'error');
     }
   });
 
   document.getElementById('savePasswordBtn').addEventListener('click', async () => {
+    const oldPw = document.getElementById('oldPasswordInput').value;
     const pw = document.getElementById('newPasswordInput').value;
     const confirmPw = document.getElementById('confirmPasswordInput').value;
+    if (!oldPw){
+      showMsg('passwordMsg', 'Enter your current password.', 'error');
+      return;
+    }
     if (pw.length < 6){
-      showMsg('passwordMsg', 'Password needs to be at least 6 characters.', 'error');
+      showMsg('passwordMsg', 'New password needs to be at least 6 characters.', 'error');
       return;
     }
     if (pw !== confirmPw){
       showMsg('passwordMsg', 'Passwords do not match.', 'error');
+      return;
+    }
+    const { error: verifyError } = await supabaseClient.auth.signInWithPassword({ email: currentUserEmail, password: oldPw });
+    if (verifyError){
+      showMsg('passwordMsg', 'Current password is incorrect.', 'error');
       return;
     }
     const { error } = await supabaseClient.auth.updateUser({ password: pw });
@@ -187,6 +222,7 @@
       showMsg('passwordMsg', error.message, 'error');
       return;
     }
+    document.getElementById('oldPasswordInput').value = '';
     document.getElementById('newPasswordInput').value = '';
     document.getElementById('confirmPasswordInput').value = '';
     showMsg('passwordMsg', 'Password changed.', 'success');
