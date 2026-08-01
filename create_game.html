@@ -62,6 +62,7 @@
       <h2>Your roster</h2>
       <p class="sub" style="margin-bottom:10px;">Pulled automatically from your Team Roster page.</p>
       <div id="ourRosterStatus"></div>
+      <div id="ourAssignments"></div>
       <div id="ourConflicts"></div>
     </div>
 
@@ -71,6 +72,7 @@
       <button id="uploadOpponentBtn" class="secondary">Upload opponent roster (.xlsx)</button>
       <input type="file" id="opponentFile" accept=".xlsx,.xls" style="display:none;">
       <div id="opponentRosterStatus"></div>
+      <div id="opponentAssignments"></div>
       <div id="opponentConflicts"></div>
 
       <p class="hint" style="margin:16px 0 6px; font-size:13px; color:#888;">Opponent branding (optional)</p>
@@ -106,9 +108,9 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-  const OFFENSE_POS = ['QB','RB','FB','HB','WR','TE','OL','OT','OG','C'];
-  const DEFENSE_POS = ['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE'];
-  const SPECIAL_POS = ['K','P','LS','H','KR','PR'];
+  const OFFENSE_POS = ['QB','RB','FB','HB','TB','WR','SE','FL','SLOT','TE','OL','OT','OG','C'];
+  const DEFENSE_POS = ['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE','DL'];
+  const SPECIAL_POS = ['K','P','LS','H','KR','PR','RET'];
   function posToUnit(pos){
     if (!pos) return null;
     const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
@@ -138,34 +140,54 @@
       byNum[key].push(en);
     });
     const resolved = {}; // num -> { offense: entry|null, defense: entry|null, special: entry|null }
-    const conflicts = []; // { num, entries }
+    const conflicts = []; // genuine collisions: 2+ people who'd occupy the SAME unit for this number
+    const needsAssignment = []; // a single person whose position we don't recognize -- no collision, just needs one tag
     Object.keys(byNum).forEach(num => {
       const group = byNum[num];
       const buckets = { offense: [], defense: [], special: [] };
-      const unresolved = [];
+      const unknown = [];
       group.forEach(en => {
         const unit = en.explicitUnit || posToUnit(en.position);
         if (unit) buckets[unit].push(en);
-        else unresolved.push(en);
+        else unknown.push(en);
       });
-      const clean = unresolved.length === 0 &&
-        buckets.offense.length <= 1 && buckets.defense.length <= 1 && buckets.special.length <= 1;
-      if (clean){
-        resolved[num] = {
-          offense: buckets.offense[0] || null,
-          defense: buckets.defense[0] || null,
-          special: buckets.special[0] || null
-        };
-      } else {
-        resolved[num] = {
-          offense: buckets.offense[0] || null,
-          defense: buckets.defense[0] || null,
-          special: buckets.special[0] || null
-        };
+      const hasCollision = buckets.offense.length > 1 || buckets.defense.length > 1 || buckets.special.length > 1 || unknown.length > 1;
+      resolved[num] = {
+        offense: buckets.offense[0] || null,
+        defense: buckets.defense[0] || null,
+        special: buckets.special[0] || null
+      };
+      if (hasCollision){
         conflicts.push({ num, entries: group });
+      } else if (unknown.length === 1){
+        needsAssignment.push({ num, entry: unknown[0] });
       }
     });
-    return { resolved, conflicts };
+    return { resolved, conflicts, needsAssignment };
+  }
+
+  function renderAssignmentUI(containerId, teamKey, needsAssignment, resolvedRef){
+    const container = document.getElementById(containerId);
+    if (needsAssignment.length === 0){ container.innerHTML = ''; return; }
+    container.innerHTML = '<div class="conflict-block" style="background:#eef5ff;">' +
+      '<p style="font-size:13px; font-weight:600; margin:0 0 8px;">' + needsAssignment.length + ' player(s) with a position we didn\'t recognize — just pick one unit for each</p>' +
+      needsAssignment.map(({ num, entry }) => {
+        const label = '#' + num + ' ' + entry.name + (entry.position ? ' (' + entry.position + ')' : '');
+        return '<div class="conflict-row">' +
+          '<span style="display:inline-block; min-width:190px;">' + label + '</span>' +
+          ['offense','defense','special'].map(unit =>
+            '<label style="margin-left:8px;"><input type="radio" name="assign_' + teamKey + '_' + num + '" class="assignRadio" data-num="' + num + '" data-unit="' + unit + '"> ' + (unit === 'special' ? 'S/T' : unit.charAt(0).toUpperCase() + unit.slice(1)) + '</label>'
+          ).join('') +
+          '</div>';
+      }).join('') +
+      '</div>';
+    container.querySelectorAll('.assignRadio').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const num = radio.dataset.num, unit = radio.dataset.unit;
+        const entry = needsAssignment.find(a => a.num === num).entry;
+        resolvedRef[num][unit] = entry;
+      });
+    });
   }
 
   function renderConflictUI(containerId, teamKey, conflicts, resolvedRef){
@@ -270,12 +292,13 @@
     const entries = (players || [])
       .filter(p => p.default_jersey_number)
       .map(p => ({ number: p.default_jersey_number, name: p.name, position: p.primary_position, explicitUnit: null, playerId: p.id }));
-    const { resolved, conflicts } = resolveByNumber(entries);
+    const { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
     ourResolved = resolved;
     ourConflictsList = conflicts;
     document.getElementById('ourRosterStatus').innerHTML =
       '<div class="roster-summary">' + entries.length + ' players loaded from your roster' +
       (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>';
+    renderAssignmentUI('ourAssignments', 'our', needsAssignment, ourResolved);
     renderConflictUI('ourConflicts', 'our', conflicts, ourResolved);
 
     showView('mainView');
@@ -313,12 +336,13 @@
         showMsg('opponentRosterStatus', 'No valid rows found. Expected column A = number, column B = name, column C = position.', 'error');
         return;
       }
-      const { resolved, conflicts } = resolveByNumber(entries);
+      const { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
       oppResolved = resolved;
       oppConflictsList = conflicts;
       document.getElementById('opponentRosterStatus').innerHTML =
         '<div class="roster-summary">' + entries.length + ' players loaded' +
         (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>';
+      renderAssignmentUI('opponentAssignments', 'opp', needsAssignment, oppResolved);
       renderConflictUI('opponentConflicts', 'opp', conflicts, oppResolved);
     };
     reader.readAsArrayBuffer(file);
