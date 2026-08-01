@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StatChat — New Game</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:24px; }
+  .wrap { max-width:760px; margin:0 auto; }
+  .card { background:#fff; border-radius:12px; padding:28px; margin-bottom:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:22px; margin:0 0 6px; }
+  h2 { font-size:16px; margin:0 0 12px; color:#444; }
+  p.sub { color:#888; margin:0 0 20px; font-size:14px; }
+  label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
+  input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  button { padding:9px 16px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+  button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
+  button:disabled { opacity:0.5; cursor:default; }
+  .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
+  .msg.error { background:#fdecea; color:#a32d2d; }
+  .msg.success { background:#e8f5e9; color:#1a7a4c; }
+  .hidden { display:none; }
+  .conflict-block { background:#fff3cd; border-radius:8px; padding:12px 14px; margin-top:12px; }
+  .conflict-row { font-size:13px; margin-bottom:6px; }
+  .conflict-status { font-size:12px; color:#7a6a2a; margin-top:2px; }
+  .roster-summary { font-size:14px; color:#1a7a4c; margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="loading" class="card"><h1>Loading…</h1></div>
+
+  <div id="mainView" class="hidden">
+    <div class="card">
+      <h1>New Game</h1>
+      <p class="sub">Set this game up now, start entering stats whenever you're ready — no need to do both at once.</p>
+      <div id="setupMsg"></div>
+
+      <div class="grid2">
+        <label>Game designator<input type="text" id="designator" placeholder="G1"></label>
+        <label>Season year<input type="number" id="seasonYear"></label>
+      </div>
+      <div class="grid2">
+        <label>Date<input type="date" id="gameDate"></label>
+        <label>Quarter length (minutes)<input type="number" id="quarterLen" value="12"></label>
+      </div>
+      <div class="grid2">
+        <label>Opponent name<input type="text" id="opponentName" placeholder="Ruston"></label>
+        <label>Home or away?
+          <select id="homeAway"><option value="home">Home</option><option value="away">Away</option></select>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Your roster</h2>
+      <p class="sub" style="margin-bottom:10px;">Pulled automatically from your Team Roster page.</p>
+      <div id="ourRosterStatus"></div>
+      <div id="ourConflicts"></div>
+    </div>
+
+    <div class="card">
+      <h2>Opponent roster</h2>
+      <p class="sub" style="margin-bottom:10px;">Fresh upload for this specific game, same as always.</p>
+      <button id="uploadOpponentBtn" class="secondary">Upload opponent roster (.xlsx)</button>
+      <input type="file" id="opponentFile" accept=".xlsx,.xls" style="display:none;">
+      <div id="opponentRosterStatus"></div>
+      <div id="opponentConflicts"></div>
+    </div>
+
+    <div class="card">
+      <button id="createGameBtn">Create game</button>
+      <a href="dashboard.html" class="secondary" style="margin-left:8px; text-decoration:none; padding:9px 16px; border-radius:6px; border:1px solid #ccc; color:#444;">Cancel</a>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  const OFFENSE_POS = ['QB','RB','FB','HB','WR','TE','OL','OT','OG','C'];
+  const DEFENSE_POS = ['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE'];
+  const SPECIAL_POS = ['K','P','LS','H','KR','PR'];
+  function posToUnit(pos){
+    if (!pos) return null;
+    const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
+    if (SPECIAL_POS.includes(first)) return 'special';
+    if (OFFENSE_POS.includes(first)) return 'offense';
+    if (DEFENSE_POS.includes(first)) return 'defense';
+    return null;
+  }
+  function extractNameTag(rawName){
+    const m = String(rawName).match(/\(\s*(O|D|ST)\s*\)\s*$/i);
+    if (!m) return { cleanName: String(rawName).trim(), explicitUnit: null };
+    const tag = m[1].toUpperCase();
+    const cleanName = String(rawName).slice(0, m.index).trim();
+    const unitMap = { O: 'offense', D: 'defense', ST: 'special' };
+    return { cleanName, explicitUnit: unitMap[tag] || null };
+  }
+
+  // Groups entries by jersey number and splits them into offense/defense/
+  // special buckets. Returns which numbers resolved cleanly and which
+  // need a human decision -- same algorithm proven in the entry app,
+  // just fed from whatever source (persistent roster or fresh upload).
+  function resolveByNumber(entries){
+    const byNum = {};
+    entries.forEach(en => {
+      const key = String(en.number).trim();
+      if (!byNum[key]) byNum[key] = [];
+      byNum[key].push(en);
+    });
+    const resolved = {}; // num -> { offense: entry|null, defense: entry|null, special: entry|null }
+    const conflicts = []; // { num, entries }
+    Object.keys(byNum).forEach(num => {
+      const group = byNum[num];
+      const buckets = { offense: [], defense: [], special: [] };
+      const unresolved = [];
+      group.forEach(en => {
+        const unit = en.explicitUnit || posToUnit(en.position);
+        if (unit) buckets[unit].push(en);
+        else unresolved.push(en);
+      });
+      const clean = unresolved.length === 0 &&
+        buckets.offense.length <= 1 && buckets.defense.length <= 1 && buckets.special.length <= 1;
+      if (clean){
+        resolved[num] = {
+          offense: buckets.offense[0] || null,
+          defense: buckets.defense[0] || null,
+          special: buckets.special[0] || null
+        };
+      } else {
+        resolved[num] = {
+          offense: buckets.offense[0] || null,
+          defense: buckets.defense[0] || null,
+          special: buckets.special[0] || null
+        };
+        conflicts.push({ num, entries: group });
+      }
+    });
+    return { resolved, conflicts };
+  }
+
+  function renderConflictUI(containerId, teamKey, conflicts, resolvedRef){
+    const container = document.getElementById(containerId);
+    if (conflicts.length === 0){ container.innerHTML = ''; return; }
+    container.innerHTML = '<div class="conflict-block">' +
+      '<p style="font-size:14px; font-weight:600; margin:0 0 8px;">Quick check — ' + conflicts.length + ' number(s) need a look</p>' +
+      '<p style="font-size:12px; color:#665; margin:0 0 10px;">Check every unit each person actually plays. You can check more than one if you\'re not sure which one -- that number just stays flagged until you narrow it down.</p>' +
+      conflicts.map(c => {
+        return '<div style="margin-bottom:10px;">' +
+          '<div style="font-size:13px; font-weight:600;">#' + c.num + '</div>' +
+          c.entries.map((en, i) => {
+            const rowId = teamKey + '_' + c.num + '_' + i;
+            const label = en.name + (en.position ? ' (' + en.position + ')' : '');
+            return '<div class="conflict-row">' +
+              '<span style="display:inline-block; min-width:170px;">' + label + '</span>' +
+              ['offense','defense','special'].map(unit => {
+                const checked = resolvedRef[c.num][unit] === en ? 'checked' : '';
+                return '<label style="margin-left:8px;"><input type="checkbox" class="conflictCheck" data-num="' + c.num + '" data-unit="' + unit + '" data-idx="' + i + '" ' + checked + '> ' + (unit === 'special' ? 'S/T' : unit.charAt(0).toUpperCase() + unit.slice(1)) + '</label>';
+              }).join('') +
+              '</div>';
+          }).join('') +
+          '<div class="conflict-status" id="conflictStatus_' + teamKey + '_' + c.num + '"></div>' +
+          '</div>';
+      }).join('') +
+      '</div>';
+
+    function updateStatus(num){
+      const parts = [];
+      ['offense','defense','special'].forEach(unit => {
+        const val = resolvedRef[num][unit];
+        parts.push((unit === 'special' ? 'S/T' : unit.charAt(0).toUpperCase() + unit.slice(1)) + ': ' + (val ? val.name : 'not set'));
+      });
+      const el = document.getElementById('conflictStatus_' + teamKey + '_' + num);
+      if (el) el.textContent = parts.join(' · ');
+    }
+    conflicts.forEach(c => updateStatus(c.num));
+
+    container.querySelectorAll('.conflictCheck').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const num = cb.dataset.num, unit = cb.dataset.unit, idx = parseInt(cb.dataset.idx);
+        const conflict = conflicts.find(c => c.num === num);
+        const entry = conflict.entries[idx];
+        if (cb.checked){
+          resolvedRef[num][unit] = entry;
+        } else if (resolvedRef[num][unit] === entry){
+          resolvedRef[num][unit] = null;
+        }
+        // Uncheck this entry for this unit in any OTHER row it might also
+        // appear checked under (shouldn't normally happen since each entry
+        // is only in the group once, but keep resolvedRef authoritative).
+        updateStatus(num);
+      });
+    });
+  }
+
+  let ourTeamId = null;
+  let ourResolved = {}, ourConflictsList = [];
+  let oppResolved = {}, oppConflictsList = [];
+
+  function showView(name){
+    ['loading', 'mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+  }
+  function showMsg(elId, text, type){
+    document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+  }
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION'){
+      if (session){
+        init();
+      } else {
+        window.location.href = 'login.html';
+      }
+    } else if (event === 'SIGNED_OUT'){
+      window.location.href = 'login.html';
+    }
+  });
+
+  async function init(){
+    document.getElementById('seasonYear').value = new Date().getFullYear();
+    const { data: teams, error: teamError } = await supabaseClient
+      .from('teams').select('id, name').eq('is_our_team', true).limit(1);
+    if (teamError || !teams || teams.length === 0){
+      showView('mainView');
+      showMsg('setupMsg', 'No team found yet — set up your Team Roster first.', 'error');
+      return;
+    }
+    ourTeamId = teams[0].id;
+
+    const { data: players, error: playersError } = await supabaseClient
+      .from('players').select('name, primary_position, default_jersey_number, id').eq('team_id', ourTeamId);
+    if (playersError){
+      showView('mainView');
+      showMsg('setupMsg', 'Could not load your roster: ' + playersError.message, 'error');
+      return;
+    }
+
+    const entries = (players || [])
+      .filter(p => p.default_jersey_number)
+      .map(p => ({ number: p.default_jersey_number, name: p.name, position: p.primary_position, explicitUnit: null, playerId: p.id }));
+    const { resolved, conflicts } = resolveByNumber(entries);
+    ourResolved = resolved;
+    ourConflictsList = conflicts;
+    document.getElementById('ourRosterStatus').innerHTML =
+      '<div class="roster-summary">' + entries.length + ' players loaded from your roster' +
+      (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>';
+    renderConflictUI('ourConflicts', 'our', conflicts, ourResolved);
+
+    showView('mainView');
+  }
+
+  document.getElementById('uploadOpponentBtn').addEventListener('click', () => {
+    document.getElementById('opponentFile').click();
+  });
+
+  document.getElementById('opponentFile').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const statusEl = document.getElementById('opponentRosterStatus');
+    statusEl.innerHTML = '<div class="roster-summary" style="color:#888;">Reading file…</div>';
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      let rows;
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      } catch (err){
+        showMsg('opponentRosterStatus', 'Could not read that file: ' + err.message, 'error');
+        return;
+      }
+      const entries = [];
+      rows.forEach(row => {
+        const num = row[0], rawName = row[1], pos = row[2];
+        if (num === undefined || rawName === undefined) return;
+        if (!/^\d+$/.test(String(num).trim())) return;
+        const { cleanName, explicitUnit } = extractNameTag(rawName);
+        entries.push({ number: String(num).trim(), name: cleanName, position: pos ? String(pos).trim().toUpperCase() : null, explicitUnit });
+      });
+      if (entries.length === 0){
+        showMsg('opponentRosterStatus', 'No valid rows found. Expected column A = number, column B = name, column C = position.', 'error');
+        return;
+      }
+      const { resolved, conflicts } = resolveByNumber(entries);
+      oppResolved = resolved;
+      oppConflictsList = conflicts;
+      document.getElementById('opponentRosterStatus').innerHTML =
+        '<div class="roster-summary">' + entries.length + ' players loaded' +
+        (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>';
+      renderConflictUI('opponentConflicts', 'opp', conflicts, oppResolved);
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  function buildGameRosterRows(resolved, teamSide){
+    const rows = [];
+    Object.keys(resolved).forEach(num => {
+      ['offense','defense','special'].forEach(unit => {
+        const entry = resolved[num][unit];
+        if (entry){
+          rows.push({
+            team_side: teamSide,
+            jersey_number: num,
+            player_name: entry.name,
+            unit,
+            position: entry.position || null,
+            player_id: entry.playerId || null
+          });
+        }
+      });
+    });
+    return rows;
+  }
+
+  document.getElementById('createGameBtn').addEventListener('click', async () => {
+    const designator = document.getElementById('designator').value.trim();
+    const seasonYear = parseInt(document.getElementById('seasonYear').value);
+    const gameDate = document.getElementById('gameDate').value || null;
+    const opponentName = document.getElementById('opponentName').value.trim();
+    const isHome = document.getElementById('homeAway').value === 'home';
+    const quarterLenMin = parseInt(document.getElementById('quarterLen').value) || 12;
+
+    if (!designator || !opponentName){
+      showMsg('setupMsg', 'Game designator and opponent name are both required.', 'error');
+      return;
+    }
+    if (Object.keys(oppResolved).length === 0){
+      showMsg('setupMsg', 'Upload the opponent roster before creating the game.', 'error');
+      return;
+    }
+
+    const { data: teamRow } = await supabaseClient.from('teams').select('name').eq('id', ourTeamId).limit(1);
+    const ourName = (teamRow && teamRow[0] && teamRow[0].name) || 'Us';
+
+    const gamePayload = {
+      designator,
+      season_year: seasonYear,
+      game_date: gameDate,
+      home_team_name: isHome ? ourName : opponentName,
+      away_team_name: isHome ? opponentName : ourName,
+      our_team_is_home: isHome,
+      quarter_length_seconds: quarterLenMin * 60,
+      status: 'setup'
+    };
+
+    const { data: game, error: gameError } = await supabaseClient
+      .from('games').insert(gamePayload).select('id').single();
+    if (gameError){
+      showMsg('setupMsg', 'Could not create game: ' + gameError.message, 'error');
+      return;
+    }
+
+    const rosterRows = [
+      ...buildGameRosterRows(ourResolved, 'teamA'),
+      ...buildGameRosterRows(oppResolved, 'teamB')
+    ].map(r => Object.assign({ game_id: game.id }, r));
+
+    const { error: rosterError } = await supabaseClient.from('game_rosters').insert(rosterRows);
+    if (rosterError){
+      showMsg('setupMsg', 'Game created, but roster snapshot failed: ' + rosterError.message, 'error');
+      return;
+    }
+
+    showMsg('setupMsg', 'Game created.', 'success');
+    setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
+  });
+</script>
+</body>
+</html>
