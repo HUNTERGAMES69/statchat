@@ -297,11 +297,16 @@
     if (!ok1) return;
 
     if (status === 'final'){
-      const ok2 = confirm(
+      const typed = prompt(
         'This game is marked FINAL — it represents a completed, finished game, not a work in progress.\n\n' +
-        'Deleting it is permanent. There is no way to recover it afterward.\n\nAre you absolutely sure?'
+        'Deleting it is permanent. Every play and stat from this game will be gone, with no way to recover it afterward.\n\n' +
+        'Type the game designator exactly (' + designator + ') to confirm:'
       );
-      if (!ok2) return;
+      if (typed === null) return; // cancelled
+      if (typed.trim() !== designator){
+        showMsg('dashboardMsg', 'That didn\'t match "' + designator + '" — deletion cancelled, nothing was touched.', 'error');
+        return;
+      }
 
       // Deleting a finalized game requires briefly un-finalizing it first --
       // only an admin account can do this, same rule as anywhere else in
