@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StatChat">
+<link rel="apple-touch-icon" id="appleTouchIcon" href="">
 <title>StatChat — Dashboard</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:24px; }
@@ -35,9 +39,19 @@
   .status-loss { color:#a32d2d; font-size:13px; }
   .status-notstarted { color:#999; font-weight:600; }
   .empty-state { color:#999; padding:16px 0; }
+  #appSplash { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000; background:#fff; transition:opacity 0.3s; }
+  #appSplash img { width:96px; height:96px; object-fit:contain; margin-bottom:16px; border-radius:16px; }
+  #appSplash .splashTitle { font-size:20px; font-weight:600; letter-spacing:0.5px; }
+  #appSplash.hidden { opacity:0; pointer-events:none; }
 </style>
 </head>
 <body>
+
+<div id="appSplash">
+  <img id="splashLogo" style="display:none;" alt="">
+  <div class="splashTitle" id="splashTitle">StatChat</div>
+</div>
+
 <div class="wrap">
 
   <div id="loading" class="card"><h1>Loading…</h1></div>
@@ -79,6 +93,39 @@
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  function luminanceOf(hex){
+    if (!hex || hex.length < 7) return 0.5;
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return (0.299*r + 0.587*g + 0.114*b) / 255;
+  }
+
+  function applySplash(branding){
+    const isLight = luminanceOf(branding.primary_color) > 0.6;
+    const bg = isLight ? '#000000' : '#ffffff';
+    const fg = isLight ? '#ffffff' : '#1a1a1a';
+    const splash = document.getElementById('appSplash');
+    splash.style.background = bg;
+    document.getElementById('splashTitle').style.color = fg;
+    if (branding.logo_url){
+      const img = document.getElementById('splashLogo');
+      img.src = branding.logo_url;
+      img.style.display = 'block';
+      document.getElementById('appleTouchIcon').setAttribute('href', branding.logo_url);
+    }
+  }
+
+  function hideSplash(){
+    document.getElementById('appSplash').classList.add('hidden');
+  }
+
+  // Show branding INSTANTLY from whatever was cached last time, before any
+  // network call -- this is what makes repeat opens feel like a real
+  // installed app instead of a blank page while data loads.
+  try {
+    const cached = JSON.parse(localStorage.getItem('statchat_branding') || 'null');
+    if (cached) applySplash(cached);
+  } catch (e){}
 
   function showView(name){
     ['loading', 'dashboardView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
@@ -126,6 +173,8 @@
         logo.style.display = 'inline-block';
       }
       if (team.current_season_year) seasonYear = team.current_season_year;
+      applySplash(team);
+      try { localStorage.setItem('statchat_branding', JSON.stringify({ logo_url: team.logo_url, primary_color: team.primary_color })); } catch (e){}
     }
     loadGames(seasonYear);
   }
@@ -138,11 +187,13 @@
       .order('game_date', { ascending: false });
     if (error){
       showMsg('dashboardMsg', 'Could not load games: ' + error.message, 'error');
+      hideSplash();
       return;
     }
     document.getElementById('seasonLabel').textContent = seasonYear + ' season';
     renderSummary(data || []);
     renderGames(data || []);
+    hideSplash();
   }
 
   function renderSummary(games){
