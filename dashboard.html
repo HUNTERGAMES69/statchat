@@ -87,7 +87,6 @@
             <div id="accountMenu" class="hidden" style="position:absolute; right:0; top:110%; background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:20; min-width:200px; padding:6px 0;">
               <div id="accountMenuEmail" style="padding:8px 14px; font-size:12px; color:#888; border-bottom:1px solid #f0f0f0;"></div>
               <a href="account.html" class="accountMenuItem" style="display:block; padding:9px 14px; color:#333; font-size:14px; text-decoration:none;">Account settings</a>
-              <button id="resetProductionMenuBtn" class="accountMenuItem hidden" style="display:block; width:100%; text-align:left; padding:9px 14px; color:#a37a00; font-weight:600; font-size:14px; background:none; border:none;">Reset for production…</button>
               <button id="signOutBtn" class="accountMenuItem" style="display:block; width:100%; text-align:left; padding:9px 14px; color:#a32d2d; font-size:14px; background:none; border:none;">Sign out</button>
             </div>
           </div>
@@ -189,28 +188,32 @@
     document.getElementById('accountMenu').classList.add('hidden');
   });
 
+  function initialsFrom(displayName, email){
+    if (displayName && displayName.trim()){
+      const parts = displayName.trim().split(/\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+    return (email || '?').charAt(0).toUpperCase();
+  }
+
   async function loadAccountMenu(){
     document.getElementById('accountMenuEmail').textContent = currentUserEmail;
-    document.getElementById('accountInitial').textContent = (currentUserEmail || '?').charAt(0).toUpperCase();
+    document.getElementById('accountInitial').textContent = initialsFrom(null, currentUserEmail);
 
     const { data, error } = await supabaseClient
-      .from('profiles').select('avatar_url, is_admin').eq('id', currentUserId).limit(1);
+      .from('profiles').select('display_name, avatar_url').eq('id', currentUserId).limit(1);
     if (error || !data || data.length === 0) return;
     const profile = data[0];
+    document.getElementById('accountInitial').textContent = initialsFrom(profile.display_name, currentUserEmail);
     if (profile.avatar_url){
       const img = document.getElementById('accountAvatarImg');
       img.src = profile.avatar_url;
       img.style.display = 'block';
       document.getElementById('accountInitial').style.display = 'none';
     }
-    if (profile.is_admin){
-      document.getElementById('resetProductionMenuBtn').classList.remove('hidden');
-    }
   }
 
-  document.getElementById('resetProductionMenuBtn').addEventListener('click', () => {
-    window.location.href = 'account.html#reset';
-  });
 
   async function loadDashboard(){
     const { data, error } = await supabaseClient
