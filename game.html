@@ -906,7 +906,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const yds = document.getElementById('gk_yards').value.trim();
         if (!kickerNum || !yds) return;
         const text = nameInSpecialTeams(guided.kickingTeam, kickerNum) + ' kicks off ' + yds;
-        pushAndPersist({ id: nextId++, text, effect: {}, team: guided.kickingTeam, quarter: guided.quarter });
+        pushAndPersist({ id: nextId++, text, effect: {}, team: guided.kickingTeam, quarter: guided.quarter, roles: { kicker: { team: guided.kickingTeam, num: kickerNum, yards: parseInt(yds)||0 }, playType: 'kickoff' } });
         guided.step = 'return';
         persistUiState();
         renderAll(); renderGuided();
@@ -942,7 +942,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         let text = nameInDefense(guided.receivingTeam, returnerNum) + ' returns ' + yds;
         const effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
         if (td){ text += ' — TOUCHDOWN'; effect.score = { team: guided.receivingTeam, points: 6 }; }
-        pushAndPersist({ id: nextId++, text, effect, team: guided.receivingTeam, quarter: guided.quarter, roles: { defense: { team: guided.receivingTeam, num: returnerNum } } });
+        pushAndPersist({ id: nextId++, text, effect, team: guided.receivingTeam, quarter: guided.quarter, roles: { defense: { team: guided.receivingTeam, num: returnerNum }, playType: 'kickoff_return' } });
         const receivingName = TEAMS[guided.receivingTeam].name;
         const receivingTeamKey = guided.receivingTeam;
         const q = guided.quarter;
@@ -1133,13 +1133,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (!sel.passer) return;
       const yds = yards('pp_yards') || '0';
       code = sel.passer + 's ' + yds + (sel.credit ? ' ' + sel.credit : '');
-      roles = {};
+      roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 } };
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
     } else if (type === 'int'){
       if (!sel.passer || !sel.credit) return;
       const yds = yards('pp_yards');
       code = sel.passer + 'x ' + sel.credit + (yds ? ' ' + yds : '') + (td ? ' td' : '');
-      roles = { defense: { team: def, num: sel.credit } };
+      roles = { passer: { team: off, num: sel.passer }, defense: { team: def, num: sel.credit } };
     } else if (type === 'fumble'){
       if (!sel.carrier) return;
       const rec = document.querySelector('input[name=pp_fumrec]:checked').value;
@@ -1155,7 +1155,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const yds = yards('pp_yards') || '0';
       const retyds = yards('pp_retyds');
       code = sel.kicker + 'ko ' + yds + (sel.credit ? ' ' + sel.credit + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
-      roles = {};
+      roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0 } };
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
     } else if (type === 'punt'){
       const blocked = document.getElementById('pp_blocked').checked;
@@ -1164,12 +1164,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (!sel.credit) return;
         const retyds = yards('pp_blockretyds');
         code = sel.punter + 'pb ' + sel.credit + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
+        roles = { punter: { team: off, num: sel.punter, yards: 0, blocked: true } };
       } else {
         const yds = yards('pp_yards') || '0';
         const retyds = yards('pp_retyds');
         code = sel.punter + 'pt ' + yds + (sel.credit ? ' ' + sel.credit + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
+        roles = { punter: { team: off, num: sel.punter, yards: parseInt(yds)||0, blocked: false } };
       }
-      roles = {};
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
     } else if (type === 'fg'){
       if (!sel.kicker) return;
@@ -1181,7 +1182,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       } else {
         code = sel.kicker + 'fg ' + yds + ' ' + res;
       }
-      roles = {};
+      roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0, result: res } };
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
     } else if (type === 'pat'){
       if (!sel.kicker) return;
@@ -1193,11 +1194,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       } else {
         code = sel.kicker + 'pa ' + res;
       }
-      roles = {};
+      roles = { kicker: { team: off, num: sel.kicker, result: res } };
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
     }
 
     if (!code) return;
+    if (roles) roles.playType = type;
     document.getElementById('code').value = code;
     showConfirm();
     if (pending){
