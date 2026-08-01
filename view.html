@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StatChat">
+<title>StatChat — Live View</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:14px; }
+  .wrap { max-width:760px; margin:0 auto; }
+  .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:20px; margin:0; }
+  h2 { font-size:16px; margin:0 0 10px; color:#444; }
+  h3 { font-size:13px; margin:14px 0 6px; color:#888; text-transform:uppercase; }
+  p.sub { color:#888; margin:0 0 14px; font-size:13px; }
+  .banner { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border-radius:10px; padding:12px 16px; margin-bottom:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
+  .banner .score { font-size:20px; font-weight:700; }
+  .banner .downdist { font-size:15px; font-weight:500; }
+  .hint { font-size:12px; color:#888; margin:6px 0; }
+  .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
+  .msg.error { background:#fdecea; color:#a32d2d; }
+  .hidden { display:none; }
+  .logline { font-size:14px; padding:6px 0; border-bottom:1px solid #f2f2f2; }
+  table.stattable { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:12px; }
+  table.stattable th { text-align:left; font-size:11px; color:#888; text-transform:uppercase; padding:4px 6px; border-bottom:1px solid #eee; }
+  table.stattable td { padding:5px 6px; border-bottom:1px solid #f5f5f5; }
+  .live-badge { display:inline-block; font-size:11px; font-weight:700; color:#a37a00; background:#fff3cd; padding:2px 8px; border-radius:10px; margin-left:8px; vertical-align:middle; }
+  @media (min-width: 640px) { body { padding:24px; } .card { padding:24px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="loading" class="card"><h1>Loading…</h1></div>
+
+  <div id="errorView" class="hidden card">
+    <h1>Couldn't open this game</h1>
+    <p class="sub" id="errorMsg"></p>
+    <a href="dashboard.html" style="text-decoration:none; padding:9px 16px; border-radius:6px; background:#1a1a2e; color:#fff; font-weight:600;">← Dashboard</a>
+  </div>
+
+  <div id="mainView" class="hidden">
+    <div class="banner" id="banner">
+      <span class="score" id="scoreText"></span>
+      <span class="downdist" id="downText"></span>
+      <span class="downdist" id="quarterText"></span>
+    </div>
+    <div class="hint" id="topText" style="text-align:right;"></div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+        <h1 id="gameTitle">Game <span class="live-badge">LIVE VIEW — READ ONLY</span></h1>
+        <a href="dashboard.html" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600; white-space:nowrap;">← Dashboard</a>
+      </div>
+      <div id="gameMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Statistics</h2>
+      <div id="boxScoreContainer"></div>
+    </div>
+
+    <div class="card">
+      <h2>Current drive</h2>
+      <div id="driveLogScroll"></div>
+    </div>
+
+    <div class="card">
+      <h2>Previous drive</h2>
+      <div id="prevDriveLogScroll"></div>
+    </div>
+
+    <div class="card">
+      <h2>All plays</h2>
+      <div id="logScroll"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  function showView(name){
+    ['loading','errorView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+  }
+  function showMsg(elId, text, type){
+    document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+  }
+
+  let currentGameId = null;
+  let TEAMS = { teamA: {}, teamB: {} };
+  let plays = [], startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION'){
+      if (session){ init(); } else { window.location.href = '/'; }
+    } else if (event === 'SIGNED_OUT'){
+      window.location.href = '/';
+    }
+  });
+
+  function buildTeams(game, rosterRows, ourBranding){
+    const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
+    const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null };
+    TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#8B0000', text: game.opponent_secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null };
+    rosterRows.forEach(r => {
+      const team = TEAMS[r.team_side];
+      if (!team) return;
+      if (r.unit === 'offense'){ team.rosterOffense[r.jersey_number] = r.player_name; team.posOffense[r.jersey_number] = r.position; }
+      else if (r.unit === 'defense'){ team.rosterDefense[r.jersey_number] = r.player_name; }
+      else if (r.unit === 'special'){ team.rosterSpecialTeams[r.jersey_number] = r.player_name; }
+    });
+  }
+
+  // --- Proven read-only engine core, extracted verbatim from game.html ---
+function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+function nameInOffense(teamKey, num){
+  const n = TEAMS[teamKey].rosterOffense[num] || (TEAMS[teamKey].rosterSpecialTeams && TEAMS[teamKey].rosterSpecialTeams[num]);
+  return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
+}
+function nameInDefense(teamKey, num){
+  const n = TEAMS[teamKey].rosterDefense[num];
+  return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
+}
+function nameInSpecialTeams(teamKey, num){
+  const n = (TEAMS[teamKey].rosterSpecialTeams && TEAMS[teamKey].rosterSpecialTeams[num]) || TEAMS[teamKey].rosterOffense[num];
+  return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
+}
+function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':n===4?'4th':(n+'th'); }
+function clockToAbsSeconds(quarter, clockStr){
+  const m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const remaining = parseInt(m[1]) * 60 + parseInt(m[2]);
+  return (quarter - 1) * quarterLengthSec + (quarterLengthSec - remaining);
+}
+function formatDuration(sec){
+  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+function markerLabel(fp){
+  if (fp === null || fp === undefined) return '';
+  return fp <= 50 ? ('own ' + fp) : ('opp ' + (100 - fp));
+}
+
+function readFileAsDataURL(file){
+  return new Promise(resolve => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.readAsDataURL(file);
+  });
+}
+
+const OFFENSE_POS = new Set(['QB','RB','FB','HB','WR','TE','OL','OT','OG','C']);
+const DEFENSE_POS = new Set(['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE']);
+const SPECIAL_POS = new Set(['K','P','LS','H','KR','PR']);
+function posToUnit(pos){
+  if (!pos) return null;
+  const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
+  if (SPECIAL_POS.has(first)) return 'st';
+  if (OFFENSE_POS.has(first)) return 'o';
+  if (DEFENSE_POS.has(first)) return 'd';
+  return null;
+}
+function extractNameTag(rawName){
+  const m = String(rawName).match(/\(\s*(O|D|ST)\s*\)\s*$/i);
+  if (!m) return { cleanName: String(rawName).trim(), explicitUnit: null };
+  const tag = m[1].toUpperCase();
+  const cleanName = String(rawName).slice(0, m.index).trim();
+  return { cleanName, explicitUnit: tag.toLowerCase() };
+}
+function computeState(){
+  const state = {
+    possession: startingPossession,
+    quarter: 1,
+    scores: { teamA: 0, teamB: 0 },
+    possessionTime: { teamA: 0, teamB: 0 },
+    down: null, distance: null, fieldPos: null, startSpot: null, statYards: 0,
+    penalties: { teamA: { count: 0, yds: 0 }, teamB: { count: 0, yds: 0 } }
+  };
+  const pendingClockStart = { teamA: null, teamB: null };
+  for (const p of plays){
+    const e = p.effect;
+    if (!e) continue;
+    if (e.isReset){
+      state.down = e.down; state.distance = e.distance; state.fieldPos = e.fieldPos;
+      state.startSpot = e.fieldPos; state.statYards = 0;
+    }
+    if (e.isStat){
+      if (state.fieldPos !== null){
+        state.fieldPos += e.fieldDelta;
+        state.fieldPos = Math.max(0, Math.min(100, state.fieldPos));
+      }
+      state.statYards += e.statYds;
+      if (e.td){
+        state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+      } else {
+        if (e.converts){
+          state.down = 1;
+          state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+        }
+        else if (e.turnoverOnDowns && e.flipApplied){
+          state.possession = otherTeam(state.possession);
+          state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+        } else if (!e.turnoverOnDowns){
+          state.down = (state.down || 1) + 1;
+          state.distance = Math.max((state.distance || 10) - e.statYds, 1);
+        }
+      }
+    }
+    if (e.endsDrive && !e.isStat){
+      state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+    }
+    if (e.penaltyTeam){
+      state.penalties[e.penaltyTeam].count += 1;
+      state.penalties[e.penaltyTeam].yds += e.penaltyYds;
+      if (state.fieldPos !== null){
+        state.fieldPos += e.fieldDelta;
+        state.fieldPos = Math.max(0, Math.min(100, state.fieldPos));
+      }
+    }
+    if (e.score){ state.scores[e.score.team] += e.score.points; }
+    if (e.scoreAdjust){ state.scores[e.scoreAdjust.team] += e.scoreAdjust.pts; }
+    if (e.flip && e.flipApplied && !e.isStat){
+      state.possession = e.flipTo;
+      state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+    }
+    if (e.forcePossession){ state.possession = e.forcePossession; }
+    if (e.setQuarter){ state.quarter = e.setQuarter; }
+    if (e.clockEvent){
+      const ce = e.clockEvent;
+      if (ce.type === 'start'){ pendingClockStart[ce.team] = ce.absSec; }
+      if (ce.type === 'end' && pendingClockStart[ce.team] !== null){
+        state.possessionTime[ce.team] += Math.max(0, ce.absSec - pendingClockStart[ce.team]);
+        pendingClockStart[ce.team] = null;
+      }
+      if (ce.type === 'transition'){
+        if (pendingClockStart[ce.outgoingTeam] !== null){
+          state.possessionTime[ce.outgoingTeam] += Math.max(0, ce.absSec - pendingClockStart[ce.outgoingTeam]);
+          pendingClockStart[ce.outgoingTeam] = null;
+        }
+        pendingClockStart[ce.incomingTeam] = ce.absSec;
+      }
+    }
+    if (e.setScores){ state.scores.teamA = e.setScores.teamA; state.scores.teamB = e.setScores.teamB; }
+  }
+  return state;
+}
+
+  // --- End engine core ---
+
+  function computeBoxScore(playsList){
+    const stats = {
+      teamA: { rushing:{}, passing:{}, receiving:{}, defense:{}, kicking:{}, punting:{} },
+      teamB: { rushing:{}, passing:{}, receiving:{}, defense:{}, kicking:{}, punting:{} }
+    };
+    function bucket(team, cat, num){
+      if (!team || !stats[team]) return null;
+      const b = stats[team][cat];
+      if (!b[num]) b[num] = {};
+      return b[num];
+    }
+    playsList.forEach(p => {
+      const r = p.roles || {};
+      const e = p.effect || {};
+      const type = r.playType;
+
+      if (r.carrier){
+        const s = bucket(r.carrier.team, 'rushing', r.carrier.num);
+        if (s){
+          s.att = (s.att||0) + 1;
+          s.yds = (s.yds||0) + (r.carrier.yards||0);
+          if (e.td) s.td = (s.td||0) + 1;
+        }
+      }
+      if (r.passer && type === 'pass'){
+        const s = bucket(r.passer.team, 'passing', r.passer.num);
+        if (s){
+          s.att = (s.att||0) + 1;
+          s.comp = (s.comp||0) + 1;
+          s.yds = (s.yds||0) + (r.passer.yards||0);
+          if (e.td) s.td = (s.td||0) + 1;
+        }
+        if (r.receiver){
+          const rs = bucket(r.receiver.team, 'receiving', r.receiver.num);
+          if (rs){
+            rs.rec = (rs.rec||0) + 1;
+            rs.yds = (rs.yds||0) + (r.receiver.yards||0);
+            if (e.td) rs.td = (rs.td||0) + 1;
+          }
+        }
+      }
+      if (r.passer && type === 'sack'){
+        const s = bucket(r.passer.team, 'passing', r.passer.num);
+        if (s){
+          s.sacked = (s.sacked||0) + 1;
+          s.sackYdsLost = (s.sackYdsLost||0) + Math.abs(r.passer.yards||0);
+        }
+      }
+      if (r.passer && type === 'int'){
+        const s = bucket(r.passer.team, 'passing', r.passer.num);
+        if (s){
+          s.att = (s.att||0) + 1;
+          s.intThrown = (s.intThrown||0) + 1;
+        }
+      }
+      if (r.defense){
+        const s = bucket(r.defense.team, 'defense', r.defense.num);
+        if (s){
+          s.credits = (s.credits||0) + 1;
+          if (type === 'int') s.int = (s.int||0) + 1;
+          if (type === 'sack') s.sacks = (s.sacks||0) + 1;
+        }
+      }
+      if (r.kicker){
+        if (type === 'kickoff'){
+          const s = bucket(r.kicker.team, 'kicking', r.kicker.num);
+          if (s){ s.ko = (s.ko||0) + 1; s.koYds = (s.koYds||0) + (r.kicker.yards||0); }
+        }
+        if (type === 'fg'){
+          const s = bucket(r.kicker.team, 'kicking', r.kicker.num);
+          if (s){
+            s.fgAtt = (s.fgAtt||0) + 1;
+            if (r.kicker.result === 'g') s.fgMade = (s.fgMade||0) + 1;
+          }
+        }
+        if (type === 'pat'){
+          const s = bucket(r.kicker.team, 'kicking', r.kicker.num);
+          if (s){
+            s.patAtt = (s.patAtt||0) + 1;
+            if (r.kicker.result === 'g') s.patMade = (s.patMade||0) + 1;
+          }
+        }
+      }
+      if (r.punter && type === 'punt'){
+        const s = bucket(r.punter.team, 'punting', r.punter.num);
+        if (s){
+          s.punts = (s.punts||0) + 1;
+          if (!r.punter.blocked) s.yds = (s.yds||0) + (r.punter.yards||0);
+          else s.blocked = (s.blocked||0) + 1;
+        }
+      }
+    });
+    return stats;
+  }
+
+  function playerName(team, num){
+    const t = TEAMS[team];
+    return (t.rosterOffense[num] || t.rosterDefense[num] || (t.rosterSpecialTeams && t.rosterSpecialTeams[num]) || ('#' + num));
+  }
+
+  function statRow(cells){
+    return '<tr>' + cells.map(c => '<td>' + c + '</td>').join('') + '</tr>';
+  }
+
+  function renderBoxScore(){
+    const box = computeBoxScore(plays);
+    let html = '';
+    ['teamA', 'teamB'].forEach(teamKey => {
+      const team = TEAMS[teamKey];
+      const s = box[teamKey];
+      html += '<h3>' + team.name + '</h3>';
+
+      const rushNums = Object.keys(s.rushing);
+      if (rushNums.length){
+        html += '<table class="stattable"><tr><th>Rushing</th><th>Att</th><th>Yds</th><th>TD</th></tr>' +
+          rushNums.map(n => statRow([playerName(teamKey, n), s.rushing[n].att||0, s.rushing[n].yds||0, s.rushing[n].td||0])).join('') + '</table>';
+      }
+      const passNums = Object.keys(s.passing);
+      if (passNums.length){
+        html += '<table class="stattable"><tr><th>Passing</th><th>Comp</th><th>Att</th><th>Yds</th><th>TD</th><th>Int</th><th>Sacked</th></tr>' +
+          passNums.map(n => statRow([playerName(teamKey, n), s.passing[n].comp||0, s.passing[n].att||0, s.passing[n].yds||0, s.passing[n].td||0, s.passing[n].intThrown||0, s.passing[n].sacked||0])).join('') + '</table>';
+      }
+      const recNums = Object.keys(s.receiving);
+      if (recNums.length){
+        html += '<table class="stattable"><tr><th>Receiving</th><th>Rec</th><th>Yds</th><th>TD</th></tr>' +
+          recNums.map(n => statRow([playerName(teamKey, n), s.receiving[n].rec||0, s.receiving[n].yds||0, s.receiving[n].td||0])).join('') + '</table>';
+      }
+      const defNums = Object.keys(s.defense);
+      if (defNums.length){
+        html += '<table class="stattable"><tr><th>Defense</th><th>Credits</th><th>Sacks</th><th>Int</th></tr>' +
+          defNums.map(n => statRow([playerName(teamKey, n), s.defense[n].credits||0, s.defense[n].sacks||0, s.defense[n].int||0])).join('') + '</table>';
+      }
+      const kickNums = Object.keys(s.kicking);
+      if (kickNums.length){
+        html += '<table class="stattable"><tr><th>Kicking</th><th>KO</th><th>KO Yds</th><th>FG</th><th>PAT</th></tr>' +
+          kickNums.map(n => statRow([playerName(teamKey, n), s.kicking[n].ko||0, s.kicking[n].koYds||0, (s.kicking[n].fgMade||0)+'/'+(s.kicking[n].fgAtt||0), (s.kicking[n].patMade||0)+'/'+(s.kicking[n].patAtt||0)])).join('') + '</table>';
+      }
+      const puntNums = Object.keys(s.punting);
+      if (puntNums.length){
+        html += '<table class="stattable"><tr><th>Punting</th><th>Punts</th><th>Yds</th><th>Blocked</th></tr>' +
+          puntNums.map(n => statRow([playerName(teamKey, n), s.punting[n].punts||0, s.punting[n].yds||0, s.punting[n].blocked||0])).join('') + '</table>';
+      }
+      if (!rushNums.length && !passNums.length && !recNums.length && !defNums.length && !kickNums.length && !puntNums.length){
+        html += '<p class="hint">No stats yet for ' + team.name + '.</p>';
+      }
+    });
+    document.getElementById('boxScoreContainer').innerHTML = html;
+  }
+
+  function renderAll(){
+    const state = computeState();
+    const isGoalToGo = state.down && state.fieldPos !== null && (state.fieldPos + state.distance >= 100);
+    const distDisplay = isGoalToGo ? 'Goal' : state.distance;
+    document.getElementById('scoreText').textContent = TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' + TEAMS.teamB.name + ' ' + state.scores.teamB;
+    document.getElementById('downText').textContent = state.down
+      ? (ordinal(state.down) + ' & ' + distDisplay + ' at the ' + markerLabel(state.fieldPos) + ' — ' + TEAMS[state.possession].name + ' ball')
+      : ('no active drive — ' + TEAMS[state.possession].name + ' ball');
+    document.getElementById('quarterText').textContent = 'Q' + state.quarter + ' (' + (state.quarter <= 2 ? '1st half' : state.quarter <= 4 ? '2nd half' : 'OT') + ')';
+    document.getElementById('topText').textContent = 'Time of possession — ' + TEAMS.teamA.name + ' ' + formatDuration(state.possessionTime.teamA) + ' · ' + TEAMS.teamB.name + ' ' + formatDuration(state.possessionTime.teamB);
+    const banner = document.getElementById('banner');
+    const c = TEAMS[state.possession];
+    banner.style.background = c.bg;
+    banner.style.color = c.text;
+
+    function renderLogLines(list){
+      return list.map(p => {
+        if (p.isDivider) return '<div style="text-align:center; font-size:14px; font-weight:600; color:#888; margin:8px 0; border-top:1px dashed #ccc; padding-top:6px;">' + p.text + '</div>';
+        const qtag = p.quarter ? '<span style="color:#999; font-size:12px; margin-right:6px;">Q' + p.quarter + '</span>' : '';
+        return '<div class="logline">' + qtag + p.text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
+      }).join('');
+    }
+    document.getElementById('logScroll').innerHTML = renderLogLines(plays.slice().reverse()) || '<div style="color:#999;">no plays logged yet</div>';
+
+    const resetIdxs = [];
+    for (let i = 0; i < plays.length; i++){
+      if (plays[i].effect && plays[i].effect.isReset) resetIdxs.push(i);
+    }
+    const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
+    const previousDrivePlays = resetIdxs.length >= 2 ? plays.slice(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1]) : [];
+    document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
+    document.getElementById('prevDriveLogScroll').innerHTML = renderLogLines(previousDrivePlays.slice().reverse()) || '<div style="color:#999;">no previous drive yet</div>';
+
+    renderBoxScore();
+  }
+
+  async function init(){
+    const params = new URLSearchParams(window.location.search);
+    currentGameId = params.get('id');
+    if (!currentGameId){
+      showView('errorView');
+      showMsg('errorMsg', 'No game specified.', 'error');
+      return;
+    }
+
+    const { data: gameRows, error: gameError } = await supabaseClient
+      .from('games').select('*').eq('id', currentGameId).limit(1);
+    if (gameError || !gameRows || gameRows.length === 0){
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = gameError ? gameError.message : 'That game could not be found.';
+      return;
+    }
+    const game = gameRows[0];
+    gameLabel = game.designator;
+    quarterLengthSec = game.quarter_length_seconds || 720;
+
+    const { data: rosterRows, error: rosterError } = await supabaseClient
+      .from('game_rosters').select('*').eq('game_id', currentGameId);
+    if (rosterError){
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = rosterError.message;
+      return;
+    }
+
+    const { data: teamRows } = await supabaseClient
+      .from('teams').select('primary_color, secondary_color, logo_url').eq('is_our_team', true).limit(1);
+    const ourBranding = (teamRows && teamRows[0]) || {};
+
+    buildTeams(game, rosterRows || [], ourBranding);
+    document.getElementById('gameTitle').innerHTML = gameLabel + ' — ' + TEAMS.teamA.name + ' vs ' + TEAMS.teamB.name + ' <span class="live-badge">LIVE VIEW — READ ONLY</span>';
+
+    const { data: existingPlays } = await supabaseClient
+      .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
+    plays = (existingPlays || []).map(p => ({
+      text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+      roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+    }));
+
+    showView('mainView');
+    renderAll();
+    subscribeToLiveUpdates();
+  }
+
+  async function reloadPlaysAndRender(){
+    const { data: existingPlays } = await supabaseClient
+      .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
+    plays = (existingPlays || []).map(p => ({
+      text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+      roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+    }));
+    renderAll();
+  }
+
+  function subscribeToLiveUpdates(){
+    // Inserts and updates can be filtered server-side by game_id.
+    // Deletes (Undo) can't be filtered server-side at all in Postgres
+    // Changes, so we listen to every delete on this table and check
+    // game_id ourselves once it arrives -- this only works because the
+    // migration set REPLICA IDENTITY FULL, which makes sure a delete
+    // event actually carries the deleted row's other columns instead
+    // of just its id.
+    supabaseClient
+      .channel('plays-' + currentGameId)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'plays', filter: 'game_id=eq.' + currentGameId }, () => {
+        reloadPlaysAndRender();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'plays', filter: 'game_id=eq.' + currentGameId }, () => {
+        reloadPlaysAndRender();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'plays' }, (payload) => {
+        if (payload.old && payload.old.game_id === currentGameId){
+          reloadPlaysAndRender();
+        }
+      })
+      .subscribe();
+  }
+</script>
+</body>
+</html>
