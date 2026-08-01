@@ -12,6 +12,7 @@
   p.sub { color:#888; margin:0 0 20px; font-size:14px; }
   label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
   input { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; }
+  input[type="color"] { width:64px; height:40px; padding:2px; cursor:pointer; }
   button { padding:9px 16px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
   a.backlink { text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600; }
@@ -39,8 +40,13 @@
 
       <div class="field-row" style="margin-top:0;">
         <div style="flex:1;">
-          <label>Team name<input type="text" id="teamNameInput" style="width:100%;"></label>
+          <label>Team name (used everywhere in stat entry)<input type="text" id="teamNameInput" placeholder="Neville" style="width:100%;"></label>
         </div>
+        <div style="flex:1;">
+          <label>Full name (shown on the dashboard)<input type="text" id="fullNameInput" placeholder="Neville High School" style="width:100%;"></label>
+        </div>
+      </div>
+      <div class="field-row">
         <div>
           <label>Current season</label>
           <input type="number" id="seasonYearInput" style="width:100px;">
@@ -107,7 +113,7 @@
 
   async function init(){
     const { data, error } = await supabaseClient
-      .from('teams').select('id, name, logo_url, primary_color, secondary_color, current_season_year')
+      .from('teams').select('id, name, full_name, logo_url, primary_color, secondary_color, current_season_year')
       .eq('is_our_team', true).limit(1);
     if (error){
       showView('mainView');
@@ -121,6 +127,7 @@
     const team = data[0];
     ourTeamId = team.id;
     document.getElementById('teamNameInput').value = team.name;
+    document.getElementById('fullNameInput').value = team.full_name || '';
     document.getElementById('seasonYearInput').value = team.current_season_year || new Date().getFullYear();
     document.getElementById('primaryColorInput').value = team.primary_color || '#1a1a2e';
     document.getElementById('secondaryColorInput').value = team.secondary_color || '#ffffff';
@@ -215,8 +222,10 @@
       return;
     }
     const seasonYear = parseInt(document.getElementById('seasonYearInput').value) || new Date().getFullYear();
+    const fullName = document.getElementById('fullNameInput').value.trim();
     const updates = {
       name,
+      full_name: fullName || name,
       current_season_year: seasonYear,
       primary_color: document.getElementById('primaryColorInput').value,
       secondary_color: document.getElementById('secondaryColorInput').value
