@@ -3,93 +3,181 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>StatChat — Dashboard</title>
+<title>StatChat — Team Roster</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:24px; }
-  .wrap { max-width:760px; margin:0 auto; }
+  .wrap { max-width:720px; margin:0 auto; }
   .card { background:#fff; border-radius:12px; padding:28px; margin-bottom:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
-  h1 { font-size:24px; margin:0; }
-  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
-  .brandline { display:flex; align-items:center; gap:12px; }
-  #teamLogo { height:36px; width:36px; object-fit:contain; border-radius:6px; display:none; }
-  .navlinks { display:flex; gap:10px; }
-  p.sub { color:#888; margin:0 0 20px; font-size:15px; }
+  h1 { font-size:22px; margin:0 0 6px; }
+  h2 { font-size:16px; margin:0 0 14px; color:#444; }
+  p.sub { color:#888; margin:0 0 20px; font-size:14px; }
+  label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
+  input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; }
   button { padding:9px 16px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
-  a.button-link { display:inline-block; text-decoration:none; padding:9px 16px; border-radius:6px; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; }
-  a.button-link.secondary { background:#fff; color:#444; border:1px solid #ccc; }
+  button.danger { background:#fff; color:#a32d2d; border:1px solid #a32d2d; }
+  button:disabled { opacity:0.5; cursor:default; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-size:12px; color:#888; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid #eee; }
+  td { padding:8px; border-bottom:1px solid #f2f2f2; vertical-align:middle; }
+  .unit-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
+  .unit-offense { background:#e3f2fd; color:#1565c0; }
+  .unit-defense { background:#fdecea; color:#a32d2d; }
+  .unit-special { background:#fff8e1; color:#a37a00; }
+  .unit-none { background:#eee; color:#999; }
+  .add-row { display:flex; gap:8px; align-items:flex-end; margin-top:16px; flex-wrap:wrap; }
+  .add-row > div { flex:1; min-width:100px; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
   .msg.error { background:#fdecea; color:#a32d2d; }
+  .msg.success { background:#e8f5e9; color:#1a7a4c; }
   .hidden { display:none; }
-  .game-list { border-top:0.5px solid #e5e3dc; }
-  .game-row { display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:0.5px solid #e5e3dc; cursor:pointer; }
-  .game-row:hover { background:#faf9f6; }
-  .game-left { display:flex; align-items:center; gap:14px; }
-  .game-num { font-size:13px; color:#aaa; width:28px; }
-  .game-matchup { font-weight:600; }
-  .game-meta { font-size:13px; color:#888; }
-  .game-right { text-align:right; }
-  .game-score { font-weight:600; }
-  .status-win { color:#1a7a4c; font-size:13px; }
-  .status-live { color:#a37a00; font-size:13px; }
-  .status-loss { color:#a32d2d; font-size:13px; }
-  .status-notstarted { color:#999; font-weight:600; }
-  .empty-state { color:#999; padding:16px 0; }
+  .row-actions { display:flex; gap:6px; }
+  .row-actions button { padding:5px 10px; font-size:12px; }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <div id="loading" class="card"><h1>Loading…</h1></div>
+  <div id="loading" class="card">
+    <h1>Loading…</h1>
+  </div>
 
-  <div id="dashboardView" class="hidden">
-    <div class="card">
-      <div class="topbar">
-        <div class="brandline">
-          <img id="teamLogo" alt="">
-          <h1 id="teamHeading">StatChat</h1>
-        </div>
-        <div class="navlinks">
-          <a class="button-link secondary" href="roster.html">Team Roster</a>
-          <button id="signOutBtn" class="secondary">Sign out</button>
-        </div>
+  <div id="teamSetupView" class="hidden card">
+    <h1>Set up your team</h1>
+    <p class="sub">One-time setup — this is your team's identity for the whole season.</p>
+    <div id="teamSetupMsg"></div>
+    <label>Team name<input type="text" id="teamNameInput" placeholder="Neville" style="width:100%;"></label>
+    <div style="display:flex; gap:16px; align-items:flex-end; margin-top:12px; flex-wrap:wrap;">
+      <div>
+        <label>Logo (optional)</label>
+        <button type="button" id="chooseLogoBtn" class="secondary">Choose file</button>
+        <input type="file" id="logoInput" accept="image/*" style="display:none;">
+        <img id="logoPreview" style="display:none; height:44px; margin-top:8px; border-radius:6px;">
       </div>
-      <p class="sub" id="signedInAs"></p>
+      <div>
+        <label>Primary color</label>
+        <input type="color" id="primaryColorInput" value="#1a1a2e">
+      </div>
+      <div>
+        <label>Secondary color</label>
+        <input type="color" id="secondaryColorInput" value="#ffffff">
+      </div>
     </div>
+    <button id="createTeamBtn" style="margin-top:16px;">Create team</button>
+  </div>
 
+  <div id="rosterView" class="hidden">
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
-        <h1 style="font-size:20px;">Games</h1>
-        <a class="button-link" id="newGameLink" href="create_game.html">+ New game</a>
+      <h1 id="rosterTitle">Team Roster</h1>
+      <p class="sub">This roster is used every week — no need to re-upload it per game.</p>
+      <div id="rosterMsg"></div>
+      <div style="margin-bottom:16px;">
+        <button id="uploadRosterBtn" class="secondary">Upload roster spreadsheet (.xlsx)</button>
+        <input type="file" id="rosterFile" accept=".xlsx,.xls" style="display:none;">
       </div>
-      <p class="sub" id="seasonSummary"></p>
-      <div id="dashboardMsg"></div>
-      <div class="game-list" id="gamesBody"></div>
+      <div id="uploadPreview" class="hidden" style="background:#f7f6f2; border-radius:8px; padding:14px; margin-bottom:16px;"></div>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Name</th><th>Position</th><th>Unit</th><th></th></tr>
+        </thead>
+        <tbody id="rosterBody"></tbody>
+      </table>
+      <div class="add-row">
+        <div><label>#</label><input type="text" id="newNumber" style="width:100%;"></div>
+        <div style="flex:2;"><label>Name</label><input type="text" id="newName" style="width:100%;"></div>
+        <div><label>Position</label>
+          <select id="newPosition" style="width:100%;">
+            <option value="">—</option>
+            <optgroup label="Offense">
+              <option value="QB">QB</option><option value="RB">RB</option><option value="FB">FB</option>
+              <option value="WR">WR</option><option value="TE">TE</option><option value="OL">OL</option>
+              <option value="C">C</option>
+            </optgroup>
+            <optgroup label="Defense">
+              <option value="DB">DB</option><option value="CB">CB</option><option value="S">S</option>
+              <option value="LB">LB</option><option value="DE">DE</option><option value="DT">DT</option>
+              <option value="NT">NT</option>
+            </optgroup>
+            <optgroup label="Special Teams">
+              <option value="K">K</option><option value="P">P</option><option value="LS">LS</option>
+            </optgroup>
+          </select>
+        </div>
+        <div><button id="addPlayerBtn">Add player</button></div>
+      </div>
+    </div>
+    <div class="card" id="brandingCard">
+      <h2>Team branding</h2>
+      <div id="brandingMsg"></div>
+      <div style="display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap;">
+        <div>
+          <label>Logo</label>
+          <button type="button" id="chooseLogoBtn2" class="secondary">Choose file</button>
+          <input type="file" id="logoInput2" accept="image/*" style="display:none;">
+          <img id="logoPreview2" style="display:none; height:44px; margin-top:8px; border-radius:6px;">
+        </div>
+        <div>
+          <label>Primary color</label>
+          <input type="color" id="primaryColorInput2">
+        </div>
+        <div>
+          <label>Secondary color</label>
+          <input type="color" id="secondaryColorInput2">
+        </div>
+        <button id="saveBrandingBtn">Save branding</button>
+      </div>
+    </div>
+    <div class="card">
+      <button class="secondary" id="backBtn">← Back to dashboard</button>
     </div>
   </div>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+  // Same position vocabulary as the live entry app, so a roster built
+  // here resolves identically once games start using it.
+  const OFFENSE_POS = ['QB','RB','FB','HB','WR','TE','OL','OT','OG','C'];
+  const DEFENSE_POS = ['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE'];
+  const SPECIAL_POS = ['K','P','LS','H','KR','PR'];
+  function posToUnit(pos){
+    if (!pos) return null;
+    const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
+    if (SPECIAL_POS.includes(first)) return 'special';
+    if (OFFENSE_POS.includes(first)) return 'offense';
+    if (DEFENSE_POS.includes(first)) return 'defense';
+    return null;
+  }
+  function unitBadge(unit){
+    const label = unit === 'offense' ? 'Offense' : unit === 'defense' ? 'Defense' : unit === 'special' ? 'Special' : '—';
+    const cls = unit ? 'unit-' + unit : 'unit-none';
+    return '<span class="unit-badge ' + cls + '">' + label + '</span>';
+  }
+
+  let ourTeamId = null;
+
   function showView(name){
-    ['loading', 'dashboardView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+    ['loading', 'teamSetupView', 'rosterView'].forEach(v => {
+      document.getElementById(v).classList.toggle('hidden', v !== name);
+    });
   }
   function showMsg(elId, text, type){
     document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+  }
+  function clearMsg(elId){
+    document.getElementById(elId).innerHTML = '';
   }
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION'){
       if (session){
-        document.getElementById('signedInAs').textContent = 'Signed in as ' + session.user.email;
-        showView('dashboardView');
-        loadTeamBranding();
-        loadGames();
+        loadTeam();
       } else {
         window.location.href = '/';
       }
@@ -98,88 +186,312 @@
     }
   });
 
-  document.getElementById('signOutBtn').addEventListener('click', async () => {
-    await supabaseClient.auth.signOut();
-  });
-
-  async function loadTeamBranding(){
+  async function loadTeam(){
     const { data, error } = await supabaseClient
       .from('teams')
-      .select('name, logo_url, primary_color, secondary_color')
+      .select('id, name, logo_url, primary_color, secondary_color')
       .eq('is_our_team', true)
       .limit(1);
-    if (error || !data || data.length === 0) return;
-    const team = data[0];
-    document.getElementById('teamHeading').textContent = team.name;
-    if (team.primary_color){
-      document.getElementById('teamHeading').style.color = team.primary_color;
-      document.getElementById('newGameLink').style.background = team.primary_color;
-      if (team.secondary_color) document.getElementById('newGameLink').style.color = team.secondary_color;
-    }
-    if (team.logo_url){
-      const logo = document.getElementById('teamLogo');
-      logo.src = team.logo_url;
-      logo.style.display = 'inline-block';
-    }
-  }
-
-  async function loadGames(){
-    const { data, error } = await supabaseClient
-      .from('games')
-      .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status')
-      .order('game_date', { ascending: false });
     if (error){
-      showMsg('dashboardMsg', 'Could not load games: ' + error.message, 'error');
+      showView('teamSetupView');
+      showMsg('teamSetupMsg', 'Could not check for an existing team: ' + error.message, 'error');
       return;
     }
-    renderSummary(data || []);
-    renderGames(data || []);
-  }
-
-  function renderSummary(games){
-    const final = games.filter(g => g.status === 'final').length;
-    const inProgress = games.filter(g => g.status === 'in_progress').length;
-    if (games.length === 0){
-      document.getElementById('seasonSummary').textContent = '';
-      return;
-    }
-    document.getElementById('seasonSummary').textContent =
-      games.length + ' game(s) this season · ' + final + ' completed' +
-      (inProgress > 0 ? ' · ' + inProgress + ' in progress' : '');
-  }
-
-  function renderGames(games){
-    const body = document.getElementById('gamesBody');
-    if (games.length === 0){
-      body.innerHTML = '<div class="empty-state">No games yet — click "New game" to set up your first one.</div>';
-      return;
-    }
-    body.innerHTML = games.map(g => {
-      const matchup = g.our_team_is_home ? 'vs ' + g.away_team_name : '@ ' + g.home_team_name;
-      const homeAway = g.our_team_is_home ? 'Home' : 'Away';
-      const dateStr = g.game_date ? new Date(g.game_date + 'T00:00:00').toLocaleDateString() : 'Date TBD';
-      let rightHtml;
-      if (g.status === 'final'){
-        rightHtml = '<div class="game-score">—</div><div class="status-win">Final</div>';
-      } else if (g.status === 'in_progress'){
-        rightHtml = '<div class="game-score">—</div><div class="status-live">In progress</div>';
-      } else {
-        rightHtml = '<div class="status-notstarted">Not started</div>';
+    if (data && data.length > 0){
+      const team = data[0];
+      ourTeamId = team.id;
+      document.getElementById('rosterTitle').textContent = team.name + ' Roster';
+      document.getElementById('primaryColorInput2').value = team.primary_color || '#1a1a2e';
+      document.getElementById('secondaryColorInput2').value = team.secondary_color || '#ffffff';
+      if (team.logo_url){
+        const img = document.getElementById('logoPreview2');
+        img.src = team.logo_url; img.style.display = 'inline-block';
       }
-      return '<div class="game-row" data-id="' + g.id + '">' +
-        '<div class="game-left">' +
-        '<span class="game-num">' + g.designator + '</span>' +
-        '<div><div class="game-matchup">' + matchup + '</div><div class="game-meta">' + homeAway + ' · ' + dateStr + '</div></div>' +
-        '</div>' +
-        '<div class="game-right">' + rightHtml + '</div>' +
-        '</div>';
+      showView('rosterView');
+      loadRoster();
+      if (window.location.hash === '#branding'){
+        setTimeout(() => {
+          const card = document.getElementById('brandingCard');
+          if (card.scrollIntoView) try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(e){}
+          card.style.transition = 'box-shadow 0.3s';
+          card.style.boxShadow = '0 0 0 2px #1a1a2e';
+          setTimeout(() => { card.style.boxShadow = ''; }, 1600);
+        }, 100);
+      }
+    } else {
+      showView('teamSetupView');
+    }
+  }
+
+  let pendingLogoFile = null, pendingLogoFile2 = null;
+
+  document.getElementById('chooseLogoBtn').addEventListener('click', () => document.getElementById('logoInput').click());
+  document.getElementById('logoInput').addEventListener('change', (e) => {
+    pendingLogoFile = e.target.files[0] || null;
+    if (pendingLogoFile && URL.createObjectURL){
+      try {
+        const url = URL.createObjectURL(pendingLogoFile);
+        const img = document.getElementById('logoPreview');
+        img.src = url; img.style.display = 'inline-block';
+      } catch (e){}
+    }
+  });
+  document.getElementById('chooseLogoBtn2').addEventListener('click', () => document.getElementById('logoInput2').click());
+  document.getElementById('logoInput2').addEventListener('change', (e) => {
+    pendingLogoFile2 = e.target.files[0] || null;
+    if (pendingLogoFile2 && URL.createObjectURL){
+      try {
+        const url = URL.createObjectURL(pendingLogoFile2);
+        const img = document.getElementById('logoPreview2');
+        img.src = url; img.style.display = 'inline-block';
+      } catch (e){}
+    }
+  });
+
+  async function uploadLogo(file, teamId){
+    const ext = file.name.split('.').pop();
+    const path = teamId + '/logo.' + ext;
+    const { error: uploadError } = await supabaseClient.storage
+      .from('team-logos')
+      .upload(path, file, { upsert: true });
+    if (uploadError) throw uploadError;
+    const { data } = supabaseClient.storage.from('team-logos').getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  document.getElementById('createTeamBtn').addEventListener('click', async () => {
+    const name = document.getElementById('teamNameInput').value.trim();
+    if (!name){
+      showMsg('teamSetupMsg', 'Enter a team name first.', 'error');
+      return;
+    }
+    const primaryColor = document.getElementById('primaryColorInput').value;
+    const secondaryColor = document.getElementById('secondaryColorInput').value;
+    const { data, error } = await supabaseClient
+      .from('teams')
+      .insert({ name, is_our_team: true, primary_color: primaryColor, secondary_color: secondaryColor })
+      .select('id, name')
+      .single();
+    if (error){
+      showMsg('teamSetupMsg', error.message, 'error');
+      return;
+    }
+    ourTeamId = data.id;
+    if (pendingLogoFile){
+      try {
+        const logoUrl = await uploadLogo(pendingLogoFile, ourTeamId);
+        await supabaseClient.from('teams').update({ logo_url: logoUrl }).eq('id', ourTeamId);
+      } catch (logoErr){
+        showMsg('teamSetupMsg', 'Team created, but logo upload failed: ' + logoErr.message, 'error');
+      }
+    }
+    document.getElementById('rosterTitle').textContent = data.name + ' Roster';
+    showView('rosterView');
+    loadRoster();
+  });
+
+  async function loadRoster(){
+    clearMsg('rosterMsg');
+    const { data, error } = await supabaseClient
+      .from('players')
+      .select('id, name, primary_position, default_jersey_number')
+      .eq('team_id', ourTeamId)
+      .order('default_jersey_number', { ascending: true });
+    if (error){
+      showMsg('rosterMsg', 'Could not load roster: ' + error.message, 'error');
+      return;
+    }
+    renderRoster(data || []);
+  }
+
+  function renderRoster(players){
+    const body = document.getElementById('rosterBody');
+    if (players.length === 0){
+      body.innerHTML = '<tr><td colspan="5" style="color:#999;">No players yet — add your first one below.</td></tr>';
+      return;
+    }
+    body.innerHTML = players.map(p => {
+      const unit = posToUnit(p.primary_position);
+      return '<tr data-id="' + p.id + '">' +
+        '<td>' + (p.default_jersey_number || '') + '</td>' +
+        '<td>' + p.name + '</td>' +
+        '<td>' + (p.primary_position || '') + '</td>' +
+        '<td>' + unitBadge(unit) + '</td>' +
+        '<td class="row-actions">' +
+          '<button class="secondary editBtn" data-id="' + p.id + '">Edit</button>' +
+          '<button class="danger removeBtn" data-id="' + p.id + '">Remove</button>' +
+        '</td></tr>';
     }).join('');
-    body.querySelectorAll('.game-row').forEach(row => {
-      row.addEventListener('click', () => {
-        window.location.href = 'game.html?id=' + row.dataset.id;
-      });
+    body.querySelectorAll('.editBtn').forEach(b => b.addEventListener('click', () => startEdit(b.dataset.id, players)));
+    body.querySelectorAll('.removeBtn').forEach(b => b.addEventListener('click', () => removePlayer(b.dataset.id)));
+  }
+
+  function startEdit(id, players){
+    const p = players.find(pl => pl.id === id);
+    if (!p) return;
+    const row = document.querySelector('tr[data-id="' + id + '"]');
+    row.innerHTML =
+      '<td><input type="text" class="editNumber" value="' + (p.default_jersey_number || '') + '" style="width:40px;"></td>' +
+      '<td><input type="text" class="editName" value="' + p.name + '" style="width:100%;"></td>' +
+      '<td><input type="text" class="editPosition" value="' + (p.primary_position || '') + '" style="width:60px;"></td>' +
+      '<td></td>' +
+      '<td class="row-actions"><button class="saveEditBtn">Save</button><button class="secondary" onclick="location.reload()">Cancel</button></td>';
+    row.querySelector('.saveEditBtn').addEventListener('click', async () => {
+      const newNumber = row.querySelector('.editNumber').value.trim();
+      const newName = row.querySelector('.editName').value.trim();
+      const newPosition = row.querySelector('.editPosition').value.trim().toUpperCase();
+      const { error } = await supabaseClient
+        .from('players')
+        .update({ name: newName, primary_position: newPosition, default_jersey_number: newNumber })
+        .eq('id', id);
+      if (error){
+        showMsg('rosterMsg', error.message, 'error');
+        return;
+      }
+      loadRoster();
     });
   }
+
+  async function removePlayer(id){
+    if (!confirm('Remove this player from the roster? This does not affect any past game data.')) return;
+    const { error } = await supabaseClient.from('players').delete().eq('id', id);
+    if (error){
+      showMsg('rosterMsg', error.message, 'error');
+      return;
+    }
+    loadRoster();
+  }
+
+  document.getElementById('addPlayerBtn').addEventListener('click', async () => {
+    const number = document.getElementById('newNumber').value.trim();
+    const name = document.getElementById('newName').value.trim();
+    const position = document.getElementById('newPosition').value;
+    if (!name){
+      showMsg('rosterMsg', 'Enter a name before adding a player.', 'error');
+      return;
+    }
+    const { error } = await supabaseClient
+      .from('players')
+      .insert({ team_id: ourTeamId, name, primary_position: position || null, default_jersey_number: number || null });
+    if (error){
+      showMsg('rosterMsg', error.message, 'error');
+      return;
+    }
+    document.getElementById('newNumber').value = '';
+    document.getElementById('newName').value = '';
+    document.getElementById('newPosition').value = '';
+    loadRoster();
+  });
+
+  document.getElementById('uploadRosterBtn').addEventListener('click', () => {
+    document.getElementById('rosterFile').click();
+  });
+
+  let pendingUploadRows = null;
+
+  document.getElementById('rosterFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const preview = document.getElementById('uploadPreview');
+    preview.classList.remove('hidden');
+    preview.innerHTML = '<p style="font-size:13px; color:#888; margin:0;">Reading file…</p>';
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      let rows;
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      } catch (err){
+        preview.innerHTML = '<p style="color:#a32d2d; margin:0;">Could not read that file: ' + err.message + '</p>';
+        return;
+      }
+
+      const parsed = [];
+      rows.forEach(row => {
+        const num = row[0], name = row[1], pos = row[2];
+        if (num === undefined || name === undefined) return;
+        if (!/^\d+$/.test(String(num).trim())) return; // skip header row / junk
+        parsed.push({
+          default_jersey_number: String(num).trim(),
+          name: String(name).trim(),
+          primary_position: pos ? String(pos).trim().toUpperCase() : null
+        });
+      });
+
+      if (parsed.length === 0){
+        preview.innerHTML = '<p style="color:#a32d2d; margin:0;">No valid rows found. Expected column A = number, column B = name, column C = position.</p>';
+        return;
+      }
+
+      // Skip anyone already on the roster by name, so re-uploading the
+      // same (or an updated) file doesn't create duplicates.
+      const { data: existing, error } = await supabaseClient
+        .from('players')
+        .select('name')
+        .eq('team_id', ourTeamId);
+      if (error){
+        preview.innerHTML = '<p style="color:#a32d2d; margin:0;">Could not check existing roster: ' + error.message + '</p>';
+        return;
+      }
+      const existingNames = new Set((existing || []).map(p => p.name.trim().toLowerCase()));
+      const newRows = parsed.filter(p => !existingNames.has(p.name.toLowerCase()));
+      const skipped = parsed.length - newRows.length;
+
+      pendingUploadRows = newRows;
+      preview.innerHTML =
+        '<p style="font-size:14px; margin:0 0 8px;"><strong>' + newRows.length + '</strong> new player(s) will be added.' +
+        (skipped > 0 ? ' <strong>' + skipped + '</strong> already on the roster and will be skipped.' : '') + '</p>' +
+        (newRows.length > 0 ? '<button id="confirmUploadBtn">Add ' + newRows.length + ' players</button> ' : '') +
+        '<button class="secondary" id="cancelUploadBtn">Cancel</button>';
+
+      const confirmBtn = document.getElementById('confirmUploadBtn');
+      if (confirmBtn) confirmBtn.addEventListener('click', async () => {
+        const toInsert = pendingUploadRows.map(p => Object.assign({ team_id: ourTeamId }, p));
+        const { error: insertError } = await supabaseClient.from('players').insert(toInsert);
+        if (insertError){
+          preview.innerHTML = '<p style="color:#a32d2d; margin:0;">' + insertError.message + '</p>';
+          return;
+        }
+        preview.classList.add('hidden');
+        preview.innerHTML = '';
+        document.getElementById('rosterFile').value = '';
+        loadRoster();
+      });
+      document.getElementById('cancelUploadBtn').addEventListener('click', () => {
+        preview.classList.add('hidden');
+        preview.innerHTML = '';
+        document.getElementById('rosterFile').value = '';
+        pendingUploadRows = null;
+      });
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  document.getElementById('saveBrandingBtn').addEventListener('click', async () => {
+    const primaryColor = document.getElementById('primaryColorInput2').value;
+    const secondaryColor = document.getElementById('secondaryColorInput2').value;
+    const updates = { primary_color: primaryColor, secondary_color: secondaryColor };
+    if (pendingLogoFile2){
+      try {
+        updates.logo_url = await uploadLogo(pendingLogoFile2, ourTeamId);
+      } catch (logoErr){
+        showMsg('brandingMsg', 'Logo upload failed: ' + logoErr.message, 'error');
+        return;
+      }
+    }
+    const { error } = await supabaseClient.from('teams').update(updates).eq('id', ourTeamId);
+    if (error){
+      showMsg('brandingMsg', error.message, 'error');
+      return;
+    }
+    showMsg('brandingMsg', 'Branding saved.', 'success');
+  });
+
+  document.getElementById('backBtn').addEventListener('click', () => {
+    window.location.href = '/';
+  });
 </script>
 </body>
 </html>
