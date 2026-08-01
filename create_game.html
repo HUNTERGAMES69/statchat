@@ -38,7 +38,7 @@
 
   <div id="mainView" class="hidden">
     <div class="card">
-      <h1>New Game</h1>
+      <h1 id="pageHeading">New Game</h1>
       <p class="sub">Set this game up now, start entering stats whenever you're ready — no need to do both at once.</p>
       <div id="setupMsg"></div>
 
@@ -72,6 +72,7 @@
       <button id="uploadOpponentBtn" class="secondary">Upload opponent roster (.xlsx)</button>
       <button id="skipOpponentBtn" class="secondary" style="margin-left:8px;">Skip roster (manual entry only)</button>
       <input type="file" id="opponentFile" accept=".xlsx,.xls" style="display:none;">
+      <div id="currentOppRosterNote"></div>
       <div id="opponentRosterStatus"></div>
       <div id="opponentAssignments"></div>
       <div id="opponentConflicts"></div>
@@ -246,6 +247,8 @@
   }
 
   let ourTeamId = null;
+  let editGameId = null;
+  let oppRosterTouched = false;
   let ourResolved = {}, ourConflictsList = [];
   let oppRosterSkipped = false;
   let oppResolved = {}, oppConflictsList = [];
@@ -271,6 +274,8 @@
 
   async function init(){
     document.getElementById('seasonYear').value = new Date().getFullYear();
+    editGameId = new URLSearchParams(window.location.search).get('edit');
+
     const { data: teams, error: teamError } = await supabaseClient
       .from('teams').select('id, name, current_season_year').eq('is_our_team', true).limit(1);
     if (teamError || !teams || teams.length === 0){
@@ -281,6 +286,40 @@
     ourTeamId = teams[0].id;
     if (teams[0].current_season_year){
       document.getElementById('seasonYear').value = teams[0].current_season_year;
+    }
+
+    if (editGameId){
+      document.getElementById('pageHeading').textContent = 'Edit Game Setup';
+      document.getElementById('createGameBtn').textContent = 'Save changes';
+      const { data: existingGames, error: existingError } = await supabaseClient
+        .from('games').select('*').eq('id', editGameId).limit(1);
+      if (existingError || !existingGames || existingGames.length === 0){
+        showView('mainView');
+        showMsg('setupMsg', 'Could not load this game to edit: ' + (existingError ? existingError.message : 'not found'), 'error');
+        return;
+      }
+      const eg = existingGames[0];
+      document.getElementById('designator').value = eg.designator;
+      document.getElementById('seasonYear').value = eg.season_year;
+      document.getElementById('gameDate').value = eg.game_date || '';
+      document.getElementById('quarterLen').value = Math.round((eg.quarter_length_seconds || 720) / 60);
+      const isHomeExisting = eg.our_team_is_home;
+      document.getElementById('homeAway').value = isHomeExisting ? 'home' : 'away';
+      document.getElementById('opponentName').value = isHomeExisting ? eg.away_team_name : eg.home_team_name;
+      if (eg.opponent_primary_color) document.getElementById('oppPrimaryColorInput').value = eg.opponent_primary_color;
+      if (eg.opponent_secondary_color) document.getElementById('oppSecondaryColorInput').value = eg.opponent_secondary_color;
+      if (eg.opponent_logo_url){
+        const img = document.getElementById('oppLogoPreview');
+        img.src = eg.opponent_logo_url;
+        img.style.display = 'inline-block';
+      }
+      const { data: existingOppRoster } = await supabaseClient
+        .from('game_rosters').select('id').eq('game_id', editGameId).eq('team_side', 'teamB');
+      const oppCount = existingOppRoster ? existingOppRoster.length : 0;
+      document.getElementById('currentOppRosterNote').innerHTML =
+        '<div class="roster-summary" style="color:#888;">' +
+        (oppCount > 0 ? 'Currently saved: ' + oppCount + ' opponent player(s). Upload a new file below only if you need to replace it.' : 'No opponent roster currently saved for this game.') +
+        '</div>';
     }
 
     const { data: players, error: playersError } = await supabaseClient
@@ -318,6 +357,7 @@
     );
     if (!ok) return;
     oppRosterSkipped = true;
+    oppRosterTouched = true;
     oppResolved = {};
     oppConflictsList = [];
     document.getElementById('opponentAssignments').innerHTML = '';
@@ -356,6 +396,7 @@
       }
       const { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
       oppResolved = resolved;
+      oppRosterTouched = true;
       oppRosterSkipped = false;
       oppConflictsList = conflicts;
       document.getElementById('opponentRosterStatus').innerHTML =
@@ -473,7 +514,10 @@
       showMsg('setupMsg', 'Game designator and opponent name are both required.', 'error');
       return;
     }
-    if (Object.keys(oppResolved).length === 0 && !oppRosterSkipped){
+    // In edit mode, leaving the opponent roster untouched just keeps
+    // whatever's already saved -- only require a roster/skip decision
+    // when creating a new game, or when actively replacing it.
+    if (Object.keys(oppResolved).length === 0 && !oppRosterSkipped && (!editGameId || oppRosterTouched)){
       showMsg('setupMsg', 'Upload the opponent roster, or click "Skip roster" to continue with manual entry.', 'error');
       return;
     }
@@ -489,39 +533,63 @@
       away_team_name: isHome ? opponentName : ourName,
       our_team_is_home: isHome,
       quarter_length_seconds: quarterLenMin * 60,
-      status: 'setup',
       opponent_primary_color: document.getElementById('oppPrimaryColorInput').value,
       opponent_secondary_color: document.getElementById('oppSecondaryColorInput').value
     };
 
-    const { data: game, error: gameError } = await supabaseClient
-      .from('games').insert(gamePayload).select('id').single();
-    if (gameError){
-      showMsg('setupMsg', 'Could not create game: ' + gameError.message, 'error');
-      return;
+    let gameId;
+    if (editGameId){
+      gameId = editGameId;
+      const { error: updateError } = await supabaseClient.from('games').update(gamePayload).eq('id', gameId);
+      if (updateError){
+        showMsg('setupMsg', 'Could not save changes: ' + updateError.message, 'error');
+        return;
+      }
+    } else {
+      gamePayload.status = 'setup';
+      const { data: game, error: gameError } = await supabaseClient
+        .from('games').insert(gamePayload).select('id').single();
+      if (gameError){
+        showMsg('setupMsg', 'Could not create game: ' + gameError.message, 'error');
+        return;
+      }
+      gameId = game.id;
     }
 
     if (pendingOppLogoFile){
       try {
-        const logoUrl = await uploadOppLogo(pendingOppLogoFile, game.id);
-        await supabaseClient.from('games').update({ opponent_logo_url: logoUrl }).eq('id', game.id);
+        const logoUrl = await uploadOppLogo(pendingOppLogoFile, gameId);
+        await supabaseClient.from('games').update({ opponent_logo_url: logoUrl }).eq('id', gameId);
       } catch (logoErr){
-        showMsg('setupMsg', 'Game created, but opponent logo upload failed: ' + logoErr.message, 'error');
+        showMsg('setupMsg', 'Game saved, but opponent logo upload failed: ' + logoErr.message, 'error');
+      }
+    }
+
+    // Our roster is always freshly resolved from the current team roster,
+    // so it always gets replaced. The opponent roster only gets replaced
+    // if it was actually touched this session -- otherwise the existing
+    // saved roster is left completely alone.
+    if (editGameId){
+      await supabaseClient.from('game_rosters').delete().eq('game_id', gameId).eq('team_side', 'teamA');
+      if (oppRosterTouched){
+        await supabaseClient.from('game_rosters').delete().eq('game_id', gameId).eq('team_side', 'teamB');
       }
     }
 
     const rosterRows = [
       ...buildGameRosterRows(ourResolved, 'teamA'),
-      ...buildGameRosterRows(oppResolved, 'teamB')
-    ].map(r => Object.assign({ game_id: game.id }, r));
+      ...(!editGameId || oppRosterTouched ? buildGameRosterRows(oppResolved, 'teamB') : [])
+    ].map(r => Object.assign({ game_id: gameId }, r));
 
-    const { error: rosterError } = await supabaseClient.from('game_rosters').insert(rosterRows);
-    if (rosterError){
-      showMsg('setupMsg', 'Game created, but roster snapshot failed: ' + rosterError.message, 'error');
-      return;
+    if (rosterRows.length > 0){
+      const { error: rosterError } = await supabaseClient.from('game_rosters').insert(rosterRows);
+      if (rosterError){
+        showMsg('setupMsg', 'Game saved, but roster snapshot failed: ' + rosterError.message, 'error');
+        return;
+      }
     }
 
-    showMsg('setupMsg', 'Game created.', 'success');
+    showMsg('setupMsg', editGameId ? 'Changes saved.' : 'Game created.', 'success');
     setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
   });
 </script>
