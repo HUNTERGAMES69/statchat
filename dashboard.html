@@ -6,32 +6,35 @@
 <title>StatChat — Dashboard</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:24px; }
-  .wrap { max-width:800px; margin:0 auto; }
+  .wrap { max-width:760px; margin:0 auto; }
   .card { background:#fff; border-radius:12px; padding:28px; margin-bottom:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:24px; margin:0; }
-  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+  .brandline { display:flex; align-items:center; gap:12px; }
+  #teamLogo { height:36px; width:36px; object-fit:contain; border-radius:6px; display:none; }
   .navlinks { display:flex; gap:10px; }
-  p.sub { color:#888; margin:0 0 20px; font-size:14px; }
+  p.sub { color:#888; margin:0 0 20px; font-size:15px; }
   button { padding:9px 16px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
   a.button-link { display:inline-block; text-decoration:none; padding:9px 16px; border-radius:6px; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; }
   a.button-link.secondary { background:#fff; color:#444; border:1px solid #ccc; }
-  table { width:100%; border-collapse:collapse; font-size:14px; }
-  th { text-align:left; font-size:12px; color:#888; text-transform:uppercase; padding:8px; border-bottom:1px solid #eee; }
-  td { padding:10px 8px; border-bottom:1px solid #f2f2f2; }
-  tr.gameRow { cursor:pointer; }
-  tr.gameRow:hover { background:#faf9f6; }
-  .status-badge { font-size:11px; padding:3px 9px; border-radius:10px; font-weight:600; }
-  .status-setup { background:#eee; color:#666; }
-  .status-in_progress { background:#fff8e1; color:#a37a00; }
-  .status-final { background:#e8f5e9; color:#1a7a4c; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
   .msg.error { background:#fdecea; color:#a32d2d; }
   .hidden { display:none; }
-  .season-summary { display:flex; gap:24px; margin-bottom:20px; }
-  .season-summary div { text-align:center; }
-  .season-summary .num { font-size:22px; font-weight:700; }
-  .season-summary .label { font-size:12px; color:#888; }
+  .game-list { border-top:0.5px solid #e5e3dc; }
+  .game-row { display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:0.5px solid #e5e3dc; cursor:pointer; }
+  .game-row:hover { background:#faf9f6; }
+  .game-left { display:flex; align-items:center; gap:14px; }
+  .game-num { font-size:13px; color:#aaa; width:28px; }
+  .game-matchup { font-weight:600; }
+  .game-meta { font-size:13px; color:#888; }
+  .game-right { text-align:right; }
+  .game-score { font-weight:600; }
+  .status-win { color:#1a7a4c; font-size:13px; }
+  .status-live { color:#a37a00; font-size:13px; }
+  .status-loss { color:#a32d2d; font-size:13px; }
+  .status-notstarted { color:#999; font-weight:600; }
+  .empty-state { color:#999; padding:16px 0; }
 </style>
 </head>
 <body>
@@ -42,9 +45,13 @@
   <div id="dashboardView" class="hidden">
     <div class="card">
       <div class="topbar">
-        <h1>StatChat</h1>
+        <div class="brandline">
+          <img id="teamLogo" alt="">
+          <h1 id="teamHeading">StatChat</h1>
+        </div>
         <div class="navlinks">
           <a class="button-link secondary" href="roster.html">Team Roster</a>
+          <a class="button-link secondary" href="roster.html#branding">Customize team</a>
           <button id="signOutBtn" class="secondary">Sign out</button>
         </div>
       </div>
@@ -52,18 +59,13 @@
     </div>
 
     <div class="card">
-      <div class="season-summary" id="seasonSummary"></div>
-      <div id="dashboardMsg"></div>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h2 style="margin:0; font-size:16px; color:#444;">Games this season</h2>
-        <a class="button-link" href="create_game.html">+ New Game</a>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+        <h1 style="font-size:20px;">Games</h1>
+        <a class="button-link" id="newGameLink" href="create_game.html">+ New game</a>
       </div>
-      <table>
-        <thead>
-          <tr><th>Game</th><th>Date</th><th>Matchup</th><th>Status</th><th>Score</th></tr>
-        </thead>
-        <tbody id="gamesBody"></tbody>
-      </table>
+      <p class="sub" id="seasonSummary"></p>
+      <div id="dashboardMsg"></div>
+      <div class="game-list" id="gamesBody"></div>
     </div>
   </div>
 
@@ -87,6 +89,7 @@
       if (session){
         document.getElementById('signedInAs').textContent = 'Signed in as ' + session.user.email;
         showView('dashboardView');
+        loadTeamBranding();
         loadGames();
       } else {
         window.location.href = '/';
@@ -99,6 +102,27 @@
   document.getElementById('signOutBtn').addEventListener('click', async () => {
     await supabaseClient.auth.signOut();
   });
+
+  async function loadTeamBranding(){
+    const { data, error } = await supabaseClient
+      .from('teams')
+      .select('name, logo_url, primary_color, secondary_color')
+      .eq('is_our_team', true)
+      .limit(1);
+    if (error || !data || data.length === 0) return;
+    const team = data[0];
+    document.getElementById('teamHeading').textContent = team.name;
+    if (team.primary_color){
+      document.getElementById('teamHeading').style.color = team.primary_color;
+      document.getElementById('newGameLink').style.background = team.primary_color;
+      if (team.secondary_color) document.getElementById('newGameLink').style.color = team.secondary_color;
+    }
+    if (team.logo_url){
+      const logo = document.getElementById('teamLogo');
+      logo.src = team.logo_url;
+      logo.style.display = 'inline-block';
+    }
+  }
 
   async function loadGames(){
     const { data, error } = await supabaseClient
@@ -114,35 +138,44 @@
   }
 
   function renderSummary(games){
-    const final = games.filter(g => g.status === 'final');
+    const final = games.filter(g => g.status === 'final').length;
     const inProgress = games.filter(g => g.status === 'in_progress').length;
-    const summary = document.getElementById('seasonSummary');
-    summary.innerHTML =
-      '<div><div class="num">' + games.length + '</div><div class="label">Total games</div></div>' +
-      '<div><div class="num">' + final.length + '</div><div class="label">Completed</div></div>' +
-      '<div><div class="num">' + inProgress + '</div><div class="label">In progress</div></div>';
+    if (games.length === 0){
+      document.getElementById('seasonSummary').textContent = '';
+      return;
+    }
+    document.getElementById('seasonSummary').textContent =
+      games.length + ' game(s) this season · ' + final + ' completed' +
+      (inProgress > 0 ? ' · ' + inProgress + ' in progress' : '');
   }
 
   function renderGames(games){
     const body = document.getElementById('gamesBody');
     if (games.length === 0){
-      body.innerHTML = '<tr><td colspan="5" style="color:#999;">No games yet — click "New Game" to set up your first one.</td></tr>';
+      body.innerHTML = '<div class="empty-state">No games yet — click "New game" to set up your first one.</div>';
       return;
     }
     body.innerHTML = games.map(g => {
-      const matchup = g.our_team_is_home
-        ? g.home_team_name + ' (Home) vs ' + g.away_team_name
-        : g.away_team_name + ' @ ' + g.home_team_name;
-      const dateStr = g.game_date ? new Date(g.game_date + 'T00:00:00').toLocaleDateString() : '—';
-      return '<tr class="gameRow" data-id="' + g.id + '">' +
-        '<td>' + g.designator + '</td>' +
-        '<td>' + dateStr + '</td>' +
-        '<td>' + matchup + '</td>' +
-        '<td><span class="status-badge status-' + g.status + '">' + g.status.replace('_',' ') + '</span></td>' +
-        '<td>—</td>' +
-        '</tr>';
+      const matchup = g.our_team_is_home ? 'vs ' + g.away_team_name : '@ ' + g.home_team_name;
+      const homeAway = g.our_team_is_home ? 'Home' : 'Away';
+      const dateStr = g.game_date ? new Date(g.game_date + 'T00:00:00').toLocaleDateString() : 'Date TBD';
+      let rightHtml;
+      if (g.status === 'final'){
+        rightHtml = '<div class="game-score">—</div><div class="status-win">Final</div>';
+      } else if (g.status === 'in_progress'){
+        rightHtml = '<div class="game-score">—</div><div class="status-live">In progress</div>';
+      } else {
+        rightHtml = '<div class="status-notstarted">Not started</div>';
+      }
+      return '<div class="game-row" data-id="' + g.id + '">' +
+        '<div class="game-left">' +
+        '<span class="game-num">' + g.designator + '</span>' +
+        '<div><div class="game-matchup">' + matchup + '</div><div class="game-meta">' + homeAway + ' · ' + dateStr + '</div></div>' +
+        '</div>' +
+        '<div class="game-right">' + rightHtml + '</div>' +
+        '</div>';
     }).join('');
-    body.querySelectorAll('.gameRow').forEach(row => {
+    body.querySelectorAll('.game-row').forEach(row => {
       row.addEventListener('click', () => {
         window.location.href = 'game.html?id=' + row.dataset.id;
       });
