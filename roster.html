@@ -44,31 +44,18 @@
 
   <div id="teamSetupView" class="hidden card">
     <h1>Set up your team</h1>
-    <p class="sub">One-time setup — this is your team's identity for the whole season.</p>
+    <p class="sub">One-time setup — this is your team's identity for the whole season. You can add a logo and colors afterward from "Customize team" on the dashboard.</p>
     <div id="teamSetupMsg"></div>
     <label>Team name<input type="text" id="teamNameInput" placeholder="Neville" style="width:100%;"></label>
-    <div style="display:flex; gap:16px; align-items:flex-end; margin-top:12px; flex-wrap:wrap;">
-      <div>
-        <label>Logo (optional)</label>
-        <button type="button" id="chooseLogoBtn" class="secondary">Choose file</button>
-        <input type="file" id="logoInput" accept="image/*" style="display:none;">
-        <img id="logoPreview" style="display:none; height:44px; margin-top:8px; border-radius:6px;">
-      </div>
-      <div>
-        <label>Primary color</label>
-        <input type="color" id="primaryColorInput" value="#1a1a2e">
-      </div>
-      <div>
-        <label>Secondary color</label>
-        <input type="color" id="secondaryColorInput" value="#ffffff">
-      </div>
-    </div>
     <button id="createTeamBtn" style="margin-top:16px;">Create team</button>
   </div>
 
   <div id="rosterView" class="hidden">
     <div class="card">
-      <h1 id="rosterTitle">Team Roster</h1>
+      <div style="display:flex; justify-content:space-between; align-items:baseline;">
+        <h1 id="rosterTitle">Team Roster</h1>
+        <a href="dashboard.html" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600;">← Dashboard</a>
+      </div>
       <p class="sub">This roster is used every week — no need to re-upload it per game.</p>
       <div id="rosterMsg"></div>
       <div style="margin-bottom:16px;">
@@ -104,27 +91,6 @@
           </select>
         </div>
         <div><button id="addPlayerBtn">Add player</button></div>
-      </div>
-    </div>
-    <div class="card" id="brandingCard">
-      <h2>Team branding</h2>
-      <div id="brandingMsg"></div>
-      <div style="display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap;">
-        <div>
-          <label>Logo</label>
-          <button type="button" id="chooseLogoBtn2" class="secondary">Choose file</button>
-          <input type="file" id="logoInput2" accept="image/*" style="display:none;">
-          <img id="logoPreview2" style="display:none; height:44px; margin-top:8px; border-radius:6px;">
-        </div>
-        <div>
-          <label>Primary color</label>
-          <input type="color" id="primaryColorInput2">
-        </div>
-        <div>
-          <label>Secondary color</label>
-          <input type="color" id="secondaryColorInput2">
-        </div>
-        <button id="saveBrandingBtn">Save branding</button>
       </div>
     </div>
     <div class="card">
@@ -189,7 +155,7 @@
   async function loadTeam(){
     const { data, error } = await supabaseClient
       .from('teams')
-      .select('id, name, logo_url, primary_color, secondary_color')
+      .select('id, name')
       .eq('is_our_team', true)
       .limit(1);
     if (error){
@@ -201,62 +167,11 @@
       const team = data[0];
       ourTeamId = team.id;
       document.getElementById('rosterTitle').textContent = team.name + ' Roster';
-      document.getElementById('primaryColorInput2').value = team.primary_color || '#1a1a2e';
-      document.getElementById('secondaryColorInput2').value = team.secondary_color || '#ffffff';
-      if (team.logo_url){
-        const img = document.getElementById('logoPreview2');
-        img.src = team.logo_url; img.style.display = 'inline-block';
-      }
       showView('rosterView');
       loadRoster();
-      if (window.location.hash === '#branding'){
-        setTimeout(() => {
-          const card = document.getElementById('brandingCard');
-          if (card.scrollIntoView) try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(e){}
-          card.style.transition = 'box-shadow 0.3s';
-          card.style.boxShadow = '0 0 0 2px #1a1a2e';
-          setTimeout(() => { card.style.boxShadow = ''; }, 1600);
-        }, 100);
-      }
     } else {
       showView('teamSetupView');
     }
-  }
-
-  let pendingLogoFile = null, pendingLogoFile2 = null;
-
-  document.getElementById('chooseLogoBtn').addEventListener('click', () => document.getElementById('logoInput').click());
-  document.getElementById('logoInput').addEventListener('change', (e) => {
-    pendingLogoFile = e.target.files[0] || null;
-    if (pendingLogoFile && URL.createObjectURL){
-      try {
-        const url = URL.createObjectURL(pendingLogoFile);
-        const img = document.getElementById('logoPreview');
-        img.src = url; img.style.display = 'inline-block';
-      } catch (e){}
-    }
-  });
-  document.getElementById('chooseLogoBtn2').addEventListener('click', () => document.getElementById('logoInput2').click());
-  document.getElementById('logoInput2').addEventListener('change', (e) => {
-    pendingLogoFile2 = e.target.files[0] || null;
-    if (pendingLogoFile2 && URL.createObjectURL){
-      try {
-        const url = URL.createObjectURL(pendingLogoFile2);
-        const img = document.getElementById('logoPreview2');
-        img.src = url; img.style.display = 'inline-block';
-      } catch (e){}
-    }
-  });
-
-  async function uploadLogo(file, teamId){
-    const ext = file.name.split('.').pop();
-    const path = teamId + '/logo.' + ext;
-    const { error: uploadError } = await supabaseClient.storage
-      .from('team-logos')
-      .upload(path, file, { upsert: true });
-    if (uploadError) throw uploadError;
-    const { data } = supabaseClient.storage.from('team-logos').getPublicUrl(path);
-    return data.publicUrl;
   }
 
   document.getElementById('createTeamBtn').addEventListener('click', async () => {
@@ -265,11 +180,9 @@
       showMsg('teamSetupMsg', 'Enter a team name first.', 'error');
       return;
     }
-    const primaryColor = document.getElementById('primaryColorInput').value;
-    const secondaryColor = document.getElementById('secondaryColorInput').value;
     const { data, error } = await supabaseClient
       .from('teams')
-      .insert({ name, is_our_team: true, primary_color: primaryColor, secondary_color: secondaryColor })
+      .insert({ name, is_our_team: true })
       .select('id, name')
       .single();
     if (error){
@@ -277,14 +190,6 @@
       return;
     }
     ourTeamId = data.id;
-    if (pendingLogoFile){
-      try {
-        const logoUrl = await uploadLogo(pendingLogoFile, ourTeamId);
-        await supabaseClient.from('teams').update({ logo_url: logoUrl }).eq('id', ourTeamId);
-      } catch (logoErr){
-        showMsg('teamSetupMsg', 'Team created, but logo upload failed: ' + logoErr.message, 'error');
-      }
-    }
     document.getElementById('rosterTitle').textContent = data.name + ' Roster';
     showView('rosterView');
     loadRoster();
@@ -469,28 +374,8 @@
     reader.readAsArrayBuffer(file);
   });
 
-  document.getElementById('saveBrandingBtn').addEventListener('click', async () => {
-    const primaryColor = document.getElementById('primaryColorInput2').value;
-    const secondaryColor = document.getElementById('secondaryColorInput2').value;
-    const updates = { primary_color: primaryColor, secondary_color: secondaryColor };
-    if (pendingLogoFile2){
-      try {
-        updates.logo_url = await uploadLogo(pendingLogoFile2, ourTeamId);
-      } catch (logoErr){
-        showMsg('brandingMsg', 'Logo upload failed: ' + logoErr.message, 'error');
-        return;
-      }
-    }
-    const { error } = await supabaseClient.from('teams').update(updates).eq('id', ourTeamId);
-    if (error){
-      showMsg('brandingMsg', error.message, 'error');
-      return;
-    }
-    showMsg('brandingMsg', 'Branding saved.', 'success');
-  });
-
   document.getElementById('backBtn').addEventListener('click', () => {
-    window.location.href = '/';
+    window.location.href = 'dashboard.html';
   });
 </script>
 </body>
