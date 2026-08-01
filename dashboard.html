@@ -60,7 +60,10 @@
 
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
-        <h1 style="font-size:20px;">Games</h1>
+        <div>
+          <h1 style="font-size:20px; margin:0;">Games</h1>
+          <span id="seasonLabel" style="font-size:13px; color:#999;"></span>
+        </div>
         <a class="button-link" id="newGameLink" href="create_game.html">+ New game</a>
       </div>
       <p class="sub" id="seasonSummary"></p>
@@ -89,8 +92,7 @@
       if (session){
         document.getElementById('signedInAs').textContent = 'Signed in as ' + session.user.email;
         showView('dashboardView');
-        loadTeamBranding();
-        loadGames();
+        loadDashboard();
       } else {
         window.location.href = '/';
       }
@@ -103,36 +105,42 @@
     await supabaseClient.auth.signOut();
   });
 
-  async function loadTeamBranding(){
+  async function loadDashboard(){
     const { data, error } = await supabaseClient
       .from('teams')
-      .select('name, logo_url, primary_color, secondary_color')
+      .select('name, logo_url, primary_color, secondary_color, current_season_year')
       .eq('is_our_team', true)
       .limit(1);
-    if (error || !data || data.length === 0) return;
-    const team = data[0];
-    document.getElementById('teamHeading').textContent = team.name;
-    if (team.primary_color){
-      document.getElementById('teamHeading').style.color = team.primary_color;
-      document.getElementById('newGameLink').style.background = team.primary_color;
-      if (team.secondary_color) document.getElementById('newGameLink').style.color = team.secondary_color;
+    let seasonYear = new Date().getFullYear();
+    if (!error && data && data.length > 0){
+      const team = data[0];
+      document.getElementById('teamHeading').textContent = team.name;
+      if (team.primary_color){
+        document.getElementById('teamHeading').style.color = team.primary_color;
+        document.getElementById('newGameLink').style.background = team.primary_color;
+        if (team.secondary_color) document.getElementById('newGameLink').style.color = team.secondary_color;
+      }
+      if (team.logo_url){
+        const logo = document.getElementById('teamLogo');
+        logo.src = team.logo_url;
+        logo.style.display = 'inline-block';
+      }
+      if (team.current_season_year) seasonYear = team.current_season_year;
     }
-    if (team.logo_url){
-      const logo = document.getElementById('teamLogo');
-      logo.src = team.logo_url;
-      logo.style.display = 'inline-block';
-    }
+    loadGames(seasonYear);
   }
 
-  async function loadGames(){
+  async function loadGames(seasonYear){
     const { data, error } = await supabaseClient
       .from('games')
       .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status')
+      .eq('season_year', seasonYear)
       .order('game_date', { ascending: false });
     if (error){
       showMsg('dashboardMsg', 'Could not load games: ' + error.message, 'error');
       return;
     }
+    document.getElementById('seasonLabel').textContent = seasonYear + ' season';
     renderSummary(data || []);
     renderGames(data || []);
   }
