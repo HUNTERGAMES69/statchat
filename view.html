@@ -9,7 +9,9 @@
 <title>StatChat — Live View</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:14px; }
-  .wrap { max-width:760px; margin:0 auto; }
+  .wrap { max-width:1900px; margin:0 auto; }
+  .view-grid { display:grid; grid-template-columns:1.3fr 1fr; gap:20px; align-items:start; }
+  @media (max-width: 1100px) { .view-grid { grid-template-columns:1fr; } }
   .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:20px; margin:0; }
   h2 { font-size:16px; margin:0 0 10px; color:#444; }
@@ -57,24 +59,27 @@
       <div id="gameMsg"></div>
     </div>
 
-    <div class="card">
-      <h2>Statistics</h2>
-      <div id="boxScoreContainer"></div>
-    </div>
-
-    <div class="card">
-      <h2>Current drive</h2>
-      <div id="driveLogScroll"></div>
-    </div>
-
-    <div class="card">
-      <h2>Previous drive</h2>
-      <div id="prevDriveLogScroll"></div>
-    </div>
-
-    <div class="card">
-      <h2>All plays</h2>
-      <div id="logScroll"></div>
+    <div class="view-grid">
+      <div class="view-col-stats">
+        <div class="card">
+          <h2>Statistics</h2>
+          <div id="boxScoreContainer"></div>
+        </div>
+      </div>
+      <div class="view-col-narrative">
+        <div class="card">
+          <h2>Current drive</h2>
+          <div id="driveLogScroll"></div>
+        </div>
+        <div class="card">
+          <h2>Previous drive</h2>
+          <div id="prevDriveLogScroll"></div>
+        </div>
+        <div class="card">
+          <h2>All plays</h2>
+          <div id="logScroll"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -177,7 +182,8 @@ function extractNameTag(rawName){
   const cleanName = String(rawName).slice(0, m.index).trim();
   return { cleanName, explicitUnit: tag.toLowerCase() };
 }
-function computeState(){
+function computeState(playsList){
+  const list = playsList || plays;
   const state = {
     possession: startingPossession,
     quarter: 1,
@@ -187,7 +193,7 @@ function computeState(){
     penalties: { teamA: { count: 0, yds: 0 }, teamB: { count: 0, yds: 0 } }
   };
   const pendingClockStart = { teamA: null, teamB: null };
-  for (const p of plays){
+  for (const p of list){
     const e = p.effect;
     if (!e) continue;
     if (e.isReset){
@@ -257,10 +263,18 @@ function computeState(){
 
   // --- End engine core ---
 
+  const RUSH_POS = new Set(['QB','RB','FB','HB','TB']);
+  const RECEIVE_POS = new Set(['WR','TE','SE','FL','SLOT']);
+
+  function playerName(team, num){
+    const t = TEAMS[team];
+    return (t.rosterOffense[num] || t.rosterDefense[num] || (t.rosterSpecialTeams && t.rosterSpecialTeams[num]) || ('#' + num));
+  }
+
   function computeBoxScore(playsList){
     const stats = {
-      teamA: { rushing:{}, passing:{}, receiving:{}, defense:{}, kicking:{}, punting:{} },
-      teamB: { rushing:{}, passing:{}, receiving:{}, defense:{}, kicking:{}, punting:{} }
+      teamA: { rushing:{}, passing:{}, receiving:{}, defense:{}, specialTeams:{} },
+      teamB: { rushing:{}, passing:{}, receiving:{}, defense:{}, specialTeams:{} }
     };
     function bucket(team, cat, num){
       if (!team || !stats[team]) return null;
@@ -273,13 +287,20 @@ function computeState(){
       const e = p.effect || {};
       const type = r.playType;
 
-      if (r.carrier){
+      if (r.carrier && type === 'rush'){
         const s = bucket(r.carrier.team, 'rushing', r.carrier.num);
         if (s){
           s.att = (s.att||0) + 1;
           s.yds = (s.yds||0) + (r.carrier.yards||0);
           if (e.td) s.td = (s.td||0) + 1;
         }
+      }
+      if (r.carrier && type === 'fumble'){
+        const teamObj = TEAMS[r.carrier.team];
+        const pos = ((teamObj && teamObj.posOffense[r.carrier.num]) || '').toUpperCase();
+        const targetCat = RECEIVE_POS.has(pos) ? 'receiving' : 'rushing';
+        const s = bucket(r.carrier.team, targetCat, r.carrier.num);
+        if (s) s.fum = (s.fum||0) + 1;
       }
       if (r.passer && type === 'pass'){
         const s = bucket(r.passer.team, 'passing', r.passer.num);
@@ -300,10 +321,7 @@ function computeState(){
       }
       if (r.passer && type === 'sack'){
         const s = bucket(r.passer.team, 'passing', r.passer.num);
-        if (s){
-          s.sacked = (s.sacked||0) + 1;
-          s.sackYdsLost = (s.sackYdsLost||0) + Math.abs(r.passer.yards||0);
-        }
+        if (s) s.sacked = (s.sacked||0) + 1;
       }
       if (r.passer && type === 'int'){
         const s = bucket(r.passer.team, 'passing', r.passer.num);
@@ -315,46 +333,58 @@ function computeState(){
       if (r.defense){
         const s = bucket(r.defense.team, 'defense', r.defense.num);
         if (s){
-          s.credits = (s.credits||0) + 1;
           if (type === 'int') s.int = (s.int||0) + 1;
           if (type === 'sack') s.sacks = (s.sacks||0) + 1;
+          if (type === 'fumble') s.fumRec = (s.fumRec||0) + 1;
         }
       }
-      if (r.kicker){
-        if (type === 'kickoff'){
-          const s = bucket(r.kicker.team, 'kicking', r.kicker.num);
-          if (s){ s.ko = (s.ko||0) + 1; s.koYds = (s.koYds||0) + (r.kicker.yards||0); }
-        }
-        if (type === 'fg'){
-          const s = bucket(r.kicker.team, 'kicking', r.kicker.num);
-          if (s){
-            s.fgAtt = (s.fgAtt||0) + 1;
-            if (r.kicker.result === 'g') s.fgMade = (s.fgMade||0) + 1;
-          }
-        }
-        if (type === 'pat'){
-          const s = bucket(r.kicker.team, 'kicking', r.kicker.num);
-          if (s){
-            s.patAtt = (s.patAtt||0) + 1;
-            if (r.kicker.result === 'g') s.patMade = (s.patMade||0) + 1;
+      if (r.kicker && type === 'fg'){
+        const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
+        if (s){
+          s.fgAtt = (s.fgAtt||0) + 1;
+          if (r.kicker.result === 'g'){
+            s.fgMade = (s.fgMade||0) + 1;
+            s.fgLong = Math.max(s.fgLong||0, r.kicker.yards||0);
           }
         }
       }
       if (r.punter && type === 'punt'){
-        const s = bucket(r.punter.team, 'punting', r.punter.num);
+        const s = bucket(r.punter.team, 'specialTeams', r.punter.num);
         if (s){
           s.punts = (s.punts||0) + 1;
-          if (!r.punter.blocked) s.yds = (s.yds||0) + (r.punter.yards||0);
-          else s.blocked = (s.blocked||0) + 1;
+          if (!r.punter.blocked){
+            s.puntYds = (s.puntYds||0) + (r.punter.yards||0);
+            s.puntsWithYards = (s.puntsWithYards||0) + 1;
+          } else {
+            s.blocked = (s.blocked||0) + 1;
+          }
         }
       }
     });
-    return stats;
-  }
 
-  function playerName(team, num){
-    const t = TEAMS[team];
-    return (t.rosterOffense[num] || t.rosterDefense[num] || (t.rosterSpecialTeams && t.rosterSpecialTeams[num]) || ('#' + num));
+    ['teamA','teamB'].forEach(defTeam => {
+      const offTeam = otherTeam(defTeam);
+      let d3att=0, d3conv=0, d4att=0, d4conv=0, explosive=0;
+      for (let i = 0; i < playsList.length; i++){
+        const p = playsList[i];
+        const type = p.roles && p.roles.playType;
+        if (!['rush','pass','sack','int','fumble'].includes(type)) continue;
+        const before = computeState(playsList.slice(0, i));
+        if (before.possession !== offTeam) continue;
+        const down = before.down;
+        const success = !!(p.effect && (p.effect.converts || p.effect.td));
+        if (down === 3){ d3att++; if (success) d3conv++; }
+        else if (down === 4){ d4att++; if (success) d4conv++; }
+        if (((p.effect && p.effect.statYds) || 0) >= 20) explosive++;
+      }
+      stats[defTeam].oppDowns = {
+        d3Pct: d3att ? Math.round(100*d3conv/d3att) : null, d3att, d3conv,
+        d4Pct: d4att ? Math.round(100*d4conv/d4att) : null, d4att, d4conv,
+        explosive
+      };
+    });
+
+    return stats;
   }
 
   function statRow(cells){
@@ -371,35 +401,58 @@ function computeState(){
 
       const rushNums = Object.keys(s.rushing);
       if (rushNums.length){
-        html += '<table class="stattable"><tr><th>Rushing</th><th>Att</th><th>Yds</th><th>TD</th></tr>' +
-          rushNums.map(n => statRow([playerName(teamKey, n), s.rushing[n].att||0, s.rushing[n].yds||0, s.rushing[n].td||0])).join('') + '</table>';
+        html += '<table class="stattable"><tr><th>Rushing</th><th>Att</th><th>Yds</th><th>Y/C</th><th>TD</th><th>Fum</th></tr>' +
+          rushNums.map(n => {
+            const d = s.rushing[n];
+            const ypc = d.att ? (d.yds / d.att).toFixed(1) : '0.0';
+            return statRow([playerName(teamKey, n), d.att||0, d.yds||0, ypc, d.td||0, d.fum||0]);
+          }).join('') + '</table>';
       }
       const passNums = Object.keys(s.passing);
       if (passNums.length){
-        html += '<table class="stattable"><tr><th>Passing</th><th>Comp</th><th>Att</th><th>Yds</th><th>TD</th><th>Int</th><th>Sacked</th></tr>' +
-          passNums.map(n => statRow([playerName(teamKey, n), s.passing[n].comp||0, s.passing[n].att||0, s.passing[n].yds||0, s.passing[n].td||0, s.passing[n].intThrown||0, s.passing[n].sacked||0])).join('') + '</table>';
+        html += '<table class="stattable"><tr><th>Passing</th><th>Att</th><th>Comp</th><th>Comp%</th><th>Yds</th><th>TD</th><th>Int</th><th>Sacked</th><th>Rush TD</th></tr>' +
+          passNums.map(n => {
+            const d = s.passing[n];
+            const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) + '%' : '—';
+            const rushTd = (s.rushing[n] && s.rushing[n].td) || 0;
+            return statRow([playerName(teamKey, n), d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0, d.sacked||0, rushTd]);
+          }).join('') + '</table>';
       }
       const recNums = Object.keys(s.receiving);
       if (recNums.length){
-        html += '<table class="stattable"><tr><th>Receiving</th><th>Rec</th><th>Yds</th><th>TD</th></tr>' +
-          recNums.map(n => statRow([playerName(teamKey, n), s.receiving[n].rec||0, s.receiving[n].yds||0, s.receiving[n].td||0])).join('') + '</table>';
+        html += '<table class="stattable"><tr><th>Receiving</th><th>Rec</th><th>Yds</th><th>Y/C</th><th>TD</th><th>Fum</th></tr>' +
+          recNums.map(n => {
+            const d = s.receiving[n];
+            const ypc = d.rec ? (d.yds / d.rec).toFixed(1) : '0.0';
+            return statRow([playerName(teamKey, n), d.rec||0, d.yds||0, ypc, d.td||0, d.fum||0]);
+          }).join('') + '</table>';
+      }
+      const stNums = Object.keys(s.specialTeams);
+      if (stNums.length){
+        html += '<table class="stattable"><tr><th>Special Teams</th><th>FG Att</th><th>FG Made</th><th>Long FG</th><th>FG%</th><th>Punts</th><th>Y/P</th><th>Blocked</th></tr>' +
+          stNums.map(n => {
+            const d = s.specialTeams[n];
+            const fgPct = d.fgAtt ? Math.round(100 * (d.fgMade||0) / d.fgAtt) + '%' : '—';
+            const ypp = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
+            return statRow([playerName(teamKey, n), d.fgAtt||0, d.fgMade||0, d.fgLong||0, fgPct, d.punts||0, ypp, d.blocked||0]);
+          }).join('') + '</table>';
       }
       const defNums = Object.keys(s.defense);
       if (defNums.length){
-        html += '<table class="stattable"><tr><th>Defense</th><th>Credits</th><th>Sacks</th><th>Int</th></tr>' +
-          defNums.map(n => statRow([playerName(teamKey, n), s.defense[n].credits||0, s.defense[n].sacks||0, s.defense[n].int||0])).join('') + '</table>';
+        html += '<table class="stattable"><tr><th>Defense</th><th>Int</th><th>Fum Rec</th><th>Sacks</th></tr>' +
+          defNums.map(n => {
+            const d = s.defense[n];
+            return statRow([playerName(teamKey, n), d.int||0, d.fumRec||0, d.sacks||0]);
+          }).join('') + '</table>';
       }
-      const kickNums = Object.keys(s.kicking);
-      if (kickNums.length){
-        html += '<table class="stattable"><tr><th>Kicking</th><th>KO</th><th>KO Yds</th><th>FG</th><th>PAT</th></tr>' +
-          kickNums.map(n => statRow([playerName(teamKey, n), s.kicking[n].ko||0, s.kicking[n].koYds||0, (s.kicking[n].fgMade||0)+'/'+(s.kicking[n].fgAtt||0), (s.kicking[n].patMade||0)+'/'+(s.kicking[n].patAtt||0)])).join('') + '</table>';
-      }
-      const puntNums = Object.keys(s.punting);
-      if (puntNums.length){
-        html += '<table class="stattable"><tr><th>Punting</th><th>Punts</th><th>Yds</th><th>Blocked</th></tr>' +
-          puntNums.map(n => statRow([playerName(teamKey, n), s.punting[n].punts||0, s.punting[n].yds||0, s.punting[n].blocked||0])).join('') + '</table>';
-      }
-      if (!rushNums.length && !passNums.length && !recNums.length && !defNums.length && !kickNums.length && !puntNums.length){
+      const od = s.oppDowns;
+      html += '<table class="stattable"><tr><th>Opponent on 3rd/4th down</th><th></th></tr>' +
+        statRow(['3rd down', od.d3Pct !== null ? od.d3conv + '/' + od.d3att + ' (' + od.d3Pct + '%)' : '—']) +
+        statRow(['4th down', od.d4Pct !== null ? od.d4conv + '/' + od.d4att + ' (' + od.d4Pct + '%)' : '—']) +
+        statRow(['Plays of 20+ yds allowed', od.explosive]) +
+        '</table>';
+
+      if (!rushNums.length && !passNums.length && !recNums.length && !stNums.length && !defNums.length){
         html += '<p class="hint">No stats yet for ' + team.name + '.</p>';
       }
     });
