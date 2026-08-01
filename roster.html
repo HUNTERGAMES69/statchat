@@ -55,6 +55,11 @@
       <h1 id="rosterTitle">Team Roster</h1>
       <p class="sub">This roster is used every week — no need to re-upload it per game.</p>
       <div id="rosterMsg"></div>
+      <div style="margin-bottom:16px;">
+        <button id="uploadRosterBtn" class="secondary">Upload roster spreadsheet (.xlsx)</button>
+        <input type="file" id="rosterFile" accept=".xlsx,.xls" style="display:none;">
+      </div>
+      <div id="uploadPreview" class="hidden" style="background:#f7f6f2; border-radius:8px; padding:14px; margin-bottom:16px;"></div>
       <table>
         <thead>
           <tr><th>#</th><th>Name</th><th>Position</th><th>Unit</th><th></th></tr>
@@ -93,6 +98,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
@@ -276,6 +282,92 @@
     document.getElementById('newName').value = '';
     document.getElementById('newPosition').value = '';
     loadRoster();
+  });
+
+  document.getElementById('uploadRosterBtn').addEventListener('click', () => {
+    document.getElementById('rosterFile').click();
+  });
+
+  let pendingUploadRows = null;
+
+  document.getElementById('rosterFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const preview = document.getElementById('uploadPreview');
+    preview.classList.remove('hidden');
+    preview.innerHTML = '<p style="font-size:13px; color:#888; margin:0;">Reading file…</p>';
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      let rows;
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      } catch (err){
+        preview.innerHTML = '<p style="color:#a32d2d; margin:0;">Could not read that file: ' + err.message + '</p>';
+        return;
+      }
+
+      const parsed = [];
+      rows.forEach(row => {
+        const num = row[0], name = row[1], pos = row[2];
+        if (num === undefined || name === undefined) return;
+        if (!/^\d+$/.test(String(num).trim())) return; // skip header row / junk
+        parsed.push({
+          default_jersey_number: String(num).trim(),
+          name: String(name).trim(),
+          primary_position: pos ? String(pos).trim().toUpperCase() : null
+        });
+      });
+
+      if (parsed.length === 0){
+        preview.innerHTML = '<p style="color:#a32d2d; margin:0;">No valid rows found. Expected column A = number, column B = name, column C = position.</p>';
+        return;
+      }
+
+      // Skip anyone already on the roster by name, so re-uploading the
+      // same (or an updated) file doesn't create duplicates.
+      const { data: existing, error } = await supabaseClient
+        .from('players')
+        .select('name')
+        .eq('team_id', ourTeamId);
+      if (error){
+        preview.innerHTML = '<p style="color:#a32d2d; margin:0;">Could not check existing roster: ' + error.message + '</p>';
+        return;
+      }
+      const existingNames = new Set((existing || []).map(p => p.name.trim().toLowerCase()));
+      const newRows = parsed.filter(p => !existingNames.has(p.name.toLowerCase()));
+      const skipped = parsed.length - newRows.length;
+
+      pendingUploadRows = newRows;
+      preview.innerHTML =
+        '<p style="font-size:14px; margin:0 0 8px;"><strong>' + newRows.length + '</strong> new player(s) will be added.' +
+        (skipped > 0 ? ' <strong>' + skipped + '</strong> already on the roster and will be skipped.' : '') + '</p>' +
+        (newRows.length > 0 ? '<button id="confirmUploadBtn">Add ' + newRows.length + ' players</button> ' : '') +
+        '<button class="secondary" id="cancelUploadBtn">Cancel</button>';
+
+      const confirmBtn = document.getElementById('confirmUploadBtn');
+      if (confirmBtn) confirmBtn.addEventListener('click', async () => {
+        const toInsert = pendingUploadRows.map(p => Object.assign({ team_id: ourTeamId }, p));
+        const { error: insertError } = await supabaseClient.from('players').insert(toInsert);
+        if (insertError){
+          preview.innerHTML = '<p style="color:#a32d2d; margin:0;">' + insertError.message + '</p>';
+          return;
+        }
+        preview.classList.add('hidden');
+        preview.innerHTML = '';
+        document.getElementById('rosterFile').value = '';
+        loadRoster();
+      });
+      document.getElementById('cancelUploadBtn').addEventListener('click', () => {
+        preview.classList.add('hidden');
+        preview.innerHTML = '';
+        document.getElementById('rosterFile').value = '';
+        pendingUploadRows = null;
+      });
+    };
+    reader.readAsArrayBuffer(file);
   });
 
   document.getElementById('backBtn').addEventListener('click', () => {
