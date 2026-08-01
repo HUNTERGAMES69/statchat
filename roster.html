@@ -8,34 +8,44 @@
 <meta name="apple-mobile-web-app-title" content="StatChat">
 <title>StatChat — Team Roster</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:24px; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:14px; }
   .wrap { max-width:720px; margin:0 auto; }
-  .card { background:#fff; border-radius:12px; padding:28px; margin-bottom:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
-  h1 { font-size:22px; margin:0 0 6px; }
+  .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:20px; margin:0 0 6px; }
   h2 { font-size:16px; margin:0 0 14px; color:#444; }
   p.sub { color:#888; margin:0 0 20px; font-size:14px; }
   label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
-  input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; }
-  button { padding:9px 16px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+  input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
+  button { padding:8px 12px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
   button.danger { background:#fff; color:#a32d2d; border:1px solid #a32d2d; }
   button:disabled { opacity:0.5; cursor:default; }
-  table { width:100%; border-collapse:collapse; font-size:14px; }
-  th { text-align:left; font-size:12px; color:#888; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid #eee; }
-  td { padding:8px; border-bottom:1px solid #f2f2f2; vertical-align:middle; }
-  .unit-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
+  .rosterList { display:flex; flex-direction:column; }
+  .rosterRow { padding:10px 0; border-bottom:1px solid #f2f2f2; }
+  .rosterLine1, .rosterLine2 { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .rosterLine1 { margin-bottom:4px; }
+  .rosterNameNum { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .rosterPos { font-size:13px; color:#888; flex-shrink:0; }
+  .rosterActions { display:flex; gap:6px; flex-wrap:wrap; flex-shrink:0; }
+  .unit-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; flex-shrink:0; }
   .unit-offense { background:#e3f2fd; color:#1565c0; }
   .unit-defense { background:#fdecea; color:#a32d2d; }
   .unit-special { background:#fff8e1; color:#a37a00; }
   .unit-none { background:#eee; color:#999; }
   .add-row { display:flex; gap:8px; align-items:flex-end; margin-top:16px; flex-wrap:wrap; }
-  .add-row > div { flex:1; min-width:100px; }
+  .add-row > div { flex:1 1 100%; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
   .msg.error { background:#fdecea; color:#a32d2d; }
   .msg.success { background:#e8f5e9; color:#1a7a4c; }
   .hidden { display:none; }
-  .row-actions { display:flex; gap:6px; }
-  .row-actions button { padding:5px 10px; font-size:12px; }
+  @media (min-width: 640px) {
+    body { padding:24px; }
+    .card { padding:28px; }
+    h1 { font-size:22px; }
+    button { padding:9px 16px; font-size:14px; }
+    .add-row > div { flex:1 1 auto; }
+    .add-row > div:last-child { flex:0 0 auto; }
+  }
 </style>
 </head>
 <body>
@@ -66,12 +76,7 @@
         <input type="file" id="rosterFile" accept=".xlsx,.xls" style="display:none;">
       </div>
       <div id="uploadPreview" class="hidden" style="background:#f7f6f2; border-radius:8px; padding:14px; margin-bottom:16px;"></div>
-      <table>
-        <thead>
-          <tr><th>#</th><th>Name</th><th>Position</th><th>Unit</th><th></th></tr>
-        </thead>
-        <tbody id="rosterBody"></tbody>
-      </table>
+      <div class="rosterList" id="rosterBody"></div>
       <div class="add-row">
         <div><label>#</label><input type="text" id="newNumber" style="width:100%;"></div>
         <div style="flex:2;"><label>Name</label><input type="text" id="newName" style="width:100%;"></div>
@@ -215,20 +220,24 @@
   function renderRoster(players){
     const body = document.getElementById('rosterBody');
     if (players.length === 0){
-      body.innerHTML = '<tr><td colspan="5" style="color:#999;">No players yet — add your first one below.</td></tr>';
+      body.innerHTML = '<div style="color:#999; padding:10px 0;">No players yet — add your first one below.</div>';
       return;
     }
     body.innerHTML = players.map(p => {
       const unit = posToUnit(p.primary_position);
-      return '<tr data-id="' + p.id + '">' +
-        '<td>' + (p.default_jersey_number || '') + '</td>' +
-        '<td>' + p.name + '</td>' +
-        '<td>' + (p.primary_position || '') + '</td>' +
-        '<td>' + unitBadge(unit) + '</td>' +
-        '<td class="row-actions">' +
-          '<button class="secondary editBtn" data-id="' + p.id + '">Edit</button>' +
-          '<button class="danger removeBtn" data-id="' + p.id + '">Remove</button>' +
-        '</td></tr>';
+      return '<div class="rosterRow" data-id="' + p.id + '">' +
+        '<div class="rosterLine1">' +
+          '<span class="rosterNameNum">#' + (p.default_jersey_number || '—') + ' ' + p.name + '</span>' +
+          unitBadge(unit) +
+        '</div>' +
+        '<div class="rosterLine2">' +
+          '<span class="rosterPos">' + (p.primary_position || '') + '</span>' +
+          '<span class="rosterActions">' +
+            '<button class="secondary editBtn" data-id="' + p.id + '">Edit</button>' +
+            '<button class="danger removeBtn" data-id="' + p.id + '">Remove</button>' +
+          '</span>' +
+        '</div>' +
+      '</div>';
     }).join('');
     body.querySelectorAll('.editBtn').forEach(b => b.addEventListener('click', () => startEdit(b.dataset.id, players)));
     body.querySelectorAll('.removeBtn').forEach(b => b.addEventListener('click', () => removePlayer(b.dataset.id)));
@@ -237,13 +246,16 @@
   function startEdit(id, players){
     const p = players.find(pl => pl.id === id);
     if (!p) return;
-    const row = document.querySelector('tr[data-id="' + id + '"]');
+    const row = document.querySelector('.rosterRow[data-id="' + id + '"]');
     row.innerHTML =
-      '<td><input type="text" class="editNumber" value="' + (p.default_jersey_number || '') + '" style="width:40px;"></td>' +
-      '<td><input type="text" class="editName" value="' + p.name + '" style="width:100%;"></td>' +
-      '<td><input type="text" class="editPosition" value="' + (p.primary_position || '') + '" style="width:60px;"></td>' +
-      '<td></td>' +
-      '<td class="row-actions"><button class="saveEditBtn">Save</button><button class="secondary" onclick="location.reload()">Cancel</button></td>';
+      '<div class="rosterLine1">' +
+        '<input type="text" class="editNumber" value="' + (p.default_jersey_number || '') + '" style="width:50px; flex-shrink:0;">' +
+        '<input type="text" class="editName" value="' + p.name + '" style="flex:1;">' +
+      '</div>' +
+      '<div class="rosterLine2">' +
+        '<input type="text" class="editPosition" value="' + (p.primary_position || '') + '" style="width:70px; flex-shrink:0;">' +
+        '<span class="rosterActions"><button class="saveEditBtn">Save</button><button class="secondary" onclick="location.reload()">Cancel</button></span>' +
+      '</div>';
     row.querySelector('.saveEditBtn').addEventListener('click', async () => {
       const newNumber = row.querySelector('.editNumber').value.trim();
       const newName = row.querySelector('.editName').value.trim();
