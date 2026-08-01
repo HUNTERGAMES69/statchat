@@ -6,30 +6,43 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="StatChat">
-<title>StatChat — Live View</title>
+<title>StatChat — Game Entry</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:14px; }
-  .wrap { max-width:1900px; margin:0 auto; }
-  .view-grid { display:grid; grid-template-columns:1.3fr 1fr; gap:20px; align-items:start; }
-  @media (max-width: 1100px) { .view-grid { grid-template-columns:1fr; } }
+  .wrap { max-width:760px; margin:0 auto; }
   .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:20px; margin:0; }
   h2 { font-size:16px; margin:0 0 10px; color:#444; }
-  h3 { font-size:13px; margin:14px 0 6px; color:#888; text-transform:uppercase; }
   p.sub { color:#888; margin:0 0 14px; font-size:13px; }
-  .banner { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border-radius:10px; padding:12px 16px; margin-bottom:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
+  label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
+  input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
+  button { padding:8px 12px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+  button.primary { background:#1a7a4c; }
+  button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
+  button.danger { background:#fff; color:#a32d2d; border:1px solid #a32d2d; }
+  button:disabled { opacity:0.5; cursor:default; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .hidden { display:none; }
+  .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
+  .msg.error { background:#fdecea; color:#a32d2d; }
+  .msg.success { background:#e8f5e9; color:#1a7a4c; }
+  .banner { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border-radius:10px; padding:12px 16px; margin-bottom:6px; transition:background 0.2s; position:sticky; top:8px; z-index:50; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
   .banner .score { font-size:20px; font-weight:700; }
   .banner .downdist { font-size:15px; font-weight:500; }
   .hint { font-size:12px; color:#888; margin:6px 0; }
-  .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
-  .msg.error { background:#fdecea; color:#a32d2d; }
-  .hidden { display:none; }
+  .floating-actions { position:fixed; bottom:16px; right:16px; z-index:90; display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
+  .floating-actions button { box-shadow:0 2px 8px rgba(0,0,0,0.2); }
+  #playPanel, #utilPanel { background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:10px; }
+  #confirmCard { background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:8px; }
   .logline { font-size:14px; padding:6px 0; border-bottom:1px solid #f2f2f2; }
-  table.stattable { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:12px; }
-  table.stattable th { text-align:left; font-size:11px; color:#888; text-transform:uppercase; padding:4px 6px; border-bottom:1px solid #eee; }
-  table.stattable td { padding:5px 6px; border-bottom:1px solid #f5f5f5; }
-  .live-badge { display:inline-block; font-size:11px; font-weight:700; color:#a37a00; background:#fff3cd; padding:2px 8px; border-radius:10px; margin-left:8px; vertical-align:middle; }
-  @media (min-width: 640px) { body { padding:24px; } .card { padding:24px; } }
+  .badge { font-size:10px; padding:2px 6px; border-radius:8px; margin-left:6px; font-weight:600; }
+  .badge.unresolved { background:#fff3cd; color:#7a6a2a; }
+  .conflict-block { background:#fff3cd; border-radius:8px; padding:10px; margin-top:8px; }
+  @media (min-width: 640px) {
+    body { padding:24px; }
+    .card { padding:24px; }
+    button { padding:9px 16px; font-size:14px; }
+  }
 </style>
 </head>
 <body>
@@ -45,42 +58,112 @@
 
   <div id="mainView" class="hidden">
     <div class="banner" id="banner">
+      <img id="bannerLogoA" style="display:none; height:28px; width:28px; object-fit:contain; border-radius:4px;">
       <span class="score" id="scoreText"></span>
+      <img id="bannerLogoB" style="display:none; height:28px; width:28px; object-fit:contain; border-radius:4px;">
       <span class="downdist" id="downText"></span>
       <span class="downdist" id="quarterText"></span>
     </div>
     <div class="hint" id="topText" style="text-align:right;"></div>
 
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
-        <h1 id="gameTitle">Game <span class="live-badge">LIVE VIEW — READ ONLY</span></h1>
-        <a href="dashboard.html" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600; white-space:nowrap;">← Dashboard</a>
-      </div>
-      <div id="gameMsg"></div>
+    <div id="clockPromptCard" style="display:none; background:#fff3cd; border-radius:8px; padding:12px 14px; margin-bottom:10px;">
+      <div id="clockPromptLabel" style="font-size:15px; font-weight:600; margin-bottom:8px;"></div>
+      <input type="text" id="clockPromptInput" placeholder="M:SS" style="width:100px; display:inline-block;">
+      <button class="primary" id="clockPromptSave">Save clock</button>
+      <button class="secondary" id="clockPromptSkip">Skip</button>
     </div>
 
-    <div class="view-grid">
-      <div class="view-col-stats">
-        <div class="card">
-          <h2>Statistics</h2>
-          <div id="boxScoreContainer"></div>
+    <div id="guidedPanel" class="card" style="display:none;">
+      <h2>Kickoff</h2>
+      <div id="guidedContent"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+        <h1 id="gameTitle">Game</h1>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <a id="launchViewLink" href="#" target="_blank" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #1565c0; color:#1565c0; font-size:13px; font-weight:600; white-space:nowrap;">Launch view ↗</a>
+          <a href="dashboard.html" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600; white-space:nowrap;">← Dashboard</a>
         </div>
       </div>
-      <div class="view-col-narrative">
-        <div class="card">
-          <h2>Current drive</h2>
-          <div id="driveLogScroll"></div>
+      <div id="gameMsg"></div>
+      <input type="text" id="code" style="display:none;">
+
+      <div class="row" style="margin-bottom:8px;">
+        <button class="primary" id="startGameBtn">Start game</button>
+        <button class="primary" id="endFirstHalfBtn" style="display:none;">End 1st half</button>
+        <button class="primary" id="startHalfBtn" style="display:none;">Start 2nd half</button>
+        <button class="primary" id="endGameBtn" style="display:none;">End game</button>
+        <button id="otUtilBtn" style="display:none;">Start overtime</button>
+      </div>
+
+      <p class="hint" style="margin:10px 0 6px;">Scrimmage</p>
+      <div class="row">
+        <button class="ptypeBtn" data-type="rush">Rush</button>
+        <button class="ptypeBtn" data-type="pass">Pass</button>
+        <button class="ptypeBtn" data-type="sack">Sack</button>
+        <button class="ptypeBtn" data-type="int">Interception</button>
+        <button class="ptypeBtn" data-type="fumble">Fumble</button>
+      </div>
+      <p class="hint" style="margin:10px 0 6px;">Special teams</p>
+      <div class="row">
+        <button class="ptypeBtn" data-type="kickoff">Kickoff</button>
+        <button class="ptypeBtn" data-type="punt">Punt</button>
+        <button class="ptypeBtn" data-type="fg">Field goal</button>
+        <button class="ptypeBtn" data-type="pat">PAT</button>
+      </div>
+      <p class="hint" style="margin:10px 0 6px;">Utilities</p>
+      <div class="row">
+        <button id="penUtilBtn">Penalty</button>
+        <button id="driveUtilBtn">New drive / correct down</button>
+        <button id="quarterUtilBtn">Quarter marker</button>
+      </div>
+
+      <div id="playPanel" style="display:none;"></div>
+
+      <div id="manualPanel" style="display:none; background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:10px;">
+        <p class="hint" style="margin:0 0 6px;">Manual entry (flags as unresolved for later review)</p>
+        <label>Insert after<select id="insertAfter" style="width:100%; margin-bottom:8px;"></select></label>
+        <input type="text" id="manualText" placeholder="Describe the play" style="width:100%; margin-bottom:8px;">
+        <div class="row"><button class="primary" id="saveManual">Save</button><button class="secondary" id="cancelManual">Cancel</button></div>
+      </div>
+
+      <div id="confirmCard" style="display:none;">
+        <div style="font-size:14px; color:#888; margin-bottom:4px;">Parsed as</div>
+        <div id="parsedText" style="font-size:16px; font-weight:600; margin-bottom:10px;"></div>
+        <label id="flipRow" style="display:none;"><input type="checkbox" id="flipCheck" checked> <span id="flipLabel"></span></label>
+        <div id="confirmClockRow" style="display:none; margin-bottom:8px;">
+          <span id="confirmClockLabel">Clock</span>&nbsp;<input type="text" id="confirmClockInput" placeholder="M:SS" style="width:90px; display:inline-block;">
         </div>
-        <div class="card">
-          <h2>Previous drive</h2>
-          <div id="prevDriveLogScroll"></div>
-        </div>
-        <div class="card">
-          <h2>All plays</h2>
-          <div id="logScroll"></div>
+        <div class="row" style="margin-top:8px;">
+          <button class="primary" id="saveBtn">Save</button>
+          <button class="secondary" id="editBtn">Edit</button>
         </div>
       </div>
     </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:baseline;">
+        <h2 style="margin:0;">Current drive</h2>
+        <button class="secondary" id="undoBtn" style="padding:6px 12px; font-size:12px;">Undo last</button>
+      </div>
+      <div id="driveLogScroll"></div>
+    </div>
+
+    <div class="card">
+      <h2>Previous drive</h2>
+      <div id="prevDriveLogScroll"></div>
+    </div>
+
+    <div class="card">
+      <h2>All plays</h2>
+      <div id="logScroll"></div>
+    </div>
+  </div>
+
+  <div class="floating-actions">
+    <button class="secondary" id="manualBtn">Manual entry</button>
+    <button class="secondary" id="flipBtn">Flip possession</button>
   </div>
 
 </div>
@@ -99,8 +182,14 @@
   }
 
   let currentGameId = null;
+  let nextSequenceNumber = 1;
   let TEAMS = { teamA: {}, teamB: {} };
-  let plays = [], startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
+  let plays = [], nextId = 1, startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
+  let pending = null;
+  let guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
+  let gamePhase = 'notStarted';
+  let clockPrompt = null, clockPromptCallback = null;
+  let currentGameStatus = 'setup';
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION'){
@@ -110,13 +199,77 @@
     }
   });
 
+  async function init(){
+    const params = new URLSearchParams(window.location.search);
+    currentGameId = params.get('id');
+    if (!currentGameId){
+      showView('errorView');
+      showMsg('errorMsg', 'No game specified.', 'error');
+      return;
+    }
+
+    const { data: gameRows, error: gameError } = await supabaseClient
+      .from('games').select('*').eq('id', currentGameId).limit(1);
+    if (gameError || !gameRows || gameRows.length === 0){
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = gameError ? gameError.message : 'That game could not be found.';
+      return;
+    }
+    const game = gameRows[0];
+    gameLabel = game.designator;
+    quarterLengthSec = game.quarter_length_seconds || 720;
+    currentGameStatus = game.status;
+
+    const { data: rosterRows, error: rosterError } = await supabaseClient
+      .from('game_rosters').select('*').eq('game_id', currentGameId);
+    if (rosterError){
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = rosterError.message;
+      return;
+    }
+
+    const { data: teamRows } = await supabaseClient
+      .from('teams').select('primary_color, secondary_color, logo_url').eq('is_our_team', true).limit(1);
+    const ourBranding = (teamRows && teamRows[0]) || {};
+
+    buildTeams(game, rosterRows || [], ourBranding);
+    document.getElementById('gameTitle').textContent = gameLabel + ' — ' + TEAMS.teamA.name + ' vs ' + TEAMS.teamB.name;
+    document.getElementById('launchViewLink').href = 'view.html?id=' + currentGameId;
+
+    const { data: existingPlays } = await supabaseClient
+      .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
+    plays = (existingPlays || []).map(p => ({
+      id: nextId++, text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+      roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override,
+      _seq: p.sequence_number
+    }));
+    nextSequenceNumber = plays.length ? Math.max(...plays.map(p => p._seq || 0)) + 1 : 1;
+
+    // Resume exactly where we left off -- read the persisted phase and
+    // any in-progress guided step directly, rather than guessing from
+    // play history (which can't tell "kickoff in progress" from "kickoff
+    // never started", and would silently drop an interrupted kickoff).
+    gamePhase = game.game_phase || (plays.length === 0 ? 'notStarted' : 'firstHalf');
+    if (currentGameStatus === 'final') gamePhase = 'ended';
+    guided = (game.guided_state && game.guided_state.active) ? game.guided_state : { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
+    showView('mainView');
+    renderAll();
+    renderGuided();
+    updatePhaseUI();
+  }
+
   function buildTeams(game, rosterRows, ourBranding){
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
     const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    const seeds = game.seed_starters || {};
+    const seedOrderFor = (side) => {
+      const s = seeds[side] || {};
+      return ['QB','RB1','RB2','WR1','WR2','WR3'].map(role => s[role]).filter(Boolean);
+    };
     TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null, seedOrder: seedOrderFor('teamA') };
     TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#8B0000', text: game.opponent_secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null, seedOrder: seedOrderFor('teamB') };
     rosterRows.forEach(r => {
       const team = TEAMS[r.team_side];
       if (!team) return;
@@ -126,10 +279,11 @@
     });
   }
 
-  // --- Proven read-only engine core, extracted verbatim from game.html ---
+
+  // --- Proven engine core, ported verbatim from the tested entry app ---
 function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
 function nameInOffense(teamKey, num){
-  const n = TEAMS[teamKey].rosterOffense[num] || (TEAMS[teamKey].rosterSpecialTeams && TEAMS[teamKey].rosterSpecialTeams[num]);
+  const n = TEAMS[teamKey].rosterOffense[num];
   return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
 }
 function nameInDefense(teamKey, num){
@@ -137,7 +291,7 @@ function nameInDefense(teamKey, num){
   return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
 }
 function nameInSpecialTeams(teamKey, num){
-  const n = (TEAMS[teamKey].rosterSpecialTeams && TEAMS[teamKey].rosterSpecialTeams[num]) || TEAMS[teamKey].rosterOffense[num];
+  const n = TEAMS[teamKey].rosterSpecialTeams && TEAMS[teamKey].rosterSpecialTeams[num];
   return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
 }
 function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':n===4?'4th':(n+'th'); }
@@ -261,202 +415,277 @@ function computeState(playsList){
   return state;
 }
 
+function parseInput(raw, state){
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const off = state.possession, def = otherTeam(off);
+
+  const quarterMatch = trimmed.match(/^q([1-4])$/i);
+  if (quarterMatch){
+    const q = parseInt(quarterMatch[1]);
+    return { text: 'Quarter marker — start of Q' + q, effect: { setQuarter: q }, flipEligible: false, quarter: q };
+  }
+
+  if (/^note:/i.test(trimmed)){
+    return { text: 'NOTE — ' + trimmed.slice(5).trim(), effect: {}, unresolved: true, flipEligible: false, quarter: state.quarter };
+  }
+  const scoreAdjMatch = trimmed.match(/^score\s+(teamA|teamB)\s+([+-]\d+)$/i);
+  if (scoreAdjMatch){
+    const team = scoreAdjMatch[1] === 'teamA' || scoreAdjMatch[1].toLowerCase() === 'teama' ? 'teamA' : 'teamB';
+    const pts = parseInt(scoreAdjMatch[2]);
+    return { text: 'Manual score adjust — ' + TEAMS[team].name + ' ' + (pts > 0 ? '+' : '') + pts, effect: { scoreAdjust: { team, pts } }, flipEligible: false, quarter: state.quarter };
+  }
+
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+
+  if (tokens.length === 3 && /^\d+$/.test(tokens[0]) && /^\d+$/.test(tokens[1]) && /^-?\d+$/.test(tokens[2])){
+    const d = parseInt(tokens[0]), togo = parseInt(tokens[1]), marker = parseInt(tokens[2]);
+    const fp = marker < 0 ? Math.abs(marker) : (100 - marker);
+    return {
+      text: 'New drive / down correction — ' + ordinal(d) + ' & ' + togo + ' at the ' + markerLabel(fp) + ' (' + TEAMS[off].name + ')',
+      effect: { isReset: true, down: d, distance: togo, fieldPos: fp },
+      flipEligible: false, team: off, quarter: state.quarter
+    };
+  }
+
+  const penMatch = tokens[0].match(/^(po|pd)$/i);
+  if (penMatch){
+    const which = penMatch[1].toLowerCase();
+    const yds = parseInt(tokens[1]) || 0;
+    const team = which === 'po' ? off : def;
+    const fieldDelta = which === 'po' ? -yds : yds;
+    return {
+      text: 'Penalty on ' + TEAMS[team].name + ' — ' + yds + ' yds',
+      effect: { penaltyTeam: team, penaltyYds: yds, fieldDelta },
+      flipEligible: false, team
+    };
+  }
+
+  const m = tokens[0].match(/^(\d+)([a-z]+)$/i);
+  if (!m) return null;
+  const p1 = m[1], type = m[2].toLowerCase();
+  let rest = tokens.slice(1);
+  const td = rest[rest.length - 1] === 'td';
+  if (td) rest.pop();
+  const O = n => nameInOffense(off, n), D = n => nameInDefense(def, n), ST = n => nameInSpecialTeams(off, n);
+
+  if (['r', 'p', 'i', 's'].includes(type)){
+    let netYards = 0, tackler = null, text;
+    if (type === 'r'){ netYards = parseInt(rest[0]) || 0; tackler = rest[1]; text = O(p1) + ' rush for ' + netYards; }
+    else if (type === 'p'){ netYards = parseInt(rest[1]) || 0; tackler = rest[2]; text = O(p1) + ' pass to ' + O(rest[0]) + ' for ' + netYards; }
+    else if (type === 'i'){ netYards = 0; text = O(p1) + ' incomplete, intended for ' + O(rest[0]); }
+    else if (type === 's'){ netYards = parseInt(rest[0]) || 0; tackler = rest[1]; text = O(p1) + ' sacked for ' + netYards + ' yds'; }
+
+    const curDown = state.down || 1, curDist = state.distance || 10;
+    let score = null, converts = false, turnoverOnDowns = false;
+    if (td){
+      text += ' — TOUCHDOWN';
+      score = { team: off, points: 6 };
+    } else {
+      if (netYards >= curDist){ converts = true; text += ' — 1st down'; }
+      else if (curDown >= 4){ turnoverOnDowns = true; text += ' — turnover on downs'; }
+      else { text += ' — ' + ordinal(curDown + 1) + ' & ' + Math.max(curDist - netYards, 1); }
+    }
+    if (tackler) text += ', tackled by ' + D(tackler);
+
+    const effect = { isStat: true, statYds: netYards, fieldDelta: netYards, td, converts, turnoverOnDowns };
+    if (td) effect.endsDrive = true;
+    if (score) effect.score = score;
+    return { text, effect, flipEligible: turnoverOnDowns, flipTo: def, team: off, quarter: state.quarter };
+  }
+
+  if (type === 'x'){
+    const defn = rest[0], ret = rest[1];
+    let t = O(p1) + ' intercepted by ' + D(defn);
+    if (ret) t += ', returned ' + ret;
+    let score = null;
+    if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+    return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
+  }
+  if (type === 'f'){
+    const rec = rest[0], retyds = rest[1];
+    if (rec){
+      let t = O(p1) + ' fumble — recovered by ' + D(rec) + ' (turnover)';
+      if (retyds) t += ', returned ' + retyds;
+      let score = null;
+      if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+      return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
+    }
+    return { text: O(p1) + ' fumble — recovered by own team', effect: {}, flipEligible: false, team: off, quarter: state.quarter };
+  }
+  if (type === 'pt'){
+    const yds = rest[0], ret = rest[1], retyds = rest[2];
+    let t = ST(p1) + ' punts ' + yds;
+    if (ret) t += ', returned by ' + D(ret) + (retyds ? ' for ' + retyds : '');
+    let score = null;
+    if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+    return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
+  }
+  if (type === 'pb'){
+    const rec = rest[0], retyds = rest[1];
+    let t = ST(p1) + ' punt BLOCKED';
+    if (rec) t += ', recovered by ' + D(rec);
+    if (retyds) t += ', returned ' + retyds;
+    let score = null;
+    if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+    return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
+  }
+  if (type === 'ko'){
+    const yds = rest[0], ret = rest[1], retyds = rest[2];
+    let t = ST(p1) + ' kicks off ' + yds;
+    if (ret) t += ', returned by ' + D(ret) + (retyds ? ' for ' + retyds : '');
+    let score = null;
+    if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+    return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
+  }
+  if (type === 'fg'){
+    if (rest[0] === 'b' || rest[0] === 'B'){
+      const rec = rest[1], retyds = rest[2];
+      let t = ST(p1) + ' field goal BLOCKED';
+      if (rec) t += ', recovered by ' + D(rec);
+      if (retyds) t += ', returned ' + retyds;
+      let score = null;
+      if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+      return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
+    }
+    const yds = rest[0], res = rest[1];
+    const good = res === 'g';
+    const score = good ? { team: off, points: 3 } : null;
+    const effect = good ? { score, endsDrive: true } : {};
+    return { text: ST(p1) + ' field goal, ' + yds + ' yds — ' + (good ? 'GOOD' : 'MISSED'), effect, flipEligible: !good, flipTo: def, team: off, quarter: state.quarter };
+  }
+  if (type === 'pa'){
+    const res = rest[0];
+    if (res === 'b' || res === 'B'){
+      const rec = rest[1], retyds = rest[2];
+      let t = ST(p1) + ' PAT BLOCKED';
+      if (rec) t += ', recovered by ' + D(rec);
+      if (retyds) t += ', returned ' + retyds;
+      let score = null;
+      if (td){ t += ' — returned for 2 (defense)'; score = { team: def, points: 2 }; }
+      return { text: t, effect: score ? { score } : {}, flipEligible: false, team: off, quarter: state.quarter };
+    }
+    const good = res === 'g';
+    const score = good ? { team: off, points: 1 } : null;
+    return { text: ST(p1) + ' PAT — ' + (good ? 'GOOD' : 'MISSED'), effect: score ? { score } : {}, flipEligible: false, team: off, quarter: state.quarter };
+  }
+  return null;
+}
+const OFFENSE_ROLE_POS = {
+  carrier: ['RB','QB','WR','FB','HB'],
+  passer: ['QB'],
+  receiver: ['WR','TE','RB'],
+  kicker: ['K'],
+  punter: ['P']
+};
+function computePlayerStats(){
+  const stats = { teamA: { rushYds:{}, recYds:{}, passYds:{}, credits:{} }, teamB: { rushYds:{}, recYds:{}, passYds:{}, credits:{} } };
+  const discovered = { teamA: [], teamB: [] };
+  const discoveredOffense = { teamA: [], teamB: [] };
+  function noteOffense(team, num){ if (discoveredOffense[team].indexOf(num) === -1) discoveredOffense[team].push(num); }
+  plays.forEach(p => {
+    if (!p.roles) return;
+    const r = p.roles;
+    if (r.carrier){ stats[r.carrier.team].rushYds[r.carrier.num] = (stats[r.carrier.team].rushYds[r.carrier.num]||0) + (r.carrier.yards||0); noteOffense(r.carrier.team, r.carrier.num); }
+    if (r.passer){ stats[r.passer.team].passYds[r.passer.num] = (stats[r.passer.team].passYds[r.passer.num]||0) + (r.passer.yards||0); noteOffense(r.passer.team, r.passer.num); }
+    if (r.receiver){ stats[r.receiver.team].recYds[r.receiver.num] = (stats[r.receiver.team].recYds[r.receiver.num]||0) + (r.receiver.yards||0); noteOffense(r.receiver.team, r.receiver.num); }
+    if (r.defense){
+      stats[r.defense.team].credits[r.defense.num] = (stats[r.defense.team].credits[r.defense.num]||0) + 1;
+      if (discovered[r.defense.team].indexOf(r.defense.num) === -1) discovered[r.defense.team].push(r.defense.num);
+    }
+  });
+  return { stats, discovered, discoveredOffense };
+}
+function offenseEligible(team, role){
+  const posOffense = TEAMS[team].posOffense || {};
+  const roster = TEAMS[team].rosterOffense || {};
+  const ambiguous = TEAMS[team].ambiguousOffense || {};
+  const allowedPos = OFFENSE_ROLE_POS[role];
+  const { stats, discoveredOffense } = computePlayerStats();
+  const statKey = role === 'carrier' ? 'rushYds' : role === 'passer' ? 'passYds' : role === 'receiver' ? 'recYds' : null;
+  // The original app seeded this list from a small set of projected
+  // starters. There's no equivalent concept in the database-backed
+  // roster yet, so default to the full roster instead -- everyone who's
+  // on offense is a visible candidate, filtered by position below.
+  const seed = TEAMS[team].seedOrder && TEAMS[team].seedOrder.length ? TEAMS[team].seedOrder : Object.keys(roster);
+  const visible = {};
+  seed.forEach(n => { visible[n] = true; });
+  (discoveredOffense[team] || []).forEach(n => { visible[n] = true; });
+  const nums = Object.keys(visible).filter(num => roster[num] && (!allowedPos || allowedPos.indexOf((posOffense[num]||'').toUpperCase()) !== -1));
+  const resolved = nums.slice().sort((a, b) => {
+    const av = statKey ? (stats[team][statKey][a]||0) : 0, bv = statKey ? (stats[team][statKey][b]||0) : 0;
+    if (av !== bv) return bv - av;
+    const aSeed = seed.indexOf(a), bSeed = seed.indexOf(b);
+    return (aSeed === -1 ? 999 : aSeed) - (bSeed === -1 ? 999 : bSeed);
+  }).map(num => ({ num, name: roster[num] }));
+  const ambiguousList = [];
+  Object.keys(ambiguous).forEach(num => {
+    ambiguous[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', resolvedName: name }));
+  });
+  return ambiguousList.concat(resolved);
+}
+function defenseEligible(team){
+  const { stats, discovered } = computePlayerStats();
+  const ambiguous = TEAMS[team].ambiguousDefense || {};
+  const ambiguousList = [];
+  Object.keys(ambiguous).forEach(num => {
+    ambiguous[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', resolvedName: name }));
+  });
+  const discoveredList = discovered[team].slice().sort((a, b) => (stats[team].credits[b]||0) - (stats[team].credits[a]||0))
+    .filter(num => !ambiguous[num])
+    .map(num => ({ num, name: TEAMS[team].rosterDefense[num] || ('#'+num) }));
+  return ambiguousList.concat(discoveredList);
+}
+function specialTeamsEligible(team){
+  const roster = TEAMS[team].rosterSpecialTeams || {};
+  const ambiguous = TEAMS[team].ambiguousSpecialTeams || {};
+  const ambiguousList = [];
+  Object.keys(ambiguous).forEach(num => {
+    ambiguous[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', resolvedName: name }));
+  });
+  const resolvedList = Object.keys(roster).sort().map(num => ({ num, name: roster[num] }));
+  return ambiguousList.concat(resolvedList);
+}
+function pickerHtml(list, groupClass, statLabelFn){
+  if (list.length === 0) return '<span style="font-size:13px; color:var(--text-muted, #999);">no one credited yet — type a number below</span>';
+  return list.map(p => '<button type="button" class="' + groupClass + '" data-num="' + p.num + '"' + (p.resolvedName ? ' data-resolved="' + p.resolvedName.replace(/"/g,'') + '"' : '') + ' style="margin:0 6px 6px 0;">#' + p.num + ' ' + (p.name||'') + (statLabelFn ? ' <span style="color:#999; font-size:11px;">(' + statLabelFn(p.num) + ')</span>' : '') + '</button>').join('');
+}
+function wirePickerButtons(container, groupClass, manualInputId, onPick){
+  container.querySelectorAll('.' + groupClass).forEach(b => {
+    b.addEventListener('click', () => {
+      container.querySelectorAll('.' + groupClass).forEach(x => x.style.background = '');
+      b.style.background = 'var(--bg-accent, #e6f1fb)';
+      document.getElementById(manualInputId).value = b.dataset.num;
+      onPick(b.dataset.num, b.dataset.resolved || null);
+    });
+  });
+}
+
   // --- End engine core ---
 
-  const RUSH_POS = new Set(['QB','RB','FB','HB','TB']);
-  const RECEIVE_POS = new Set(['WR','TE','SE','FL','SLOT']);
-
-  function playerName(team, num){
-    const t = TEAMS[team];
-    return (t.rosterOffense[num] || t.rosterDefense[num] || (t.rosterSpecialTeams && t.rosterSpecialTeams[num]) || ('#' + num));
-  }
-
-  function computeBoxScore(playsList){
-    const stats = {
-      teamA: { rushing:{}, passing:{}, receiving:{}, defense:{}, specialTeams:{} },
-      teamB: { rushing:{}, passing:{}, receiving:{}, defense:{}, specialTeams:{} }
-    };
-    function bucket(team, cat, num){
-      if (!team || !stats[team]) return null;
-      const b = stats[team][cat];
-      if (!b[num]) b[num] = {};
-      return b[num];
+  async function persistPlay(playObj){
+    const seq = nextSequenceNumber++;
+    playObj._seq = seq;
+    const { error } = await supabaseClient.from('plays').insert({
+      game_id: currentGameId,
+      quarter: playObj.quarter || 1,
+      sequence_number: seq,
+      team_side: playObj.team || null,
+      text: playObj.text,
+      effect: playObj.effect || {},
+      roles: playObj.roles || null,
+      unresolved: !!playObj.unresolved,
+      is_divider: !!playObj.isDivider,
+      is_override: !!playObj.isOverride
+    });
+    if (error){
+      showMsg('gameMsg', 'Saved on this screen, but failed to sync to the server: ' + error.message + '. (Offline-safe retry queue is planned but not built yet — for now, check your connection and re-enter this play if it never appears after reloading.)', 'error');
     }
-    playsList.forEach(p => {
-      const r = p.roles || {};
-      const e = p.effect || {};
-      const type = r.playType;
-
-      if (r.carrier && type === 'rush'){
-        const s = bucket(r.carrier.team, 'rushing', r.carrier.num);
-        if (s){
-          s.att = (s.att||0) + 1;
-          s.yds = (s.yds||0) + (r.carrier.yards||0);
-          if (e.td) s.td = (s.td||0) + 1;
-        }
-      }
-      if (r.carrier && type === 'fumble'){
-        const teamObj = TEAMS[r.carrier.team];
-        const pos = ((teamObj && teamObj.posOffense[r.carrier.num]) || '').toUpperCase();
-        const targetCat = RECEIVE_POS.has(pos) ? 'receiving' : 'rushing';
-        const s = bucket(r.carrier.team, targetCat, r.carrier.num);
-        if (s) s.fum = (s.fum||0) + 1;
-      }
-      if (r.passer && type === 'pass'){
-        const s = bucket(r.passer.team, 'passing', r.passer.num);
-        if (s){
-          s.att = (s.att||0) + 1;
-          s.comp = (s.comp||0) + 1;
-          s.yds = (s.yds||0) + (r.passer.yards||0);
-          if (e.td) s.td = (s.td||0) + 1;
-        }
-        if (r.receiver){
-          const rs = bucket(r.receiver.team, 'receiving', r.receiver.num);
-          if (rs){
-            rs.rec = (rs.rec||0) + 1;
-            rs.yds = (rs.yds||0) + (r.receiver.yards||0);
-            if (e.td) rs.td = (rs.td||0) + 1;
-          }
-        }
-      }
-      if (r.passer && type === 'sack'){
-        const s = bucket(r.passer.team, 'passing', r.passer.num);
-        if (s) s.sacked = (s.sacked||0) + 1;
-      }
-      if (r.passer && type === 'int'){
-        const s = bucket(r.passer.team, 'passing', r.passer.num);
-        if (s){
-          s.att = (s.att||0) + 1;
-          s.intThrown = (s.intThrown||0) + 1;
-        }
-      }
-      if (r.defense){
-        const s = bucket(r.defense.team, 'defense', r.defense.num);
-        if (s){
-          if (type === 'int') s.int = (s.int||0) + 1;
-          if (type === 'sack') s.sacks = (s.sacks||0) + 1;
-          if (type === 'fumble') s.fumRec = (s.fumRec||0) + 1;
-        }
-      }
-      if (r.kicker && type === 'fg'){
-        const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
-        if (s){
-          s.fgAtt = (s.fgAtt||0) + 1;
-          if (r.kicker.result === 'g'){
-            s.fgMade = (s.fgMade||0) + 1;
-            s.fgLong = Math.max(s.fgLong||0, r.kicker.yards||0);
-          }
-        }
-      }
-      if (r.punter && type === 'punt'){
-        const s = bucket(r.punter.team, 'specialTeams', r.punter.num);
-        if (s){
-          s.punts = (s.punts||0) + 1;
-          if (!r.punter.blocked){
-            s.puntYds = (s.puntYds||0) + (r.punter.yards||0);
-            s.puntsWithYards = (s.puntsWithYards||0) + 1;
-          } else {
-            s.blocked = (s.blocked||0) + 1;
-          }
-        }
-      }
-    });
-
-    ['teamA','teamB'].forEach(defTeam => {
-      const offTeam = otherTeam(defTeam);
-      let d3att=0, d3conv=0, d4att=0, d4conv=0, explosive=0;
-      for (let i = 0; i < playsList.length; i++){
-        const p = playsList[i];
-        const type = p.roles && p.roles.playType;
-        if (!['rush','pass','sack','int','fumble'].includes(type)) continue;
-        const before = computeState(playsList.slice(0, i));
-        if (before.possession !== offTeam) continue;
-        const down = before.down;
-        const success = !!(p.effect && (p.effect.converts || p.effect.td));
-        if (down === 3){ d3att++; if (success) d3conv++; }
-        else if (down === 4){ d4att++; if (success) d4conv++; }
-        if (((p.effect && p.effect.statYds) || 0) >= 20) explosive++;
-      }
-      stats[defTeam].oppDowns = {
-        d3Pct: d3att ? Math.round(100*d3conv/d3att) : null, d3att, d3conv,
-        d4Pct: d4att ? Math.round(100*d4conv/d4att) : null, d4att, d4conv,
-        explosive
-      };
-    });
-
-    return stats;
   }
 
-  function statRow(cells){
-    return '<tr>' + cells.map(c => '<td>' + c + '</td>').join('') + '</tr>';
-  }
-
-  function renderBoxScore(){
-    const box = computeBoxScore(plays);
-    let html = '';
-    ['teamA', 'teamB'].forEach(teamKey => {
-      const team = TEAMS[teamKey];
-      const s = box[teamKey];
-      html += '<h3>' + team.name + '</h3>';
-
-      const rushNums = Object.keys(s.rushing);
-      if (rushNums.length){
-        html += '<table class="stattable"><tr><th>Rushing</th><th>Att</th><th>Yds</th><th>Y/C</th><th>TD</th><th>Fum</th></tr>' +
-          rushNums.map(n => {
-            const d = s.rushing[n];
-            const ypc = d.att ? (d.yds / d.att).toFixed(1) : '0.0';
-            return statRow([playerName(teamKey, n), d.att||0, d.yds||0, ypc, d.td||0, d.fum||0]);
-          }).join('') + '</table>';
-      }
-      const passNums = Object.keys(s.passing);
-      if (passNums.length){
-        html += '<table class="stattable"><tr><th>Passing</th><th>Att</th><th>Comp</th><th>Comp%</th><th>Yds</th><th>TD</th><th>Int</th><th>Sacked</th><th>Rush TD</th></tr>' +
-          passNums.map(n => {
-            const d = s.passing[n];
-            const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) + '%' : '—';
-            const rushTd = (s.rushing[n] && s.rushing[n].td) || 0;
-            return statRow([playerName(teamKey, n), d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0, d.sacked||0, rushTd]);
-          }).join('') + '</table>';
-      }
-      const recNums = Object.keys(s.receiving);
-      if (recNums.length){
-        html += '<table class="stattable"><tr><th>Receiving</th><th>Rec</th><th>Yds</th><th>Y/C</th><th>TD</th><th>Fum</th></tr>' +
-          recNums.map(n => {
-            const d = s.receiving[n];
-            const ypc = d.rec ? (d.yds / d.rec).toFixed(1) : '0.0';
-            return statRow([playerName(teamKey, n), d.rec||0, d.yds||0, ypc, d.td||0, d.fum||0]);
-          }).join('') + '</table>';
-      }
-      const stNums = Object.keys(s.specialTeams);
-      if (stNums.length){
-        html += '<table class="stattable"><tr><th>Special Teams</th><th>FG Att</th><th>FG Made</th><th>Long FG</th><th>FG%</th><th>Punts</th><th>Y/P</th><th>Blocked</th></tr>' +
-          stNums.map(n => {
-            const d = s.specialTeams[n];
-            const fgPct = d.fgAtt ? Math.round(100 * (d.fgMade||0) / d.fgAtt) + '%' : '—';
-            const ypp = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
-            return statRow([playerName(teamKey, n), d.fgAtt||0, d.fgMade||0, d.fgLong||0, fgPct, d.punts||0, ypp, d.blocked||0]);
-          }).join('') + '</table>';
-      }
-      const defNums = Object.keys(s.defense);
-      if (defNums.length){
-        html += '<table class="stattable"><tr><th>Defense</th><th>Int</th><th>Fum Rec</th><th>Sacks</th></tr>' +
-          defNums.map(n => {
-            const d = s.defense[n];
-            return statRow([playerName(teamKey, n), d.int||0, d.fumRec||0, d.sacks||0]);
-          }).join('') + '</table>';
-      }
-      const od = s.oppDowns;
-      html += '<table class="stattable"><tr><th>Opponent on 3rd/4th down</th><th></th></tr>' +
-        statRow(['3rd down', od.d3Pct !== null ? od.d3conv + '/' + od.d3att + ' (' + od.d3Pct + '%)' : '—']) +
-        statRow(['4th down', od.d4Pct !== null ? od.d4conv + '/' + od.d4att + ' (' + od.d4Pct + '%)' : '—']) +
-        statRow(['Plays of 20+ yds allowed', od.explosive]) +
-        '</table>';
-
-      if (!rushNums.length && !passNums.length && !recNums.length && !stNums.length && !defNums.length){
-        html += '<p class="hint">No stats yet for ' + team.name + '.</p>';
-      }
-    });
-    document.getElementById('boxScoreContainer').innerHTML = html;
+  function pushAndPersist(playObj){
+    plays.push(playObj);
+    persistPlay(playObj);
   }
 
   function renderAll(){
@@ -464,15 +693,25 @@ function computeState(playsList){
     const isGoalToGo = state.down && state.fieldPos !== null && (state.fieldPos + state.distance >= 100);
     const distDisplay = isGoalToGo ? 'Goal' : state.distance;
     document.getElementById('scoreText').textContent = TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' + TEAMS.teamB.name + ' ' + state.scores.teamB;
-    document.getElementById('downText').textContent = state.down
-      ? (ordinal(state.down) + ' & ' + distDisplay + ' at the ' + markerLabel(state.fieldPos) + ' — ' + TEAMS[state.possession].name + ' ball')
-      : ('no active drive — ' + TEAMS[state.possession].name + ' ball');
+    let downMsg;
+    if (state.down){
+      downMsg = ordinal(state.down) + ' & ' + distDisplay + ' at the ' + markerLabel(state.fieldPos) + ' — ' + TEAMS[state.possession].name + ' ball';
+    } else if (gamePhase === 'firstHalf' || gamePhase === 'secondHalf'){
+      downMsg = 'No active drive — ' + TEAMS[state.possession].name + ' needs to kick off next';
+    } else {
+      downMsg = 'no active drive — ' + TEAMS[state.possession].name + ' ball';
+    }
+    document.getElementById('downText').textContent = downMsg;
     document.getElementById('quarterText').textContent = 'Q' + state.quarter + ' (' + (state.quarter <= 2 ? '1st half' : state.quarter <= 4 ? '2nd half' : 'OT') + ')';
     document.getElementById('topText').textContent = 'Time of possession — ' + TEAMS.teamA.name + ' ' + formatDuration(state.possessionTime.teamA) + ' · ' + TEAMS.teamB.name + ' ' + formatDuration(state.possessionTime.teamB);
     const banner = document.getElementById('banner');
     const c = TEAMS[state.possession];
     banner.style.background = c.bg;
     banner.style.color = c.text;
+    const logoA = document.getElementById('bannerLogoA');
+    const logoB = document.getElementById('bannerLogoB');
+    if (TEAMS.teamA.logo){ logoA.src = TEAMS.teamA.logo; logoA.style.display = 'inline-block'; } else { logoA.style.display = 'none'; }
+    if (TEAMS.teamB.logo){ logoB.src = TEAMS.teamB.logo; logoB.style.display = 'inline-block'; } else { logoB.style.display = 'none'; }
 
     function renderLogLines(list){
       return list.map(p => {
@@ -483,6 +722,9 @@ function computeState(playsList){
     }
     document.getElementById('logScroll').innerHTML = renderLogLines(plays.slice().reverse()) || '<div style="color:#999;">no plays logged yet</div>';
 
+    // Every play with effect.isReset marks the start of a new drive --
+    // current and previous drive are just the last two segments between
+    // those markers.
     const resetIdxs = [];
     for (let i = 0; i < plays.length; i++){
       if (plays[i].effect && plays[i].effect.isReset) resetIdxs.push(i);
@@ -491,90 +733,732 @@ function computeState(playsList){
     const previousDrivePlays = resetIdxs.length >= 2 ? plays.slice(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1]) : [];
     document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
     document.getElementById('prevDriveLogScroll').innerHTML = renderLogLines(previousDrivePlays.slice().reverse()) || '<div style="color:#999;">no previous drive yet</div>';
-
-    renderBoxScore();
   }
 
-  async function init(){
-    const params = new URLSearchParams(window.location.search);
-    currentGameId = params.get('id');
-    if (!currentGameId){
-      showView('errorView');
-      showMsg('errorMsg', 'No game specified.', 'error');
-      return;
-    }
+  function updatePhaseUI(){
+    const disable = guided.active || !!clockPrompt || gamePhase === 'notStarted' || gamePhase === 'halftime' || gamePhase === 'ended';
+    document.querySelectorAll('.ptypeBtn').forEach(b => { b.disabled = disable; });
+    document.getElementById('penUtilBtn').disabled = disable;
+    document.getElementById('driveUtilBtn').disabled = disable;
+    document.getElementById('quarterUtilBtn').disabled = disable;
+    if (disable) document.getElementById('playPanel').style.display = 'none';
+    document.getElementById('startGameBtn').style.display = (gamePhase === 'notStarted' && !guided.active) ? 'inline-block' : 'none';
+    document.getElementById('endFirstHalfBtn').style.display = (gamePhase === 'firstHalf' && !guided.active) ? 'inline-block' : 'none';
+    document.getElementById('startHalfBtn').style.display = (gamePhase === 'halftime' && !guided.active) ? 'inline-block' : 'none';
+    document.getElementById('endGameBtn').style.display = (gamePhase === 'secondHalf' && !guided.active) ? 'inline-block' : 'none';
+    document.getElementById('otUtilBtn').style.display = (gamePhase === 'secondHalf' && !guided.active && computeState().quarter < 5) ? 'inline-block' : 'none';
 
-    const { data: gameRows, error: gameError } = await supabaseClient
-      .from('games').select('*').eq('id', currentGameId).limit(1);
-    if (gameError || !gameRows || gameRows.length === 0){
-      showView('errorView');
-      document.getElementById('errorMsg').textContent = gameError ? gameError.message : 'That game could not be found.';
-      return;
-    }
-    const game = gameRows[0];
-    gameLabel = game.designator;
-    quarterLengthSec = game.quarter_length_seconds || 720;
-
-    const { data: rosterRows, error: rosterError } = await supabaseClient
-      .from('game_rosters').select('*').eq('game_id', currentGameId);
-    if (rosterError){
-      showView('errorView');
-      document.getElementById('errorMsg').textContent = rosterError.message;
-      return;
-    }
-
-    const { data: teamRows } = await supabaseClient
-      .from('teams').select('primary_color, secondary_color, logo_url').eq('is_our_team', true).limit(1);
-    const ourBranding = (teamRows && teamRows[0]) || {};
-
-    buildTeams(game, rosterRows || [], ourBranding);
-    document.getElementById('gameTitle').innerHTML = gameLabel + ' — ' + TEAMS.teamA.name + ' vs ' + TEAMS.teamB.name + ' <span class="live-badge">LIVE VIEW — READ ONLY</span>';
-
-    const { data: existingPlays } = await supabaseClient
-      .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
-    plays = (existingPlays || []).map(p => ({
-      text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
-      roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
-    }));
-
-    showView('mainView');
-    renderAll();
-    subscribeToLiveUpdates();
   }
 
-  async function reloadPlaysAndRender(){
-    const { data: existingPlays } = await supabaseClient
-      .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
-    plays = (existingPlays || []).map(p => ({
-      text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
-      roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
-    }));
-    renderAll();
+  async function setGameStatus(status){
+    currentGameStatus = status;
+    const { error } = await supabaseClient.from('games').update({ status }).eq('id', currentGameId);
+    if (error) showMsg('gameMsg', 'Phase changed here, but failed to sync to the server: ' + error.message, 'error');
   }
 
-  function subscribeToLiveUpdates(){
-    // Inserts and updates can be filtered server-side by game_id.
-    // Deletes (Undo) can't be filtered server-side at all in Postgres
-    // Changes, so we listen to every delete on this table and check
-    // game_id ourselves once it arrives -- this only works because the
-    // migration set REPLICA IDENTITY FULL, which makes sure a delete
-    // event actually carries the deleted row's other columns instead
-    // of just its id.
-    supabaseClient
-      .channel('plays-' + currentGameId)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'plays', filter: 'game_id=eq.' + currentGameId }, () => {
-        reloadPlaysAndRender();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'plays', filter: 'game_id=eq.' + currentGameId }, () => {
-        reloadPlaysAndRender();
-      })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'plays' }, (payload) => {
-        if (payload.old && payload.old.game_id === currentGameId){
-          reloadPlaysAndRender();
+  // Persists exactly where we are in the live flow -- including any
+  // in-progress guided step (mid-kickoff, mid-overtime-setup) -- so
+  // navigating away and back resumes exactly here instead of guessing
+  // from play history, which can silently drop an incomplete kickoff.
+  async function persistUiState(){
+    const { error } = await supabaseClient.from('games')
+      .update({ game_phase: gamePhase, guided_state: guided })
+      .eq('id', currentGameId);
+    if (error) showMsg('gameMsg', 'State changed here, but failed to sync to the server: ' + error.message, 'error');
+  }
+
+  function showClockPrompt(ctx, thenFn){
+    clockPrompt = ctx;
+    clockPromptCallback = thenFn;
+    renderClockPrompt();
+    updatePhaseUI();
+  }
+  function renderClockPrompt(){
+    const card = document.getElementById('clockPromptCard');
+    if (!clockPrompt){ card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    let label = '';
+    if (clockPrompt.mode === 'transition') label = 'Clock at change of possession — ' + TEAMS[clockPrompt.outgoingTeam].name + ' \u2192 ' + TEAMS[clockPrompt.incomingTeam].name;
+    if (clockPrompt.mode === 'start') label = 'Clock at start of ' + TEAMS[clockPrompt.team].name + ' possession';
+    if (clockPrompt.mode === 'end') label = 'Clock at end of ' + TEAMS[clockPrompt.team].name + ' possession';
+    document.getElementById('clockPromptLabel').textContent = label;
+    document.getElementById('clockPromptInput').value = '';
+  }
+  function resolveClockPrompt(skip){
+    const val = document.getElementById('clockPromptInput').value.trim();
+    if (!skip && val){
+      const q = computeState().quarter;
+      const absSec = clockToAbsSeconds(q, val);
+      if (absSec !== null){
+        let effect, text;
+        if (clockPrompt.mode === 'transition'){
+          effect = { clockEvent: { type: 'transition', outgoingTeam: clockPrompt.outgoingTeam, incomingTeam: clockPrompt.incomingTeam, absSec } };
+          text = 'Clock — ' + val + ' at change of possession (' + TEAMS[clockPrompt.outgoingTeam].name + ' \u2192 ' + TEAMS[clockPrompt.incomingTeam].name + ')';
+        } else if (clockPrompt.mode === 'start'){
+          effect = { clockEvent: { type: 'start', team: clockPrompt.team, absSec } };
+          text = 'Clock — ' + val + ' start of possession (' + TEAMS[clockPrompt.team].name + ')';
+        } else {
+          effect = { clockEvent: { type: 'end', team: clockPrompt.team, absSec } };
+          text = 'Clock — ' + val + ' end of possession (' + TEAMS[clockPrompt.team].name + ')';
         }
-      })
-      .subscribe();
+        pushAndPersist({ id: nextId++, text, effect, quarter: q });
+      }
+    }
+    const cb = clockPromptCallback;
+    clockPrompt = null;
+    clockPromptCallback = null;
+    renderAll();
+    renderClockPrompt();
+    updatePhaseUI();
+    if (cb) cb();
   }
+  document.getElementById('clockPromptSave').addEventListener('click', () => resolveClockPrompt(false));
+  document.getElementById('clockPromptSkip').addEventListener('click', () => resolveClockPrompt(true));
+  document.getElementById('clockPromptInput').addEventListener('keydown', e => { if (e.key === 'Enter') resolveClockPrompt(false); });
+
+  function startGuided(quarterNum, targetPhase){
+    guided = { active: true, quarter: quarterNum, kickingTeam: null, receivingTeam: null, step: 'pickKicker', targetPhase };
+    persistUiState();
+    pushAndPersist({ id: nextId++, text: 'Quarter marker — start of Q' + quarterNum, effect: { setQuarter: quarterNum }, quarter: quarterNum });
+    renderAll();
+    renderGuided();
+    updatePhaseUI();
+  }
+  document.getElementById('startGameBtn').addEventListener('click', () => { setGameStatus('in_progress'); startGuided(1, 'firstHalf'); });
+  document.getElementById('startHalfBtn').addEventListener('click', () => startGuided(3, 'secondHalf'));
+  document.getElementById('endFirstHalfBtn').addEventListener('click', () => {
+    const state = computeState();
+    const absSec = clockToAbsSeconds(state.quarter, '0:00');
+    pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
+    pushAndPersist({ id: nextId++, text: 'End of 1st half', effect: {}, isDivider: true });
+    gamePhase = 'halftime';
+    persistUiState();
+    renderAll();
+    updatePhaseUI();
+  });
+  document.getElementById('endGameBtn').addEventListener('click', () => {
+    const state = computeState();
+    if (state.scores.teamA === state.scores.teamB){
+      alert('Score is tied ' + state.scores.teamA + '-' + state.scores.teamB + ' — the game can\'t end on a tie. Use "Start overtime" instead.');
+      return;
+    }
+    const ok = confirm('End the game now? Final score: ' + TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' + TEAMS.teamB.name + ' ' + state.scores.teamB + '.\n\nThis locks in the game as final.');
+    if (!ok) return;
+    const absSec = clockToAbsSeconds(state.quarter, '0:00');
+    pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
+    pushAndPersist({ id: nextId++, text: 'Final', effect: {}, isDivider: true });
+    gamePhase = 'ended';
+    persistUiState();
+    setGameStatus('final');
+    renderAll();
+    updatePhaseUI();
+  });
+
+  function renderGuided(){
+    const panel = document.getElementById('guidedPanel');
+    const content = document.getElementById('guidedContent');
+    if (!guided.active){ panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+
+    if (guided.step === 'otPickTeam'){
+      content.innerHTML =
+        '<p class="hint">Overtime — no kickoff. Who gets the ball first? Possession will keep alternating from here as normal (turnovers, New Drive after each score) until someone\'s actually ahead.</p>' +
+        '<button type="button" id="ot_pickA">' + TEAMS.teamA.name + '</button> ' +
+        '<button type="button" id="ot_pickB">' + TEAMS.teamB.name + '</button>';
+      function pickTeam(team){
+        pushAndPersist({ id: nextId++, text: 'Quarter marker — start of overtime', effect: { setQuarter: 5 }, quarter: 5 });
+        guided.receivingTeam = team;
+        guided.step = 'otSpot';
+        persistUiState();
+        renderGuided();
+      }
+      document.getElementById('ot_pickA').addEventListener('click', () => pickTeam('teamA'));
+      document.getElementById('ot_pickB').addEventListener('click', () => pickTeam('teamB'));
+      return;
+    }
+
+    if (guided.step === 'otSpot'){
+      const team = guided.receivingTeam;
+      content.innerHTML =
+        '<p class="hint">' + TEAMS[team].name + ' starts overtime. Starting spot (most rule sets: opponent\'s 10 — adjust to your association\'s format):</p>' +
+        startingSpotFieldsHtml('ot_spot', 'Starting spot') +
+        '<div class="row" style="margin-top:12px;"><button class="primary" id="ot_review">Set drive</button></div>';
+      const getReset = wireStartingSpot(content, 'ot_spot');
+      document.getElementById('ot_review').addEventListener('click', () => {
+        const reset = getReset();
+        if (!reset) return;
+        pushAndPersist({ id: nextId++, text: 'Overtime — ' + TEAMS[team].name + ' to start at the ' + markerLabel(reset.fieldPos), effect: { forcePossession: team }, quarter: 5 });
+        pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(reset.down) + ' & ' + reset.distance + ' at the ' + markerLabel(reset.fieldPos) + ' (' + TEAMS[team].name + ')', effect: { isReset: true, down: reset.down, distance: reset.distance, fieldPos: reset.fieldPos }, quarter: 5 });
+        guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
+        persistUiState();
+        renderAll();
+        renderGuided();
+        updatePhaseUI();
+      });
+      return;
+    }
+
+    if (guided.step === 'pickKicker'){
+      content.innerHTML =
+        '<div style="font-size:16px; margin-bottom:8px;">Q' + guided.quarter + ' kickoff — who kicks off?</div>' +
+        '<div class="row"><button class="primary" id="pickA">' + TEAMS.teamA.name + ' kicks</button>' +
+        '<button class="primary" id="pickB">' + TEAMS.teamB.name + ' kicks</button></div>';
+      document.getElementById('pickA').addEventListener('click', () => { guided.kickingTeam = 'teamA'; guided.receivingTeam = 'teamB'; guided.step = 'kickoff'; persistUiState(); renderGuided(); });
+      document.getElementById('pickB').addEventListener('click', () => { guided.kickingTeam = 'teamB'; guided.receivingTeam = 'teamA'; guided.step = 'kickoff'; persistUiState(); renderGuided(); });
+      return;
+    }
+    if (guided.step === 'kickoff'){
+      const kickerList = specialTeamsEligible(guided.kickingTeam);
+      content.innerHTML =
+        '<div style="font-size:16px; margin-bottom:8px;">' + TEAMS[guided.kickingTeam].name + ' kicks off.</div>' +
+        '<p style="font-size:13px; color:#888; margin:0 0 4px;">Kicker</p>' +
+        '<div id="gk_kicker_grid">' + pickerHtml(kickerList, 'gk_kicker_pick') + '</div>' +
+        '<input type="text" id="gk_kicker_manual" placeholder="or type #" style="width:100px; margin:4px 0 8px;"><br>' +
+        '<label class="inline">Distance <input type="text" id="gk_yards" style="width:70px; margin-left:6px; display:inline-block;"></label>' +
+        '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedKickoffSave">Save kickoff</button></div>';
+      let kickerNum = null;
+      content.querySelectorAll('.gk_kicker_pick').forEach(b => b.addEventListener('click', () => {
+        kickerNum = b.dataset.num;
+        if (b.dataset.resolved) TEAMS[guided.kickingTeam].rosterSpecialTeams[kickerNum] = b.dataset.resolved;
+        content.querySelectorAll('.gk_kicker_pick').forEach(x => x.style.background = '');
+        b.style.background = '#e6f1fb';
+        document.getElementById('gk_kicker_manual').value = kickerNum;
+      }));
+      document.getElementById('gk_kicker_manual').addEventListener('input', e => { kickerNum = e.target.value.trim(); });
+      document.getElementById('guidedKickoffSave').addEventListener('click', () => {
+        const yds = document.getElementById('gk_yards').value.trim();
+        if (!kickerNum || !yds) return;
+        const text = nameInSpecialTeams(guided.kickingTeam, kickerNum) + ' kicks off ' + yds;
+        pushAndPersist({ id: nextId++, text, effect: {}, team: guided.kickingTeam, quarter: guided.quarter, roles: { kicker: { team: guided.kickingTeam, num: kickerNum, yards: parseInt(yds)||0 }, playType: 'kickoff' } });
+        guided.step = 'return';
+        persistUiState();
+        renderAll(); renderGuided();
+      });
+      return;
+    }
+    if (guided.step === 'return'){
+      const returnerList = defenseEligible(guided.receivingTeam);
+      content.innerHTML =
+        '<div style="font-size:16px; margin-bottom:8px;">' + TEAMS[guided.receivingTeam].name + ' returns.</div>' +
+        '<p style="font-size:13px; color:#888; margin:0 0 4px;">Returner</p>' +
+        '<div id="gr_returner_grid">' + pickerHtml(returnerList, 'gr_returner_pick') + '</div>' +
+        '<input type="text" id="gr_returner_manual" placeholder="type #" style="width:100px; margin:4px 0 8px;"><br>' +
+        '<label class="inline">Return yards <input type="text" id="gr_yards" style="width:70px; margin-left:6px; display:inline-block;"></label>' +
+        '<label class="inline" style="margin-left:12px; display:inline-block;"><input type="checkbox" id="gr_td"> Touchdown</label>' +
+        '<label class="inline" style="margin-left:12px; display:inline-block;">Clock <input type="text" id="guidedReturnClock" placeholder="M:SS" style="width:80px; margin-left:6px; display:inline-block;"></label>' +
+        startingSpotFieldsHtml('gr_spot', 'Ball spot after the return (sets 1st down for ' + TEAMS[guided.receivingTeam].name + ')') +
+        '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedReturnSave">Save return</button></div>';
+      let returnerNum = null;
+      const getReturnReset = wireStartingSpot(content, 'gr_spot');
+      content.querySelectorAll('.gr_returner_pick').forEach(b => b.addEventListener('click', () => {
+        returnerNum = b.dataset.num;
+        if (b.dataset.resolved) TEAMS[guided.receivingTeam].rosterDefense[returnerNum] = b.dataset.resolved;
+        content.querySelectorAll('.gr_returner_pick').forEach(x => x.style.background = '');
+        b.style.background = '#e6f1fb';
+        document.getElementById('gr_returner_manual').value = returnerNum;
+      }));
+      document.getElementById('gr_returner_manual').addEventListener('input', e => { returnerNum = e.target.value.trim(); });
+      document.getElementById('guidedReturnSave').addEventListener('click', () => {
+        const yds = document.getElementById('gr_yards').value.trim();
+        const td = document.getElementById('gr_td').checked;
+        if (!returnerNum || !yds) return;
+        let text = nameInDefense(guided.receivingTeam, returnerNum) + ' returns ' + yds;
+        const effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
+        if (td){ text += ' — TOUCHDOWN'; effect.score = { team: guided.receivingTeam, points: 6 }; }
+        pushAndPersist({ id: nextId++, text, effect, team: guided.receivingTeam, quarter: guided.quarter, roles: { defense: { team: guided.receivingTeam, num: returnerNum }, playType: 'kickoff_return' } });
+        const receivingName = TEAMS[guided.receivingTeam].name;
+        const receivingTeamKey = guided.receivingTeam;
+        const q = guided.quarter;
+        const clockVal = document.getElementById('guidedReturnClock').value.trim();
+        if (clockVal){
+          const absSec = clockToAbsSeconds(q, clockVal);
+          if (absSec !== null){
+            pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' start of possession (' + receivingName + ')', effect: { clockEvent: { type: 'start', team: receivingTeamKey, absSec } }, quarter: q });
+          }
+        }
+        const reset = getReturnReset();
+        if (reset && !td){
+          pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(reset.down) + ' & ' + reset.distance + ' at the ' + markerLabel(reset.fieldPos) + ' (' + receivingName + ')', effect: { isReset: true, down: reset.down, distance: reset.distance, fieldPos: reset.fieldPos }, quarter: q });
+        }
+        gamePhase = guided.targetPhase;
+        guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
+        persistUiState();
+        renderAll(); renderGuided(); updatePhaseUI();
+        if (reset && !td){
+          document.getElementById('code').placeholder = '15p 22 25 7';
+        } else {
+          document.getElementById('code').placeholder = '1 10 -20 — set the starting spot for ' + receivingName;
+        }
+      });
+      return;
+    }
+  }
+
+  document.getElementById('otUtilBtn').addEventListener('click', () => {
+    guided = { active: true, quarter: 5, kickingTeam: null, receivingTeam: null, step: 'otPickTeam', targetPhase: 'secondHalf' };
+    persistUiState();
+    renderGuided();
+  });
+
+  document.querySelectorAll('.ptypeBtn').forEach(b => b.addEventListener('click', () => renderPlayPanel(b.dataset.type)));
+  let currentSpotGetter = null;
+
+  function startingSpotFieldsHtml(idPrefix, label){
+    return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label || 'Starting spot for the ensuing drive (optional — leave blank to set later)') + '</p>' +
+      '<button type="button" class="' + idPrefix + '_side" data-side="own">Our side</button> ' +
+      '<button type="button" class="' + idPrefix + '_side" data-side="opp">Their side</button> ' +
+      '<input type="text" id="' + idPrefix + '_yardline" style="width:70px; display:inline-block;" placeholder="Yard line">';
+  }
+  function wireStartingSpot(container, idPrefix){
+    let side = null;
+    container.querySelectorAll('.' + idPrefix + '_side').forEach(b => b.addEventListener('click', () => {
+      side = b.dataset.side;
+      container.querySelectorAll('.' + idPrefix + '_side').forEach(x => x.style.background = '');
+      b.style.background = '#e6f1fb';
+    }));
+    return function getReset(){
+      const yardlineEl = document.getElementById(idPrefix + '_yardline');
+      const yardline = yardlineEl ? yardlineEl.value.trim() : '';
+      if (!side || !yardline) return null;
+      const fieldPos = side === 'own' ? Math.abs(parseInt(yardline)) : (100 - parseInt(yardline));
+      const distance = Math.min(10, 100 - fieldPos);
+      return { down: 1, distance, fieldPos };
+    };
+  }
+
+  function renderPlayPanel(type){
+    const state = computeState();
+    const off = state.possession, def = otherTeam(state.possession);
+    const panel = document.getElementById('playPanel');
+    panel.style.display = 'block';
+    document.getElementById('confirmCard').style.display = 'none';
+
+    const { stats } = computePlayerStats();
+    function offBlock(role, label){
+      const list = (role === 'kicker' || role === 'punter') ? specialTeamsEligible(off) : offenseEligible(off, role);
+      const statFn = role === 'carrier' ? (n => (stats[off].rushYds[n]||0)+' yds') : role === 'passer' ? (n => (stats[off].passYds[n]||0)+' yds') : role === 'receiver' ? (n => (stats[off].recYds[n]||0)+' yds') : null;
+      return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
+        '<div id="pp_' + role + '_grid">' + pickerHtml(list, 'pp_' + role + '_pick', statFn) + '</div>' +
+        '<input type="text" id="pp_' + role + '_manual" placeholder="or type #" style="width:100px; margin-top:4px;">';
+    }
+    function defBlock(label, suffix){
+      suffix = suffix || '';
+      const list = defenseEligible(def);
+      return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
+        '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, n => (stats[def].credits[n]||0)+' credits') + '</div>' +
+        '<input type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px; margin-top:4px;">';
+    }
+    const yardsBlock = (label, id) => '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label||'Yards') + '</p><input type="text" id="' + (id||'pp_yards') + '" style="width:80px;">';
+    const yardsBlockRet = () => '<div id="pp_retyds_container"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Return yards (optional)</p><input type="text" id="pp_retyds" style="width:80px;"></div>';
+    const tdBlock = '<label class="inline" style="margin-top:8px; display:block;"><input type="checkbox" id="pp_td"> Touchdown</label>';
+
+    let html = '';
+    if (type === 'rush') html = offBlock('carrier','Ball carrier') + yardsBlock() + defBlock('Tackled by (optional)') + tdBlock;
+    else if (type === 'pass') html = offBlock('passer','Passer') + offBlock('receiver','Receiver') + yardsBlock() + defBlock('Tackled by (optional)') + tdBlock;
+    else if (type === 'sack') html = offBlock('passer','Passer') + yardsBlock('Yards lost') + defBlock('Sacked by');
+    else if (type === 'int') html = offBlock('passer','Passer') + defBlock('Intercepted by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot');
+    else if (type === 'fumble') html = offBlock('carrier','Who fumbled') +
+        '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input type="radio" name="pp_fumrec" value="own" checked> Recovered by own team</label>' +
+        '<label class="inline" style="display:block;"><input type="radio" name="pp_fumrec" value="opp"> Recovered by opponent</label></div>' +
+        '<div id="pp_fum_opp" style="display:none;">' + defBlock('Recovered by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot') + '</div>';
+    else if (type === 'kickoff') html = offBlock('kicker','Kicker') + yardsBlock('Kick distance') + defBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' + tdBlock + startingSpotFieldsHtml('pp_spot');
+    else if (type === 'punt') html =
+        '<label class="inline" style="display:block;"><input type="checkbox" id="pp_blocked"> Blocked</label>' +
+        offBlock('punter','Punter') +
+        '<div id="pp_punt_normal">' + yardsBlock('Punt distance') + defBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div></div>' +
+        '<div id="pp_punt_blocked" style="display:none;">' + defBlock('Recovered by', '_pb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + '</div>' + tdBlock + startingSpotFieldsHtml('pp_spot');
+    else if (type === 'fg') html =
+        offBlock('kicker','Kicker') + yardsBlock('Distance') +
+        '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input type="radio" name="pp_fgres" value="g" checked> Good</label>' +
+        '<label class="inline" style="display:block;"><input type="radio" name="pp_fgres" value="x"> Missed</label>' +
+        '<label class="inline" style="display:block;"><input type="radio" name="pp_fgres" value="b"> Blocked</label></div>' +
+        '<div id="pp_fg_blocked" style="display:none;">' + defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + tdBlock + '</div>';
+    else if (type === 'pat') html =
+        offBlock('kicker','Kicker') +
+        '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input type="radio" name="pp_patres" value="g" checked> Good</label>' +
+        '<label class="inline" style="display:block;"><input type="radio" name="pp_patres" value="x"> Missed</label>' +
+        '<label class="inline" style="display:block;"><input type="radio" name="pp_patres" value="b"> Blocked</label></div>' +
+        '<div id="pp_pat_blocked" style="display:none;">' + defBlock('Returned by (optional)') + yardsBlock('Return yards (optional)') +
+        '<label class="inline" style="margin-top:6px; display:block;"><input type="checkbox" id="pp_pat_2pt"> Returned all the way (defense +2)</label></div>';
+
+    html += '<div class="row" style="margin-top:12px;"><button class="primary" id="pp_review">Review play</button><button class="secondary" id="pp_clear">Clear</button></div>';
+    panel.innerHTML = html;
+    currentSpotGetter = (type === 'kickoff' || type === 'punt' || type === 'int' || type === 'fumble') ? wireStartingSpot(panel, 'pp_spot') : null;
+    if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
+
+    const sel = { carrier:null, passer:null, receiver:null, kicker:null, punter:null, credit:null };
+    ['carrier','passer','receiver','kicker','punter'].forEach(role => {
+      const grid = document.getElementById('pp_' + role + '_grid');
+      const targetRoster = (role === 'kicker' || role === 'punter') ? TEAMS[off].rosterSpecialTeams : TEAMS[off].rosterOffense;
+      if (grid) wirePickerButtons(panel, 'pp_' + role + '_pick', 'pp_' + role + '_manual', (num, resolvedName) => {
+        if (resolvedName) targetRoster[num] = resolvedName;
+        sel[role] = num;
+      });
+      const manual = document.getElementById('pp_' + role + '_manual');
+      if (manual) manual.addEventListener('input', e => { sel[role] = e.target.value.trim(); });
+    });
+    ['', '_pb', '_fgb'].forEach(suffix => {
+      const creditGrid = document.getElementById('pp_credit_grid' + suffix);
+      if (creditGrid) wirePickerButtons(panel, 'pp_credit_pick' + suffix, 'pp_credit_manual' + suffix, (num, resolvedName) => {
+        if (resolvedName) TEAMS[def].rosterDefense[num] = resolvedName;
+        sel.credit = num;
+      });
+      const creditManual = document.getElementById('pp_credit_manual' + suffix);
+      if (creditManual) creditManual.addEventListener('input', e => { sel.credit = e.target.value.trim(); });
+    });
+
+    if (type === 'fumble'){
+      panel.querySelectorAll('input[name=pp_fumrec]').forEach(r => r.addEventListener('change', () => {
+        document.getElementById('pp_fum_opp').style.display = (document.querySelector('input[name=pp_fumrec]:checked').value === 'opp') ? 'block' : 'none';
+      }));
+    }
+    if (type === 'punt'){
+      document.getElementById('pp_blocked').addEventListener('change', (e) => {
+        document.getElementById('pp_punt_normal').style.display = e.target.checked ? 'none' : 'block';
+        document.getElementById('pp_punt_blocked').style.display = e.target.checked ? 'block' : 'none';
+      });
+    }
+    if (type === 'fg'){
+      panel.querySelectorAll('input[name=pp_fgres]').forEach(r => r.addEventListener('change', () => {
+        document.getElementById('pp_fg_blocked').style.display = (document.querySelector('input[name=pp_fgres]:checked').value === 'b') ? 'block' : 'none';
+      }));
+    }
+    if (type === 'pat'){
+      panel.querySelectorAll('input[name=pp_patres]').forEach(r => r.addEventListener('change', () => {
+        document.getElementById('pp_pat_blocked').style.display = (document.querySelector('input[name=pp_patres]:checked').value === 'b') ? 'block' : 'none';
+      }));
+    }
+
+    document.getElementById('pp_clear').addEventListener('click', () => renderPlayPanel(type));
+    document.getElementById('pp_review').addEventListener('click', () => buildAndReview(type, sel));
+  }
+
+  function buildAndReview(type, sel){
+    const yards = (id) => (document.getElementById(id) ? document.getElementById(id).value.trim() : '');
+    const td = document.getElementById('pp_td') && document.getElementById('pp_td').checked;
+    let code = '', roles = null;
+    const state = computeState();
+    const off = state.possession, def = otherTeam(state.possession);
+
+    if (type === 'rush'){
+      if (!sel.carrier) return;
+      const yds = yards('pp_yards') || '0';
+      code = sel.carrier + 'r ' + yds + (sel.credit ? ' ' + sel.credit : '') + (td ? ' td' : '');
+      roles = { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0 } };
+      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+    } else if (type === 'pass'){
+      if (!sel.passer || !sel.receiver) return;
+      const yds = yards('pp_yards') || '0';
+      code = sel.passer + 'p ' + sel.receiver + ' ' + yds + (sel.credit ? ' ' + sel.credit : '') + (td ? ' td' : '');
+      roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0 } };
+      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+    } else if (type === 'sack'){
+      if (!sel.passer) return;
+      const yds = yards('pp_yards') || '0';
+      code = sel.passer + 's ' + yds + (sel.credit ? ' ' + sel.credit : '');
+      roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 } };
+      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+    } else if (type === 'int'){
+      if (!sel.passer || !sel.credit) return;
+      const yds = yards('pp_yards');
+      code = sel.passer + 'x ' + sel.credit + (yds ? ' ' + yds : '') + (td ? ' td' : '');
+      roles = { passer: { team: off, num: sel.passer }, defense: { team: def, num: sel.credit } };
+    } else if (type === 'fumble'){
+      if (!sel.carrier) return;
+      const rec = document.querySelector('input[name=pp_fumrec]:checked').value;
+      if (rec === 'own'){ code = sel.carrier + 'f'; roles = { carrier: { team: off, num: sel.carrier } }; }
+      else {
+        if (!sel.credit) return;
+        const yds = yards('pp_yards');
+        code = sel.carrier + 'f ' + sel.credit + (yds ? ' ' + yds : '') + (td ? ' td' : '');
+        roles = { carrier: { team: off, num: sel.carrier }, defense: { team: def, num: sel.credit } };
+      }
+    } else if (type === 'kickoff'){
+      if (!sel.kicker) return;
+      const yds = yards('pp_yards') || '0';
+      const retyds = yards('pp_retyds');
+      code = sel.kicker + 'ko ' + yds + (sel.credit ? ' ' + sel.credit + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
+      roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0 } };
+      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+    } else if (type === 'punt'){
+      const blocked = document.getElementById('pp_blocked').checked;
+      if (!sel.punter) return;
+      if (blocked){
+        if (!sel.credit) return;
+        const retyds = yards('pp_blockretyds');
+        code = sel.punter + 'pb ' + sel.credit + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
+        roles = { punter: { team: off, num: sel.punter, yards: 0, blocked: true } };
+      } else {
+        const yds = yards('pp_yards') || '0';
+        const retyds = yards('pp_retyds');
+        code = sel.punter + 'pt ' + yds + (sel.credit ? ' ' + sel.credit + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
+        roles = { punter: { team: off, num: sel.punter, yards: parseInt(yds)||0, blocked: false } };
+      }
+      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+    } else if (type === 'fg'){
+      if (!sel.kicker) return;
+      const yds = yards('pp_yards') || '0';
+      const res = document.querySelector('input[name=pp_fgres]:checked').value;
+      if (res === 'b'){
+        const retyds = yards('pp_blockretyds');
+        code = sel.kicker + 'fg b' + (sel.credit ? ' ' + sel.credit : '') + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
+      } else {
+        code = sel.kicker + 'fg ' + yds + ' ' + res;
+      }
+      roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0, result: res } };
+      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+    } else if (type === 'pat'){
+      if (!sel.kicker) return;
+      const res = document.querySelector('input[name=pp_patres]:checked').value;
+      if (res === 'b'){
+        const twoPt = document.getElementById('pp_pat_2pt').checked;
+        const retyds = yards('pp_yards');
+        code = sel.kicker + 'pa b' + (sel.credit ? ' ' + sel.credit : '') + (retyds ? ' ' + retyds : '') + (twoPt ? ' td' : '');
+      } else {
+        code = sel.kicker + 'pa ' + res;
+      }
+      roles = { kicker: { team: off, num: sel.kicker, result: res } };
+      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+    }
+
+    if (!code) return;
+    if (roles) roles.playType = type;
+    document.getElementById('code').value = code;
+    showConfirm();
+    if (pending){
+      pending.roles = roles;
+      pending.reset = (currentSpotGetter && !td) ? currentSpotGetter() : null;
+    }
+  }
+
+  function showConfirm(){
+    const val = document.getElementById('code').value;
+    if (!val) return;
+    const state = computeState();
+    pending = parseInput(val, state);
+    if (!pending){
+      document.getElementById('parsedText').textContent = 'Unrecognized entry.';
+      document.getElementById('flipRow').style.display = 'none';
+      document.getElementById('confirmClockRow').style.display = 'none';
+    } else {
+      document.getElementById('parsedText').textContent = pending.text;
+      if (pending.flipEligible){
+        document.getElementById('flipRow').style.display = 'flex';
+        document.getElementById('flipLabel').textContent = 'Change of possession — ' + TEAMS[pending.flipTo].name + ' ball';
+        document.getElementById('flipCheck').checked = true;
+      } else {
+        document.getElementById('flipRow').style.display = 'none';
+      }
+      const needsClock = pending.flipEligible || (pending.effect && pending.effect.endsDrive);
+      document.getElementById('confirmClockRow').style.display = needsClock ? 'flex' : 'none';
+      if (needsClock) document.getElementById('confirmClockInput').value = '';
+    }
+    document.getElementById('confirmCard').style.display = 'block';
+    const cc = document.getElementById('confirmCard');
+    if (cc.scrollIntoView) try { cc.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(e){}
+  }
+
+  document.getElementById('editBtn').addEventListener('click', () => {
+    document.getElementById('confirmCard').style.display = 'none';
+  });
+
+  document.getElementById('saveBtn').addEventListener('click', () => {
+    if (!pending) return;
+    const preState = computeState();
+    const effect = Object.assign({}, pending.effect);
+    let flipHappened = false, outgoingTeam = null, incomingTeam = null;
+    if (pending.flipEligible){
+      const confirmed = document.getElementById('flipCheck').checked;
+      effect.flip = true;
+      effect.flipTo = pending.flipTo;
+      effect.flipApplied = confirmed;
+      if (confirmed){ flipHappened = true; outgoingTeam = preState.possession; incomingTeam = pending.flipTo; }
+    }
+    pushAndPersist({ id: nextId++, text: pending.text, effect, unresolved: !!pending.unresolved, team: pending.team || null, quarter: pending.quarter || computeState().quarter, roles: pending.roles || null });
+
+    const clockVal = document.getElementById('confirmClockInput').value.trim();
+    if (clockVal){
+      const q = computeState().quarter;
+      const absSec = clockToAbsSeconds(q, clockVal);
+      if (absSec !== null){
+        if (flipHappened){
+          pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' at change of possession (' + TEAMS[outgoingTeam].name + ' \u2192 ' + TEAMS[incomingTeam].name + ')', effect: { clockEvent: { type: 'transition', outgoingTeam, incomingTeam, absSec } }, quarter: q });
+        }
+        if (effect.endsDrive){
+          const scoringTeam = effect.score ? effect.score.team : preState.possession;
+          pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' end of possession (' + TEAMS[scoringTeam].name + ')', effect: { clockEvent: { type: 'end', team: scoringTeam, absSec } }, quarter: q });
+        } else if (flipHappened && effect.score && effect.score.points === 6){
+          pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' end of possession (' + TEAMS[effect.score.team].name + ')', effect: { clockEvent: { type: 'end', team: effect.score.team, absSec } }, quarter: q });
+        }
+      }
+    }
+    if (pending.reset && flipHappened){
+      const q2 = computeState().quarter;
+      pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(pending.reset.down) + ' & ' + pending.reset.distance + ' at the ' + markerLabel(pending.reset.fieldPos) + ' (' + TEAMS[incomingTeam].name + ')', effect: { isReset: true, down: pending.reset.down, distance: pending.reset.distance, fieldPos: pending.reset.fieldPos }, quarter: q2 });
+    }
+    renderAll();
+    document.getElementById('confirmCard').style.display = 'none';
+    document.getElementById('playPanel').style.display = 'none';
+    document.getElementById('playPanel').innerHTML = '';
+    document.getElementById('code').value = '';
+    pending = null;
+    if (window.scrollTo) try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch(e){}
+  });
+
+  document.getElementById('driveUtilBtn').addEventListener('click', () => {
+    document.getElementById('confirmCard').style.display = 'none';
+    const panel = document.getElementById('playPanel');
+    panel.style.display = 'block';
+    panel.innerHTML =
+      '<p style="font-size:13px; color:#888; margin:0 0 6px;">New drive / correct down</p>' +
+      '<div style="margin-bottom:8px;"><span style="font-size:13px; margin-right:6px;">Down</span>' +
+      ['1','2','3','4'].map(d => '<button type="button" class="driveDownBtn" data-d="' + d + '">' + (d==='1'?'1st':d==='2'?'2nd':d==='3'?'3rd':'4th') + '</button>').join(' ') + '</div>' +
+      '<label class="inline">Distance <input type="text" id="drive_dist" style="width:60px; display:inline-block;"></label>' +
+      '<div style="margin-top:8px;"><button type="button" class="driveSideBtn" data-side="own">Our side</button> <button type="button" class="driveSideBtn" data-side="opp">Their side</button> ' +
+      '<input type="text" id="drive_yardline" style="width:70px; display:inline-block;" placeholder="Yard line"></div>' +
+      '<div class="row" style="margin-top:12px;"><button class="primary" id="drive_review">Review</button><button class="secondary" id="drive_clear">Clear</button></div>';
+    if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
+    let down = null, side = null;
+    panel.querySelectorAll('.driveDownBtn').forEach(b => b.addEventListener('click', () => {
+      down = b.dataset.d;
+      panel.querySelectorAll('.driveDownBtn').forEach(x => x.style.background = '');
+      b.style.background = '#e6f1fb';
+    }));
+    panel.querySelectorAll('.driveSideBtn').forEach(b => b.addEventListener('click', () => {
+      side = b.dataset.side;
+      panel.querySelectorAll('.driveSideBtn').forEach(x => x.style.background = '');
+      b.style.background = '#e6f1fb';
+    }));
+    document.getElementById('drive_clear').addEventListener('click', () => document.getElementById('driveUtilBtn').click());
+    document.getElementById('drive_review').addEventListener('click', () => {
+      const dist = document.getElementById('drive_dist').value.trim();
+      const yardline = document.getElementById('drive_yardline').value.trim();
+      if (!down || !side || !dist || !yardline) return;
+      const marker = side === 'own' ? ('-' + yardline) : yardline;
+      document.getElementById('code').value = down + ' ' + dist + ' ' + marker;
+      showConfirm();
+    });
+  });
+
+  document.getElementById('quarterUtilBtn').addEventListener('click', () => {
+    document.getElementById('confirmCard').style.display = 'none';
+    const panel = document.getElementById('playPanel');
+    panel.style.display = 'block';
+    panel.innerHTML = '<p style="font-size:13px; color:#888; margin:0 0 6px;">Mark start of quarter</p>' +
+      ['2','3','4'].map(q => '<button type="button" class="qMarkBtn" data-q="' + q + '">Start Q' + q + '</button>').join(' ');
+    if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
+    panel.querySelectorAll('.qMarkBtn').forEach(b => b.addEventListener('click', () => {
+      document.getElementById('code').value = 'q' + b.dataset.q;
+      showConfirm();
+    }));
+  });
+
+  document.getElementById('undoBtn').addEventListener('click', async () => {
+    if (!plays.length) return;
+    const removed = plays.pop();
+    renderAll();
+    // The game isn't finalized, so the database allows this delete -- but
+    // only bother if this play actually made it to the server in the
+    // first place (it has a real sequence number).
+    if (removed._seq){
+      const { error } = await supabaseClient.from('plays').delete()
+        .eq('game_id', currentGameId).eq('sequence_number', removed._seq);
+      if (error){
+        showMsg('gameMsg', 'Removed here, but failed to remove from the server: ' + error.message, 'error');
+      }
+    }
+  });
+
+  document.getElementById('penUtilBtn').addEventListener('click', () => {
+    document.getElementById('confirmCard').style.display = 'none';
+    const panel = document.getElementById('playPanel');
+    panel.style.display = 'block';
+    panel.innerHTML =
+      '<p class="hint">Penalty</p>' +
+      '<button type="button" class="penTeamBtn" data-team="off">On offense</button> ' +
+      '<button type="button" class="penTeamBtn" data-team="def">On defense</button>' +
+      '<div style="margin-top:8px;"><label class="inline">Yards <input type="text" id="pen_yds" style="width:70px; display:inline-block; margin-left:6px;"></label></div>' +
+      '<div class="row" style="margin-top:12px;"><button class="primary" id="pen_review">Review</button><button class="secondary" id="pen_clear">Clear</button></div>';
+    if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
+    let penTeam = null;
+    panel.querySelectorAll('.penTeamBtn').forEach(b => b.addEventListener('click', () => {
+      penTeam = b.dataset.team;
+      panel.querySelectorAll('.penTeamBtn').forEach(x => x.style.background = '');
+      b.style.background = '#e6f1fb';
+    }));
+    document.getElementById('pen_clear').addEventListener('click', () => document.getElementById('penUtilBtn').click());
+    document.getElementById('pen_review').addEventListener('click', () => {
+      const yds = document.getElementById('pen_yds').value.trim();
+      if (!penTeam || !yds) return;
+      const code = (penTeam === 'off' ? 'po' : 'pd') + ' ' + yds;
+      document.getElementById('code').value = code;
+      showConfirm();
+    });
+  });
+
+  document.getElementById('flipBtn').addEventListener('click', () => {
+    const state = computeState();
+    const outgoingTeam = state.possession, incomingTeam = otherTeam(state.possession);
+    pushAndPersist({ id: nextId++, text: 'Manual flip — possession to ' + TEAMS[incomingTeam].name, effect: { forcePossession: incomingTeam } });
+    renderAll();
+    showClockPrompt({ mode: 'transition', outgoingTeam, incomingTeam }, () => { document.getElementById('code').focus(); });
+  });
+
+  function populateInsertOptions(){
+    const sel = document.getElementById('insertAfter');
+    sel.innerHTML = '<option value="start">— beginning of log —</option>' +
+      plays.map(p => '<option value="' + p.id + '">after: ' + p.text.slice(0, 60) + '</option>').join('');
+    sel.value = plays.length ? plays[plays.length - 1].id : 'start';
+  }
+
+  document.getElementById('manualBtn').addEventListener('click', () => {
+    populateInsertOptions();
+    document.getElementById('manualPanel').style.display = 'block';
+  });
+  document.getElementById('cancelManual').addEventListener('click', () => {
+    document.getElementById('manualPanel').style.display = 'none';
+    document.getElementById('manualText').value = '';
+  });
+  document.getElementById('saveManual').addEventListener('click', async () => {
+    const text = document.getElementById('manualText').value;
+    if (!text) return;
+    const afterVal = document.getElementById('insertAfter').value;
+    const entry = { id: nextId++, text, unresolved: true, effect: {} };
+
+    // Manual entry can land anywhere in the log, not just the end, so it
+    // needs its own fractional sequence number between whatever it's
+    // being inserted between -- this is exactly what the NUMERIC (not
+    // integer) sequence_number column exists to support.
+    let insertIdx, seq;
+    if (afterVal === 'start'){
+      insertIdx = 0;
+      const firstSeq = plays.length ? (plays[0]._seq || 1) : 1;
+      seq = firstSeq > 1 ? firstSeq - 0.5 : firstSeq / 2;
+    } else {
+      const idx = plays.findIndex(p => p.id === parseInt(afterVal));
+      insertIdx = idx + 1;
+      const beforeSeq = plays[idx] ? (plays[idx]._seq || nextSequenceNumber - 1) : nextSequenceNumber - 1;
+      const afterSeq = plays[idx + 1] ? plays[idx + 1]._seq : null;
+      seq = afterSeq ? (beforeSeq + afterSeq) / 2 : null;
+    }
+    entry._seq = seq;
+    plays.splice(insertIdx, 0, entry);
+    renderAll();
+    document.getElementById('manualPanel').style.display = 'none';
+    document.getElementById('manualText').value = '';
+
+    if (seq === null){
+      // Inserting at the very end -- just use the normal next sequence.
+      persistPlay(entry);
+    } else {
+      const { error } = await supabaseClient.from('plays').insert({
+        game_id: currentGameId, quarter: computeState().quarter, sequence_number: seq,
+        team_side: null, text: entry.text, effect: {}, roles: null, unresolved: true
+      });
+      if (error) showMsg('gameMsg', 'Saved here, but failed to sync to the server: ' + error.message, 'error');
+    }
+  });
+
 </script>
 </body>
 </html>
