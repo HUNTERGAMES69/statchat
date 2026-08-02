@@ -101,6 +101,7 @@
       <div class="row">
         <button class="ptypeBtn" data-type="rush">Rush</button>
         <button class="ptypeBtn" data-type="pass">Pass</button>
+        <button class="ptypeBtn" data-type="incomplete">Incomplete</button>
         <button class="ptypeBtn" data-type="sack">Sack</button>
         <button class="ptypeBtn" data-type="int">Interception</button>
         <button class="ptypeBtn" data-type="fumble">Fumble</button>
@@ -1067,6 +1068,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     let html = '';
     if (type === 'rush') html = offBlock('carrier','Ball carrier') + yardsBlock() + defBlock('Tackled by (optional)') + tdBlock;
     else if (type === 'pass') html = offBlock('passer','Passer') + offBlock('receiver','Receiver') + yardsBlock() + defBlock('Tackled by (optional)') + tdBlock;
+    else if (type === 'incomplete') html = offBlock('passer','Passer') + offBlock('receiver','Intended for');
     else if (type === 'sack') html = offBlock('passer','Passer') + yardsBlock('Yards lost') + defBlock('Sacked by');
     else if (type === 'int') html = offBlock('passer','Passer') + defBlock('Intercepted by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot');
     else if (type === 'fumble') html = offBlock('carrier','Who fumbled') +
@@ -1164,6 +1166,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       code = sel.passer + 'p ' + sel.receiver + ' ' + yds + (sel.credit ? ' ' + sel.credit : '') + (td ? ' td' : '');
       roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0 } };
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
+    } else if (type === 'incomplete'){
+      if (!sel.passer || !sel.receiver) return;
+      code = sel.passer + 'i ' + sel.receiver;
+      roles = { passer: { team: off, num: sel.passer, yards: 0 }, receiver: { team: off, num: sel.receiver, yards: 0 } };
     } else if (type === 'sack'){
       if (!sel.passer) return;
       const yds = yards('pp_yards') || '0';
