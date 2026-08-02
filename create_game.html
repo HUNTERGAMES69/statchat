@@ -39,6 +39,11 @@
   <div id="mainView" class="hidden">
     <div class="card">
       <h1 id="pageHeading">New Game</h1>
+      <div id="finalLockBanner" class="hidden" style="background:#fff3cd; border:1px solid #e0b400; border-radius:8px; padding:12px 14px; margin-bottom:16px;">
+        <div style="font-weight:600; color:#7a5c00; margin-bottom:4px;">This game is finalized</div>
+        <div style="font-size:13px; color:#7a5c00; margin-bottom:10px;">Setup is locked to prevent accidental changes to a completed game's record. Unlock only if something genuinely needs correcting.</div>
+        <button type="button" id="unlockFinalBtn" class="secondary" style="background:#fff;">Unlock to edit</button>
+      </div>
       <p class="sub">Set this game up now, start entering stats whenever you're ready — no need to do both at once.</p>
       <div id="setupMsg"></div>
 
@@ -295,6 +300,7 @@
 
   let ourTeamId = null;
   let editGameId = null;
+  let editGameStatus = null;
   let oppRosterTouched = false;
   let ourResolved = {}, ourConflictsList = [];
   let oppRosterSkipped = false;
@@ -356,6 +362,7 @@
         return;
       }
       const eg = existingGames[0];
+      editGameStatus = eg.status;
       document.getElementById('designator').value = eg.designator;
       document.getElementById('seasonYear').value = eg.season_year;
       document.getElementById('gameDate').value = eg.game_date || '';
@@ -435,8 +442,26 @@
     renderAssignmentUI('ourAssignments', 'our', needsAssignment, ourResolved);
     renderConflictUI('ourConflicts', 'our', conflicts, ourResolved);
 
+    if (editGameStatus === 'final'){
+      setFormLocked(true);
+    }
+
     showView('mainView');
   }
+
+  function setFormLocked(locked){
+    document.getElementById('finalLockBanner').classList.toggle('hidden', !locked);
+    document.querySelectorAll('#mainView input, #mainView select, #mainView button').forEach(el => {
+      if (el.id === 'unlockFinalBtn') return;
+      el.disabled = locked;
+    });
+  }
+
+  document.getElementById('unlockFinalBtn').addEventListener('click', () => {
+    if (confirm('This game is finalized. Are you sure you need to change its setup? Only do this if something genuinely needs correcting.')){
+      setFormLocked(false);
+    }
+  });
 
   document.getElementById('uploadOpponentBtn').addEventListener('click', () => {
     document.getElementById('opponentFile').click();
