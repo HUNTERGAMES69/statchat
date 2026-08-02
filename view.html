@@ -23,10 +23,10 @@
   .drive-current { border-left-color:#1a7a4c; }
   .drive-current h2 { color:#1a7a4c; }
   .drive-current h2::before { content:"● LIVE  "; font-size:10px; letter-spacing:0.05em; }
-  .drive-current .mini-tile { background:#e6f4ea; }
+  .drive-current .inline-stat-line { background:#e6f4ea; }
   .drive-previous { border-left-color:#8a8f98; }
   .drive-previous h2 { color:#5b6068; }
-  .drive-previous .mini-tile { background:#edeef0; }
+  .drive-previous .inline-stat-line { background:#edeef0; }
   .team-summary-row { display:flex; gap:28px; flex:1; min-height:0; }
   .team-summary-col { flex:1; display:flex; flex-direction:column; min-width:0; }
   .team-summary-header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:8px; font-weight:800; font-size:20px; margin-bottom:10px; }
@@ -35,10 +35,9 @@
   .stat-tile { background:#f5f7fa; border-radius:8px; padding:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
   .stat-tile-value { font-size:34px; font-weight:500; color:#1a1a2e; line-height:1.1; }
   .stat-tile-label { font-size:13px; color:#777; text-transform:uppercase; letter-spacing:0.03em; margin-top:3px; }
-  .mini-tile-row { display:flex; gap:6px; margin-bottom:8px; }
-  .mini-tile { flex:1; background:#f5f7fa; border-radius:6px; padding:6px 4px; text-align:center; }
-  .mini-tile-value { font-size:17px; font-weight:600; color:#1a1a2e; }
-  .mini-tile-label { font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.02em; margin-top:2px; }
+  .inline-stat-line { display:flex; justify-content:space-around; align-items:baseline; gap:10px; background:#f5f7fa; border-radius:6px; padding:8px 6px; margin-bottom:8px; }
+  .inline-stat-item { white-space:nowrap; font-size:15px; font-weight:600; color:#1a1a2e; }
+  .inline-stat-item b { font-size:11px; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.03em; margin-right:5px; }
   .card.compact h2 { font-size:13px; margin:0 0 6px; }
   h1 { font-size:20px; margin:0; }
   h2 { font-size:16px; margin:0 0 10px; color:#444; }
@@ -118,7 +117,7 @@
       <div class="quad" id="quadTR">
         <div class="card compact drive-card drive-current">
           <h2>Current Drive</h2>
-          <div id="currentDriveTiles" class="mini-tile-row"></div>
+          <div id="currentDriveTiles"></div>
           <div id="driveLogScroll"></div>
         </div>
         <div class="card compact drive-card drive-previous">
@@ -572,11 +571,11 @@ function computeState(playsList){
       ? computeDriveSummary(resetIdxs[resetIdxs.length - 1], plays.length)
       : null;
     document.getElementById('currentDriveTiles').innerHTML = currentSummary
-      ? [
-          [currentSummary.rushes + '/' + currentSummary.rushYds, 'Rushes/Yds'],
-          [currentSummary.passes + '/' + currentSummary.passYds, 'Passes/Yds'],
-          [currentSummary.totalPlays + '/' + currentSummary.totalYds, 'Plays/Yds']
-        ].map(([val, label]) => '<div class="mini-tile"><div class="mini-tile-value">' + val + '</div><div class="mini-tile-label">' + label + '</div></div>').join('')
+      ? '<div class="inline-stat-line">' + [
+          ['RUSH', currentSummary.rushes + '/' + currentSummary.rushYds],
+          ['PASS', currentSummary.passes + '/' + currentSummary.passYds],
+          ['TOTAL', currentSummary.totalPlays + '/' + currentSummary.totalYds]
+        ].map(([label, val]) => '<span class="inline-stat-item"><b>' + label + '</b>' + val + '</span>').join('') + '</div>'
       : '';
 
     const prevSummary = resetIdxs.length >= 2
@@ -598,7 +597,7 @@ function computeState(playsList){
   function adjustDriveCardVisibility(){
     const quad = document.getElementById('quadTR');
     const prevCard = document.querySelector('.drive-previous');
-    const prevTiles = prevCard ? prevCard.querySelector('.mini-tile-row') : null;
+    const prevTiles = prevCard ? prevCard.querySelector('.inline-stat-line') : null;
     if (!quad || !prevCard) return;
 
     prevCard.classList.remove('hidden');
@@ -650,15 +649,15 @@ function computeState(playsList){
     if (!summary) return '<div style="color:#999;">no previous drive yet</div>';
     const teamName = TEAMS[summary.team].name;
     const tiles = [
-      [summary.rushes + '/' + summary.rushYds, 'Rushes/Yds'],
-      [summary.passes + '/' + summary.passYds, 'Passes/Yds'],
-      [summary.totalYds, 'Total Yds'],
-      [formatDuration(summary.top), 'ToP']
+      ['RUSH', summary.rushes + '/' + summary.rushYds],
+      ['PASS', summary.passes + '/' + summary.passYds],
+      ['YARDS', summary.totalYds],
+      ['TOP', formatDuration(summary.top)]
     ];
     const outcome = summary.scoringPlayText || summary.lastPlayText || 'No plays recorded';
     const outcomeColor = summary.scoringPlayText ? '#1a7a4c' : '#555';
-    return '<div class="mini-tile-row" style="margin-bottom:4px;">' +
-      tiles.map(([val, label]) => '<div class="mini-tile"><div class="mini-tile-value">' + val + '</div><div class="mini-tile-label">' + label + '</div></div>').join('') +
+    return '<div class="inline-stat-line">' +
+      tiles.map(([label, val]) => '<span class="inline-stat-item"><b>' + label + '</b>' + val + '</span>').join('') +
       '</div>' +
       '<div style="font-size:13px; line-height:1.3;"><strong>' + teamName + ':</strong> <span style="color:' + outcomeColor + '; font-weight:600;">' + outcome + '</span></div>';
   }
