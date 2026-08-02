@@ -597,15 +597,21 @@ function computeState(playsList){
     const stateBefore = computeState(plays.slice(0, startIdx));
     const stateAtEnd = computeState(plays.slice(0, endIdx));
     const segment = plays.slice(startIdx, endIdx);
-    const scrimmageTypes = ['rush','pass','sack','int','fumble'];
+    const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
     let rushes = 0, rushYds = 0, passes = 0, passYds = 0, totalPlays = 0, totalYds = 0, scoringPlayText = null;
     segment.forEach(p => {
       const r = p.roles;
       if (!r || p.team !== driveTeam) return;
       if (scrimmageTypes.includes(r.playType)) totalPlays++;
       if (p.effect && typeof p.effect.statYds === 'number') totalYds += p.effect.statYds;
-      if (r.playType === 'rush'){ rushes++; rushYds += (p.effect && p.effect.statYds) || 0; }
-      if (r.playType === 'pass'){ passes++; passYds += (p.effect && p.effect.statYds) || 0; }
+      const yds = (p.effect && p.effect.statYds) || 0;
+      if (r.playType === 'rush' || r.playType === 'sack'){ rushes++; rushYds += yds; }
+      else if (r.playType === 'pass' || r.playType === 'incomplete' || r.playType === 'int'){ passes++; passYds += yds; }
+      else if (r.playType === 'fumble' && r.carrier){
+        const pos = ((TEAMS[driveTeam] && TEAMS[driveTeam].posOffense[r.carrier.num]) || '').toUpperCase();
+        if (RECEIVE_POS.has(pos)){ passes++; passYds += yds; }
+        else { rushes++; rushYds += yds; }
+      }
       const isFgGood = r.playType === 'fg' && r.kicker && r.kicker.result === 'g';
       if (p.effect && (p.effect.td || isFgGood)) scoringPlayText = p.text;
     });
@@ -660,7 +666,7 @@ function computeState(playsList){
 
   function renderTeamSummary(){
     const box = computeBoxScore(plays);
-    const scrimmageTypes = ['rush','pass','sack','int','fumble'];
+    const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
     const playsFor = (teamKey) => plays.filter(p => p.team === teamKey && p.roles && scrimmageTypes.includes(p.roles.playType)).length;
     const possessions = countPossessions(plays);
     const turnovers = countTurnovers(plays);
