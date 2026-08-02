@@ -58,9 +58,14 @@
   table.stattable td { text-align:right; padding:2px 6px; border-bottom:none; }
   table.stattable tbody tr:nth-child(even) { background:rgba(0,0,0,0.03); }
   table.stattable tr.totalRow { font-weight:700; border-top:1px solid #333; }
-  .stat-category-tile { background:#f5f7fa; border-radius:6px; padding:5px 4px; margin-bottom:5px; }
-  .stat-category-tile:last-child { margin-bottom:0; }
-  .stat-category-label { font-size:10px; font-weight:700; color:#444; text-transform:uppercase; letter-spacing:0.02em; margin:0 0 2px 2px; }
+  .stat-category-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; align-content:start; }
+  .stat-category-tile { background:#eef1f5; border:1px solid #c9d0d9; border-radius:6px; padding:6px 6px 4px; margin-bottom:0; }
+  .stat-category-label { font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.02em; margin:0 0 3px; background:#4a5568; display:inline-block; padding:2px 6px; border-radius:3px; }
+  .player-stat-row { display:flex; align-items:baseline; gap:12px; padding:3px 2px; border-bottom:1px solid rgba(0,0,0,0.06); font-size:12px; }
+  .player-stat-row:last-child { border-bottom:none; }
+  .player-stat-name { font-weight:700; color:#1a1a2e; min-width:64px; flex-shrink:0; }
+  .player-stat-item { color:#555; white-space:nowrap; }
+  .player-stat-item b { color:#1a1a2e; font-size:14px; font-weight:700; }
   .live-badge { display:inline-block; font-size:11px; font-weight:700; color:#a37a00; background:#fff3cd; padding:2px 8px; border-radius:10px; margin-left:8px; vertical-align:middle; }
   @media (min-width: 640px) { body { padding:24px; } .card { padding:24px; } }
 </style>
@@ -434,63 +439,58 @@ function computeState(playsList){
 
       const sum = (nums, obj, key) => nums.reduce((t, n) => t + ((obj[n] && obj[n][key]) || 0), 0);
       const tile = (label, inner) => '<div class="stat-category-tile"><div class="stat-category-label">' + label + '</div>' + inner + '</div>';
+      const item = (val, label) => '<span class="player-stat-item"><b>' + val + '</b> ' + label + '</span>';
+      const row = (name, items) => '<div class="player-stat-row"><span class="player-stat-name">' + name + '</span>' + items.join('') + '</div>';
 
       const rushNums = Object.keys(s.rushing);
       if (rushNums.length){
-        const tAtt = sum(rushNums, s.rushing, 'att'), tYds = sum(rushNums, s.rushing, 'yds');
-        html += tile('Rushing', '<table class="stattable"><tr><th></th><th>Att</th><th>Yds</th><th>TD</th></tr>' +
-          rushNums.map(n => {
-            const d = s.rushing[n];
-            return statRow([playerName(teamKey, n), d.att||0, d.yds||0, d.td||0]);
-          }).join('') +
-          '<tr class="totalRow">' + ['Total', tAtt, tYds, sum(rushNums,s.rushing,'td')].map(c => '<td>'+c+'</td>').join('') + '</tr>' +
-          '</table>');
+        html += tile('Rushing', rushNums.map(n => {
+          const d = s.rushing[n];
+          return row(playerName(teamKey, n), [item(d.att||0,'Att'), item(d.yds||0,'Yds'), item(d.td||0,'TD')]);
+        }).join(''));
       }
       const passNums = Object.keys(s.passing);
       if (passNums.length){
-        const tAtt = sum(passNums, s.passing, 'att'), tComp = sum(passNums, s.passing, 'comp'), tYds = sum(passNums, s.passing, 'yds');
-        html += tile('Passing', '<table class="stattable"><tr><th></th><th>Att</th><th>Comp</th><th>%</th><th>Yds</th><th>TD</th><th>Int</th></tr>' +
-          passNums.map(n => {
-            const d = s.passing[n];
-            const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) + '%' : '—';
-            return statRow([playerName(teamKey, n), d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0]);
-          }).join('') +
-          '<tr class="totalRow">' + ['Total', tAtt, tComp, tAtt ? Math.round(100*tComp/tAtt)+'%' : '—', tYds, sum(passNums,s.passing,'td'), sum(passNums,s.passing,'intThrown')].map(c => '<td>'+c+'</td>').join('') + '</tr>' +
-          '</table>');
+        html += tile('Passing', passNums.map(n => {
+          const d = s.passing[n];
+          const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
+          return row(playerName(teamKey, n), [item(d.att||0,'Att'), item(d.comp||0,'Comp'), item(compPct,'%'), item(d.yds||0,'Yds'), item(d.td||0,'TD'), item(d.intThrown||0,'Int')]);
+        }).join(''));
       }
       const recNums = Object.keys(s.receiving);
       if (recNums.length){
-        const tRec = sum(recNums, s.receiving, 'rec'), tYds = sum(recNums, s.receiving, 'yds');
-        html += tile('Receiving', '<table class="stattable"><tr><th></th><th>Rec</th><th>Yds</th><th>TD</th></tr>' +
-          recNums.map(n => {
-            const d = s.receiving[n];
-            return statRow([playerName(teamKey, n), d.rec||0, d.yds||0, d.td||0]);
-          }).join('') +
-          '<tr class="totalRow">' + ['Total', tRec, tYds, sum(recNums,s.receiving,'td')].map(c => '<td>'+c+'</td>').join('') + '</tr>' +
-          '</table>');
+        html += tile('Receiving', recNums.map(n => {
+          const d = s.receiving[n];
+          return row(playerName(teamKey, n), [item(d.rec||0,'Rec'), item(d.yds||0,'Yds'), item(d.td||0,'TD')]);
+        }).join(''));
       }
-      const stNums = Object.keys(s.specialTeams).filter(n => s.specialTeams[n].fgAtt);
-      if (stNums.length){
-        const tFgAtt = sum(stNums, s.specialTeams, 'fgAtt'), tFgMade = sum(stNums, s.specialTeams, 'fgMade');
-        const tLongFg = stNums.reduce((m, n) => Math.max(m, s.specialTeams[n].fgLong||0), 0);
-        html += tile('Special Teams', '<table class="stattable"><tr><th></th><th>FG Att</th><th>FG Made</th><th>Long</th><th>Blocked</th></tr>' +
-          stNums.map(n => {
-            const d = s.specialTeams[n];
-            return statRow([playerName(teamKey, n), d.fgAtt||0, d.fgMade||0, d.fgLong||0, d.fgBlocked||0]);
-          }).join('') +
-          '<tr class="totalRow">' + ['Total', tFgAtt, tFgMade, tLongFg, sum(stNums,s.specialTeams,'fgBlocked')].map(c => '<td>'+c+'</td>').join('') + '</tr>' +
-          '</table>');
+      const stAllNums = Object.keys(s.specialTeams).filter(n => s.specialTeams[n].fgAtt || s.specialTeams[n].punts);
+      if (stAllNums.length){
+        html += tile('Special Teams', stAllNums.map(n => {
+          const d = s.specialTeams[n];
+          const items = [];
+          if (d.fgAtt){
+            items.push(item(d.fgAtt||0,'FG Att'), item(d.fgMade||0,'FG Made'), item(d.fgLong||0,'Long'), item(d.fgBlocked||0,'Blocked'));
+          }
+          if (d.punts){
+            const avg = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
+            items.push(item(d.punts||0,'Punts'), item(d.puntYds||0,'Yds'), item(avg,'Avg'));
+          }
+          return row(playerName(teamKey, n), items);
+        }).join(''));
       }
       const defNums = Object.keys(s.defense);
       if (defNums.length){
-        html += tile('Defense', '<table class="stattable"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th></tr>' +
-          '<tr class="totalRow">' + ['Team', sum(defNums,s.defense,'int'), sum(defNums,s.defense,'fumRec'), sum(defNums,s.defense,'sacks')].map(c => '<td>'+c+'</td>').join('') + '</tr>' +
-          '</table>');
+        html += tile('Defense', row('Team', [
+          item(sum(defNums,s.defense,'int'),'Int'),
+          item(sum(defNums,s.defense,'fumRec'),'Fum Rec'),
+          item(sum(defNums,s.defense,'sacks'),'Sacks')
+        ]));
       }
-      if (!rushNums.length && !passNums.length && !recNums.length && !stNums.length && !defNums.length){
+      if (!rushNums.length && !passNums.length && !recNums.length && !stAllNums.length && !defNums.length){
         html += '<p class="hint">No stats yet for ' + team.name + '.</p>';
       }
-      return html;
+      return '<div class="stat-category-grid">' + html + '</div>';
   }
 
   function renderBoxScore(){
