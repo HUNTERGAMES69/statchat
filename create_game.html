@@ -188,6 +188,33 @@
     return { resolved, conflicts, needsAssignment };
   }
 
+  // A conflict is "already handled" once a saved game_rosters row exists
+  // for every unit that had a genuine collision for that number -- at
+  // that point the coach has already made this exact call, so there's
+  // nothing left to ask about. Re-deriving the per-unit collision groups
+  // here rather than threading them out of resolveByNumber, since the
+  // conflicts array only carries the raw entry list.
+  function filterUnresolvedConflicts(conflicts, savedRows){
+    if (!savedRows || savedRows.length === 0) return conflicts;
+    const savedByNumUnit = new Set(savedRows.map(r => String(r.jersey_number).trim() + '|' + r.unit));
+    return conflicts.filter(c => {
+      const buckets = { offense: [], defense: [], special: [] };
+      const unknown = [];
+      c.entries.forEach(en => {
+        const unit = en.explicitUnit || posToUnit(en.position);
+        if (unit) buckets[unit].push(en); else unknown.push(en);
+      });
+      const collidingUnits = Object.keys(buckets).filter(u => buckets[u].length > 1);
+      // If literally every unit that collided already has a saved
+      // resolution, this conflict has already been handled -- don't
+      // show it again. If unknown-position entries collided too (no
+      // unit at all), that can't be represented in game_rosters, so
+      // never treat it as resolved.
+      if (unknown.length > 1) return true;
+      return !(collidingUnits.length > 0 && collidingUnits.every(u => savedByNumUnit.has(String(c.num).trim() + '|' + u)));
+    });
+  }
+
   function renderAssignmentUI(containerId, teamKey, needsAssignment, resolvedRef){
     const container = document.getElementById(containerId);
     if (needsAssignment.length === 0){ container.innerHTML = ''; return; }
@@ -378,7 +405,7 @@
     const entries = (players || [])
       .filter(p => p.default_jersey_number)
       .map(p => ({ number: p.default_jersey_number, name: p.name, position: p.primary_position, explicitUnit: null, playerId: p.id }));
-    const { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
+    let { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
 
     // In edit mode, resolveByNumber just re-picks a default (the first
     // entry) for every conflict, since it has no memory of what was
@@ -397,6 +424,7 @@
         );
         if (match) bucket[saved.unit] = match;
       });
+      conflicts = filterUnresolvedConflicts(conflicts, savedOurRows);
     }
 
     ourResolved = resolved;
