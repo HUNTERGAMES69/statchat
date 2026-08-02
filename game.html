@@ -777,9 +777,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   }
 
-  async function setGameStatus(status){
+  async function setGameStatus(status, finalScore){
     currentGameStatus = status;
-    const { error } = await supabaseClient.from('games').update({ status }).eq('id', currentGameId);
+    const updateFields = { status };
+    if (finalScore){
+      updateFields.final_score_us = finalScore.us;
+      updateFields.final_score_opp = finalScore.opp;
+    }
+    const { error } = await supabaseClient.from('games').update(updateFields).eq('id', currentGameId);
     if (error) showMsg('gameMsg', 'Phase changed here, but failed to sync to the server: ' + error.message, 'error');
   }
 
@@ -876,7 +881,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     pushAndPersist({ id: nextId++, text: 'Final', effect: {}, isDivider: true });
     gamePhase = 'ended';
     persistUiState();
-    setGameStatus('final');
+    setGameStatus('final', { us: state.scores.teamA, opp: state.scores.teamB });
     renderAll();
     updatePhaseUI();
   });
