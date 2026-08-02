@@ -49,6 +49,7 @@
   .game-right { text-align:right; }
   .game-score { font-weight:600; }
   .status-win { color:#1a7a4c; font-size:13px; }
+  .status-loss { color:#a32d2d; font-size:13px; }
   .status-live { color:#a37a00; font-size:13px; }
   .status-loss { color:#a32d2d; font-size:13px; }
   .status-notstarted { color:#999; font-weight:600; }
@@ -257,7 +258,7 @@
   async function loadGames(seasonYear){
     const { data, error } = await supabaseClient
       .from('games')
-      .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status')
+      .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status, final_score_us, final_score_opp')
       .eq('season_year', seasonYear)
       .order('game_date', { ascending: false });
     if (error){
@@ -295,7 +296,12 @@
       const dateStr = g.game_date ? new Date(g.game_date + 'T00:00:00').toLocaleDateString() : 'Date TBD';
       let rightHtml;
       if (g.status === 'final'){
-        rightHtml = '<div class="game-score">—</div><div class="status-win">Final</div>';
+        if (g.final_score_us !== null && g.final_score_opp !== null && g.final_score_us !== undefined && g.final_score_opp !== undefined){
+          const won = g.final_score_us > g.final_score_opp;
+          rightHtml = '<div class="game-score">' + g.final_score_us + ' - ' + g.final_score_opp + '</div><div class="' + (won ? 'status-win' : 'status-loss') + '">' + (won ? 'WIN' : 'LOSS') + '</div>';
+        } else {
+          rightHtml = '<div class="game-score">—</div><div class="status-win">Final</div>';
+        }
       } else if (g.status === 'in_progress'){
         rightHtml = '<div class="game-score">—</div><div class="status-live">In progress</div>';
       } else {
@@ -307,12 +313,13 @@
         '<div><div class="game-matchup">' + matchup + '</div><div class="game-meta">' + homeAway + ' · ' + dateStr + '</div></div>' +
         '</div>' +
         '<div class="game-right">' + rightHtml + '</div>' +
-        (currentIsAdmin || g.status === 'in_progress'
+        (currentIsAdmin || g.status === 'in_progress' || g.status === 'final'
           ? '<div style="position:relative;">' +
             '<button class="secondary rowMenuBtn" data-id="' + g.id + '" style="padding:4px 10px; font-size:16px; line-height:1;">⋮</button>' +
             '<div class="rowMenu hidden" data-id="' + g.id + '" style="position:absolute; right:0; top:100%; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:10; min-width:140px;">' +
               (currentIsAdmin ? '<a href="create_game.html?edit=' + g.id + '" style="display:block; padding:8px 12px; color:#444; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game setup</a>' : '') +
               (g.status === 'in_progress' ? '<a href="view.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:#1565c0; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">View live</a>' : '') +
+              (g.status === 'final' ? '<a href="view.html?id=' + g.id + '&mode=results" style="display:block; padding:8px 12px; color:#1565c0; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">View results</a>' : '') +
               (currentIsAdmin ? '<button class="deleteGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a32d2d; font-weight:600; font-size:13px;">Delete game</button>' : '') +
             '</div>' +
             '</div>'
@@ -327,6 +334,8 @@
           window.location.href = 'game.html?id=' + row.dataset.id;
         } else if (row.dataset.status === 'in_progress'){
           window.location.href = 'view.html?id=' + row.dataset.id;
+        } else if (row.dataset.status === 'final'){
+          window.location.href = 'view.html?id=' + row.dataset.id + '&mode=results';
         }
       });
     });
