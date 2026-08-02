@@ -6,107 +6,121 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="StatChat">
-<link rel="apple-touch-icon" id="appleTouchIcon" href="">
-<title>StatChat — Dashboard</title>
+<title>StatChat — Account</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:14px; }
-  .wrap { max-width:760px; margin:0 auto; }
-  .card { background:#fff; border-radius:12px; padding:20px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
-  h1 { font-size:22px; margin:0; line-height:1.15; }
-  #teamHeading { font-size:20px; }
-  .topbar { display:flex; flex-direction:column; align-items:flex-start; gap:12px; margin-bottom:4px; }
-  .brandline { display:flex; align-items:center; gap:10px; min-width:0; }
-  #teamLogo { height:32px; width:32px; object-fit:contain; border-radius:6px; display:none; flex-shrink:0; }
-  .navlinks { display:flex; gap:8px; flex-wrap:wrap; width:100%; }
-  .navlinks a, .navlinks button { flex:1 1 auto; text-align:center; white-space:nowrap; }
-  @media (min-width: 640px) {
-    body { padding:24px; }
-    .card { padding:28px; }
-    h1 { font-size:24px; }
-    #teamHeading { font-size:24px; }
-    #teamLogo { height:36px; width:36px; }
-    .topbar { flex-direction:row; justify-content:space-between; align-items:center; }
-    .navlinks { width:auto; }
-    .navlinks a, .navlinks button { flex:none; }
-    button, a.button-link { padding:9px 16px; font-size:14px; }
-  }
-  p.sub { color:#888; margin:0 0 20px; font-size:15px; }
-  button { padding:8px 10px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+  .wrap { max-width:600px; margin:0 auto; }
+  .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:20px; margin:0; }
+  h2 { font-size:16px; margin:0 0 10px; color:#444; }
+  p.sub { color:#888; margin:0 0 14px; font-size:13px; }
+  label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
+  input { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
+  button { padding:9px 16px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
-  a.button-link { display:inline-block; text-decoration:none; padding:8px 10px; border-radius:6px; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; }
-  a.button-link.secondary { background:#fff; color:#444; border:1px solid #ccc; }
+  button.danger { background:#a32d2d; }
+  button:disabled { opacity:0.5; cursor:default; }
+  .row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
   .msg.error { background:#fdecea; color:#a32d2d; }
+  .msg.success { background:#e8f5e9; color:#1a7a4c; }
   .hidden { display:none; }
-  a.button-link.hidden { display:none; }
-  .game-list { border-top:0.5px solid #e5e3dc; }
-  .game-row { display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:0.5px solid #e5e3dc; cursor:pointer; }
-  .game-row:hover { background:#faf9f6; }
-  .game-left { display:flex; align-items:center; gap:14px; }
-  .game-num { font-size:13px; color:#aaa; width:28px; }
-  .game-matchup { font-weight:600; }
-  .game-meta { font-size:13px; color:#888; }
-  .game-right { text-align:right; }
-  .game-score { font-weight:600; }
-  .status-win { color:#1a7a4c; font-size:13px; }
-  .status-live { color:#a37a00; font-size:13px; }
-  .status-loss { color:#a32d2d; font-size:13px; }
-  .status-notstarted { color:#999; font-weight:600; }
-  .empty-state { color:#999; padding:16px 0; }
-  #appSplash { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000; background:#fff; transition:opacity 0.3s; }
-  #appSplash img { width:96px; height:96px; object-fit:contain; margin-bottom:16px; border-radius:16px; }
-  #appSplash .splashTitle { font-size:20px; font-weight:600; letter-spacing:0.5px; }
-  #appSplash.hidden { opacity:0; pointer-events:none; }
+  #avatarPreview { width:64px; height:64px; border-radius:50%; object-fit:cover; background:#eee; }
+  .danger-zone { border:1px solid #f0d0a0; background:#fffaf0; border-radius:10px; padding:16px; margin-top:8px; }
+  .user-row { border:1px solid #e5e3dc; border-radius:8px; padding:12px; margin-bottom:10px; }
+  .user-row-head { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:6px; }
+  .user-row-name { font-weight:700; font-size:14px; }
+  .user-row-email { color:#777; font-size:13px; }
+  .user-row-meta { color:#999; font-size:12px; margin-top:4px; }
+  .user-row-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .user-row-actions button { font-size:12px; padding:6px 10px; }
+  .set-password-inline { display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap; }
+  .set-password-inline input { width:auto; flex:1; min-width:140px; }
+  .badge-admin { display:inline-block; font-size:10px; font-weight:700; color:#a37a00; background:#fff3cd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+  @media (min-width: 640px) { body { padding:24px; } .card { padding:24px; } }
 </style>
 </head>
 <body>
-
-<div id="appSplash">
-  <img id="splashLogo" style="display:none;" alt="">
-  <div class="splashTitle" id="splashTitle">StatChat</div>
-</div>
-
 <div class="wrap">
 
   <div id="loading" class="card"><h1>Loading…</h1></div>
 
-  <div id="dashboardView" class="hidden">
+  <div id="mainView" class="hidden">
     <div class="card">
-      <div class="topbar">
-        <div class="brandline">
-          <img id="teamLogo" alt="">
-          <h1 id="teamHeading">StatChat</h1>
-        </div>
-        <div class="navlinks">
-          <a class="button-link secondary" id="rosterLink" href="roster.html">Team Roster</a>
-          <a class="button-link secondary" id="customizeLink" href="customize.html">Customize team</a>
-          <div style="position:relative;">
-            <button id="accountBtn" class="secondary" style="border-radius:50%; width:36px; height:36px; padding:0; display:inline-flex; align-items:center; justify-content:center; overflow:hidden;">
-              <img id="accountAvatarImg" style="display:none; width:100%; height:100%; object-fit:cover;">
-              <span id="accountInitial" style="font-weight:700; font-size:14px;">?</span>
-            </button>
-            <div id="accountMenu" class="hidden" style="position:absolute; right:0; top:110%; background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:20; min-width:200px; padding:6px 0;">
-              <div id="accountMenuEmail" style="padding:8px 14px; font-size:12px; color:#888; border-bottom:1px solid #f0f0f0;"></div>
-              <a href="account.html" class="accountMenuItem" style="display:block; padding:9px 14px; color:#333; font-size:14px; text-decoration:none;">Account settings</a>
-              <button id="signOutBtn" class="accountMenuItem" style="display:block; width:100%; text-align:left; padding:9px 14px; color:#a32d2d; font-size:14px; background:none; border:none;">Sign out</button>
-            </div>
-          </div>
-        </div>
+      <div style="display:flex; justify-content:space-between; align-items:baseline;">
+        <h1>Account</h1>
+        <a href="dashboard.html" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600;">← Dashboard</a>
       </div>
-      <p class="sub" id="signedInAs"></p>
+      <p class="sub" id="accountEmail"></p>
     </div>
 
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
-        <div>
-          <h1 style="font-size:20px; margin:0;">Games</h1>
-          <span id="seasonLabel" style="font-size:13px; color:#999;"></span>
-        </div>
-        <a class="button-link" id="newGameLink" href="create_game.html">+ New game</a>
+      <h2>Full name</h2>
+      <div id="nameMsg"></div>
+      <div class="row">
+        <div style="flex:1;"><input type="text" id="fullNameInput" placeholder="Your name"></div>
+        <button id="saveNameBtn">Save</button>
       </div>
-      <p class="sub" id="seasonSummary"></p>
-      <div id="dashboardMsg"></div>
-      <div class="game-list" id="gamesBody"></div>
+    </div>
+
+    <div class="card">
+      <h2>Photo</h2>
+      <div id="avatarMsg"></div>
+      <div class="row">
+        <img id="avatarPreview" alt="">
+        <div>
+          <button type="button" id="chooseAvatarBtn" class="secondary">Choose photo</button>
+          <input type="file" id="avatarInput" accept="image/*" style="display:none;">
+        </div>
+        <button id="saveAvatarBtn">Save photo</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Password</h2>
+      <div id="passwordMsg"></div>
+      <label>Current password<input type="password" id="oldPasswordInput"></label>
+      <label style="margin-top:10px;">New password<input type="password" id="newPasswordInput"></label>
+      <label style="margin-top:10px;">Confirm new password<input type="password" id="confirmPasswordInput"></label>
+      <button id="savePasswordBtn" style="margin-top:14px;">Change password</button>
+    </div>
+
+    <div id="userMgmtCard" class="card hidden">
+      <h2>User management</h2>
+      <p class="sub">Invite a new user, or view, reset, resend, and remove existing ones. Admin only.</p>
+      <div id="inviteMsg"></div>
+      <label>Email address<input type="email" id="inviteEmailInput" placeholder="coach@example.com"></label>
+      <button id="sendInviteBtn" style="margin-top:10px; margin-bottom:18px;">Send invite</button>
+
+      <div id="userMgmtMsg"></div>
+      <button id="refreshUsersBtn" style="margin-bottom:12px;">Refresh list</button>
+      <div id="usersListContainer"></div>
+    </div>
+
+    <div id="resetCard" class="card hidden">
+      <h2>Reset for production</h2>
+      <p class="sub">Permanently deletes every game, play, and roster snapshot in the database. Your team roster and branding are not touched. Only use this once, when you're done testing and ready to track real games.</p>
+      <div id="resetMsg"></div>
+      <button class="danger" id="startResetBtn">Reset for production…</button>
+
+      <div id="resetStep2" class="hidden danger-zone">
+        <p style="font-weight:600; margin:0 0 10px;">Confirm your password to continue</p>
+        <input type="password" id="resetPasswordInput" placeholder="Your current password">
+        <div class="row" style="margin-top:10px;">
+          <button class="danger" id="resetPasswordContinueBtn">Continue</button>
+          <button class="secondary" id="resetCancelBtn1">Cancel</button>
+        </div>
+      </div>
+
+      <div id="resetStep3" class="hidden danger-zone">
+        <p style="font-weight:600; margin:0 0 6px;">This cannot be undone</p>
+        <p class="sub" style="margin:0 0 10px;">Every game, every play, every roster snapshot — gone permanently. Type <strong>I agree</strong> exactly to confirm.</p>
+        <input type="text" id="resetAgreeInput" placeholder="I agree">
+        <div class="row" style="margin-top:10px;">
+          <button class="danger" id="resetFinalBtn">Delete everything</button>
+          <button class="secondary" id="resetCancelBtn2">Cancel</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -118,59 +132,22 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-  function luminanceOf(hex){
-    if (!hex || hex.length < 7) return 0.5;
-    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
-    return (0.299*r + 0.587*g + 0.114*b) / 255;
-  }
-
-  function applySplash(branding){
-    const isLight = luminanceOf(branding.primary_color) > 0.6;
-    const bg = isLight ? '#000000' : '#ffffff';
-    const fg = isLight ? '#ffffff' : '#1a1a1a';
-    const splash = document.getElementById('appSplash');
-    splash.style.background = bg;
-    document.getElementById('splashTitle').style.color = fg;
-    if (branding.logo_url){
-      const img = document.getElementById('splashLogo');
-      img.src = branding.logo_url;
-      img.style.display = 'block';
-      document.getElementById('appleTouchIcon').setAttribute('href', branding.logo_url);
-    }
-  }
-
-  function hideSplash(){
-    document.getElementById('appSplash').classList.add('hidden');
-  }
-
-  // Show branding INSTANTLY from whatever was cached last time, before any
-  // network call -- this is what makes repeat opens feel like a real
-  // installed app instead of a blank page while data loads.
-  try {
-    const cached = JSON.parse(localStorage.getItem('statchat_branding') || 'null');
-    if (cached) applySplash(cached);
-  } catch (e){}
+  let currentUserId = null, currentUserEmail = null, currentAccessToken = null;
 
   function showView(name){
-    ['loading', 'dashboardView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+    ['loading', 'mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
   }
   function showMsg(elId, text, type){
     document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
   }
-
-  let currentUserId = null, currentUserEmail = null, currentIsAdmin = false;
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION'){
       if (session){
         currentUserId = session.user.id;
         currentUserEmail = session.user.email;
-        document.getElementById('signedInAs').textContent = 'Signed in as ' + session.user.email;
-        showView('dashboardView');
-        loadIsAdmin().then(() => {
-          loadDashboard();
-        });
-        loadAccountMenu();
+        currentAccessToken = session.access_token;
+        init();
       } else {
         window.location.href = '/';
       }
@@ -179,221 +156,337 @@
     }
   });
 
-  async function loadIsAdmin(){
+  async function init(){
+    document.getElementById('accountEmail').textContent = currentUserEmail;
     const { data, error } = await supabaseClient
-      .from('profiles').select('is_admin').eq('id', currentUserId).limit(1);
-    currentIsAdmin = !error && data && data.length > 0 && !!data[0].is_admin;
-    document.getElementById('newGameLink').classList.toggle('hidden', !currentIsAdmin);
-    document.getElementById('rosterLink').classList.toggle('hidden', !currentIsAdmin);
-    document.getElementById('customizeLink').classList.toggle('hidden', !currentIsAdmin);
-  }
-
-  document.getElementById('signOutBtn').addEventListener('click', async () => {
-    await supabaseClient.auth.signOut();
-  });
-
-  document.getElementById('accountBtn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    document.getElementById('accountMenu').classList.toggle('hidden');
-  });
-  document.addEventListener('click', () => {
-    document.getElementById('accountMenu').classList.add('hidden');
-  });
-
-  function initialsFrom(displayName, email){
-    if (displayName && displayName.trim()){
-      const parts = displayName.trim().split(/\s+/);
-      if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-      return parts[0].slice(0, 2).toUpperCase();
-    }
-    return (email || '?').charAt(0).toUpperCase();
-  }
-
-  async function loadAccountMenu(){
-    document.getElementById('accountMenuEmail').textContent = currentUserEmail;
-    document.getElementById('accountInitial').textContent = initialsFrom(null, currentUserEmail);
-
-    const { data, error } = await supabaseClient
-      .from('profiles').select('display_name, avatar_url').eq('id', currentUserId).limit(1);
-    if (error || !data || data.length === 0) return;
-    const profile = data[0];
-    document.getElementById('accountInitial').textContent = initialsFrom(profile.display_name, currentUserEmail);
-    if (profile.avatar_url){
-      const img = document.getElementById('accountAvatarImg');
-      img.src = profile.avatar_url;
-      img.style.display = 'block';
-      document.getElementById('accountInitial').style.display = 'none';
-    }
-  }
-
-
-  async function loadDashboard(){
-    const { data, error } = await supabaseClient
-      .from('teams')
-      .select('name, full_name, logo_url, primary_color, secondary_color, current_season_year')
-      .eq('is_our_team', true)
-      .limit(1);
-    let seasonYear = new Date().getFullYear();
+      .from('profiles').select('display_name, avatar_url, is_admin').eq('id', currentUserId).limit(1);
     if (!error && data && data.length > 0){
-      const team = data[0];
-      document.getElementById('teamHeading').textContent = team.full_name || team.name;
-      if (team.primary_color){
-        document.getElementById('teamHeading').style.color = team.primary_color;
-        document.getElementById('newGameLink').style.background = team.primary_color;
-        if (team.secondary_color) document.getElementById('newGameLink').style.color = team.secondary_color;
+      const profile = data[0];
+      if (profile.display_name) document.getElementById('fullNameInput').value = profile.display_name;
+      if (profile.avatar_url) document.getElementById('avatarPreview').src = profile.avatar_url;
+      if (profile.is_admin){
+        document.getElementById('userMgmtCard').classList.remove('hidden');
+        loadUsers();
+        document.getElementById('resetCard').classList.remove('hidden');
+        if (window.location.hash === '#reset'){
+          setTimeout(() => {
+            const card = document.getElementById('resetCard');
+            if (card.scrollIntoView) try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(e){}
+          }, 100);
+        }
       }
-      if (team.logo_url){
-        const logo = document.getElementById('teamLogo');
-        logo.src = team.logo_url;
-        logo.style.display = 'inline-block';
-      }
-      if (team.current_season_year) seasonYear = team.current_season_year;
-      applySplash(team);
-      try { localStorage.setItem('statchat_branding', JSON.stringify({ logo_url: team.logo_url, primary_color: team.primary_color })); } catch (e){}
     }
-    loadGames(seasonYear);
+    showView('mainView');
   }
 
-  async function loadGames(seasonYear){
-    const { data, error } = await supabaseClient
-      .from('games')
-      .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status')
-      .eq('season_year', seasonYear)
-      .order('game_date', { ascending: false });
+  document.getElementById('saveNameBtn').addEventListener('click', async () => {
+    const name = document.getElementById('fullNameInput').value.trim();
+    if (!name){
+      showMsg('nameMsg', 'Enter your name.', 'error');
+      return;
+    }
+    const { error } = await supabaseClient.from('profiles').update({ display_name: name }).eq('id', currentUserId);
     if (error){
-      showMsg('dashboardMsg', 'Could not load games: ' + error.message, 'error');
-      hideSplash();
+      showMsg('nameMsg', error.message, 'error');
       return;
     }
-    document.getElementById('seasonLabel').textContent = seasonYear + ' season';
-    renderSummary(data || []);
-    renderGames(data || []);
-    hideSplash();
-  }
+    showMsg('nameMsg', 'Saved.', 'success');
+  });
 
-  function renderSummary(games){
-    const final = games.filter(g => g.status === 'final').length;
-    const inProgress = games.filter(g => g.status === 'in_progress').length;
-    if (games.length === 0){
-      document.getElementById('seasonSummary').textContent = '';
-      return;
+  let pendingAvatarFile = null;
+  document.getElementById('chooseAvatarBtn').addEventListener('click', () => document.getElementById('avatarInput').click());
+  document.getElementById('avatarInput').addEventListener('change', (e) => {
+    pendingAvatarFile = e.target.files[0] || null;
+    if (pendingAvatarFile && URL.createObjectURL){
+      try { document.getElementById('avatarPreview').src = URL.createObjectURL(pendingAvatarFile); } catch(e){}
     }
-    document.getElementById('seasonSummary').textContent =
-      games.length + ' game(s) this season · ' + final + ' completed' +
-      (inProgress > 0 ? ' · ' + inProgress + ' in progress' : '');
-  }
+  });
 
-  function renderGames(games){
-    const body = document.getElementById('gamesBody');
-    if (games.length === 0){
-      body.innerHTML = '<div class="empty-state">No games yet — click "New game" to set up your first one.</div>';
+  document.getElementById('saveAvatarBtn').addEventListener('click', async () => {
+    if (!pendingAvatarFile){
+      showMsg('avatarMsg', 'Choose a photo first.', 'error');
       return;
     }
-    body.innerHTML = games.map(g => {
-      const matchup = g.our_team_is_home ? 'vs ' + g.away_team_name : '@ ' + g.home_team_name;
-      const homeAway = g.our_team_is_home ? 'Home' : 'Away';
-      const dateStr = g.game_date ? new Date(g.game_date + 'T00:00:00').toLocaleDateString() : 'Date TBD';
-      let rightHtml;
-      if (g.status === 'final'){
-        rightHtml = '<div class="game-score">—</div><div class="status-win">Final</div>';
-      } else if (g.status === 'in_progress'){
-        rightHtml = '<div class="game-score">—</div><div class="status-live">In progress</div>';
+    try {
+      const ext = pendingAvatarFile.name.split('.').pop();
+      const path = 'avatars/' + currentUserId + '/avatar.' + ext;
+      const { error: uploadError } = await supabaseClient.storage.from('team-logos').upload(path, pendingAvatarFile, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabaseClient.storage.from('team-logos').getPublicUrl(path);
+      const { error: updateError } = await supabaseClient.from('profiles').update({ avatar_url: data.publicUrl }).eq('id', currentUserId);
+      if (updateError) throw updateError;
+      showMsg('avatarMsg', 'Photo saved.', 'success');
+    } catch (err){
+      showMsg('avatarMsg', err.message, 'error');
+    }
+  });
+
+  document.getElementById('savePasswordBtn').addEventListener('click', async () => {
+    const oldPw = document.getElementById('oldPasswordInput').value;
+    const pw = document.getElementById('newPasswordInput').value;
+    const confirmPw = document.getElementById('confirmPasswordInput').value;
+    if (!oldPw){
+      showMsg('passwordMsg', 'Enter your current password.', 'error');
+      return;
+    }
+    if (pw.length < 6){
+      showMsg('passwordMsg', 'New password needs to be at least 6 characters.', 'error');
+      return;
+    }
+    if (pw !== confirmPw){
+      showMsg('passwordMsg', 'Passwords do not match.', 'error');
+      return;
+    }
+    const { error: verifyError } = await supabaseClient.auth.signInWithPassword({ email: currentUserEmail, password: oldPw });
+    if (verifyError){
+      showMsg('passwordMsg', 'Current password is incorrect.', 'error');
+      return;
+    }
+    const { error } = await supabaseClient.auth.updateUser({ password: pw });
+    if (error){
+      showMsg('passwordMsg', error.message, 'error');
+      return;
+    }
+    document.getElementById('oldPasswordInput').value = '';
+    document.getElementById('newPasswordInput').value = '';
+    document.getElementById('confirmPasswordInput').value = '';
+    showMsg('passwordMsg', 'Password changed.', 'success');
+  });
+
+  // --- Reset for production: password re-entry, then a typed agreement,
+  // before anything is actually touched. ---
+  document.getElementById('sendInviteBtn').addEventListener('click', async () => {
+    const email = document.getElementById('inviteEmailInput').value.trim();
+    if (!email || !email.includes('@')){
+      showMsg('inviteMsg', 'Enter a valid email address.', 'error');
+      return;
+    }
+    document.getElementById('sendInviteBtn').disabled = true;
+    try {
+      const response = await fetch('/api/invite-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + currentAccessToken
+        },
+        body: JSON.stringify({ email })
+      });
+      const result = await response.json();
+      if (!response.ok){
+        showMsg('inviteMsg', result.error || 'Could not send the invite.', 'error');
       } else {
-        rightHtml = '<div class="status-notstarted">Not started</div>';
+        document.getElementById('inviteEmailInput').value = '';
+        showMsg('inviteMsg', 'Invite sent to ' + email + '.', 'success');
       }
-      return '<div class="game-row" data-id="' + g.id + '" data-designator="' + g.designator + '" data-status="' + g.status + '">' +
-        '<div class="game-left">' +
-        '<span class="game-num">' + g.designator + '</span>' +
-        '<div><div class="game-matchup">' + matchup + '</div><div class="game-meta">' + homeAway + ' · ' + dateStr + '</div></div>' +
+    } catch (err){
+      showMsg('inviteMsg', 'Could not reach the server: ' + err.message, 'error');
+    }
+    document.getElementById('sendInviteBtn').disabled = false;
+  });
+
+  async function callManageUsers(action, extra){
+    const response = await fetch('/api/manage-users', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + currentAccessToken
+      },
+      body: JSON.stringify(Object.assign({ action }, extra || {}))
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Something went wrong.');
+    return result;
+  }
+
+  function formatDate(iso){
+    if (!iso) return 'never';
+    const d = new Date(iso);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderUsersList(users){
+    if (!users.length){
+      document.getElementById('usersListContainer').innerHTML = '<p class="sub">No users found.</p>';
+      return;
+    }
+    document.getElementById('usersListContainer').innerHTML = users.map(u => {
+      const name = u.displayName || '(no name set)';
+      const pending = !u.lastSignInAt;
+      return '<div class="user-row" data-user-id="' + u.id + '" data-email="' + u.email + '">' +
+        '<div class="user-row-head"><span class="user-row-name">' + name + (u.isAdmin ? '<span class="badge-admin">ADMIN</span>' : '') + '</span></div>' +
+        '<div class="user-row-email">' + u.email + '</div>' +
+        '<div class="user-row-meta">Joined ' + formatDate(u.createdAt) + ' &middot; Last sign-in: ' + formatDate(u.lastSignInAt) + (pending ? ' &middot; invite pending' : '') + '</div>' +
+        '<div class="user-row-actions">' +
+        '<button class="secondary" data-action="showSetPassword">Set password</button>' +
+        '<button class="secondary" data-action="sendReset">Send reset email</button>' +
+        (pending ? '<button class="secondary" data-action="resendInvite">Resend invite</button>' : '') +
+        '<button class="danger" data-action="delete">Delete</button>' +
         '</div>' +
-        '<div class="game-right">' + rightHtml + '</div>' +
-        (currentIsAdmin || g.status === 'in_progress'
-          ? '<div style="position:relative;">' +
-            '<button class="secondary rowMenuBtn" data-id="' + g.id + '" style="padding:4px 10px; font-size:16px; line-height:1;">⋮</button>' +
-            '<div class="rowMenu hidden" data-id="' + g.id + '" style="position:absolute; right:0; top:100%; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:10; min-width:140px;">' +
-              (currentIsAdmin ? '<a href="create_game.html?edit=' + g.id + '" style="display:block; padding:8px 12px; color:#444; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game setup</a>' : '') +
-              (g.status === 'in_progress' ? '<a href="view.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:#1565c0; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">View live</a>' : '') +
-              (currentIsAdmin ? '<button class="deleteGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a32d2d; font-weight:600; font-size:13px;">Delete game</button>' : '') +
-            '</div>' +
-            '</div>'
-          : '') +
+        '<div class="set-password-inline hidden" data-role="setPasswordBlock">' +
+        '<input type="password" placeholder="New password (min 6 chars)" data-role="newPasswordInput">' +
+        '<button data-action="confirmSetPassword">Confirm</button>' +
+        '<button class="secondary" data-action="cancelSetPassword">Cancel</button>' +
+        '</div>' +
         '</div>';
     }).join('');
-
-    body.querySelectorAll('.game-row').forEach(row => {
-      row.addEventListener('click', (e) => {
-        if (e.target.closest('.rowMenuBtn') || e.target.closest('.rowMenu')) return;
-        if (currentIsAdmin){
-          window.location.href = 'game.html?id=' + row.dataset.id;
-        } else if (row.dataset.status === 'in_progress'){
-          window.location.href = 'view.html?id=' + row.dataset.id;
-        }
-      });
-    });
-    body.querySelectorAll('.rowMenuBtn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const menu = body.querySelector('.rowMenu[data-id="' + btn.dataset.id + '"]');
-        const isOpen = !menu.classList.contains('hidden');
-        body.querySelectorAll('.rowMenu').forEach(m => m.classList.add('hidden'));
-        if (!isOpen) menu.classList.remove('hidden');
-      });
-    });
-    body.querySelectorAll('.deleteGameBtn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        body.querySelectorAll('.rowMenu').forEach(m => m.classList.add('hidden'));
-        deleteGame(btn.dataset.id);
-      });
-    });
-    document.addEventListener('click', () => {
-      body.querySelectorAll('.rowMenu').forEach(m => m.classList.add('hidden'));
-    });
   }
 
-  async function deleteGame(gameId){
-    const row = document.querySelector('.game-row[data-id="' + gameId + '"]');
-    const designator = row.dataset.designator;
-    const status = row.dataset.status;
-
-    const { data: existingPlays } = await supabaseClient.from('plays').select('id').eq('game_id', gameId);
-    const playCount = existingPlays ? existingPlays.length : 0;
-
-    const ok1 = confirm(
-      'Delete game ' + designator + '?\n\n' +
-      'This permanently deletes ' + playCount + ' play(s) and the roster snapshot for this game. This cannot be undone.\n\nContinue?'
-    );
-    if (!ok1) return;
-
-    if (status === 'final'){
-      const typed = prompt(
-        'This game is marked FINAL — it represents a completed, finished game, not a work in progress.\n\n' +
-        'Deleting it is permanent. Every play and stat from this game will be gone, with no way to recover it afterward.\n\n' +
-        'Type the game designator exactly (' + designator + ') to confirm:'
-      );
-      if (typed === null) return; // cancelled
-      if (typed.trim() !== designator){
-        showMsg('dashboardMsg', 'That didn\'t match "' + designator + '" — deletion cancelled, nothing was touched.', 'error');
-        return;
-      }
-
-      // Deleting a finalized game requires briefly un-finalizing it first --
-      // only an admin account can do this, same rule as anywhere else in
-      // the app that touches a finalized game.
-      const { error: unlockError } = await supabaseClient.from('games').update({ status: 'in_progress' }).eq('id', gameId);
-      if (unlockError){
-        showMsg('dashboardMsg', 'Could not delete: ' + unlockError.message, 'error');
-        return;
-      }
+  async function loadUsers(){
+    document.getElementById('usersListContainer').innerHTML = '<p class="sub">Loading...</p>';
+    try {
+      const result = await callManageUsers('list');
+      renderUsersList(result.users);
+    } catch (err){
+      showMsg('userMgmtMsg', err.message, 'error');
     }
+  }
 
-    const { error: deleteError } = await supabaseClient.from('games').delete().eq('id', gameId);
-    if (deleteError){
-      showMsg('dashboardMsg', 'Could not delete: ' + deleteError.message, 'error');
+  document.getElementById('refreshUsersBtn').addEventListener('click', loadUsers);
+
+  document.getElementById('usersListContainer').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const row = btn.closest('.user-row');
+    const userId = row.getAttribute('data-user-id');
+    const email = row.getAttribute('data-email');
+    const action = btn.getAttribute('data-action');
+
+    if (action === 'showSetPassword'){
+      row.querySelector('[data-role="setPasswordBlock"]').classList.remove('hidden');
       return;
     }
-    loadDashboard();
-  }
+    if (action === 'cancelSetPassword'){
+      row.querySelector('[data-role="setPasswordBlock"]').classList.add('hidden');
+      return;
+    }
+    if (action === 'confirmSetPassword'){
+      const input = row.querySelector('[data-role="newPasswordInput"]');
+      const newPassword = input.value;
+      if (newPassword.length < 6){
+        showMsg('userMgmtMsg', 'Password needs to be at least 6 characters.', 'error');
+        return;
+      }
+      btn.disabled = true;
+      try {
+        await callManageUsers('setPassword', { userId, newPassword });
+        showMsg('userMgmtMsg', 'Password updated for ' + email + '.', 'success');
+        input.value = '';
+        row.querySelector('[data-role="setPasswordBlock"]').classList.add('hidden');
+      } catch (err){
+        showMsg('userMgmtMsg', err.message, 'error');
+      }
+      btn.disabled = false;
+      return;
+    }
+    if (action === 'sendReset'){
+      btn.disabled = true;
+      try {
+        await callManageUsers('sendReset', { email });
+        showMsg('userMgmtMsg', 'Password reset email sent to ' + email + '.', 'success');
+      } catch (err){
+        showMsg('userMgmtMsg', err.message, 'error');
+      }
+      btn.disabled = false;
+      return;
+    }
+    if (action === 'resendInvite'){
+      btn.disabled = true;
+      try {
+        await callManageUsers('resendInvite', { email });
+        showMsg('userMgmtMsg', 'Invite resent to ' + email + '.', 'success');
+      } catch (err){
+        showMsg('userMgmtMsg', err.message, 'error');
+      }
+      btn.disabled = false;
+      return;
+    }
+    if (action === 'delete'){
+      if (!window.confirm('Remove ' + email + '? This cannot be undone.')) return;
+      btn.disabled = true;
+      try {
+        await callManageUsers('delete', { userId });
+        showMsg('userMgmtMsg', 'Removed ' + email + '.', 'success');
+        loadUsers();
+      } catch (err){
+        showMsg('userMgmtMsg', err.message, 'error');
+        btn.disabled = false;
+      }
+      return;
+    }
+  });
+
+  document.getElementById('startResetBtn').addEventListener('click', () => {
+    document.getElementById('resetStep2').classList.remove('hidden');
+  });
+  document.getElementById('resetCancelBtn1').addEventListener('click', () => {
+    document.getElementById('resetStep2').classList.add('hidden');
+    document.getElementById('resetPasswordInput').value = '';
+  });
+  document.getElementById('resetCancelBtn2').addEventListener('click', () => {
+    document.getElementById('resetStep3').classList.add('hidden');
+    document.getElementById('resetAgreeInput').value = '';
+  });
+
+  document.getElementById('resetPasswordContinueBtn').addEventListener('click', async () => {
+    const pw = document.getElementById('resetPasswordInput').value;
+    if (!pw){
+      showMsg('resetMsg', 'Enter your password.', 'error');
+      return;
+    }
+    const { error } = await supabaseClient.auth.signInWithPassword({ email: currentUserEmail, password: pw });
+    if (error){
+      showMsg('resetMsg', 'Incorrect password.', 'error');
+      return;
+    }
+    document.getElementById('resetMsg').innerHTML = '';
+    document.getElementById('resetStep2').classList.add('hidden');
+    document.getElementById('resetPasswordInput').value = '';
+    document.getElementById('resetStep3').classList.remove('hidden');
+  });
+
+  document.getElementById('resetFinalBtn').addEventListener('click', async () => {
+    const typed = document.getElementById('resetAgreeInput').value;
+    if (typed !== 'I agree'){
+      showMsg('resetMsg', 'Type "I agree" exactly to continue.', 'error');
+      return;
+    }
+    document.getElementById('resetFinalBtn').disabled = true;
+    showMsg('resetMsg', 'Deleting everything…', 'success');
+
+    const { data: allGames, error: fetchError } = await supabaseClient.from('games').select('id, status');
+    if (fetchError){
+      showMsg('resetMsg', 'Could not load games: ' + fetchError.message, 'error');
+      document.getElementById('resetFinalBtn').disabled = false;
+      return;
+    }
+
+    // Any finalized game needs to be un-finalized first -- same admin-only
+    // mechanism used everywhere else in the app that touches a final game.
+    const finalized = (allGames || []).filter(g => g.status === 'final');
+    for (const g of finalized){
+      const { error: unlockError } = await supabaseClient.from('games').update({ status: 'in_progress' }).eq('id', g.id);
+      if (unlockError){
+        showMsg('resetMsg', 'Could not reset: ' + unlockError.message, 'error');
+        document.getElementById('resetFinalBtn').disabled = false;
+        return;
+      }
+    }
+
+    const ids = (allGames || []).map(g => g.id);
+    if (ids.length > 0){
+      const { error: deleteError } = await supabaseClient.from('games').delete().in('id', ids);
+      if (deleteError){
+        showMsg('resetMsg', 'Could not delete: ' + deleteError.message, 'error');
+        document.getElementById('resetFinalBtn').disabled = false;
+        return;
+      }
+    }
+
+    document.getElementById('resetStep3').classList.add('hidden');
+    document.getElementById('resetAgreeInput').value = '';
+    document.getElementById('resetFinalBtn').disabled = false;
+    showMsg('resetMsg', 'Done — ' + ids.length + ' game(s) and all their plays and rosters were deleted. Ready for production.', 'success');
+  });
 </script>
 </body>
 </html>
