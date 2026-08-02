@@ -93,6 +93,14 @@
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   const linkType = hashParams.get('type');
   const isInviteOrRecovery = linkType === 'invite' || linkType === 'recovery';
+  // The OTP-code flow (verifyOtp below) establishes a session the exact
+  // same way a normal sign-in does, with nothing in the URL hash to mark
+  // it as special -- so isInviteOrRecovery above can never be true for
+  // it. This flag exists purely to give onAuthStateChange's SIGNED_IN
+  // handler the same "this needs a password, not a dashboard redirect"
+  // signal for this flow that the hash already provides for the
+  // original link-based one.
+  let justVerifiedInviteCode = false;
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY' || (isInviteOrRecovery && session)){
@@ -109,7 +117,7 @@
       } else if (!session && document.getElementById('setPasswordView').classList.contains('hidden') && document.getElementById('enterCodeView').classList.contains('hidden')){
         showView('loginView');
       }
-    } else if (event === 'SIGNED_IN' && session && !isInviteOrRecovery){
+    } else if (event === 'SIGNED_IN' && session && !isInviteOrRecovery && !justVerifiedInviteCode){
       if (!document.getElementById('setPasswordView').classList.contains('hidden')) return;
       showLoggedIn(session);
     } else if (event === 'SIGNED_OUT'){
@@ -150,11 +158,13 @@
       showMsg('enterCodeMsg', 'Enter both your email and the 6-digit code.', 'error');
       return;
     }
+    justVerifiedInviteCode = true;
     // type: 'invite' specifically, confirmed against Supabase's own API
     // reference -- this is the value meant for verifying a code sent as
     // part of an invitation, as distinct from signup/recovery/etc codes.
     const { data, error } = await supabaseClient.auth.verifyOtp({ email, token, type: 'invite' });
     if (error){
+      justVerifiedInviteCode = false;
       showMsg('enterCodeMsg', error.message, 'error');
     } else {
       showView('setPasswordView');
