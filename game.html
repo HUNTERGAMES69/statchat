@@ -1083,7 +1083,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
     const yardsBlock = (label, id) => '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label||'Yards') + '</p><input type="text" id="' + (id||'pp_yards') + '" style="width:80px;">';
     const yardsBlockRet = () => '<div id="pp_retyds_container"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Return yards (optional)</p><input type="text" id="pp_retyds" style="width:80px;"></div>';
-    const tdBlock = '<label class="inline" style="margin-top:8px; display:block;"><input type="checkbox" id="pp_td"> Touchdown</label>';
+    const tdBlock = '<div style="margin-top:10px;">' +
+      '<input type="checkbox" id="pp_td" style="display:none;">' +
+      '<button type="button" id="pp_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button>' +
+      '</div>';
 
     let html = '';
     if (type === 'rush') html = offBlock('carrier','Ball carrier') + yardsBlock() + defBlock('Tackled by (optional)') + tdBlock;
@@ -1126,6 +1129,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     html += '<div class="row" style="margin-top:12px;"><button class="primary" id="pp_review">Review play</button><button class="secondary" id="pp_clear">Clear</button></div>';
     panel.innerHTML = html;
+    const tdToggle = document.getElementById('pp_td_toggle');
+    if (tdToggle){
+      tdToggle.addEventListener('click', () => {
+        const cb = document.getElementById('pp_td');
+        cb.checked = !cb.checked;
+        tdToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
+        tdToggle.style.color = cb.checked ? '#fff' : '#555';
+        tdToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
+        tdToggle.textContent = cb.checked ? '✓ Touchdown' : 'Touchdown';
+      });
+    }
     currentSpotGetter = (type === 'kickoff' || type === 'punt' || type === 'int' || type === 'fumble') ? wireStartingSpot(panel, 'pp_spot') : null;
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
 
