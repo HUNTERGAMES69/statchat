@@ -65,6 +65,7 @@
   .stat-category-tile { background:#eef1f5; border:1px solid #c9d0d9; border-radius:6px; padding:6px 6px 4px; margin-bottom:0; }
   .stat-category-label { font-size:10px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.02em; margin:0 0 3px; background:#4a5568; display:inline-block; padding:2px 6px; border-radius:3px; }
   .player-stat-row { display:flex; align-items:baseline; gap:12px; padding:3px 2px; border-bottom:1px solid rgba(0,0,0,0.06); font-size:12px; }
+  .player-stat-row.leader { background:rgba(255,193,7,0.18); border-radius:4px; }
   .player-stat-row:last-child { border-bottom:none; }
   .player-stat-name { font-weight:700; color:#1a1a2e; min-width:64px; flex-shrink:0; }
   .player-stat-item { color:#555; white-space:nowrap; }
@@ -413,6 +414,14 @@ function computeState(playsList){
           if (r.kicker.result === 'b') s.fgBlocked = (s.fgBlocked||0) + 1;
         }
       }
+      if (r.kicker && type === 'pat'){
+        const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
+        if (s){
+          s.patAtt = (s.patAtt||0) + 1;
+          if (r.kicker.result === 'g') s.patMade = (s.patMade||0) + 1;
+          if (r.kicker.result === 'b') s.patBlocked = (s.patBlocked||0) + 1;
+        }
+      }
       if (r.punter && type === 'punt'){
         const s = bucket(r.punter.team, 'specialTeams', r.punter.num);
         if (s){
@@ -464,43 +473,51 @@ function computeState(playsList){
       const sum = (nums, obj, key) => nums.reduce((t, n) => t + ((obj[n] && obj[n][key]) || 0), 0);
       const tile = (label, inner) => '<div class="stat-category-tile"><div class="stat-category-label">' + label + '</div>' + inner + '</div>';
       const item = (val, label) => '<span class="player-stat-item"><b>' + val + '</b> ' + label + '</span>';
-      const row = (name, items) => '<div class="player-stat-row"><span class="player-stat-name">' + name + '</span>' + items.join('') + '</div>';
+      const row = (name, items, isLeader) => '<div class="player-stat-row' + (isLeader ? ' leader' : '') + '">' + '<span class="player-stat-name">' + name + '</span>' + items.join('') + '</div>';
+      // Sorts jersey numbers by a yardage-like field, descending, so the
+      // category leader always renders first.
+      const sortByYds = (nums, obj, key) => nums.slice().sort((a, b) => ((obj[b] && obj[b][key]) || 0) - ((obj[a] && obj[a][key]) || 0));
 
-      const rushNums = Object.keys(s.rushing);
-      if (rushNums.length){
-        html += tile('Rushing', rushNums.map(n => {
-          const d = s.rushing[n];
-          return row(playerName(teamKey, n), [item(d.att||0,'Att'), item(d.yds||0,'Yds'), item(d.td||0,'TD')]);
-        }).join(''));
-      }
-      const passNums = Object.keys(s.passing);
+      const passNums = sortByYds(Object.keys(s.passing), s.passing, 'yds');
       if (passNums.length){
-        html += tile('Passing', passNums.map(n => {
+        html += tile('Passing', passNums.map((n, i) => {
           const d = s.passing[n];
           const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
-          return row(playerName(teamKey, n), [item(d.att||0,'Att'), item(d.comp||0,'Comp'), item(compPct,'%'), item(d.yds||0,'Yds'), item(d.td||0,'TD'), item(d.intThrown||0,'Int')]);
+          return row(playerName(teamKey, n), [item(d.att||0,'Att'), item(d.comp||0,'Comp'), item(compPct,'%'), item(d.yds||0,'Yds'), item(d.td||0,'TD'), item(d.intThrown||0,'Int')], i === 0 && passNums.length > 1);
         }).join(''));
       }
-      const recNums = Object.keys(s.receiving);
+      const rushNums = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
+      if (rushNums.length){
+        html += tile('Rushing', rushNums.map((n, i) => {
+          const d = s.rushing[n];
+          return row(playerName(teamKey, n), [item(d.att||0,'Att'), item(d.yds||0,'Yds'), item(d.td||0,'TD')], i === 0 && rushNums.length > 1);
+        }).join(''));
+      }
+      const recNums = sortByYds(Object.keys(s.receiving), s.receiving, 'yds');
       if (recNums.length){
-        html += tile('Receiving', recNums.map(n => {
+        html += tile('Receiving', recNums.map((n, i) => {
           const d = s.receiving[n];
-          return row(playerName(teamKey, n), [item(d.rec||0,'Rec'), item(d.yds||0,'Yds'), item(d.td||0,'TD')]);
+          return row(playerName(teamKey, n), [item(d.rec||0,'Rec'), item(d.yds||0,'Yds'), item(d.td||0,'TD')], i === 0 && recNums.length > 1);
         }).join(''));
       }
-      const stAllNums = Object.keys(s.specialTeams).filter(n => s.specialTeams[n].fgAtt || s.specialTeams[n].punts);
+      const stAllNumsRaw = Object.keys(s.specialTeams).filter(n => s.specialTeams[n].fgAtt || s.specialTeams[n].patAtt || s.specialTeams[n].punts);
+      const stYds = (n) => { const d = s.specialTeams[n]; return (d.fgLong||0) + (d.puntYds||0); };
+      const stAllNums = stAllNumsRaw.slice().sort((a, b) => stYds(b) - stYds(a));
       if (stAllNums.length){
-        html += tile('Special Teams', stAllNums.map(n => {
+        html += tile('Special Teams', stAllNums.map((n, i) => {
           const d = s.specialTeams[n];
           const items = [];
           if (d.fgAtt){
             items.push(item(d.fgAtt||0,'FG Att'), item(d.fgMade||0,'FG Made'), item(d.fgLong||0,'Long'), item(d.fgBlocked||0,'Blocked'));
           }
+          if (d.patAtt){
+            items.push(item(d.patAtt||0,'PAT Att'), item(d.patMade||0,'PAT Made'), item(d.patBlocked||0,'Blocked'));
+          }
           if (d.punts){
             const avg = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
             items.push(item(d.punts||0,'Punts'), item(d.puntYds||0,'Yds'), item(avg,'Avg'));
           }
-          return row(playerName(teamKey, n), items);
+          return row(playerName(teamKey, n), items, i === 0 && stAllNums.length > 1);
         }).join(''));
       }
       const defNums = Object.keys(s.defense);
