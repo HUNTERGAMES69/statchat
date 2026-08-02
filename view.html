@@ -159,6 +159,7 @@
   }
 
   let currentGameId = null;
+  let isResultsMode = false;
   let TEAMS = { teamA: {}, teamB: {} };
   let plays = [], startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
 
@@ -560,32 +561,34 @@ function computeState(playsList){
         return '<div class="logline">' + qtag + text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
       }).join('');
     }
-    const resetIdxs = [];
-    for (let i = 0; i < plays.length; i++){
-      if (plays[i].effect && plays[i].effect.isReset) resetIdxs.push(i);
+    if (!isResultsMode){
+      const resetIdxs = [];
+      for (let i = 0; i < plays.length; i++){
+        if (plays[i].effect && plays[i].effect.isReset) resetIdxs.push(i);
+      }
+      const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
+      document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
+
+      const currentSummary = resetIdxs.length
+        ? computeDriveSummary(resetIdxs[resetIdxs.length - 1], plays.length)
+        : null;
+      document.getElementById('currentDriveTiles').innerHTML = currentSummary
+        ? '<div class="inline-stat-line">' + [
+            ['RUSH', currentSummary.rushes + '/' + currentSummary.rushYds],
+            ['PASS', currentSummary.passes + '/' + currentSummary.passYds],
+            ['TOTAL', currentSummary.totalPlays + '/' + currentSummary.totalYds]
+          ].map(([label, val]) => '<span class="inline-stat-item"><b>' + label + '</b>' + val + '</span>').join('') + '</div>'
+        : '';
+
+      const prevSummary = resetIdxs.length >= 2
+        ? computeDriveSummary(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1])
+        : null;
+      document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary);
     }
-    const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
-    document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
-
-    const currentSummary = resetIdxs.length
-      ? computeDriveSummary(resetIdxs[resetIdxs.length - 1], plays.length)
-      : null;
-    document.getElementById('currentDriveTiles').innerHTML = currentSummary
-      ? '<div class="inline-stat-line">' + [
-          ['RUSH', currentSummary.rushes + '/' + currentSummary.rushYds],
-          ['PASS', currentSummary.passes + '/' + currentSummary.passYds],
-          ['TOTAL', currentSummary.totalPlays + '/' + currentSummary.totalYds]
-        ].map(([label, val]) => '<span class="inline-stat-item"><b>' + label + '</b>' + val + '</span>').join('') + '</div>'
-      : '';
-
-    const prevSummary = resetIdxs.length >= 2
-      ? computeDriveSummary(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1])
-      : null;
-    document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary);
 
     renderTeamSummary();
     renderBoxScore();
-    adjustDriveCardVisibility();
+    if (!isResultsMode) adjustDriveCardVisibility();
   }
 
   // Measures the actual rendered content against the quadrant's real
@@ -734,6 +737,10 @@ function computeState(playsList){
   async function init(){
     const params = new URLSearchParams(window.location.search);
     currentGameId = params.get('id');
+    isResultsMode = params.get('mode') === 'results';
+    if (isResultsMode){
+      document.getElementById('quadTR').innerHTML = '<div style="height:100%; display:flex; align-items:center; justify-content:center; color:#999; font-size:14px; text-align:center; padding:20px;">Drive summary isn\'t available for a completed game.<br>See the box scores for full stats.</div>';
+    }
     if (!currentGameId){
       showView('errorView');
       showMsg('errorMsg', 'No game specified.', 'error');
