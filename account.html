@@ -37,6 +37,7 @@
   .set-password-inline { display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap; }
   .set-password-inline input { width:auto; flex:1; min-width:140px; }
   .badge-admin { display:inline-block; font-size:10px; font-weight:700; color:#a37a00; background:#fff3cd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+  .badge-invited { display:inline-block; font-size:10px; font-weight:700; color:#1565c0; background:#e3f2fd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
   @media (min-width: 640px) { body { padding:24px; } .card { padding:24px; } }
 </style>
 </head>
@@ -287,6 +288,7 @@
         document.getElementById('inviteEmailInput').value = '';
         document.getElementById('inviteNameInput').value = '';
         showMsg('inviteMsg', 'Invite sent to ' + email + '.', 'success');
+        loadUsers();
       }
     } catch (err){
       showMsg('inviteMsg', 'Could not reach the server: ' + err.message, 'error');
@@ -323,7 +325,7 @@
       const name = u.displayName || '(no name set)';
       const pending = !u.lastSignInAt;
       return '<div class="user-row" data-user-id="' + u.id + '" data-email="' + u.email + '">' +
-        '<div class="user-row-head"><span class="user-row-name">' + name + (u.isAdmin ? '<span class="badge-admin">ADMIN</span>' : '') + '</span></div>' +
+        '<div class="user-row-head"><span class="user-row-name">' + name + (u.isAdmin ? '<span class="badge-admin">ADMIN</span>' : '') + (pending ? '<span class="badge-invited">INVITED</span>' : '') + '</span></div>' +
         '<div class="user-row-email">' + u.email + '</div>' +
         '<div class="user-row-meta">Joined ' + formatDate(u.createdAt) + ' &middot; Last sign-in: ' + formatDate(u.lastSignInAt) + (pending ? ' &middot; invite pending' : '') + '</div>' +
         '<div class="user-row-actions">' +
