@@ -75,6 +75,14 @@
       <button id="savePasswordBtn" style="margin-top:14px;">Change password</button>
     </div>
 
+    <div id="inviteCard" class="card hidden">
+      <h2>Invite a user</h2>
+      <p class="sub">Sends them an email invite to sign in and set their own password. Admin only.</p>
+      <div id="inviteMsg"></div>
+      <label>Email address<input type="email" id="inviteEmailInput" placeholder="coach@example.com"></label>
+      <button id="sendInviteBtn" style="margin-top:10px;">Send invite</button>
+    </div>
+
     <div id="resetCard" class="card hidden">
       <h2>Reset for production</h2>
       <p class="sub">Permanently deletes every game, play, and roster snapshot in the database. Your team roster and branding are not touched. Only use this once, when you're done testing and ready to track real games.</p>
@@ -110,7 +118,7 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-  let currentUserId = null, currentUserEmail = null;
+  let currentUserId = null, currentUserEmail = null, currentAccessToken = null;
 
   function showView(name){
     ['loading', 'mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
@@ -124,6 +132,7 @@
       if (session){
         currentUserId = session.user.id;
         currentUserEmail = session.user.email;
+        currentAccessToken = session.access_token;
         init();
       } else {
         window.location.href = '/';
@@ -142,6 +151,7 @@
       if (profile.display_name) document.getElementById('fullNameInput').value = profile.display_name;
       if (profile.avatar_url) document.getElementById('avatarPreview').src = profile.avatar_url;
       if (profile.is_admin){
+        document.getElementById('inviteCard').classList.remove('hidden');
         document.getElementById('resetCard').classList.remove('hidden');
         if (window.location.hash === '#reset'){
           setTimeout(() => {
@@ -230,6 +240,35 @@
 
   // --- Reset for production: password re-entry, then a typed agreement,
   // before anything is actually touched. ---
+  document.getElementById('sendInviteBtn').addEventListener('click', async () => {
+    const email = document.getElementById('inviteEmailInput').value.trim();
+    if (!email || !email.includes('@')){
+      showMsg('inviteMsg', 'Enter a valid email address.', 'error');
+      return;
+    }
+    document.getElementById('sendInviteBtn').disabled = true;
+    try {
+      const response = await fetch('/api/invite-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + currentAccessToken
+        },
+        body: JSON.stringify({ email })
+      });
+      const result = await response.json();
+      if (!response.ok){
+        showMsg('inviteMsg', result.error || 'Could not send the invite.', 'error');
+      } else {
+        document.getElementById('inviteEmailInput').value = '';
+        showMsg('inviteMsg', 'Invite sent to ' + email + '.', 'success');
+      }
+    } catch (err){
+      showMsg('inviteMsg', 'Could not reach the server: ' + err.message, 'error');
+    }
+    document.getElementById('sendInviteBtn').disabled = false;
+  });
+
   document.getElementById('startResetBtn').addEventListener('click', () => {
     document.getElementById('resetStep2').classList.remove('hidden');
   });
