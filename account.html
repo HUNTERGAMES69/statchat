@@ -27,6 +27,16 @@
   .hidden { display:none; }
   #avatarPreview { width:64px; height:64px; border-radius:50%; object-fit:cover; background:#eee; }
   .danger-zone { border:1px solid #f0d0a0; background:#fffaf0; border-radius:10px; padding:16px; margin-top:8px; }
+  .user-row { border:1px solid #e5e3dc; border-radius:8px; padding:12px; margin-bottom:10px; }
+  .user-row-head { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:6px; }
+  .user-row-name { font-weight:700; font-size:14px; }
+  .user-row-email { color:#777; font-size:13px; }
+  .user-row-meta { color:#999; font-size:12px; margin-top:4px; }
+  .user-row-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .user-row-actions button { font-size:12px; padding:6px 10px; }
+  .set-password-inline { display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap; }
+  .set-password-inline input { width:auto; flex:1; min-width:140px; }
+  .badge-admin { display:inline-block; font-size:10px; font-weight:700; color:#a37a00; background:#fff3cd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
   @media (min-width: 640px) { body { padding:24px; } .card { padding:24px; } }
 </style>
 </head>
@@ -81,6 +91,14 @@
       <div id="inviteMsg"></div>
       <label>Email address<input type="email" id="inviteEmailInput" placeholder="coach@example.com"></label>
       <button id="sendInviteBtn" style="margin-top:10px;">Send invite</button>
+    </div>
+
+    <div id="userMgmtCard" class="card hidden">
+      <h2>User management</h2>
+      <p class="sub">View existing users, reset a password, resend an invite, or remove access. Admin only.</p>
+      <div id="userMgmtMsg"></div>
+      <button id="refreshUsersBtn" style="margin-bottom:12px;">Refresh list</button>
+      <div id="usersListContainer"></div>
     </div>
 
     <div id="resetCard" class="card hidden">
@@ -152,6 +170,8 @@
       if (profile.avatar_url) document.getElementById('avatarPreview').src = profile.avatar_url;
       if (profile.is_admin){
         document.getElementById('inviteCard').classList.remove('hidden');
+        document.getElementById('userMgmtCard').classList.remove('hidden');
+        loadUsers();
         document.getElementById('resetCard').classList.remove('hidden');
         if (window.location.hash === '#reset'){
           setTimeout(() => {
@@ -267,6 +287,137 @@
       showMsg('inviteMsg', 'Could not reach the server: ' + err.message, 'error');
     }
     document.getElementById('sendInviteBtn').disabled = false;
+  });
+
+  async function callManageUsers(action, extra){
+    const response = await fetch('/api/manage-users', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + currentAccessToken
+      },
+      body: JSON.stringify(Object.assign({ action }, extra || {}))
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Something went wrong.');
+    return result;
+  }
+
+  function formatDate(iso){
+    if (!iso) return 'never';
+    const d = new Date(iso);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderUsersList(users){
+    if (!users.length){
+      document.getElementById('usersListContainer').innerHTML = '<p class="sub">No users found.</p>';
+      return;
+    }
+    document.getElementById('usersListContainer').innerHTML = users.map(u => {
+      const name = u.displayName || '(no name set)';
+      const pending = !u.lastSignInAt;
+      return '<div class="user-row" data-user-id="' + u.id + '" data-email="' + u.email + '">' +
+        '<div class="user-row-head"><span class="user-row-name">' + name + (u.isAdmin ? '<span class="badge-admin">ADMIN</span>' : '') + '</span></div>' +
+        '<div class="user-row-email">' + u.email + '</div>' +
+        '<div class="user-row-meta">Joined ' + formatDate(u.createdAt) + ' &middot; Last sign-in: ' + formatDate(u.lastSignInAt) + (pending ? ' &middot; invite pending' : '') + '</div>' +
+        '<div class="user-row-actions">' +
+        '<button class="secondary" data-action="showSetPassword">Set password</button>' +
+        '<button class="secondary" data-action="sendReset">Send reset email</button>' +
+        (pending ? '<button class="secondary" data-action="resendInvite">Resend invite</button>' : '') +
+        '<button class="danger" data-action="delete">Delete</button>' +
+        '</div>' +
+        '<div class="set-password-inline hidden" data-role="setPasswordBlock">' +
+        '<input type="password" placeholder="New password (min 6 chars)" data-role="newPasswordInput">' +
+        '<button data-action="confirmSetPassword">Confirm</button>' +
+        '<button class="secondary" data-action="cancelSetPassword">Cancel</button>' +
+        '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  async function loadUsers(){
+    document.getElementById('usersListContainer').innerHTML = '<p class="sub">Loading...</p>';
+    try {
+      const result = await callManageUsers('list');
+      renderUsersList(result.users);
+    } catch (err){
+      showMsg('userMgmtMsg', err.message, 'error');
+    }
+  }
+
+  document.getElementById('refreshUsersBtn').addEventListener('click', loadUsers);
+
+  document.getElementById('usersListContainer').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const row = btn.closest('.user-row');
+    const userId = row.getAttribute('data-user-id');
+    const email = row.getAttribute('data-email');
+    const action = btn.getAttribute('data-action');
+
+    if (action === 'showSetPassword'){
+      row.querySelector('[data-role="setPasswordBlock"]').classList.remove('hidden');
+      return;
+    }
+    if (action === 'cancelSetPassword'){
+      row.querySelector('[data-role="setPasswordBlock"]').classList.add('hidden');
+      return;
+    }
+    if (action === 'confirmSetPassword'){
+      const input = row.querySelector('[data-role="newPasswordInput"]');
+      const newPassword = input.value;
+      if (newPassword.length < 6){
+        showMsg('userMgmtMsg', 'Password needs to be at least 6 characters.', 'error');
+        return;
+      }
+      btn.disabled = true;
+      try {
+        await callManageUsers('setPassword', { userId, newPassword });
+        showMsg('userMgmtMsg', 'Password updated for ' + email + '.', 'success');
+        input.value = '';
+        row.querySelector('[data-role="setPasswordBlock"]').classList.add('hidden');
+      } catch (err){
+        showMsg('userMgmtMsg', err.message, 'error');
+      }
+      btn.disabled = false;
+      return;
+    }
+    if (action === 'sendReset'){
+      btn.disabled = true;
+      try {
+        await callManageUsers('sendReset', { email });
+        showMsg('userMgmtMsg', 'Password reset email sent to ' + email + '.', 'success');
+      } catch (err){
+        showMsg('userMgmtMsg', err.message, 'error');
+      }
+      btn.disabled = false;
+      return;
+    }
+    if (action === 'resendInvite'){
+      btn.disabled = true;
+      try {
+        await callManageUsers('resendInvite', { email });
+        showMsg('userMgmtMsg', 'Invite resent to ' + email + '.', 'success');
+      } catch (err){
+        showMsg('userMgmtMsg', err.message, 'error');
+      }
+      btn.disabled = false;
+      return;
+    }
+    if (action === 'delete'){
+      if (!window.confirm('Remove ' + email + '? This cannot be undone.')) return;
+      btn.disabled = true;
+      try {
+        await callManageUsers('delete', { userId });
+        showMsg('userMgmtMsg', 'Removed ' + email + '.', 'success');
+        loadUsers();
+      } catch (err){
+        showMsg('userMgmtMsg', err.message, 'error');
+        btn.disabled = false;
+      }
+      return;
+    }
   });
 
   document.getElementById('startResetBtn').addEventListener('click', () => {
