@@ -26,6 +26,10 @@
   .stat-tile { background:#f5f7fa; border-radius:8px; padding:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
   .stat-tile-value { font-size:34px; font-weight:500; color:#1a1a2e; line-height:1.1; }
   .stat-tile-label { font-size:13px; color:#777; text-transform:uppercase; letter-spacing:0.03em; margin-top:3px; }
+  .mini-tile-row { display:flex; gap:6px; margin-bottom:8px; }
+  .mini-tile { flex:1; background:#f5f7fa; border-radius:6px; padding:6px 4px; text-align:center; }
+  .mini-tile-value { font-size:17px; font-weight:600; color:#1a1a2e; }
+  .mini-tile-label { font-size:9px; color:#888; text-transform:uppercase; letter-spacing:0.02em; margin-top:2px; }
   .card.compact h2 { font-size:13px; margin:0 0 6px; }
   h1 { font-size:20px; margin:0; }
   h2 { font-size:16px; margin:0 0 10px; color:#444; }
@@ -80,6 +84,7 @@
       <div class="quad" id="quadTR">
         <div class="card compact">
           <h2>Current Drive</h2>
+          <div id="currentDriveTiles" class="mini-tile-row"></div>
           <div id="driveLogScroll"></div>
         </div>
         <div class="card compact">
@@ -527,12 +532,68 @@ function computeState(playsList){
       if (plays[i].effect && plays[i].effect.isReset) resetIdxs.push(i);
     }
     const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
-    const previousDrivePlays = resetIdxs.length >= 2 ? plays.slice(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1]) : [];
     document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
-    document.getElementById('prevDriveLogScroll').innerHTML = renderLogLines(previousDrivePlays.slice().reverse()) || '<div style="color:#999;">no previous drive yet</div>';
+
+    const currentSummary = resetIdxs.length
+      ? computeDriveSummary(resetIdxs[resetIdxs.length - 1], plays.length)
+      : null;
+    document.getElementById('currentDriveTiles').innerHTML = currentSummary
+      ? [
+          [currentSummary.rushes + '/' + currentSummary.rushYds, 'Rushes/Yds'],
+          [currentSummary.passes + '/' + currentSummary.passYds, 'Passes/Yds'],
+          [currentSummary.totalPlays + '/' + currentSummary.totalYds, 'Plays/Yds']
+        ].map(([val, label]) => '<div class="mini-tile"><div class="mini-tile-value">' + val + '</div><div class="mini-tile-label">' + label + '</div></div>').join('')
+      : '';
+
+    const prevSummary = resetIdxs.length >= 2
+      ? computeDriveSummary(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1])
+      : null;
+    document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary);
 
     renderTeamSummary();
     renderBoxScore();
+  }
+
+  function computeDriveSummary(startIdx, endIdx){
+    const driveTeam = computeState(plays.slice(0, startIdx + 1)).possession;
+    if (driveTeam !== 'teamA' && driveTeam !== 'teamB') return null;
+    const stateBefore = computeState(plays.slice(0, startIdx));
+    const stateAtEnd = computeState(plays.slice(0, endIdx));
+    const segment = plays.slice(startIdx, endIdx);
+    const scrimmageTypes = ['rush','pass','sack','int','fumble'];
+    let rushes = 0, rushYds = 0, passes = 0, passYds = 0, totalPlays = 0, totalYds = 0, scoringPlayText = null;
+    segment.forEach(p => {
+      const r = p.roles;
+      if (!r || p.team !== driveTeam) return;
+      if (scrimmageTypes.includes(r.playType)) totalPlays++;
+      if (p.effect && typeof p.effect.statYds === 'number') totalYds += p.effect.statYds;
+      if (r.playType === 'rush'){ rushes++; rushYds += (p.effect && p.effect.statYds) || 0; }
+      if (r.playType === 'pass'){ passes++; passYds += (p.effect && p.effect.statYds) || 0; }
+      const isFgGood = r.playType === 'fg' && r.kicker && r.kicker.result === 'g';
+      if (p.effect && (p.effect.td || isFgGood)) scoringPlayText = p.text;
+    });
+    const top = stateAtEnd.possessionTime[driveTeam] - stateBefore.possessionTime[driveTeam];
+    let lastPlayText = null;
+    if (!scoringPlayText){
+      for (let i = segment.length - 1; i >= 0; i--){
+        if (segment[i].text && !segment[i].isDivider){ lastPlayText = segment[i].text; break; }
+      }
+    }
+    return { team: driveTeam, rushes, rushYds, passes, passYds, totalPlays, totalYds, top, scoringPlayText, lastPlayText };
+  }
+
+  function renderDriveSummary(summary){
+    if (!summary) return '<div style="color:#999;">no previous drive yet</div>';
+    const teamName = TEAMS[summary.team].name;
+    return '<div style="font-size:14px;">' +
+      '<div style="font-weight:700; margin-bottom:4px;">' + teamName + '</div>' +
+      '<div>Rushes: ' + summary.rushes + ' &middot; Passes: ' + summary.passes + '</div>' +
+      '<div>Total yards: ' + summary.totalYds + '</div>' +
+      '<div>Time of possession: ' + formatDuration(summary.top) + '</div>' +
+      (summary.scoringPlayText
+        ? '<div style="margin-top:6px; font-weight:600; color:#1a7a4c;">' + summary.scoringPlayText + '</div>'
+        : '<div style="margin-top:6px; color:#555;">' + (summary.lastPlayText || 'No plays recorded') + '</div>') +
+      '</div>';
   }
 
   function countPossessions(playsList){
