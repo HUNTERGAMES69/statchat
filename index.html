@@ -30,11 +30,14 @@
     <h1>Loading…</h1>
   </div>
 
-  <div id="confirmInviteView" class="hidden">
-    <h1>You've been invited</h1>
-    <p class="sub">Click below to accept your invite to StatChat and finish setting up your account.</p>
-    <div id="confirmInviteMsg"></div>
-    <button id="confirmInviteBtn">Accept invitation</button>
+  <div id="enterCodeView" class="hidden">
+    <h1>Enter your invite code</h1>
+    <p class="sub">Enter the email address you were invited with, along with the 6-digit code from your invite email.</p>
+    <div id="enterCodeMsg"></div>
+    <label>Email<input type="email" id="codeEmailInput"></label>
+    <label>Invite code<input type="text" id="codeInput" inputmode="numeric" maxlength="6" placeholder="123456"></label>
+    <button id="verifyCodeBtn">Verify code</button>
+    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="backToLoginLink" style="color:#1565c0;">Back to sign in</a></p>
   </div>
 
   <div id="setPasswordView" class="hidden">
@@ -51,6 +54,7 @@
     <label>Email<input type="email" id="loginEmail"></label>
     <label>Password<input type="password" id="loginPassword"></label>
     <button id="loginBtn">Sign in</button>
+    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="haveCodeLink" style="color:#1565c0;">Have an invite code?</a></p>
   </div>
 
   <div id="loggedInView" class="hidden">
@@ -68,27 +72,12 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-  const views = ['loading', 'confirmInviteView', 'setPasswordView', 'loginView', 'loggedInView'];
+  const views = ['loading', 'enterCodeView', 'setPasswordView', 'loginView', 'loggedInView'];
   function showView(name){
     views.forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
   }
   function showMsg(elId, text, type){
     document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
-  }
-
-  // Defends against email prefetching (e.g. Microsoft Safe Links, Google's
-  // link scanning): rather than the invite email linking directly to
-  // Supabase's one-time confirmation URL -- which an automated scanner can
-  // consume before the person ever clicks it -- the email links here first,
-  // with the real confirmation URL tucked into a query param. Nothing gets
-  // consumed until the person actually clicks the button below; scanners
-  // fetch URLs but don't click buttons or run JS, so this is immune to
-  // that whole failure mode. See Supabase's own docs on this:
-  // https://supabase.com/docs/guides/auth/auth-email-templates#email-prefetching
-  const queryParams = new URLSearchParams(window.location.search);
-  const pendingConfirmationUrl = queryParams.get('confirmation_url');
-  if (pendingConfirmationUrl){
-    showView('confirmInviteView');
   }
 
   // Supabase's JS client automatically parses invite/recovery tokens out of
@@ -116,7 +105,7 @@
       // supabase-js deadlock trigger that can hang forever with no error.
       if (session && !isInviteOrRecovery){
         showLoggedIn(session);
-      } else if (!session && !pendingConfirmationUrl && document.getElementById('setPasswordView').classList.contains('hidden')){
+      } else if (!session && document.getElementById('setPasswordView').classList.contains('hidden') && document.getElementById('enterCodeView').classList.contains('hidden')){
         showView('loginView');
       }
     } else if (event === 'SIGNED_IN' && session && !isInviteOrRecovery){
@@ -143,8 +132,32 @@
     window.location.href = 'dashboard.html';
   }
 
-  document.getElementById('confirmInviteBtn').addEventListener('click', () => {
-    window.location.href = pendingConfirmationUrl;
+  document.getElementById('haveCodeLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    showView('enterCodeView');
+  });
+
+  document.getElementById('backToLoginLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    showView('loginView');
+  });
+
+  document.getElementById('verifyCodeBtn').addEventListener('click', async () => {
+    const email = document.getElementById('codeEmailInput').value.trim();
+    const token = document.getElementById('codeInput').value.trim();
+    if (!email || !token){
+      showMsg('enterCodeMsg', 'Enter both your email and the 6-digit code.', 'error');
+      return;
+    }
+    // type: 'invite' specifically, confirmed against Supabase's own API
+    // reference -- this is the value meant for verifying a code sent as
+    // part of an invitation, as distinct from signup/recovery/etc codes.
+    const { data, error } = await supabaseClient.auth.verifyOtp({ email, token, type: 'invite' });
+    if (error){
+      showMsg('enterCodeMsg', error.message, 'error');
+    } else {
+      showView('setPasswordView');
+    }
   });
 
   document.getElementById('setPasswordBtn').addEventListener('click', async () => {
