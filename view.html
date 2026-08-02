@@ -8,27 +8,44 @@
 <meta name="apple-mobile-web-app-title" content="StatChat">
 <title>StatChat — Live View</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:14px; }
-  .wrap { max-width:1900px; margin:0 auto; }
-  .view-grid { display:grid; grid-template-columns:1.3fr 1fr; gap:20px; align-items:start; }
-  @media (max-width: 1100px) { .view-grid { grid-template-columns:1fr; } }
+  html, body { height:100%; margin:0; box-sizing:border-box; overflow:hidden; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; padding:8px; width:1920px; height:1080px; }
+  .wrap { width:100%; height:100%; max-width:none; margin:0; }
+  #mainView.hidden, #loading, #errorView { height:auto; overflow:visible; }
+  #mainView { height:100%; }
+  .quad-grid { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:8px; height:100%; }
+  .quad { min-height:0; overflow-y:auto; display:flex; flex-direction:column; background:#fff; border:2px solid #1a1a1a; border-radius:4px; padding:8px; box-sizing:border-box; }
   .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  .card.compact { padding:0 0 8px; margin-bottom:8px; background:none; box-shadow:none; border-radius:0; border-bottom:1px solid #e5e3dc; }
+  .card.compact:last-child { border-bottom:none; margin-bottom:0; }
+  .team-summary-row { display:flex; gap:12px; flex:1; min-height:0; }
+  .team-summary-col { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .team-summary-header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:8px; font-weight:800; font-size:20px; margin-bottom:10px; }
+  .team-summary-logo { height:36px; width:36px; object-fit:contain; border-radius:6px; background:rgba(255,255,255,0.85); flex-shrink:0; }
+  .stat-tile-grid { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr 1fr; gap:8px; flex:1; min-height:0; }
+  .stat-tile { background:#f5f7fa; border-radius:8px; padding:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+  .stat-tile-value { font-size:34px; font-weight:500; color:#1a1a2e; line-height:1.1; }
+  .stat-tile-label { font-size:13px; color:#777; text-transform:uppercase; letter-spacing:0.03em; margin-top:3px; }
+  .card.compact h2 { font-size:13px; margin:0 0 6px; }
   h1 { font-size:20px; margin:0; }
   h2 { font-size:16px; margin:0 0 10px; color:#444; }
-  h3 { font-size:18px; font-weight:700; margin:20px 0 10px; color:#1a1a1a; letter-spacing:0.02em; }
+  h3 { font-size:14px; font-weight:700; margin:12px 0 6px; color:#1a1a1a; letter-spacing:0.02em; }
   p.sub { color:#888; margin:0 0 14px; font-size:13px; }
   .banner { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border-radius:10px; padding:12px 16px; margin-bottom:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
   .banner .score { font-size:20px; font-weight:700; }
   .banner .downdist { font-size:15px; font-weight:500; }
+  .banner.compact { padding:8px 12px; margin-bottom:6px; }
+  .banner.compact .score { font-size:16px; }
+  .banner.compact .downdist { font-size:12px; }
   .hint { font-size:12px; color:#888; margin:6px 0; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
   .msg.error { background:#fdecea; color:#a32d2d; }
   .hidden { display:none; }
   .logline { font-size:14px; padding:6px 0; border-bottom:1px solid #f2f2f2; }
-  table.stattable { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:18px; }
-  table.stattable th { text-align:right; font-size:11px; color:#5b7ca8; font-weight:600; padding:5px 8px; border-bottom:2px solid #d8dde3; white-space:nowrap; }
+  table.stattable { width:100%; border-collapse:collapse; font-size:11px; margin-bottom:10px; }
+  table.stattable th { text-align:right; font-size:9px; color:#5b7ca8; font-weight:600; padding:3px 6px; border-bottom:2px solid #d8dde3; white-space:nowrap; }
   table.stattable th:first-child, table.stattable td:first-child { text-align:left; }
-  table.stattable td { text-align:right; padding:6px 8px; border-bottom:1px solid #f0f0f0; }
+  table.stattable td { text-align:right; padding:3px 6px; border-bottom:1px solid #f0f0f0; }
   table.stattable tbody tr:nth-child(even) { background:#f5f7fa; }
   table.stattable tr.totalRow { font-weight:700; border-top:2px solid #333; }
   table.stattable tr.totalRow td { border-bottom:none; }
@@ -48,38 +65,43 @@
   </div>
 
   <div id="mainView" class="hidden">
-    <div class="banner" id="banner">
-      <span class="score" id="scoreText"></span>
-      <span class="downdist" id="downText"></span>
-      <span class="downdist" id="quarterText"></span>
-    </div>
-    <div class="hint" id="topText" style="text-align:right;"></div>
+    <div class="quad-grid">
 
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
-        <h1 id="gameTitle">Game <span class="live-badge">LIVE VIEW — READ ONLY</span></h1>
-        <a href="dashboard.html" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600; white-space:nowrap;">← Dashboard</a>
-      </div>
-      <div id="gameMsg"></div>
-    </div>
-
-    <div class="view-grid">
-      <div class="view-col-stats">
-        <div class="card">
-          <h2>Statistics</h2>
-          <div id="boxScoreContainer"></div>
+      <div class="quad" id="quadTL">
+        <div class="banner compact" id="banner">
+          <span class="score" id="scoreText"></span>
+          <span class="downdist" id="downText"></span>
+          <span class="downdist" id="quarterText"></span>
         </div>
+        <div id="gameMsg"></div>
+        <div id="teamSummaryContainer" style="flex:1; display:flex; flex-direction:column;"></div>
       </div>
-      <div class="view-col-narrative">
-        <div class="card">
-          <h2>Current drive</h2>
+
+      <div class="quad" id="quadTR">
+        <div class="card compact">
+          <h2>Current Drive</h2>
           <div id="driveLogScroll"></div>
         </div>
-        <div class="card">
-          <h2>Previous drive</h2>
+        <div class="card compact">
+          <h2>Previous Drive</h2>
           <div id="prevDriveLogScroll"></div>
         </div>
       </div>
+
+      <div class="quad" id="quadBL">
+        <div class="card compact">
+          <h2 id="teamAHeading">Team Stats</h2>
+          <div id="boxScoreTeamA"></div>
+        </div>
+      </div>
+
+      <div class="quad" id="quadBR">
+        <div class="card compact">
+          <h2 id="teamBHeading">Opponent Stats</h2>
+          <div id="boxScoreTeamB"></div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -391,13 +413,10 @@ function computeState(playsList){
     return '<tr>' + cells.map(c => '<td>' + c + '</td>').join('') + '</tr>';
   }
 
-  function renderBoxScore(){
-    const box = computeBoxScore(plays);
-    let html = '';
-    ['teamA', 'teamB'].forEach(teamKey => {
+  function renderTeamBoxScore(teamKey, box){
       const team = TEAMS[teamKey];
       const s = box[teamKey];
-      html += '<h3>' + team.name + '</h3>';
+      let html = '';
 
       const sum = (nums, obj, key) => nums.reduce((t, n) => t + ((obj[n] && obj[n][key]) || 0), 0);
 
@@ -474,8 +493,13 @@ function computeState(playsList){
       if (!rushNums.length && !passNums.length && !recNums.length && !stNums.length && !defNums.length){
         html += '<p class="hint">No stats yet for ' + team.name + '.</p>';
       }
-    });
-    document.getElementById('boxScoreContainer').innerHTML = html;
+      return html;
+  }
+
+  function renderBoxScore(){
+    const box = computeBoxScore(plays);
+    document.getElementById('boxScoreTeamA').innerHTML = renderTeamBoxScore('teamA', box);
+    document.getElementById('boxScoreTeamB').innerHTML = renderTeamBoxScore('teamB', box);
   }
 
   function renderAll(){
@@ -487,11 +511,9 @@ function computeState(playsList){
       ? (ordinal(state.down) + ' & ' + distDisplay + ' at the ' + markerLabel(state.fieldPos) + ' — ' + TEAMS[state.possession].name + ' ball')
       : ('no active drive — ' + TEAMS[state.possession].name + ' ball');
     document.getElementById('quarterText').textContent = 'Q' + state.quarter + ' (' + (state.quarter <= 2 ? '1st half' : state.quarter <= 4 ? '2nd half' : 'OT') + ')';
-    document.getElementById('topText').textContent = 'Time of possession — ' + TEAMS.teamA.name + ' ' + formatDuration(state.possessionTime.teamA) + ' · ' + TEAMS.teamB.name + ' ' + formatDuration(state.possessionTime.teamB);
     const banner = document.getElementById('banner');
-    const c = TEAMS[state.possession];
-    banner.style.background = c.bg;
-    banner.style.color = c.text;
+    banner.style.background = '#1a1a1a';
+    banner.style.color = '#ffffff';
 
     function renderLogLines(list){
       return list.map(p => {
@@ -509,7 +531,77 @@ function computeState(playsList){
     document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
     document.getElementById('prevDriveLogScroll').innerHTML = renderLogLines(previousDrivePlays.slice().reverse()) || '<div style="color:#999;">no previous drive yet</div>';
 
+    renderTeamSummary();
     renderBoxScore();
+  }
+
+  function countPossessions(playsList){
+    const counts = { teamA: 0, teamB: 0 };
+    for (let i = 0; i < playsList.length; i++){
+      if (playsList[i].effect && playsList[i].effect.isReset){
+        const after = computeState(playsList.slice(0, i + 1));
+        if (after.possession === 'teamA' || after.possession === 'teamB') counts[after.possession]++;
+      }
+    }
+    return counts;
+  }
+
+  function countTurnovers(playsList){
+    const counts = { teamA: 0, teamB: 0 };
+    playsList.forEach(p => {
+      const r = p.roles;
+      if (!r) return;
+      if (r.playType === 'int' && r.passer) counts[r.passer.team] = (counts[r.passer.team] || 0) + 1;
+      if (r.playType === 'fumble' && r.carrier && r.defense) counts[r.carrier.team] = (counts[r.carrier.team] || 0) + 1;
+    });
+    return counts;
+  }
+
+  function renderTeamSummary(){
+    const box = computeBoxScore(plays);
+    const scrimmageTypes = ['rush','pass','sack','int','fumble'];
+    const playsFor = (teamKey) => plays.filter(p => p.team === teamKey && p.roles && scrimmageTypes.includes(p.roles.playType)).length;
+    const possessions = countPossessions(plays);
+    const turnovers = countTurnovers(plays);
+    const penState = computeState();
+
+    let html = '<div class="team-summary-row">';
+    ['teamA', 'teamB'].forEach(teamKey => {
+      const team = TEAMS[teamKey];
+      const s = box[teamKey];
+      const rushYds = Object.keys(s.rushing).reduce((t, n) => t + (s.rushing[n].yds || 0), 0);
+      const passYds = Object.keys(s.passing).reduce((t, n) => t + (s.passing[n].yds || 0), 0);
+      const totalYds = rushYds + passYds;
+      // A team's own offensive 3rd/4th down conversion rate is stored on
+      // the OTHER team's oppDowns entry (that's "the other team's defense
+      // against this team's offense", which is the same numbers).
+      const own = box[otherTeam(teamKey)].oppDowns;
+      const d3 = own.d3Pct !== null ? own.d3conv + ' of ' + own.d3att + ' (' + own.d3Pct + '%)' : '—';
+      const pen = penState.penalties[teamKey];
+
+      const tiles = [
+        [possessions[teamKey] || 0, 'Possessions'],
+        [totalYds, 'Total Yards'],
+        [passYds, 'Passing Yards'],
+        [rushYds, 'Rushing Yards'],
+        [playsFor(teamKey), 'Total Plays'],
+        [turnovers[teamKey] || 0, 'Turnovers'],
+        [pen.count + '-' + pen.yds, 'Penalties'],
+        [d3, '3rd Down']
+      ];
+
+      html += '<div class="team-summary-col">' +
+        '<div class="team-summary-header" style="background:' + team.bg + '; color:' + team.text + ';">' +
+        (team.logo ? '<img class="team-summary-logo" src="' + team.logo + '">' : '') +
+        '<span>' + team.name + '</span>' +
+        '</div>' +
+        '<div class="stat-tile-grid">' +
+        tiles.map(([val, label]) => '<div class="stat-tile"><div class="stat-tile-value">' + val + '</div><div class="stat-tile-label">' + label + '</div></div>').join('') +
+        '</div>' +
+        '</div>';
+    });
+    html += '</div>';
+    document.getElementById('teamSummaryContainer').innerHTML = html;
   }
 
   async function init(){
@@ -545,7 +637,8 @@ function computeState(playsList){
     const ourBranding = (teamRows && teamRows[0]) || {};
 
     buildTeams(game, rosterRows || [], ourBranding);
-    document.getElementById('gameTitle').innerHTML = gameLabel + ' — ' + TEAMS.teamA.name + ' vs ' + TEAMS.teamB.name + ' <span class="live-badge">LIVE VIEW — READ ONLY</span>';
+    document.getElementById('teamAHeading').textContent = TEAMS.teamA.name + ' Stats';
+    document.getElementById('teamBHeading').textContent = TEAMS.teamB.name + ' Stats';
 
     const { data: existingPlays } = await supabaseClient
       .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
