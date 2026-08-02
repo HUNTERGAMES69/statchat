@@ -157,7 +157,7 @@
     document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
   }
 
-  let currentUserId = null, currentUserEmail = null;
+  let currentUserId = null, currentUserEmail = null, currentIsAdmin = false;
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION'){
@@ -166,7 +166,9 @@
         currentUserEmail = session.user.email;
         document.getElementById('signedInAs').textContent = 'Signed in as ' + session.user.email;
         showView('dashboardView');
-        loadDashboard();
+        loadIsAdmin().then(() => {
+          loadDashboard();
+        });
         loadAccountMenu();
       } else {
         window.location.href = '/';
@@ -175,6 +177,13 @@
       window.location.href = '/';
     }
   });
+
+  async function loadIsAdmin(){
+    const { data, error } = await supabaseClient
+      .from('profiles').select('is_admin').eq('id', currentUserId).limit(1);
+    currentIsAdmin = !error && data && data.length > 0 && !!data[0].is_admin;
+    document.getElementById('newGameLink').classList.toggle('hidden', !currentIsAdmin);
+  }
 
   document.getElementById('signOutBtn').addEventListener('click', async () => {
     await supabaseClient.auth.signOut();
@@ -295,21 +304,27 @@
         '<div><div class="game-matchup">' + matchup + '</div><div class="game-meta">' + homeAway + ' · ' + dateStr + '</div></div>' +
         '</div>' +
         '<div class="game-right">' + rightHtml + '</div>' +
-        '<div style="position:relative;">' +
-          '<button class="secondary rowMenuBtn" data-id="' + g.id + '" style="padding:4px 10px; font-size:16px; line-height:1;">⋮</button>' +
-          '<div class="rowMenu hidden" data-id="' + g.id + '" style="position:absolute; right:0; top:100%; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:10; min-width:140px;">' +
-            '<a href="create_game.html?edit=' + g.id + '" style="display:block; padding:8px 12px; color:#444; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game setup</a>' +
-            (g.status === 'in_progress' ? '<a href="view.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:#1565c0; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">View live</a>' : '') +
-            '<button class="deleteGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a32d2d; font-weight:600; font-size:13px;">Delete game</button>' +
-          '</div>' +
-        '</div>' +
+        (currentIsAdmin || g.status === 'in_progress'
+          ? '<div style="position:relative;">' +
+            '<button class="secondary rowMenuBtn" data-id="' + g.id + '" style="padding:4px 10px; font-size:16px; line-height:1;">⋮</button>' +
+            '<div class="rowMenu hidden" data-id="' + g.id + '" style="position:absolute; right:0; top:100%; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:10; min-width:140px;">' +
+              (currentIsAdmin ? '<a href="create_game.html?edit=' + g.id + '" style="display:block; padding:8px 12px; color:#444; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game setup</a>' : '') +
+              (g.status === 'in_progress' ? '<a href="view.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:#1565c0; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">View live</a>' : '') +
+              (currentIsAdmin ? '<button class="deleteGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a32d2d; font-weight:600; font-size:13px;">Delete game</button>' : '') +
+            '</div>' +
+            '</div>'
+          : '') +
         '</div>';
     }).join('');
 
     body.querySelectorAll('.game-row').forEach(row => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('.rowMenuBtn') || e.target.closest('.rowMenu')) return;
-        window.location.href = 'game.html?id=' + row.dataset.id;
+        if (currentIsAdmin){
+          window.location.href = 'game.html?id=' + row.dataset.id;
+        } else if (row.dataset.status === 'in_progress'){
+          window.location.href = 'view.html?id=' + row.dataset.id;
+        }
       });
     });
     body.querySelectorAll('.rowMenuBtn').forEach(btn => {
