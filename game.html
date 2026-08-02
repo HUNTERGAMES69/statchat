@@ -1317,8 +1317,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // being logged at its full, unclamped value if TD wasn't checked,
       // which silently inflates both the player's stats and drive totals.
       const gain = pending.effect && typeof pending.effect.statYds === 'number' ? pending.effect.statYds : 0;
-      if (gain > 0 && state.fieldPos !== null && gain >= state.fieldPos && !pending.effect.td){
-        warningEl.textContent = '⚠️ This gain (' + gain + ' yds) reaches or passes the goal line -- only ' + state.fieldPos + ' yds away. If this scored, go back and check the touchdown box first.';
+      const distToGoal = state.fieldPos !== null ? 100 - state.fieldPos : null;
+      if (gain > 0 && distToGoal !== null && gain >= distToGoal && !pending.effect.td){
+        warningEl.textContent = '⚠️ This gain (' + gain + ' yds) reaches or passes the goal line -- only ' + distToGoal + ' yds away. If this scored, go back and check the touchdown box first.';
         warningEl.style.display = 'block';
       }
       if (pending.flipEligible){
