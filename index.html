@@ -70,8 +70,19 @@
 
   // Supabase's JS client automatically parses invite/recovery tokens out of
   // the URL on load and fires this event -- no manual token handling needed.
+  // Supabase's invite links don't fire a PASSWORD_RECOVERY event the way
+  // password-reset links do -- an accepted invite looks like an ordinary
+  // sign-in to onAuthStateChange (INITIAL_SESSION or SIGNED_IN with a
+  // valid session). The only reliable way to tell "this session was just
+  // established from an invite/recovery link" is the type= marker
+  // Supabase includes in the URL hash itself, so check that directly
+  // rather than trusting the event name alone.
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const linkType = hashParams.get('type');
+  const isInviteOrRecovery = linkType === 'invite' || linkType === 'recovery';
+
   supabaseClient.auth.onAuthStateChange((event, session) => {
-    if (event === 'PASSWORD_RECOVERY'){
+    if (event === 'PASSWORD_RECOVERY' || (isInviteOrRecovery && session)){
       showView('setPasswordView');
     } else if (event === 'INITIAL_SESSION'){
       // Fires once automatically right after the client loads and finishes
@@ -80,12 +91,12 @@
       // already logged in" -- deliberately never calling getSession()
       // separately, since doing so around this same moment is a known
       // supabase-js deadlock trigger that can hang forever with no error.
-      if (session){
+      if (session && !isInviteOrRecovery){
         showLoggedIn(session);
-      } else if (document.getElementById('setPasswordView').classList.contains('hidden')){
+      } else if (!session && document.getElementById('setPasswordView').classList.contains('hidden')){
         showView('loginView');
       }
-    } else if (event === 'SIGNED_IN' && session){
+    } else if (event === 'SIGNED_IN' && session && !isInviteOrRecovery){
       if (!document.getElementById('setPasswordView').classList.contains('hidden')) return;
       showLoggedIn(session);
     } else if (event === 'SIGNED_OUT'){
