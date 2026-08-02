@@ -85,17 +85,14 @@
       <button id="savePasswordBtn" style="margin-top:14px;">Change password</button>
     </div>
 
-    <div id="inviteCard" class="card hidden">
-      <h2>Invite a user</h2>
-      <p class="sub">Sends them an email invite to sign in and set their own password. Admin only.</p>
-      <div id="inviteMsg"></div>
-      <label>Email address<input type="email" id="inviteEmailInput" placeholder="coach@example.com"></label>
-      <button id="sendInviteBtn" style="margin-top:10px;">Send invite</button>
-    </div>
-
     <div id="userMgmtCard" class="card hidden">
       <h2>User management</h2>
-      <p class="sub">View existing users, reset a password, resend an invite, or remove access. Admin only.</p>
+      <p class="sub">Invite a new user, or view, reset, resend, and remove existing ones. Admin only.</p>
+      <div id="inviteMsg"></div>
+      <label>Full name<input type="text" id="inviteNameInput" autocomplete="off" placeholder="Enter full name"></label>
+      <label>Email address<input type="email" id="inviteEmailInput" autocomplete="off" placeholder="Enter valid email address"></label>
+      <button id="sendInviteBtn" style="margin-top:10px; margin-bottom:18px;">Send invite</button>
+
       <div id="userMgmtMsg"></div>
       <button id="refreshUsersBtn" style="margin-bottom:12px;">Refresh list</button>
       <div id="usersListContainer"></div>
@@ -169,7 +166,6 @@
       if (profile.display_name) document.getElementById('fullNameInput').value = profile.display_name;
       if (profile.avatar_url) document.getElementById('avatarPreview').src = profile.avatar_url;
       if (profile.is_admin){
-        document.getElementById('inviteCard').classList.remove('hidden');
         document.getElementById('userMgmtCard').classList.remove('hidden');
         loadUsers();
         document.getElementById('resetCard').classList.remove('hidden');
@@ -262,6 +258,7 @@
   // before anything is actually touched. ---
   document.getElementById('sendInviteBtn').addEventListener('click', async () => {
     const email = document.getElementById('inviteEmailInput').value.trim();
+    const fullName = document.getElementById('inviteNameInput').value.trim();
     if (!email || !email.includes('@')){
       showMsg('inviteMsg', 'Enter a valid email address.', 'error');
       return;
@@ -274,13 +271,14 @@
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + currentAccessToken
         },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email, fullName })
       });
       const result = await response.json();
       if (!response.ok){
         showMsg('inviteMsg', result.error || 'Could not send the invite.', 'error');
       } else {
         document.getElementById('inviteEmailInput').value = '';
+        document.getElementById('inviteNameInput').value = '';
         showMsg('inviteMsg', 'Invite sent to ' + email + '.', 'success');
       }
     } catch (err){
