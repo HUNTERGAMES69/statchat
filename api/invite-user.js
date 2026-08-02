@@ -23,6 +23,7 @@ module.exports = async function handler(req, res) {
   }
 
   const email = req.body && req.body.email;
+  const fullName = req.body && req.body.fullName;
   if (!email || typeof email !== 'string' || !email.includes('@')) {
     res.status(400).json({ error: 'A valid email address is required' });
     return;
@@ -64,5 +65,17 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  res.status(200).json({ success: true, userId: inviteData && inviteData.user ? inviteData.user.id : null });
+  const newUserId = inviteData && inviteData.user ? inviteData.user.id : null;
+  if (newUserId && fullName) {
+    const { error: nameError } = await adminClient
+      .from('profiles').update({ display_name: fullName }).eq('id', newUserId);
+    if (nameError) {
+      // The invite itself succeeded -- don't fail the whole request over
+      // the name not saving, just let the admin know.
+      res.status(200).json({ success: true, userId: newUserId, nameWarning: nameError.message });
+      return;
+    }
+  }
+
+  res.status(200).json({ success: true, userId: newUserId });
 };
