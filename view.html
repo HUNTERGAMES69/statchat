@@ -489,13 +489,16 @@ function computeState(playsList){
           '</table>';
       }
       const od = s.oppDowns;
-      html += '<table class="stattable"><tr><th>Opponent on 3rd/4th down</th><th></th></tr>' +
-        statRow(['3rd down', od.d3Pct !== null ? od.d3conv + '/' + od.d3att + ' (' + od.d3Pct + '%)' : '—']) +
-        statRow(['4th down', od.d4Pct !== null ? od.d4conv + '/' + od.d4att + ' (' + od.d4Pct + '%)' : '—']) +
-        statRow(['Plays of 20+ yds allowed', od.explosive]) +
-        '</table>';
+      const hasDownData = od.d3att > 0 || od.d4att > 0 || od.explosive > 0;
+      if (hasDownData){
+        html += '<table class="stattable"><tr><th>Opponent on 3rd/4th down</th><th></th></tr>' +
+          statRow(['3rd down', od.d3Pct !== null ? od.d3conv + '/' + od.d3att + ' (' + od.d3Pct + '%)' : '—']) +
+          statRow(['4th down', od.d4Pct !== null ? od.d4conv + '/' + od.d4att + ' (' + od.d4Pct + '%)' : '—']) +
+          statRow(['Plays of 20+ yds allowed', od.explosive]) +
+          '</table>';
+      }
 
-      if (!rushNums.length && !passNums.length && !recNums.length && !stNums.length && !defNums.length){
+      if (!rushNums.length && !passNums.length && !recNums.length && !stNums.length && !defNums.length && !hasDownData){
         html += '<p class="hint">No stats yet for ' + team.name + '.</p>';
       }
       return html;
