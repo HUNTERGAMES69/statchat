@@ -148,10 +148,20 @@
     document.getElementById(elId).innerHTML = '';
   }
 
+  async function guardAdminOrRedirect(userId){
+    const { data, error } = await supabaseClient
+      .from('profiles').select('is_admin').eq('id', userId).limit(1);
+    const isAdmin = !error && data && data.length > 0 && !!data[0].is_admin;
+    if (!isAdmin) window.location.href = 'dashboard.html';
+    return isAdmin;
+  }
+
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION'){
       if (session){
-        loadTeam();
+        guardAdminOrRedirect(session.user.id).then(isAdmin => {
+          if (isAdmin) loadTeam();
+        });
       } else {
         window.location.href = '/';
       }
