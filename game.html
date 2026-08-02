@@ -111,6 +111,7 @@
         <button class="ptypeBtn" data-type="punt">Punt</button>
         <button class="ptypeBtn" data-type="fg">Field goal</button>
         <button class="ptypeBtn" data-type="pat">PAT</button>
+        <button class="ptypeBtn" data-type="twopt">2PT</button>
       </div>
       <p class="hint" style="margin:10px 0 6px;">Utilities</p>
       <div class="row">
@@ -502,7 +503,6 @@ function parseInput(raw, state){
     if (tackler) text += ', tackled by ' + D(tackler);
 
     const effect = { isStat: true, statYds: netYards, fieldDelta: netYards, td, converts, turnoverOnDowns };
-    if (td) effect.endsDrive = true;
     if (score) effect.score = score;
     return { text, effect, flipEligible: turnoverOnDowns, flipTo: def, team: off, quarter: state.quarter };
   }
@@ -576,11 +576,25 @@ function parseInput(raw, state){
       if (retyds) t += ', returned ' + retyds;
       let score = null;
       if (td){ t += ' — returned for 2 (defense)'; score = { team: def, points: 2 }; }
-      return { text: t, effect: score ? { score } : {}, flipEligible: false, team: off, quarter: state.quarter };
+      return { text: t, effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: off, quarter: state.quarter };
     }
     const good = res === 'g';
     const score = good ? { team: off, points: 1 } : null;
-    return { text: ST(p1) + ' PAT — ' + (good ? 'GOOD' : 'MISSED'), effect: score ? { score } : {}, flipEligible: false, team: off, quarter: state.quarter };
+    return { text: ST(p1) + ' PAT — ' + (good ? 'GOOD' : 'MISSED'), effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: off, quarter: state.quarter };
+  }
+  if (type === 'tp'){
+    const res = rest[0];
+    if (res === 'b' || res === 'B'){
+      const rec = rest[1];
+      let t = O(p1) + ' 2PT attempt TURNED OVER';
+      if (rec) t += ', recovered by ' + D(rec);
+      let score = null;
+      if (td){ t += ' — returned for 2 (defense)'; score = { team: def, points: 2 }; }
+      return { text: t, effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: off, quarter: state.quarter };
+    }
+    const good = res === 'g';
+    const score = good ? { team: off, points: 2 } : null;
+    return { text: O(p1) + ' 2PT conversion — ' + (good ? 'GOOD' : 'NO GOOD'), effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: off, quarter: state.quarter };
   }
   return null;
 }
@@ -1096,6 +1110,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<label class="inline" style="display:block;"><input type="radio" name="pp_patres" value="b"> Blocked</label></div>' +
         '<div id="pp_pat_blocked" style="display:none;">' + defBlock('Returned by (optional)') + yardsBlock('Return yards (optional)') +
         '<label class="inline" style="margin-top:6px; display:block;"><input type="checkbox" id="pp_pat_2pt"> Returned all the way (defense +2)</label></div>';
+    else if (type === 'twopt') html =
+        offBlock('carrier','Player') +
+        '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input type="radio" name="pp_2ptres" value="g" checked> Good</label>' +
+        '<label class="inline" style="display:block;"><input type="radio" name="pp_2ptres" value="x"> No good</label>' +
+        '<label class="inline" style="display:block;"><input type="radio" name="pp_2ptres" value="b"> Turned over, returned by defense</label></div>' +
+        '<div id="pp_2pt_def" style="display:none;">' + defBlock('Returned by (optional)') +
+        '<label class="inline" style="margin-top:6px; display:block;"><input type="checkbox" id="pp_2pt_defTd"> Returned all the way (defense +2)</label></div>';
 
     html += '<div class="row" style="margin-top:12px;"><button class="primary" id="pp_review">Review play</button><button class="secondary" id="pp_clear">Clear</button></div>';
     panel.innerHTML = html;
@@ -1142,6 +1163,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (type === 'pat'){
       panel.querySelectorAll('input[name=pp_patres]').forEach(r => r.addEventListener('change', () => {
         document.getElementById('pp_pat_blocked').style.display = (document.querySelector('input[name=pp_patres]:checked').value === 'b') ? 'block' : 'none';
+      }));
+    }
+    if (type === 'twopt'){
+      panel.querySelectorAll('input[name=pp_2ptres]').forEach(r => r.addEventListener('change', () => {
+        document.getElementById('pp_2pt_def').style.display = (document.querySelector('input[name=pp_2ptres]:checked').value === 'b') ? 'block' : 'none';
       }));
     }
     if (type === 'pass'){
@@ -1248,6 +1274,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         code = sel.kicker + 'pa ' + res;
       }
       roles = { kicker: { team: off, num: sel.kicker, result: res } };
+      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+    } else if (type === 'twopt'){
+      if (!sel.carrier) return;
+      const res = document.querySelector('input[name=pp_2ptres]:checked').value;
+      if (res === 'b'){
+        const defTd = document.getElementById('pp_2pt_defTd').checked;
+        code = sel.carrier + 'tp b' + (sel.credit ? ' ' + sel.credit : '') + (defTd ? ' td' : '');
+      } else {
+        code = sel.carrier + 'tp ' + res;
+      }
+      roles = { carrier: { team: off, num: sel.carrier, result: res } };
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
     }
 
