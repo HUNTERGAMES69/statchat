@@ -101,7 +101,6 @@
       <div class="row">
         <button class="ptypeBtn" data-type="rush">Rush</button>
         <button class="ptypeBtn" data-type="pass">Pass</button>
-        <button class="ptypeBtn" data-type="incomplete">Incomplete</button>
         <button class="ptypeBtn" data-type="sack">Sack</button>
         <button class="ptypeBtn" data-type="int">Interception</button>
         <button class="ptypeBtn" data-type="fumble">Fumble</button>
@@ -616,10 +615,10 @@ function offenseEligible(team, role){
   const allowedPos = OFFENSE_ROLE_POS[role];
   const { stats, discoveredOffense } = computePlayerStats();
   const statKey = role === 'carrier' ? 'rushYds' : role === 'passer' ? 'passYds' : role === 'receiver' ? 'recYds' : null;
-  // The original app seeded this list from a small set of projected
-  // starters. There's no equivalent concept in the database-backed
-  // roster yet, so default to the full roster instead -- everyone who's
-  // on offense is a visible candidate, filtered by position below.
+  // Starts with just the seeded projected starters (if any were set on
+  // game setup) and grows as other players get discovered during the
+  // game itself. Falls back to the full roster only if no seed list was
+  // ever set for this game.
   const seed = TEAMS[team].seedOrder && TEAMS[team].seedOrder.length ? TEAMS[team].seedOrder : Object.keys(roster);
   const visible = {};
   seed.forEach(n => { visible[n] = true; });
@@ -1067,8 +1066,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     let html = '';
     if (type === 'rush') html = offBlock('carrier','Ball carrier') + yardsBlock() + defBlock('Tackled by (optional)') + tdBlock;
-    else if (type === 'pass') html = offBlock('passer','Passer') + offBlock('receiver','Receiver') + yardsBlock() + defBlock('Tackled by (optional)') + tdBlock;
-    else if (type === 'incomplete') html = offBlock('passer','Passer') + offBlock('receiver','Intended for');
+    else if (type === 'pass') html = offBlock('passer','Passer') + offBlock('receiver','Receiver') +
+        '<div style="display:flex; align-items:flex-end; gap:14px;"><div id="pp_yards_wrap">' + yardsBlock() + '</div>' +
+        '<label class="inline" style="margin-bottom:6px;"><input type="checkbox" id="pp_incomplete"> Incomplete</label></div>' +
+        '<div id="pp_pass_extra">' + defBlock('Tackled by (optional)') + tdBlock + '</div>';
     else if (type === 'sack') html = offBlock('passer','Passer') + yardsBlock('Yards lost') + defBlock('Sacked by');
     else if (type === 'int') html = offBlock('passer','Passer') + defBlock('Intercepted by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot');
     else if (type === 'fumble') html = offBlock('carrier','Who fumbled') +
@@ -1142,6 +1143,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('pp_pat_blocked').style.display = (document.querySelector('input[name=pp_patres]:checked').value === 'b') ? 'block' : 'none';
       }));
     }
+    if (type === 'pass'){
+      document.getElementById('pp_incomplete').addEventListener('change', (e) => {
+        const isIncomplete = e.target.checked;
+        document.getElementById('pp_yards_wrap').style.display = isIncomplete ? 'none' : '';
+        document.getElementById('pp_pass_extra').style.display = isIncomplete ? 'none' : '';
+        if (isIncomplete) document.getElementById('pp_yards').value = '';
+      });
+    }
 
     document.getElementById('pp_clear').addEventListener('click', () => renderPlayPanel(type));
     document.getElementById('pp_review').addEventListener('click', () => buildAndReview(type, sel));
@@ -1162,14 +1171,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
     } else if (type === 'pass'){
       if (!sel.passer || !sel.receiver) return;
-      const yds = yards('pp_yards') || '0';
-      code = sel.passer + 'p ' + sel.receiver + ' ' + yds + (sel.credit ? ' ' + sel.credit : '') + (td ? ' td' : '');
-      roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0 } };
-      if (sel.credit) roles.defense = { team: def, num: sel.credit };
-    } else if (type === 'incomplete'){
-      if (!sel.passer || !sel.receiver) return;
-      code = sel.passer + 'i ' + sel.receiver;
-      roles = { passer: { team: off, num: sel.passer, yards: 0 }, receiver: { team: off, num: sel.receiver, yards: 0 } };
+      const isIncomplete = document.getElementById('pp_incomplete') && document.getElementById('pp_incomplete').checked;
+      if (isIncomplete){
+        code = sel.passer + 'i ' + sel.receiver;
+        roles = { passer: { team: off, num: sel.passer, yards: 0 }, receiver: { team: off, num: sel.receiver, yards: 0 }, playType: 'incomplete' };
+      } else {
+        const yds = yards('pp_yards') || '0';
+        code = sel.passer + 'p ' + sel.receiver + ' ' + yds + (sel.credit ? ' ' + sel.credit : '') + (td ? ' td' : '');
+        roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0 } };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit };
+      }
     } else if (type === 'sack'){
       if (!sel.passer) return;
       const yds = yards('pp_yards') || '0';
@@ -1240,7 +1251,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
 
     if (!code) return;
-    if (roles) roles.playType = type;
+    if (roles) roles.playType = roles.playType || type;
     document.getElementById('code').value = code;
     showConfirm();
     if (pending){
