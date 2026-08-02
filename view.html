@@ -558,6 +558,30 @@ function computeState(playsList){
 
     renderTeamSummary();
     renderBoxScore();
+    adjustDriveCardVisibility();
+  }
+
+  // Measures the actual rendered content against the quadrant's real
+  // height and progressively frees up space for Current Drive if
+  // Previous Drive would otherwise force scrolling -- first dropping
+  // just its tile row, then the whole card if that's still not enough.
+  // Always starts from fully visible so it correctly un-hides again
+  // once there's more room (e.g. after Undo shortens the current drive).
+  function adjustDriveCardVisibility(){
+    const quad = document.getElementById('quadTR');
+    const prevCard = document.querySelector('.drive-previous');
+    const prevTiles = prevCard ? prevCard.querySelector('.mini-tile-row') : null;
+    if (!quad || !prevCard) return;
+
+    prevCard.classList.remove('hidden');
+    if (prevTiles) prevTiles.classList.remove('hidden');
+
+    if (quad.scrollHeight <= quad.clientHeight) return;
+
+    if (prevTiles) prevTiles.classList.add('hidden');
+    if (quad.scrollHeight <= quad.clientHeight) return;
+
+    prevCard.classList.add('hidden');
   }
 
   function computeDriveSummary(startIdx, endIdx){
