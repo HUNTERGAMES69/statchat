@@ -1092,7 +1092,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (type === 'rush') html = offBlock('carrier','Ball carrier') + yardsBlock() + defBlock('Tackled by (optional)') + tdBlock;
     else if (type === 'pass') html = offBlock('passer','Passer') + offBlock('receiver','Receiver') +
         '<div style="display:flex; align-items:flex-end; gap:14px;"><div id="pp_yards_wrap">' + yardsBlock() + '</div>' +
-        '<label class="inline" style="margin-bottom:6px;"><input type="checkbox" id="pp_incomplete"> Incomplete</label></div>' +
+        '<div style="margin-bottom:6px;"><input type="checkbox" id="pp_incomplete" style="display:none;">' +
+        '<button type="button" id="pp_incomplete_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div></div>' +
         '<div id="pp_pass_extra">' + defBlock('Tackled by (optional)') + tdBlock + '</div>';
     else if (type === 'sack') html = offBlock('passer','Passer') + yardsBlock('Yards lost') + defBlock('Sacked by');
     else if (type === 'int') html = offBlock('passer','Passer') + defBlock('Intercepted by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot');
@@ -1138,6 +1139,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         tdToggle.style.color = cb.checked ? '#fff' : '#555';
         tdToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
         tdToggle.textContent = cb.checked ? '✓ Touchdown' : 'Touchdown';
+      });
+    }
+    const incToggle = document.getElementById('pp_incomplete_toggle');
+    if (incToggle){
+      incToggle.addEventListener('click', () => {
+        const cb = document.getElementById('pp_incomplete');
+        cb.checked = !cb.checked;
+        incToggle.style.background = cb.checked ? '#a37a00' : '#fff';
+        incToggle.style.color = cb.checked ? '#fff' : '#555';
+        incToggle.style.borderColor = cb.checked ? '#a37a00' : '#ccc';
+        incToggle.textContent = cb.checked ? '✓ Incomplete' : 'Incomplete';
+        cb.dispatchEvent(new Event('change'));
       });
     }
     currentSpotGetter = (type === 'kickoff' || type === 'punt' || type === 'int' || type === 'fumble') ? wireStartingSpot(panel, 'pp_spot') : null;
