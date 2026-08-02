@@ -67,12 +67,12 @@
 
       <p class="hint" style="margin:16px 0 6px; font-size:13px; color:#888;">Likely starters (optional) — the offense picker starts with just these, and grows as anyone else gets entered during the game</p>
       <div class="row" style="gap:10px; flex-wrap:wrap;">
-        <div><label>QB</label><input type="text" id="ourStarterQB" style="width:60px;"></div>
-        <div><label>RB1</label><input type="text" id="ourStarterRB1" style="width:60px;"></div>
-        <div><label>RB2</label><input type="text" id="ourStarterRB2" style="width:60px;"></div>
-        <div><label>WR1</label><input type="text" id="ourStarterWR1" style="width:60px;"></div>
-        <div><label>WR2</label><input type="text" id="ourStarterWR2" style="width:60px;"></div>
-        <div><label>WR3</label><input type="text" id="ourStarterWR3" style="width:60px;"></div>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">QB<input type="text" id="ourStarterQB" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">RB1<input type="text" id="ourStarterRB1" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">RB2<input type="text" id="ourStarterRB2" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR1<input type="text" id="ourStarterWR1" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR2<input type="text" id="ourStarterWR2" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR3<input type="text" id="ourStarterWR3" style="width:36px;"></label>
       </div>
     </div>
 
@@ -89,12 +89,12 @@
 
       <p class="hint" style="margin:16px 0 6px; font-size:13px; color:#888;">Likely starters (optional)</p>
       <div class="row" style="gap:10px; flex-wrap:wrap;">
-        <div><label>QB</label><input type="text" id="oppStarterQB" style="width:60px;"></div>
-        <div><label>RB1</label><input type="text" id="oppStarterRB1" style="width:60px;"></div>
-        <div><label>RB2</label><input type="text" id="oppStarterRB2" style="width:60px;"></div>
-        <div><label>WR1</label><input type="text" id="oppStarterWR1" style="width:60px;"></div>
-        <div><label>WR2</label><input type="text" id="oppStarterWR2" style="width:60px;"></div>
-        <div><label>WR3</label><input type="text" id="oppStarterWR3" style="width:60px;"></div>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">QB<input type="text" id="oppStarterQB" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">RB1<input type="text" id="oppStarterRB1" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">RB2<input type="text" id="oppStarterRB2" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR1<input type="text" id="oppStarterWR1" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR2<input type="text" id="oppStarterWR2" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR3<input type="text" id="oppStarterWR3" style="width:36px;"></label>
       </div>
 
       <p class="hint" style="margin:16px 0 6px; font-size:13px; color:#888;">Opponent branding (optional)</p>
@@ -379,6 +379,26 @@
       .filter(p => p.default_jersey_number)
       .map(p => ({ number: p.default_jersey_number, name: p.name, position: p.primary_position, explicitUnit: null, playerId: p.id }));
     const { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
+
+    // In edit mode, resolveByNumber just re-picks a default (the first
+    // entry) for every conflict, since it has no memory of what was
+    // chosen last time. Load whatever was actually saved for this game
+    // and use it to override those defaults, so a coach's prior "quick
+    // check" choices are still there instead of silently resetting.
+    if (editGameId){
+      const { data: savedOurRows } = await supabaseClient
+        .from('game_rosters').select('jersey_number, unit, player_id, player_name').eq('game_id', editGameId).eq('team_side', 'teamA');
+      (savedOurRows || []).forEach(saved => {
+        const bucket = resolved[saved.jersey_number];
+        if (!bucket) return;
+        const match = entries.find(en =>
+          String(en.number).trim() === String(saved.jersey_number).trim() &&
+          (en.playerId === saved.player_id || en.name === saved.player_name)
+        );
+        if (match) bucket[saved.unit] = match;
+      });
+    }
+
     ourResolved = resolved;
     ourConflictsList = conflicts;
     document.getElementById('ourRosterStatus').innerHTML =
