@@ -131,6 +131,7 @@
       <div id="confirmCard" style="display:none;">
         <div style="font-size:14px; color:#888; margin-bottom:4px;">Parsed as</div>
         <div id="parsedText" style="font-size:16px; font-weight:600; margin-bottom:10px;"></div>
+        <div id="fieldPosWarning" style="display:none; background:#fff3cd; border:1px solid #e0b400; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:13px; color:#7a5c00;"></div>
         <label id="flipRow" style="display:none;"><input type="checkbox" id="flipCheck" checked> <span id="flipLabel"></span></label>
         <div id="confirmClockRow" style="display:none; margin-bottom:8px;">
           <span id="confirmClockLabel">Clock</span>&nbsp;<input type="text" id="confirmClockInput" placeholder="M:SS" style="width:90px; display:inline-block;">
@@ -1265,12 +1266,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (!val) return;
     const state = computeState();
     pending = parseInput(val, state);
+    const warningEl = document.getElementById('fieldPosWarning');
+    warningEl.style.display = 'none';
     if (!pending){
       document.getElementById('parsedText').textContent = 'Unrecognized entry.';
       document.getElementById('flipRow').style.display = 'none';
       document.getElementById('confirmClockRow').style.display = 'none';
     } else {
       document.getElementById('parsedText').textContent = pending.text;
+      // A gain that reaches or passes the goal line should always be a
+      // touchdown -- field position itself is clamped at 0/100 elsewhere,
+      // but that clamp doesn't stop a play's own recorded yardage from
+      // being logged at its full, unclamped value if TD wasn't checked,
+      // which silently inflates both the player's stats and drive totals.
+      const gain = pending.effect && typeof pending.effect.statYds === 'number' ? pending.effect.statYds : 0;
+      if (gain > 0 && state.fieldPos !== null && gain >= state.fieldPos && !pending.effect.td){
+        warningEl.textContent = '⚠️ This gain (' + gain + ' yds) reaches or passes the goal line -- only ' + state.fieldPos + ' yds away. If this scored, go back and check the touchdown box first.';
+        warningEl.style.display = 'block';
+      }
       if (pending.flipEligible){
         document.getElementById('flipRow').style.display = 'flex';
         document.getElementById('flipLabel').textContent = 'Change of possession — ' + TEAMS[pending.flipTo].name + ' ball';
