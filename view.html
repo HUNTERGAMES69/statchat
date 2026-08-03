@@ -69,7 +69,7 @@
   table.player-stat-table th { text-align:right; font-size:calc(10px * var(--stat-scale, 1)); color:#5b7ca8; font-weight:600; padding:1px 4px; white-space:nowrap; }
   table.player-stat-table th:first-child, table.player-stat-table td:first-child { text-align:left; }
   table.player-stat-table td { text-align:right; padding:calc(2px * var(--stat-scale, 1)) 4px; white-space:nowrap; }
-  table.player-stat-table td:first-child { font-weight:700; color:#1a1a2e; overflow:hidden; text-overflow:ellipsis; max-width:0; }
+  table.player-stat-table td:first-child { font-weight:700; color:#1a1a2e; white-space:nowrap; }
   table.player-stat-table tr.leader { background:rgba(255,193,7,0.28); }
   table.player-stat-table tr.leader td:first-child { border-radius:4px 0 0 4px; }
   table.player-stat-table tr.leader td:last-child { border-radius:0 4px 4px 0; }
@@ -607,23 +607,36 @@ function computeState(playsList){
     const box = computeBoxScore(plays);
     const a = renderTeamBoxScore('teamA', box);
     const b = renderTeamBoxScore('teamB', box);
+    const quadBL = document.getElementById('quadBL'), quadBR = document.getElementById('quadBR');
+    quadBL.style.setProperty('--stat-scale', 1);
+    quadBR.style.setProperty('--stat-scale', 1);
     document.getElementById('boxScoreTeamA').innerHTML = a.html;
     document.getElementById('boxScoreTeamB').innerHTML = b.html;
-    // Both sides use the same scale so the two panels look visually
-    // consistent, based on whichever team has more rows to fit -- a
-    // team with fewer stats shouldn't render larger just because its
-    // sibling has more.
-    const maxRows = Math.max(a.totalRows, b.totalRows);
-    // Tiered rather than continuous: predictable steps are easier to
-    // verify than a continuously-computed shrink factor, and the 5-per-
-    // category cap (plus TD exceptions) keeps realistic totals well
-    // within this range.
-    let scale = 1;
-    if (maxRows > 20) scale = 0.72;
-    else if (maxRows > 15) scale = 0.82;
-    else if (maxRows > 10) scale = 0.92;
-    document.getElementById('quadBL').style.setProperty('--stat-scale', scale);
-    document.getElementById('quadBR').style.setProperty('--stat-scale', scale);
+
+    // Measure real rendered height at scale 1, then compute the scale
+    // that actually fills the available space -- growing when there's
+    // room to spare (a team with modest stats shouldn't render small
+    // and leave the rest of the quadrant empty), shrinking when there's
+    // more content than fits. Both sides use the same scale so neither
+    // panel looks visually denser or sparser than its sibling.
+    const availableHeight = (quad) => {
+      const header = quad.querySelector('h2');
+      const headerH = header ? header.getBoundingClientRect().height + 10 : 0;
+      return quad.clientHeight - headerH - 16;
+    };
+    const contentHeight = (id) => document.getElementById(id).scrollHeight;
+    const scaleFor = (avail, content) => {
+      if (content <= 0) return 1;
+      return Math.min(2.2, Math.max(0.55, avail / content));
+    };
+    const scaleA = scaleFor(availableHeight(quadBL), contentHeight('boxScoreTeamA'));
+    const scaleB = scaleFor(availableHeight(quadBR), contentHeight('boxScoreTeamB'));
+    // The smaller (more conservative) of the two, so neither side ever
+    // overflows its own quadrant even though both render at one shared
+    // scale.
+    const scale = Math.min(scaleA, scaleB);
+    quadBL.style.setProperty('--stat-scale', scale);
+    quadBR.style.setProperty('--stat-scale', scale);
   }
 
   function renderAll(){
