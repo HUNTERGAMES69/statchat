@@ -615,6 +615,8 @@ function computeState(playsList){
         ? computeDriveSummary(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1])
         : null;
       document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary);
+    } else {
+      document.getElementById('allPlaysScroll').innerHTML = renderLogLines(plays.slice().reverse()) || '<div style="color:#999;">No plays recorded.</div>';
     }
 
     renderTeamSummary();
@@ -770,7 +772,11 @@ function computeState(playsList){
     currentGameId = params.get('id');
     isResultsMode = params.get('mode') === 'results';
     if (isResultsMode){
-      document.getElementById('quadTR').innerHTML = '<div style="height:100%; display:flex; align-items:center; justify-content:center; color:#999; font-size:14px; text-align:center; padding:20px;">Drive summary isn\'t available for a completed game.<br>See the box scores for full stats.</div>';
+      document.getElementById('quadTR').innerHTML =
+        '<div class="card compact drive-card" style="height:100%; display:flex; flex-direction:column;">' +
+          '<h2>All Plays</h2>' +
+          '<div id="allPlaysScroll" style="flex:1; min-height:0; overflow-y:auto;"></div>' +
+        '</div>';
     }
     if (!currentGameId){
       showView('errorView');
