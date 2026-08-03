@@ -179,33 +179,53 @@
     });
   }
 
-  function detectPrimaryColor(dataUrl){
+  function detectLogoColors(dataUrl){
     return new Promise(resolve => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const size = 40;
+        const size = 60;
         canvas.width = size; canvas.height = size;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, size, size);
         let data;
         try { data = ctx.getImageData(0, 0, size, size).data; }
-        catch (err){ resolve(null); return; }
-        let r = 0, g = 0, b = 0, count = 0;
+        catch (err){ resolve({ primary: null, secondary: null }); return; }
+        // Quantizes each pixel into a coarse color bucket so near-
+        // identical shades of the same color group together, then finds
+        // the bucket with the most pixels -- the actual dominant color,
+        // rather than averaging every pixel into one blended value
+        // (which is what turns a logo that's genuinely red and blue
+        // into a muddy purple).
+        const BUCKET = 32;
+        const buckets = {};
         for (let i = 0; i < data.length; i += 4){
           const alpha = data[i+3];
           if (alpha < 100) continue;
           const rr = data[i], gg = data[i+1], bb = data[i+2];
           if (rr > 235 && gg > 235 && bb > 235) continue;
           if (rr < 20 && gg < 20 && bb < 20) continue;
-          r += rr; g += gg; b += bb; count++;
+          const key = Math.round(rr/BUCKET) + '_' + Math.round(gg/BUCKET) + '_' + Math.round(bb/BUCKET);
+          if (!buckets[key]) buckets[key] = { count: 0, rSum: 0, gSum: 0, bSum: 0 };
+          buckets[key].count++;
+          buckets[key].rSum += rr; buckets[key].gSum += gg; buckets[key].bSum += bb;
         }
-        if (count === 0){ resolve(null); return; }
-        r = Math.round(r / count); g = Math.round(g / count); b = Math.round(b / count);
-        const toHex = v => v.toString(16).padStart(2, '0');
-        resolve('#' + toHex(r) + toHex(g) + toHex(b));
+        const entries = Object.values(buckets).map(bk => ({
+          count: bk.count,
+          r: Math.round(bk.rSum / bk.count), g: Math.round(bk.gSum / bk.count), b: Math.round(bk.bSum / bk.count)
+        })).sort((a, b) => b.count - a.count);
+        if (entries.length === 0){ resolve({ primary: null, secondary: null }); return; }
+        const toHex = c => '#' + [c.r, c.g, c.b].map(v => v.toString(16).padStart(2,'0')).join('');
+        const colorDistance = (a, b) => Math.sqrt((a.r-b.r)**2 + (a.g-b.g)**2 + (a.b-b.b)**2);
+        const primary = entries[0];
+        // The second color needs to be genuinely different in hue AND
+        // make up a real share of the image, not just a small cluster
+        // of edge-blend pixels where the logo's color anti-aliases into
+        // the white background during downscaling.
+        const secondEntry = entries.find(e => colorDistance(e, primary) > 60 && e.count > primary.count * 0.15);
+        resolve({ primary: toHex(primary), secondary: secondEntry ? toHex(secondEntry) : null });
       };
-      img.onerror = () => resolve(null);
+      img.onerror = () => resolve({ primary: null, secondary: null });
       img.src = dataUrl;
     });
   }
@@ -230,10 +250,10 @@
       } catch (e){}
     }
     const dataUrl = await readFileAsDataURL(pendingLogoFile);
-    const detected = await detectPrimaryColor(dataUrl);
-    if (detected){
-      document.getElementById('primaryColorInput').value = detected;
-      document.getElementById('secondaryColorInput').value = contrastingColor(detected);
+    const detected = await detectLogoColors(dataUrl);
+    if (detected.primary){
+      document.getElementById('primaryColorInput').value = detected.primary;
+      document.getElementById('secondaryColorInput').value = detected.secondary || contrastingColor(detected.primary);
     }
   });
 
