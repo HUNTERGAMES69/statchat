@@ -116,19 +116,21 @@
     document.getElementById('msg').innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
   }
 
-  async function guardAdminOrRedirect(userId){
+  async function guardMinRoleOrRedirect(userId, minRole){
+    const ROLE_RANK = { view: 0, game_entry: 1, admin: 2 };
     const { data, error } = await supabaseClient
-      .from('profiles').select('is_admin').eq('id', userId).limit(1);
-    const isAdmin = !error && data && data.length > 0 && !!data[0].is_admin;
-    if (!isAdmin) window.location.href = 'dashboard.html';
-    return isAdmin;
+      .from('profiles').select('role').eq('id', userId).limit(1);
+    const role = (!error && data && data.length > 0 && data[0].role) || 'view';
+    const ok = (ROLE_RANK[role] || 0) >= (ROLE_RANK[minRole] || 0);
+    if (!ok) window.location.href = 'dashboard.html';
+    return ok;
   }
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION'){
       if (session){
-        guardAdminOrRedirect(session.user.id).then(isAdmin => {
-          if (isAdmin) init();
+        guardMinRoleOrRedirect(session.user.id, 'admin').then(ok => {
+          if (ok) init();
         });
       } else {
         window.location.href = '/';
