@@ -519,6 +519,8 @@ function parseInput(raw, state){
   let rest = tokens.slice(1);
   const td = rest[rest.length - 1] === 'td';
   if (td) rest.pop();
+  const isSafety = rest[rest.length - 1] === 'sf';
+  if (isSafety) rest.pop();
   const O = n => nameInOffense(off, n), D = n => nameInDefense(def, n), ST = n => nameInSpecialTeams(off, n);
 
   if (['r', 'p', 'i', 's'].includes(type)){
@@ -526,7 +528,15 @@ function parseInput(raw, state){
     if (type === 'r'){ netYards = parseInt(rest[0]) || 0; tackler = rest[1]; text = O(p1) + ' rush for ' + netYards; }
     else if (type === 'p'){ netYards = parseInt(rest[1]) || 0; tackler = rest[2]; text = O(p1) + ' pass to ' + O(rest[0]) + ' for ' + netYards; }
     else if (type === 'i'){ netYards = 0; text = O(p1) + ' incomplete, intended for ' + O(rest[0]); }
-    else if (type === 's'){ netYards = parseInt(rest[0]) || 0; tackler = rest[1]; text = O(p1) + ' sacked for ' + netYards + ' yds'; }
+    else if (type === 's'){
+      netYards = parseInt(rest[0]) || 0; tackler = rest[1];
+      if (isSafety){
+        return { text: O(p1) + ' sacked for ' + netYards + ' yds — SAFETY',
+          effect: { score: { team: def, points: 2 }, endsDrive: true },
+          flipEligible: false, team: off, quarter: state.quarter };
+      }
+      text = O(p1) + ' sacked for ' + netYards + ' yds';
+    }
 
     const curDown = state.down || 1, curDist = state.distance || 10;
     let score = null, converts = false, turnoverOnDowns = false;
@@ -562,7 +572,9 @@ function parseInput(raw, state){
       if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
       return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
     }
-    return { text: O(p1) + ' fumble — recovered by own team', effect: {}, flipEligible: false, team: off, quarter: state.quarter };
+    return { text: O(p1) + ' fumble — recovered by own team' + (isSafety ? ', in the end zone — SAFETY' : ''),
+      effect: isSafety ? { score: { team: def, points: 2 }, endsDrive: true } : {},
+      flipEligible: false, team: off, quarter: state.quarter };
   }
   if (type === 'pt'){
     const yds = rest[0], ret = rest[1], retyds = rest[2];
@@ -580,6 +592,12 @@ function parseInput(raw, state){
     let score = null;
     if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
+  }
+  if (type === 'pbo'){
+    let t = ST(p1) + ' punt BLOCKED, recovered by own team';
+    if (isSafety) t += ', in the end zone — SAFETY';
+    return { text: t, effect: isSafety ? { score: { team: def, points: 2 }, endsDrive: true } : {},
+      flipEligible: false, team: off, quarter: state.quarter };
   }
   if (type === 'ko'){
     const yds = rest[0], ret = rest[1], retyds = rest[2];
@@ -1156,21 +1174,51 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<input type="checkbox" id="pp_td" style="display:none;">' +
       '<button type="button" id="pp_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button>' +
       '</div>';
-    const blockedToggleHtml = (id) => '<input type="checkbox" id="' + id + '" style="display:none;">' +
-      '<button type="button" id="' + id + '_toggle" data-cb="' + id + '" class="pp-blocked-toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Blocked</button>';
+    const blockedToggleHtml = (id, label) => '<input type="checkbox" id="' + id + '" style="display:none;">' +
+      '<button type="button" id="' + id + '_toggle" data-cb="' + id + '" data-label="' + (label || 'Blocked') + '" class="pp-blocked-toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">' + (label || 'Blocked') + '</button>';
 
     let html = '';
-    if (type === 'rush') html = offBlock('carrier','Ball carrier') + yardsBlock() + defBlock('Tackled by (optional)') + tdBlock;
+    if (type === 'rush') html = offBlock('carrier','Ball carrier') +
+        '<div style="display:flex; align-items:flex-end; gap:14px;"><div>' + yardsBlock() + '</div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_fumbled', 'Fumbled') + '</div></div>' +
+        defBlock('Tackled by (optional)') +
+        '<div id="pp_rush_td_wrap">' + tdBlock + '</div>' +
+        '<div id="pp_rush_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_rush_fumrec" value="own" checked> Recovered by own team</label>' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_rush_fumrec" value="opp"> Recovered by opponent</label>' +
+          '<div id="pp_rush_fum_own" style="margin-top:10px;"><input type="checkbox" id="pp_rushfum_safety" style="display:none;">' +
+          '<button type="button" id="pp_rushfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
+          '<div id="pp_rush_fum_opp" style="display:none; margin-top:8px;">' + defBlock('Recovered by', '_rushfum') + yardsBlock('Return yards (optional)', 'pp_rushfum_retyds') +
+            '<div style="margin-top:10px;"><input type="checkbox" id="pp_rushfum_td" style="display:none;">' +
+            '<button type="button" id="pp_rushfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
+          '</div>' +
+        '</div>';
     else if (type === 'pass') html = offBlock('passer','Passer') + offBlock('receiver','Receiver') +
-        '<div style="display:flex; align-items:flex-end; gap:14px;"><div id="pp_yards_wrap">' + yardsBlock() + '</div>' +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap">' + yardsBlock() + '</div>' +
         '<div style="margin-bottom:6px;"><input type="checkbox" id="pp_incomplete" style="display:none;">' +
-        '<button type="button" id="pp_incomplete_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div></div>' +
-        '<div id="pp_pass_extra">' + defBlock('Tackled by (optional)') + tdBlock + '</div>';
-    else if (type === 'sack') html = offBlock('passer','Passer') + yardsBlock('Yards lost') + defBlock('Sacked by');
+        '<button type="button" id="pp_incomplete_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
+        '<div id="pp_pass_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_fumbled', 'Fumbled') + '</div></div>' +
+        '<div id="pp_pass_extra">' + defBlock('Tackled by (optional)') + '<div id="pp_pass_td_wrap">' + tdBlock + '</div></div>' +
+        '<div id="pp_pass_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_pass_fumrec" value="own" checked> Recovered by own team</label>' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_pass_fumrec" value="opp"> Recovered by opponent</label>' +
+          '<div id="pp_pass_fum_own" style="margin-top:10px;"><input type="checkbox" id="pp_passfum_safety" style="display:none;">' +
+          '<button type="button" id="pp_passfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
+          '<div id="pp_pass_fum_opp" style="display:none; margin-top:8px;">' + defBlock('Recovered by', '_passfum') + yardsBlock('Return yards (optional)', 'pp_passfum_retyds') +
+            '<div style="margin-top:10px;"><input type="checkbox" id="pp_passfum_td" style="display:none;">' +
+            '<button type="button" id="pp_passfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
+          '</div>' +
+        '</div>';
+    else if (type === 'sack') html = offBlock('passer','Passer') +
+        '<div style="display:flex; align-items:flex-end; gap:14px;"><div>' + yardsBlock('Yards lost') + '</div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_sack_safety', 'Safety') + '</div></div>' +
+        defBlock('Sacked by');
     else if (type === 'int') html = offBlock('passer','Passer') + defBlock('Intercepted by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot');
     else if (type === 'fumble') html = offBlock('carrier','Who fumbled') +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input type="radio" name="pp_fumrec" value="own" checked> Recovered by own team</label>' +
         '<label class="inline" style="display:block;"><input type="radio" name="pp_fumrec" value="opp"> Recovered by opponent</label></div>' +
+        '<div id="pp_fum_own" style="margin-top:10px;"><input type="checkbox" id="pp_fum_safety" style="display:none;">' +
+        '<button type="button" id="pp_fum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
         '<div id="pp_fum_opp" style="display:none;">' + defBlock('Recovered by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot') + '</div>';
     else if (type === 'safety') html =
         '<p class="hint" style="margin:0 0 10px;">Offense tackled, or committed a foul, in their own end zone. Always 2 points for the defense, and ends the drive — the scoring team kicks off next, logged as its own play afterward.</p>' +
@@ -1181,7 +1229,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="display:flex; align-items:flex-end; gap:14px;"><div>' + yardsBlock('Punt distance') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_blocked') + '</div></div>' +
         '<div id="pp_punt_normal">' + defBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div></div>' +
-        '<div id="pp_punt_blocked" style="display:none;">' + defBlock('Recovered by', '_pb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + '</div>' + tdBlock + startingSpotFieldsHtml('pp_spot');
+        '<div id="pp_punt_blocked" style="display:none;">' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_punt_blockrec" value="opp" checked> Recovered by opponent</label>' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_punt_blockrec" value="own"> Recovered by own team</label>' +
+          '<div id="pp_punt_block_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_pb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + '</div>' +
+          '<div id="pp_punt_block_own" style="display:none; margin-top:10px;"><input type="checkbox" id="pp_punt_safety" style="display:none;">' +
+          '<button type="button" id="pp_punt_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
+        '</div>' +
+        '<div id="pp_punt_td_wrap">' + tdBlock + '</div>' + startingSpotFieldsHtml('pp_spot');
     else if (type === 'fg') html =
         offBlock('kicker','Kicker') +
         '<div style="display:flex; align-items:flex-end; gap:14px;"><div>' + yardsBlock('Distance') + '</div>' +
@@ -1231,6 +1286,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         tdToggle.textContent = cb.checked ? '✓ Touchdown' : 'Touchdown';
       });
     }
+    const rushFumTdToggle = document.getElementById('pp_rushfum_td_toggle');
+    if (rushFumTdToggle){
+      rushFumTdToggle.addEventListener('click', () => {
+        const cb = document.getElementById('pp_rushfum_td');
+        cb.checked = !cb.checked;
+        rushFumTdToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
+        rushFumTdToggle.style.color = cb.checked ? '#fff' : '#555';
+        rushFumTdToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
+        rushFumTdToggle.textContent = cb.checked ? '✓ Returned for touchdown (defense)' : 'Returned for touchdown (defense)';
+      });
+    }
+    const passFumTdToggle = document.getElementById('pp_passfum_td_toggle');
+    if (passFumTdToggle){
+      passFumTdToggle.addEventListener('click', () => {
+        const cb = document.getElementById('pp_passfum_td');
+        cb.checked = !cb.checked;
+        passFumTdToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
+        passFumTdToggle.style.color = cb.checked ? '#fff' : '#555';
+        passFumTdToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
+        passFumTdToggle.textContent = cb.checked ? '✓ Returned for touchdown (defense)' : 'Returned for touchdown (defense)';
+      });
+    }
     const incToggle = document.getElementById('pp_incomplete_toggle');
     if (incToggle){
       incToggle.addEventListener('click', () => {
@@ -1240,6 +1317,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         incToggle.style.color = cb.checked ? '#fff' : '#555';
         incToggle.style.borderColor = cb.checked ? '#a37a00' : '#ccc';
         incToggle.textContent = cb.checked ? '✓ Incomplete' : 'Incomplete';
+        const fumbledWrap = document.getElementById('pp_pass_fumbled_wrap');
+        if (fumbledWrap) fumbledWrap.style.display = cb.checked ? 'none' : 'block';
+        const fumbledCb = document.getElementById('pp_pass_fumbled');
+        if (cb.checked && fumbledCb && fumbledCb.checked){
+          fumbledCb.checked = false;
+          const fumbledBtn = document.getElementById('pp_pass_fumbled_toggle');
+          fumbledBtn.style.background = '#fff'; fumbledBtn.style.color = '#555'; fumbledBtn.style.borderColor = '#ccc';
+          fumbledBtn.textContent = 'Fumbled';
+          document.getElementById('pp_pass_fumble_fields').style.display = 'none';
+          document.getElementById('pp_pass_td_wrap').style.display = 'block';
+        }
         cb.dispatchEvent(new Event('change'));
       });
     }
@@ -1247,10 +1335,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       btn.addEventListener('click', () => {
         const cb = document.getElementById(btn.dataset.cb);
         cb.checked = !cb.checked;
+        const label = btn.dataset.label || 'Blocked';
         btn.style.background = cb.checked ? '#a32d2d' : '#fff';
         btn.style.color = cb.checked ? '#fff' : '#555';
         btn.style.borderColor = cb.checked ? '#a32d2d' : '#ccc';
-        btn.textContent = cb.checked ? '✓ Blocked' : 'Blocked';
+        btn.textContent = cb.checked ? '✓ ' + label : label;
         cb.dispatchEvent(new Event('change'));
       });
     });
@@ -1268,7 +1357,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const manual = document.getElementById('pp_' + role + '_manual');
       if (manual) manual.addEventListener('input', e => { sel[role] = e.target.value.trim(); });
     });
-    ['', '_pb', '_fgb', '_2ptRush', '_2ptPass'].forEach(suffix => {
+    ['', '_pb', '_fgb', '_2ptRush', '_2ptPass', '_rushfum', '_passfum'].forEach(suffix => {
       const creditGrid = document.getElementById('pp_credit_grid' + suffix);
       if (creditGrid) wirePickerButtons(panel, 'pp_credit_pick' + suffix, 'pp_credit_manual' + suffix, (num, resolvedName) => {
         if (resolvedName) TEAMS[def].rosterDefense[num] = resolvedName;
@@ -1278,16 +1367,96 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (creditManual) creditManual.addEventListener('input', e => { sel.credit = e.target.value.trim(); });
     });
 
+    if (type === 'rush'){
+      document.getElementById('pp_rush_fumbled').addEventListener('change', (e) => {
+        document.getElementById('pp_rush_fumble_fields').style.display = e.target.checked ? 'block' : 'none';
+        document.getElementById('pp_rush_td_wrap').style.display = e.target.checked ? 'none' : 'block';
+      });
+      panel.querySelectorAll('input[name=pp_rush_fumrec]').forEach(r => r.addEventListener('change', () => {
+        const isOpp = document.querySelector('input[name=pp_rush_fumrec]:checked').value === 'opp';
+        document.getElementById('pp_rush_fum_opp').style.display = isOpp ? 'block' : 'none';
+        document.getElementById('pp_rush_fum_own').style.display = isOpp ? 'none' : 'block';
+      }));
+      const rushFumSafetyToggle = document.getElementById('pp_rushfum_safety_toggle');
+      if (rushFumSafetyToggle){
+        rushFumSafetyToggle.addEventListener('click', () => {
+          const cb = document.getElementById('pp_rushfum_safety');
+          cb.checked = !cb.checked;
+          rushFumSafetyToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
+          rushFumSafetyToggle.style.color = cb.checked ? '#fff' : '#555';
+          rushFumSafetyToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
+          rushFumSafetyToggle.textContent = cb.checked ? '✓ In the end zone — safety' : 'In the end zone — safety';
+        });
+      }
+    }
+    if (type === 'pass'){
+      document.getElementById('pp_pass_fumbled').addEventListener('change', (e) => {
+        document.getElementById('pp_pass_fumble_fields').style.display = e.target.checked ? 'block' : 'none';
+        document.getElementById('pp_pass_td_wrap').style.display = e.target.checked ? 'none' : 'block';
+      });
+      panel.querySelectorAll('input[name=pp_pass_fumrec]').forEach(r => r.addEventListener('change', () => {
+        const isOpp = document.querySelector('input[name=pp_pass_fumrec]:checked').value === 'opp';
+        document.getElementById('pp_pass_fum_opp').style.display = isOpp ? 'block' : 'none';
+        document.getElementById('pp_pass_fum_own').style.display = isOpp ? 'none' : 'block';
+      }));
+      const passFumSafetyToggle = document.getElementById('pp_passfum_safety_toggle');
+      if (passFumSafetyToggle){
+        passFumSafetyToggle.addEventListener('click', () => {
+          const cb = document.getElementById('pp_passfum_safety');
+          cb.checked = !cb.checked;
+          passFumSafetyToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
+          passFumSafetyToggle.style.color = cb.checked ? '#fff' : '#555';
+          passFumSafetyToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
+          passFumSafetyToggle.textContent = cb.checked ? '✓ In the end zone — safety' : 'In the end zone — safety';
+        });
+      }
+    }
     if (type === 'fumble'){
       panel.querySelectorAll('input[name=pp_fumrec]').forEach(r => r.addEventListener('change', () => {
-        document.getElementById('pp_fum_opp').style.display = (document.querySelector('input[name=pp_fumrec]:checked').value === 'opp') ? 'block' : 'none';
+        const isOpp = document.querySelector('input[name=pp_fumrec]:checked').value === 'opp';
+        document.getElementById('pp_fum_opp').style.display = isOpp ? 'block' : 'none';
+        document.getElementById('pp_fum_own').style.display = isOpp ? 'none' : 'block';
       }));
+      const fumSafetyToggle = document.getElementById('pp_fum_safety_toggle');
+      if (fumSafetyToggle){
+        fumSafetyToggle.addEventListener('click', () => {
+          const cb = document.getElementById('pp_fum_safety');
+          cb.checked = !cb.checked;
+          fumSafetyToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
+          fumSafetyToggle.style.color = cb.checked ? '#fff' : '#555';
+          fumSafetyToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
+          fumSafetyToggle.textContent = cb.checked ? '✓ In the end zone — safety' : 'In the end zone — safety';
+        });
+      }
     }
     if (type === 'punt'){
+      const updatePuntTdVisibility = () => {
+        const blocked = document.getElementById('pp_blocked').checked;
+        const ownRec = blocked && document.querySelector('input[name=pp_punt_blockrec]:checked').value === 'own';
+        document.getElementById('pp_punt_td_wrap').style.display = ownRec ? 'none' : 'block';
+      };
       document.getElementById('pp_blocked').addEventListener('change', (e) => {
         document.getElementById('pp_punt_normal').style.display = e.target.checked ? 'none' : 'block';
         document.getElementById('pp_punt_blocked').style.display = e.target.checked ? 'block' : 'none';
+        updatePuntTdVisibility();
       });
+      panel.querySelectorAll('input[name=pp_punt_blockrec]').forEach(r => r.addEventListener('change', () => {
+        const isOwn = document.querySelector('input[name=pp_punt_blockrec]:checked').value === 'own';
+        document.getElementById('pp_punt_block_opp').style.display = isOwn ? 'none' : 'block';
+        document.getElementById('pp_punt_block_own').style.display = isOwn ? 'block' : 'none';
+        updatePuntTdVisibility();
+      }));
+      const puntSafetyToggle = document.getElementById('pp_punt_safety_toggle');
+      if (puntSafetyToggle){
+        puntSafetyToggle.addEventListener('click', () => {
+          const cb = document.getElementById('pp_punt_safety');
+          cb.checked = !cb.checked;
+          puntSafetyToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
+          puntSafetyToggle.style.color = cb.checked ? '#fff' : '#555';
+          puntSafetyToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
+          puntSafetyToggle.textContent = cb.checked ? '✓ In the end zone — safety' : 'In the end zone — safety';
+        });
+      }
     }
     if (type === 'fg'){
       document.getElementById('pp_fg_blocked_cb').addEventListener('change', (e) => {
@@ -1344,9 +1513,32 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (type === 'rush'){
       if (!sel.carrier) return;
       const yds = yards('pp_yards') || '0';
-      code = sel.carrier + 'r ' + yds + (sel.credit ? ' ' + sel.credit : '') + (td ? ' td' : '');
-      roles = { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0 } };
-      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+      const fumbled = document.getElementById('pp_rush_fumbled').checked;
+      if (fumbled){
+        // The gain genuinely happened before the fumble -- save it as
+        // its own play first, silently, then let the rest of this
+        // branch build a Fumble-type play for the turnover itself.
+        const rushParsed = parseInput(sel.carrier + 'r ' + yds, computeState());
+        pushAndPersist({ id: nextId++, text: rushParsed.text, effect: rushParsed.effect, team: off, quarter: computeState().quarter,
+          roles: { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0 }, playType: 'rush' } });
+        const rec = document.querySelector('input[name=pp_rush_fumrec]:checked').value;
+        if (rec === 'own'){
+          const isRushFumSafety = document.getElementById('pp_rushfum_safety').checked;
+          code = sel.carrier + 'f' + (isRushFumSafety ? ' sf' : '');
+          roles = { carrier: { team: off, num: sel.carrier }, playType: 'fumble' };
+        } else {
+          const fumCredit = sel.credit;
+          if (!fumCredit) return;
+          const retyds = yards('pp_rushfum_retyds');
+          const returnTd = document.getElementById('pp_rushfum_td').checked;
+          code = sel.carrier + 'f ' + fumCredit + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
+          roles = { carrier: { team: off, num: sel.carrier }, defense: { team: def, num: fumCredit }, playType: 'fumble' };
+        }
+      } else {
+        code = sel.carrier + 'r ' + yds + (sel.credit ? ' ' + sel.credit : '') + (td ? ' td' : '');
+        roles = { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0 } };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit };
+      }
     } else if (type === 'pass'){
       if (!sel.passer || !sel.receiver) return;
       const isIncomplete = document.getElementById('pp_incomplete') && document.getElementById('pp_incomplete').checked;
@@ -1355,14 +1547,39 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         roles = { passer: { team: off, num: sel.passer, yards: 0 }, receiver: { team: off, num: sel.receiver, yards: 0 }, playType: 'incomplete' };
       } else {
         const yds = yards('pp_yards') || '0';
-        code = sel.passer + 'p ' + sel.receiver + ' ' + yds + (sel.credit ? ' ' + sel.credit : '') + (td ? ' td' : '');
-        roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0 } };
-        if (sel.credit) roles.defense = { team: def, num: sel.credit };
+        const fumbled = document.getElementById('pp_pass_fumbled').checked;
+        if (fumbled){
+          // The catch and yardage genuinely happened before the fumble --
+          // save the completion as its own play first, silently, then
+          // let the rest of this branch build a Fumble-type play for
+          // the receiver, same as the Rush panel's equivalent.
+          const passParsed = parseInput(sel.passer + 'p ' + sel.receiver + ' ' + yds, computeState());
+          pushAndPersist({ id: nextId++, text: passParsed.text, effect: passParsed.effect, team: off, quarter: computeState().quarter,
+            roles: { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0 }, playType: 'pass' } });
+          const rec = document.querySelector('input[name=pp_pass_fumrec]:checked').value;
+          if (rec === 'own'){
+            const isPassFumSafety = document.getElementById('pp_passfum_safety').checked;
+            code = sel.receiver + 'f' + (isPassFumSafety ? ' sf' : '');
+            roles = { carrier: { team: off, num: sel.receiver }, playType: 'fumble' };
+          } else {
+            const fumCredit = sel.credit;
+            if (!fumCredit) return;
+            const retyds = yards('pp_passfum_retyds');
+            const returnTd = document.getElementById('pp_passfum_td').checked;
+            code = sel.receiver + 'f ' + fumCredit + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
+            roles = { carrier: { team: off, num: sel.receiver }, defense: { team: def, num: fumCredit }, playType: 'fumble' };
+          }
+        } else {
+          code = sel.passer + 'p ' + sel.receiver + ' ' + yds + (sel.credit ? ' ' + sel.credit : '') + (td ? ' td' : '');
+          roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0 } };
+          if (sel.credit) roles.defense = { team: def, num: sel.credit };
+        }
       }
     } else if (type === 'sack'){
       if (!sel.passer) return;
       const yds = yards('pp_yards') || '0';
-      code = sel.passer + 's ' + yds + (sel.credit ? ' ' + sel.credit : '');
+      const isSackSafety = document.getElementById('pp_sack_safety').checked;
+      code = sel.passer + 's ' + yds + (sel.credit ? ' ' + sel.credit : '') + (isSackSafety ? ' sf' : '');
       roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 } };
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
     } else if (type === 'int'){
@@ -1373,7 +1590,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     } else if (type === 'fumble'){
       if (!sel.carrier) return;
       const rec = document.querySelector('input[name=pp_fumrec]:checked').value;
-      if (rec === 'own'){ code = sel.carrier + 'f'; roles = { carrier: { team: off, num: sel.carrier } }; }
+      if (rec === 'own'){
+        const isFumSafety = document.getElementById('pp_fum_safety').checked;
+        code = sel.carrier + 'f' + (isFumSafety ? ' sf' : '');
+        roles = { carrier: { team: off, num: sel.carrier } };
+      }
       else {
         if (!sel.credit) return;
         const yds = yards('pp_yards');
@@ -1394,17 +1615,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const blocked = document.getElementById('pp_blocked').checked;
       if (!sel.punter) return;
       if (blocked){
-        if (!sel.credit) return;
-        const retyds = yards('pp_blockretyds');
-        code = sel.punter + 'pb ' + sel.credit + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
-        roles = { punter: { team: off, num: sel.punter, yards: 0, blocked: true } };
+        const blockRec = document.querySelector('input[name=pp_punt_blockrec]:checked').value;
+        if (blockRec === 'own'){
+          const isPuntSafety = document.getElementById('pp_punt_safety').checked;
+          code = sel.punter + 'pbo' + (isPuntSafety ? ' sf' : '');
+          roles = { punter: { team: off, num: sel.punter, yards: 0, blocked: true } };
+        } else {
+          if (!sel.credit) return;
+          const retyds = yards('pp_blockretyds');
+          code = sel.punter + 'pb ' + sel.credit + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
+          roles = { punter: { team: off, num: sel.punter, yards: 0, blocked: true } };
+          roles.defense = { team: def, num: sel.credit };
+        }
       } else {
         const yds = yards('pp_yards') || '0';
         const retyds = yards('pp_retyds');
         code = sel.punter + 'pt ' + yds + (sel.credit ? ' ' + sel.credit + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
         roles = { punter: { team: off, num: sel.punter, yards: parseInt(yds)||0, blocked: false } };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
-      if (sel.credit) roles.defense = { team: def, num: sel.credit };
     } else if (type === 'fg'){
       if (!sel.kicker) return;
       const yds = yards('pp_yards') || '0';
