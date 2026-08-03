@@ -1350,10 +1350,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // but that clamp doesn't stop a play's own recorded yardage from
       // being logged at its full, unclamped value if TD wasn't checked,
       // which silently inflates both the player's stats and drive totals.
+      // The maximum possible gain on any single play is capped by the
+      // actual distance to the goal line -- the play physically ends
+      // there, whether it's a touchdown or not. That's a fundamentally
+      // different check from "reached the goal line but TD wasn't
+      // checked" below: exceeding the field is impossible no matter how
+      // the play is marked, so it must warn regardless of TD status.
       const gain = pending.effect && typeof pending.effect.statYds === 'number' ? pending.effect.statYds : 0;
       const distToGoal = state.fieldPos !== null ? 100 - state.fieldPos : null;
-      if (gain > 0 && distToGoal !== null && gain >= distToGoal && !pending.effect.td){
-        warningEl.textContent = '⚠️ This gain (' + gain + ' yds) reaches or passes the goal line -- only ' + distToGoal + ' yds away. If this scored, go back and check the touchdown box first.';
+      if (gain > 0 && distToGoal !== null && gain > distToGoal){
+        warningEl.textContent = '⚠️ This gain (' + gain + ' yds) is more than possible here -- only ' + distToGoal + ' yds to the goal line. The maximum this play could have gained is ' + distToGoal + ' yds.';
+        warningEl.style.display = 'block';
+      } else if (gain > 0 && distToGoal !== null && gain === distToGoal && !pending.effect.td){
+        warningEl.textContent = '⚠️ This gain (' + gain + ' yds) reaches the goal line exactly -- only ' + distToGoal + ' yds away. If this scored, go back and check the touchdown box first.';
         warningEl.style.display = 'block';
       }
       if (pending.flipEligible){
