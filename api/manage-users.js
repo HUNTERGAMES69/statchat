@@ -37,12 +37,12 @@ module.exports = async function handler(req, res) {
   const callerId = userData.user.id;
 
   const { data: profileRows, error: profileError } = await adminClient
-    .from('profiles').select('is_admin').eq('id', callerId).limit(1);
+    .from('profiles').select('role').eq('id', callerId).limit(1);
   if (profileError) {
     res.status(500).json({ error: profileError.message });
     return;
   }
-  if (!profileRows || profileRows.length === 0 || !profileRows[0].is_admin) {
+  if (!profileRows || profileRows.length === 0 || profileRows[0].role !== 'admin') {
     res.status(403).json({ error: 'Only an admin can manage users' });
     return;
   }
@@ -56,7 +56,7 @@ module.exports = async function handler(req, res) {
 
     const ids = data.users.map(u => u.id);
     const { data: profiles, error: profilesErr } = await adminClient
-      .from('profiles').select('id, display_name, is_admin').in('id', ids);
+      .from('profiles').select('id, display_name, role').in('id', ids);
     if (profilesErr) { res.status(500).json({ error: profilesErr.message }); return; }
     const profileById = {};
     (profiles || []).forEach(p => { profileById[p.id] = p; });
@@ -65,12 +65,29 @@ module.exports = async function handler(req, res) {
       id: u.id,
       email: u.email,
       displayName: (profileById[u.id] && profileById[u.id].display_name) || null,
-      isAdmin: !!(profileById[u.id] && profileById[u.id].is_admin),
+      role: (profileById[u.id] && profileById[u.id].role) || 'view',
       createdAt: u.created_at,
       lastSignInAt: u.last_sign_in_at,
       emailConfirmedAt: u.email_confirmed_at
     }));
     res.status(200).json({ users });
+    return;
+  }
+
+  if (action === 'setRole') {
+    const { userId, role } = body;
+    const validRoles = ['view', 'game_entry', 'admin'];
+    if (!userId || !validRoles.includes(role)) {
+      res.status(400).json({ error: 'A user id and a valid role (view, game_entry, or admin) are required' });
+      return;
+    }
+    if (userId === callerId) {
+      res.status(400).json({ error: "You can't change your own role from here." });
+      return;
+    }
+    const { error } = await adminClient.from('profiles').update({ role }).eq('id', userId);
+    if (error) { res.status(400).json({ error: error.message }); return; }
+    res.status(200).json({ success: true });
     return;
   }
 

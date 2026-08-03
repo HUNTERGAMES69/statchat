@@ -49,12 +49,12 @@ module.exports = async function handler(req, res) {
   // check bypasses RLS entirely and cannot be tricked by anything sent
   // from the browser -- it only trusts what's actually in the database.
   const { data: profileRows, error: profileError } = await adminClient
-    .from('profiles').select('is_admin').eq('id', userData.user.id).limit(1);
+    .from('profiles').select('role').eq('id', userData.user.id).limit(1);
   if (profileError){
     res.status(500).json({ error: profileError.message });
     return;
   }
-  if (!profileRows || profileRows.length === 0 || !profileRows[0].is_admin) {
+  if (!profileRows || profileRows.length === 0 || profileRows[0].role !== 'admin') {
     res.status(403).json({ error: 'Only an admin can invite new users' });
     return;
   }
