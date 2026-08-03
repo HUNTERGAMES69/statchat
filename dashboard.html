@@ -101,7 +101,7 @@
       <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
         <div>
           <h1 style="font-size:20px; margin:0;">Games</h1>
-          <span id="seasonLabel" style="font-size:13px; color:#999;"></span>
+          <select id="seasonPicker" style="font-size:13px; color:#555; border:1px solid #ddd; border-radius:6px; padding:3px 6px; background:#fff;"></select>
         </div>
         <a class="button-link" id="newGameLink" href="create_game.html">+ New game</a>
       </div>
@@ -256,21 +256,39 @@
     loadGames(seasonYear);
   }
 
-  async function loadGames(seasonYear){
+  let allGames = [];
+
+  async function loadGames(defaultSeasonYear){
+    // Fetches every game regardless of season, rather than filtering by
+    // one fixed year server-side -- a game moved to a different season
+    // was previously just invisible with no way back to it. Filtering
+    // happens client-side instead, so switching seasons in the picker
+    // is instant and never requires a fresh query.
     const { data, error } = await supabaseClient
       .from('games')
       .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status, final_score_us, final_score_opp')
-      .eq('season_year', seasonYear)
       .order('game_date', { ascending: false });
     if (error){
       showMsg('dashboardMsg', 'Could not load games: ' + error.message, 'error');
       hideSplash();
       return;
     }
-    document.getElementById('seasonLabel').textContent = seasonYear + ' season';
-    renderSummary(data || []);
-    renderGames(data || []);
+    allGames = data || [];
+    const years = Array.from(new Set(allGames.map(g => g.season_year).filter(y => y !== null && y !== undefined))).sort((a, b) => b - a);
+    if (!years.includes(defaultSeasonYear)) years.unshift(defaultSeasonYear);
+    const picker = document.getElementById('seasonPicker');
+    picker.innerHTML = years.map(y => '<option value="' + y + '">' + y + ' season</option>').join('');
+    picker.value = defaultSeasonYear;
+    picker.addEventListener('change', renderForSelectedSeason);
+    renderForSelectedSeason();
     hideSplash();
+  }
+
+  function renderForSelectedSeason(){
+    const selectedYear = parseInt(document.getElementById('seasonPicker').value);
+    const games = allGames.filter(g => g.season_year === selectedYear);
+    renderSummary(games);
+    renderGames(games);
   }
 
   function renderSummary(games){
