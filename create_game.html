@@ -6,107 +6,123 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="StatChat">
-<title>StatChat — Team Roster</title>
+<title>StatChat — New Game</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
-  .wrap { max-width:720px; margin:0 auto; }
-  .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
-  h1 { font-size:20px; margin:0 0 6px; }
-  h2 { font-size:16px; margin:0 0 14px; color:#444; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
+  .wrap { max-width:760px; margin:0 auto; }
+  .card { background:#fff; border-radius:12px; padding:28px; margin-bottom:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:22px; margin:0 0 6px; }
+  h2 { font-size:16px; margin:0 0 12px; color:#444; }
   p.sub { color:#888; margin:0 0 20px; font-size:14px; }
   label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
-  input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
-  button { padding:8px 12px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+  input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; }
+  input[type="color"] { width:64px; height:40px; padding:2px; cursor:pointer; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  button { padding:9px 16px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
-  button.danger { background:#fff; color:#a32d2d; border:1px solid #a32d2d; }
   button:disabled { opacity:0.5; cursor:default; }
-  .rosterList { display:flex; flex-direction:column; }
-  .rosterRow { padding:10px 0; border-bottom:1px solid #f2f2f2; }
-  .rosterLine1, .rosterLine2 { display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .rosterLine1 { margin-bottom:4px; }
-  .rosterNameNum { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
-  .rosterPos { font-size:13px; color:#888; flex-shrink:0; }
-  .rosterActions { display:flex; gap:6px; flex-wrap:wrap; flex-shrink:0; }
-  .unit-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; flex-shrink:0; }
-  .unit-offense { background:#e3f2fd; color:#1565c0; }
-  .unit-defense { background:#fdecea; color:#a32d2d; }
-  .unit-special { background:#fff8e1; color:#a37a00; }
-  .unit-none { background:#eee; color:#999; }
-  .add-row { display:flex; gap:8px; align-items:flex-end; margin-top:16px; flex-wrap:wrap; }
-  .add-row > div { flex:1 1 100%; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
   .msg.error { background:#fdecea; color:#a32d2d; }
   .msg.success { background:#e8f5e9; color:#1a7a4c; }
   .hidden { display:none; }
-  @media (min-width: 640px) {
-    body { padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
-    .card { padding:28px; }
-    h1 { font-size:22px; }
-    button { padding:9px 16px; font-size:14px; }
-    .add-row > div { flex:1 1 auto; }
-    .add-row > div:last-child { flex:0 0 auto; }
-  }
+  .conflict-block { background:#fff3cd; border-radius:8px; padding:12px 14px; margin-top:12px; }
+  .conflict-row { font-size:13px; margin-bottom:6px; }
+  .conflict-status { font-size:12px; color:#7a6a2a; margin-top:2px; }
+  .roster-summary { font-size:14px; color:#1a7a4c; margin-top:8px; }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <div id="loading" class="card">
-    <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:14px;">
-      <img src="logo.png" alt="StatChat" style="width:48px; height:auto; border-radius:8px;">
-      <img id="splashTeamIcon" style="display:none; width:48px; height:48px; border-radius:8px; object-fit:cover;">
-    </div>
-    <h1>Loading…</h1>
-  </div>
+  <div id="loading" class="card"><div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:14px;"><img src="logo.png" alt="StatChat" style="width:48px; height:auto; border-radius:8px;"><img id="splashTeamIcon" style="display:none; width:48px; height:48px; border-radius:8px; object-fit:cover;"></div><h1>Loading…</h1></div>
 
-  <div id="teamSetupView" class="hidden card">
-    <h1>Set up your team</h1>
-    <p class="sub">One-time setup — this is your team's identity for the whole season. You can add a logo and colors afterward from "Customize team" on the dashboard.</p>
-    <div id="teamSetupMsg"></div>
-    <label>Team name<input type="text" id="teamNameInput" placeholder="Neville" style="width:100%;"></label>
-    <button id="createTeamBtn" style="margin-top:16px;">Create team</button>
-  </div>
-
-  <div id="rosterView" class="hidden">
+  <div id="mainView" class="hidden">
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:10px;">
-        <h1 id="rosterTitle" style="min-width:0;">Team Roster</h1>
-        <a href="dashboard.html" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600; white-space:nowrap; flex-shrink:0;">← Dashboard</a>
+      <h1 id="pageHeading">New Game</h1>
+      <div id="finalLockBanner" class="hidden" style="background:#fff3cd; border:1px solid #e0b400; border-radius:8px; padding:12px 14px; margin-bottom:16px;">
+        <div style="font-weight:600; color:#7a5c00; margin-bottom:4px;">This game is finalized</div>
+        <div style="font-size:13px; color:#7a5c00; margin-bottom:10px;">Setup is locked to prevent accidental changes to a completed game's record. Unlock only if something genuinely needs correcting.</div>
+        <button type="button" id="unlockFinalBtn" class="secondary" style="background:#fff;">Unlock to edit</button>
       </div>
-      <p class="sub">This roster is used every week — no need to re-upload it per game.</p>
-      <div id="rosterMsg"></div>
-      <div style="margin-bottom:16px;">
-        <button id="uploadRosterBtn" class="secondary">Upload roster spreadsheet (.xlsx)</button>
-        <input type="file" id="rosterFile" accept=".xlsx,.xls" style="display:none;">
+      <p class="sub">Set this game up now, start entering stats whenever you're ready — no need to do both at once.</p>
+      <div id="setupMsg"></div>
+
+      <div class="grid2">
+        <label>Game designator<input type="text" id="designator" placeholder="Enter game designator"></label>
+        <label>Season year<input type="number" id="seasonYear"></label>
       </div>
-      <div id="uploadPreview" class="hidden" style="background:#f7f6f2; border-radius:8px; padding:14px; margin-bottom:16px;"></div>
-      <div class="rosterList" id="rosterBody"></div>
-      <div class="add-row">
-        <div><label>#</label><input type="text" id="newNumber" style="width:100%;"></div>
-        <div style="flex:2;"><label>Name</label><input type="text" id="newName" style="width:100%;"></div>
-        <div><label>Position</label>
-          <select id="newPosition" style="width:100%;">
-            <option value="">—</option>
-            <optgroup label="Offense">
-              <option value="QB">QB</option><option value="RB">RB</option><option value="FB">FB</option>
-              <option value="WR">WR</option><option value="TE">TE</option><option value="OL">OL</option>
-              <option value="C">C</option>
-            </optgroup>
-            <optgroup label="Defense">
-              <option value="DB">DB</option><option value="CB">CB</option><option value="S">S</option>
-              <option value="LB">LB</option><option value="DE">DE</option><option value="DT">DT</option>
-              <option value="NT">NT</option>
-            </optgroup>
-            <optgroup label="Special Teams">
-              <option value="K">K</option><option value="P">P</option><option value="LS">LS</option>
-            </optgroup>
-          </select>
+      <div class="grid2">
+        <label>Date<input type="date" id="gameDate"></label>
+        <label>Quarter length (minutes)<input type="number" id="quarterLen" placeholder="Enter minutes per quarter"></label>
+      </div>
+      <div class="grid2">
+        <label>Opponent name<input type="text" id="opponentName" placeholder="Enter opponent name"></label>
+        <label>Home or away?
+          <select id="homeAway"><option value="home">Home</option><option value="away">Away</option></select>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Your roster</h2>
+      <p class="sub" style="margin-bottom:10px;">Pulled automatically from your Team Roster page.</p>
+      <div id="ourRosterStatus"></div>
+      <div id="ourAssignments"></div>
+      <div id="ourConflicts"></div>
+
+      <p class="hint" style="margin:16px 0 6px; font-size:13px; color:#888;">Likely starters (optional) — the offense picker starts with just these, and grows as anyone else gets entered during the game</p>
+      <div class="row" style="gap:10px; flex-wrap:wrap;">
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">QB<input type="text" id="ourStarterQB" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">RB1<input type="text" id="ourStarterRB1" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">RB2<input type="text" id="ourStarterRB2" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR1<input type="text" id="ourStarterWR1" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR2<input type="text" id="ourStarterWR2" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR3<input type="text" id="ourStarterWR3" style="width:36px;"></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Opponent roster</h2>
+      <p class="sub" style="margin-bottom:10px;">Fresh upload for this specific game, same as always.</p>
+      <button id="uploadOpponentBtn" class="secondary">Upload opponent roster (.xlsx)</button>
+      <button id="skipOpponentBtn" class="secondary" style="margin-left:8px;">Skip roster (manual entry only)</button>
+      <input type="file" id="opponentFile" accept=".xlsx,.xls" style="display:none;">
+      <div id="currentOppRosterNote"></div>
+      <div id="opponentRosterStatus"></div>
+      <div id="opponentAssignments"></div>
+      <div id="opponentConflicts"></div>
+
+      <p class="hint" style="margin:16px 0 6px; font-size:13px; color:#888;">Likely starters (optional)</p>
+      <div class="row" style="gap:10px; flex-wrap:wrap;">
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">QB<input type="text" id="oppStarterQB" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">RB1<input type="text" id="oppStarterRB1" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">RB2<input type="text" id="oppStarterRB2" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR1<input type="text" id="oppStarterWR1" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR2<input type="text" id="oppStarterWR2" style="width:36px;"></label>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR3<input type="text" id="oppStarterWR3" style="width:36px;"></label>
+      </div>
+
+      <p class="hint" style="margin:16px 0 6px; font-size:13px; color:#888;">Opponent branding (optional)</p>
+      <div class="row" style="gap:16px; align-items:flex-end; flex-wrap:wrap;">
+        <div>
+          <button type="button" id="chooseOppLogoBtn" class="secondary">Choose logo</button>
+          <input type="file" id="oppLogoInput" accept="image/*" style="display:none;">
+          <img id="oppLogoPreview" style="display:none; height:44px; margin-top:8px; border-radius:6px;">
         </div>
-        <div><button id="addPlayerBtn">Add player</button></div>
+        <div>
+          <label style="font-size:12px;">Primary color</label>
+          <input type="color" id="oppPrimaryColorInput" value="#8B0000">
+        </div>
+        <div>
+          <label style="font-size:12px;">Secondary color</label>
+          <input type="color" id="oppSecondaryColorInput" value="#ffffff">
+        </div>
       </div>
     </div>
+
     <div class="card">
-      <button class="secondary" id="backBtn">← Back to dashboard</button>
+      <button id="createGameBtn">Create game</button>
+      <a href="dashboard.html" class="secondary" style="margin-left:8px; text-decoration:none; padding:9px 16px; border-radius:6px; border:1px solid #ccc; color:#444;">Cancel</a>
     </div>
   </div>
 
@@ -120,11 +136,9 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-  // Same position vocabulary as the live entry app, so a roster built
-  // here resolves identically once games start using it.
-  const OFFENSE_POS = ['QB','RB','FB','HB','WR','TE','OL','OT','OG','C'];
-  const DEFENSE_POS = ['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE'];
-  const SPECIAL_POS = ['K','P','LS','H','KR','PR'];
+  const OFFENSE_POS = ['QB','RB','FB','HB','TB','WR','SE','FL','SLOT','TE','OL','OT','OG','C'];
+  const DEFENSE_POS = ['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE','DL'];
+  const SPECIAL_POS = ['K','P','LS','H','KR','PR','RET'];
   function posToUnit(pos){
     if (!pos) return null;
     const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
@@ -133,24 +147,171 @@
     if (DEFENSE_POS.includes(first)) return 'defense';
     return null;
   }
-  function unitBadge(unit){
-    const label = unit === 'offense' ? 'Offense' : unit === 'defense' ? 'Defense' : unit === 'special' ? 'Special' : '—';
-    const cls = unit ? 'unit-' + unit : 'unit-none';
-    return '<span class="unit-badge ' + cls + '">' + label + '</span>';
+  function extractNameTag(rawName){
+    const m = String(rawName).match(/\(\s*(O|D|ST)\s*\)\s*$/i);
+    if (!m) return { cleanName: String(rawName).trim(), explicitUnit: null };
+    const tag = m[1].toUpperCase();
+    const cleanName = String(rawName).slice(0, m.index).trim();
+    const unitMap = { O: 'offense', D: 'defense', ST: 'special' };
+    return { cleanName, explicitUnit: unitMap[tag] || null };
+  }
+
+  // Groups entries by jersey number and splits them into offense/defense/
+  // special buckets. Returns which numbers resolved cleanly and which
+  // need a human decision -- same algorithm proven in the entry app,
+  // just fed from whatever source (persistent roster or fresh upload).
+  function resolveByNumber(entries){
+    const byNum = {};
+    entries.forEach(en => {
+      const key = String(en.number).trim();
+      if (!byNum[key]) byNum[key] = [];
+      byNum[key].push(en);
+    });
+    const resolved = {}; // num -> { offense: entry|null, defense: entry|null, special: entry|null }
+    const conflicts = []; // genuine collisions: 2+ people who'd occupy the SAME unit for this number
+    const needsAssignment = []; // a single person whose position we don't recognize -- no collision, just needs one tag
+    Object.keys(byNum).forEach(num => {
+      const group = byNum[num];
+      const buckets = { offense: [], defense: [], special: [] };
+      const unknown = [];
+      group.forEach(en => {
+        const unit = en.explicitUnit || posToUnit(en.position);
+        if (unit) buckets[unit].push(en);
+        else unknown.push(en);
+      });
+      const hasCollision = buckets.offense.length > 1 || buckets.defense.length > 1 || buckets.special.length > 1 || unknown.length > 1;
+      resolved[num] = {
+        offense: buckets.offense[0] || null,
+        defense: buckets.defense[0] || null,
+        special: buckets.special[0] || null
+      };
+      if (hasCollision){
+        conflicts.push({ num, entries: group });
+      } else if (unknown.length === 1){
+        needsAssignment.push({ num, entry: unknown[0] });
+      }
+    });
+    return { resolved, conflicts, needsAssignment };
+  }
+
+  // A conflict is "already handled" once a saved game_rosters row exists
+  // for every unit that had a genuine collision for that number -- at
+  // that point the coach has already made this exact call, so there's
+  // nothing left to ask about. Re-deriving the per-unit collision groups
+  // here rather than threading them out of resolveByNumber, since the
+  // conflicts array only carries the raw entry list.
+  function filterUnresolvedConflicts(conflicts, savedRows){
+    if (!savedRows || savedRows.length === 0) return conflicts;
+    const savedByNumUnit = new Set(savedRows.map(r => String(r.jersey_number).trim() + '|' + r.unit));
+    return conflicts.filter(c => {
+      const buckets = { offense: [], defense: [], special: [] };
+      const unknown = [];
+      c.entries.forEach(en => {
+        const unit = en.explicitUnit || posToUnit(en.position);
+        if (unit) buckets[unit].push(en); else unknown.push(en);
+      });
+      const collidingUnits = Object.keys(buckets).filter(u => buckets[u].length > 1);
+      // If literally every unit that collided already has a saved
+      // resolution, this conflict has already been handled -- don't
+      // show it again. If unknown-position entries collided too (no
+      // unit at all), that can't be represented in game_rosters, so
+      // never treat it as resolved.
+      if (unknown.length > 1) return true;
+      return !(collidingUnits.length > 0 && collidingUnits.every(u => savedByNumUnit.has(String(c.num).trim() + '|' + u)));
+    });
+  }
+
+  function renderAssignmentUI(containerId, teamKey, needsAssignment, resolvedRef){
+    const container = document.getElementById(containerId);
+    if (needsAssignment.length === 0){ container.innerHTML = ''; return; }
+    container.innerHTML = '<div class="conflict-block" style="background:#eef5ff;">' +
+      '<p style="font-size:13px; font-weight:600; margin:0 0 8px;">' + needsAssignment.length + ' player(s) with a position we didn\'t recognize — just pick one unit for each</p>' +
+      needsAssignment.map(({ num, entry }) => {
+        const label = '#' + num + ' ' + entry.name + (entry.position ? ' (' + entry.position + ')' : '');
+        return '<div class="conflict-row">' +
+          '<span style="display:inline-block; min-width:190px;">' + label + '</span>' +
+          ['offense','defense','special'].map(unit =>
+            '<label style="margin-left:8px;"><input type="radio" name="assign_' + teamKey + '_' + num + '" class="assignRadio" data-num="' + num + '" data-unit="' + unit + '"> ' + (unit === 'special' ? 'S/T' : unit.charAt(0).toUpperCase() + unit.slice(1)) + '</label>'
+          ).join('') +
+          '</div>';
+      }).join('') +
+      '</div>';
+    container.querySelectorAll('.assignRadio').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const num = radio.dataset.num, unit = radio.dataset.unit;
+        const entry = needsAssignment.find(a => a.num === num).entry;
+        resolvedRef[num][unit] = entry;
+      });
+    });
+  }
+
+  function renderConflictUI(containerId, teamKey, conflicts, resolvedRef){
+    const container = document.getElementById(containerId);
+    if (conflicts.length === 0){ container.innerHTML = ''; return; }
+    container.innerHTML = '<div class="conflict-block">' +
+      '<p style="font-size:14px; font-weight:600; margin:0 0 8px;">Quick check — ' + conflicts.length + ' number(s) need a look</p>' +
+      '<p style="font-size:12px; color:#665; margin:0 0 10px;">Check every unit each person actually plays. You can check more than one if you\'re not sure which one -- that number just stays flagged until you narrow it down.</p>' +
+      conflicts.map(c => {
+        return '<div style="margin-bottom:10px;">' +
+          '<div style="font-size:13px; font-weight:600;">#' + c.num + '</div>' +
+          c.entries.map((en, i) => {
+            const rowId = teamKey + '_' + c.num + '_' + i;
+            const label = en.name + (en.position ? ' (' + en.position + ')' : '');
+            return '<div class="conflict-row">' +
+              '<span style="display:inline-block; min-width:170px;">' + label + '</span>' +
+              ['offense','defense','special'].map(unit => {
+                const checked = resolvedRef[c.num][unit] === en ? 'checked' : '';
+                return '<label style="margin-left:8px;"><input type="checkbox" class="conflictCheck" data-num="' + c.num + '" data-unit="' + unit + '" data-idx="' + i + '" ' + checked + '> ' + (unit === 'special' ? 'S/T' : unit.charAt(0).toUpperCase() + unit.slice(1)) + '</label>';
+              }).join('') +
+              '</div>';
+          }).join('') +
+          '<div class="conflict-status" id="conflictStatus_' + teamKey + '_' + c.num + '"></div>' +
+          '</div>';
+      }).join('') +
+      '</div>';
+
+    function updateStatus(num){
+      const parts = [];
+      ['offense','defense','special'].forEach(unit => {
+        const val = resolvedRef[num][unit];
+        parts.push((unit === 'special' ? 'S/T' : unit.charAt(0).toUpperCase() + unit.slice(1)) + ': ' + (val ? val.name : 'not set'));
+      });
+      const el = document.getElementById('conflictStatus_' + teamKey + '_' + num);
+      if (el) el.textContent = parts.join(' · ');
+    }
+    conflicts.forEach(c => updateStatus(c.num));
+
+    container.querySelectorAll('.conflictCheck').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const num = cb.dataset.num, unit = cb.dataset.unit, idx = parseInt(cb.dataset.idx);
+        const conflict = conflicts.find(c => c.num === num);
+        const entry = conflict.entries[idx];
+        if (cb.checked){
+          resolvedRef[num][unit] = entry;
+        } else if (resolvedRef[num][unit] === entry){
+          resolvedRef[num][unit] = null;
+        }
+        // Uncheck this entry for this unit in any OTHER row it might also
+        // appear checked under (shouldn't normally happen since each entry
+        // is only in the group once, but keep resolvedRef authoritative).
+        updateStatus(num);
+      });
+    });
   }
 
   let ourTeamId = null;
+  let editGameId = null;
+  let editGameStatus = null;
+  let oppRosterTouched = false;
+  let ourResolved = {}, ourConflictsList = [];
+  let oppRosterSkipped = false;
+  let oppResolved = {}, oppConflictsList = [];
 
   function showView(name){
-    ['loading', 'teamSetupView', 'rosterView'].forEach(v => {
-      document.getElementById(v).classList.toggle('hidden', v !== name);
-    });
+    ['loading', 'mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
   }
   function showMsg(elId, text, type){
     document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
-  }
-  function clearMsg(elId){
-    document.getElementById(elId).innerHTML = '';
   }
 
   async function guardMinRoleOrRedirect(userId, minRole){
@@ -167,7 +328,7 @@
     if (event === 'INITIAL_SESSION'){
       if (session){
         guardMinRoleOrRedirect(session.user.id, 'admin').then(ok => {
-          if (ok) loadTeam();
+          if (ok) init();
         });
       } else {
         window.location.href = '/';
@@ -177,237 +338,411 @@
     }
   });
 
-  async function loadTeam(){
-    const { data, error } = await supabaseClient
-      .from('teams')
-      .select('id, name')
-      .eq('is_our_team', true)
-      .limit(1);
-    if (error){
-      showView('teamSetupView');
-      showMsg('teamSetupMsg', 'Could not check for an existing team: ' + error.message, 'error');
-      return;
-    }
-    if (data && data.length > 0){
-      const team = data[0];
-      ourTeamId = team.id;
-      document.getElementById('rosterTitle').textContent = team.name + ' Roster';
-      showView('rosterView');
-      loadRoster();
-    } else {
-      showView('teamSetupView');
-    }
-  }
+  async function init(){
+    document.getElementById('seasonYear').value = new Date().getFullYear();
+    editGameId = new URLSearchParams(window.location.search).get('edit');
 
-  document.getElementById('createTeamBtn').addEventListener('click', async () => {
-    const name = document.getElementById('teamNameInput').value.trim();
-    if (!name){
-      showMsg('teamSetupMsg', 'Enter a team name first.', 'error');
+    const { data: teams, error: teamError } = await supabaseClient
+      .from('teams').select('id, name, current_season_year').eq('is_our_team', true).limit(1);
+    if (teamError || !teams || teams.length === 0){
+      showView('mainView');
+      showMsg('setupMsg', 'No team found yet — set up your Team Roster first.', 'error');
       return;
     }
-    const { data, error } = await supabaseClient
-      .from('teams')
-      .insert({ name, is_our_team: true })
-      .select('id, name')
-      .single();
-    if (error){
-      showMsg('teamSetupMsg', error.message, 'error');
-      return;
+    ourTeamId = teams[0].id;
+    if (teams[0].current_season_year){
+      document.getElementById('seasonYear').value = teams[0].current_season_year;
     }
-    ourTeamId = data.id;
-    document.getElementById('rosterTitle').textContent = data.name + ' Roster';
-    showView('rosterView');
-    loadRoster();
-  });
 
-  async function loadRoster(){
-    clearMsg('rosterMsg');
-    const { data, error } = await supabaseClient
-      .from('players')
-      .select('id, name, primary_position, default_jersey_number')
-      .eq('team_id', ourTeamId)
-      .order('default_jersey_number', { ascending: true });
-    if (error){
-      showMsg('rosterMsg', 'Could not load roster: ' + error.message, 'error');
-      return;
-    }
-    renderRoster(data || []);
-  }
-
-  function renderRoster(players){
-    const body = document.getElementById('rosterBody');
-    if (players.length === 0){
-      body.innerHTML = '<div style="color:#999; padding:10px 0;">No players yet — add your first one below.</div>';
-      return;
-    }
-    body.innerHTML = players.map(p => {
-      const unit = posToUnit(p.primary_position);
-      return '<div class="rosterRow" data-id="' + p.id + '">' +
-        '<div class="rosterLine1">' +
-          '<span class="rosterNameNum">#' + (p.default_jersey_number || '—') + ' ' + p.name + '</span>' +
-          unitBadge(unit) +
-        '</div>' +
-        '<div class="rosterLine2">' +
-          '<span class="rosterPos">' + (p.primary_position || '') + '</span>' +
-          '<span class="rosterActions">' +
-            '<button class="secondary editBtn" data-id="' + p.id + '">Edit</button>' +
-            '<button class="danger removeBtn" data-id="' + p.id + '">Remove</button>' +
-          '</span>' +
-        '</div>' +
-      '</div>';
-    }).join('');
-    body.querySelectorAll('.editBtn').forEach(b => b.addEventListener('click', () => startEdit(b.dataset.id, players)));
-    body.querySelectorAll('.removeBtn').forEach(b => b.addEventListener('click', () => removePlayer(b.dataset.id)));
-  }
-
-  function startEdit(id, players){
-    const p = players.find(pl => pl.id === id);
-    if (!p) return;
-    const row = document.querySelector('.rosterRow[data-id="' + id + '"]');
-    row.innerHTML =
-      '<div class="rosterLine1">' +
-        '<input type="text" class="editNumber" value="' + (p.default_jersey_number || '') + '" style="width:50px; flex-shrink:0;">' +
-        '<input type="text" class="editName" value="' + p.name + '" style="flex:1;">' +
-      '</div>' +
-      '<div class="rosterLine2">' +
-        '<input type="text" class="editPosition" value="' + (p.primary_position || '') + '" style="width:70px; flex-shrink:0;">' +
-        '<span class="rosterActions"><button class="saveEditBtn">Save</button><button class="secondary" onclick="location.reload()">Cancel</button></span>' +
-      '</div>';
-    row.querySelector('.saveEditBtn').addEventListener('click', async () => {
-      const newNumber = row.querySelector('.editNumber').value.trim();
-      const newName = row.querySelector('.editName').value.trim();
-      const newPosition = row.querySelector('.editPosition').value.trim().toUpperCase();
-      const { error } = await supabaseClient
-        .from('players')
-        .update({ name: newName, primary_position: newPosition, default_jersey_number: newNumber })
-        .eq('id', id);
-      if (error){
-        showMsg('rosterMsg', error.message, 'error');
+    if (editGameId){
+      document.getElementById('pageHeading').textContent = 'Edit Game Setup';
+      document.getElementById('createGameBtn').textContent = 'Save changes';
+      const { data: existingGames, error: existingError } = await supabaseClient
+        .from('games').select('*').eq('id', editGameId).limit(1);
+      if (existingError || !existingGames || existingGames.length === 0){
+        showView('mainView');
+        showMsg('setupMsg', 'Could not load this game to edit: ' + (existingError ? existingError.message : 'not found'), 'error');
         return;
       }
-      loadRoster();
+      const eg = existingGames[0];
+      editGameStatus = eg.status;
+      document.getElementById('designator').value = eg.designator;
+      document.getElementById('seasonYear').value = eg.season_year;
+      document.getElementById('gameDate').value = eg.game_date || '';
+      document.getElementById('quarterLen').value = Math.round((eg.quarter_length_seconds || 720) / 60);
+      const isHomeExisting = eg.our_team_is_home;
+      document.getElementById('homeAway').value = isHomeExisting ? 'home' : 'away';
+      document.getElementById('opponentName').value = isHomeExisting ? eg.away_team_name : eg.home_team_name;
+      if (eg.opponent_primary_color) document.getElementById('oppPrimaryColorInput').value = eg.opponent_primary_color;
+      if (eg.opponent_secondary_color) document.getElementById('oppSecondaryColorInput').value = eg.opponent_secondary_color;
+      const seeds = eg.seed_starters || {};
+      ['QB','RB1','RB2','WR1','WR2','WR3'].forEach(role => {
+        if (seeds.teamA && seeds.teamA[role]) document.getElementById('ourStarter' + role).value = seeds.teamA[role];
+        if (seeds.teamB && seeds.teamB[role]) document.getElementById('oppStarter' + role).value = seeds.teamB[role];
+      });
+      if (eg.opponent_logo_url){
+        const img = document.getElementById('oppLogoPreview');
+        img.src = eg.opponent_logo_url;
+        img.style.display = 'inline-block';
+      }
+      const { data: existingOppRoster } = await supabaseClient
+        .from('game_rosters').select('id').eq('game_id', editGameId).eq('team_side', 'teamB');
+      const oppCount = existingOppRoster ? existingOppRoster.length : 0;
+      document.getElementById('currentOppRosterNote').innerHTML =
+        '<div class="roster-summary" style="color:#888;">' +
+        (oppCount > 0 ? 'Currently saved: ' + oppCount + ' opponent player(s). Upload a new file below only if you need to replace it.' : 'No opponent roster currently saved for this game.') +
+        '</div>';
+    } else {
+      // New game: default the quarter length to the standard 12 minutes,
+      // and figure out the next designator from how many games already
+      // exist this season (G1 if none yet, G2 if one exists, and so on).
+      document.getElementById('quarterLen').value = 12;
+      const seasonYearVal = parseInt(document.getElementById('seasonYear').value);
+      const { data: existingSeasonGames } = await supabaseClient
+        .from('games').select('id').eq('season_year', seasonYearVal);
+      const nextNum = (existingSeasonGames ? existingSeasonGames.length : 0) + 1;
+      document.getElementById('designator').value = 'G' + nextNum;
+    }
+
+    const { data: players, error: playersError } = await supabaseClient
+      .from('players').select('name, primary_position, default_jersey_number, id').eq('team_id', ourTeamId);
+    if (playersError){
+      showView('mainView');
+      showMsg('setupMsg', 'Could not load your roster: ' + playersError.message, 'error');
+      return;
+    }
+
+    const entries = (players || [])
+      .filter(p => p.default_jersey_number)
+      .map(p => ({ number: p.default_jersey_number, name: p.name, position: p.primary_position, explicitUnit: null, playerId: p.id }));
+    let { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
+
+    // In edit mode, resolveByNumber just re-picks a default (the first
+    // entry) for every conflict, since it has no memory of what was
+    // chosen last time. Load whatever was actually saved for this game
+    // and use it to override those defaults, so a coach's prior "quick
+    // check" choices are still there instead of silently resetting.
+    if (editGameId){
+      const { data: savedOurRows } = await supabaseClient
+        .from('game_rosters').select('jersey_number, unit, player_id, player_name').eq('game_id', editGameId).eq('team_side', 'teamA');
+      (savedOurRows || []).forEach(saved => {
+        const bucket = resolved[saved.jersey_number];
+        if (!bucket) return;
+        const match = entries.find(en =>
+          String(en.number).trim() === String(saved.jersey_number).trim() &&
+          (en.playerId === saved.player_id || en.name === saved.player_name)
+        );
+        if (match) bucket[saved.unit] = match;
+      });
+      conflicts = filterUnresolvedConflicts(conflicts, savedOurRows);
+    }
+
+    ourResolved = resolved;
+    ourConflictsList = conflicts;
+    document.getElementById('ourRosterStatus').innerHTML =
+      '<div class="roster-summary">' + entries.length + ' players loaded from your roster' +
+      (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>';
+    renderAssignmentUI('ourAssignments', 'our', needsAssignment, ourResolved);
+    renderConflictUI('ourConflicts', 'our', conflicts, ourResolved);
+
+    if (editGameStatus === 'final'){
+      setFormLocked(true);
+    }
+
+    showView('mainView');
+  }
+
+  function setFormLocked(locked){
+    document.getElementById('finalLockBanner').classList.toggle('hidden', !locked);
+    document.querySelectorAll('#mainView input, #mainView select, #mainView button').forEach(el => {
+      if (el.id === 'unlockFinalBtn') return;
+      el.disabled = locked;
     });
   }
 
-  async function removePlayer(id){
-    if (!confirm('Remove this player from the roster? This does not affect any past game data.')) return;
-    const { error } = await supabaseClient.from('players').delete().eq('id', id);
-    if (error){
-      showMsg('rosterMsg', error.message, 'error');
-      return;
+  document.getElementById('unlockFinalBtn').addEventListener('click', () => {
+    if (confirm('This game is finalized. Are you sure you need to change its setup? Only do this if something genuinely needs correcting.')){
+      setFormLocked(false);
     }
-    loadRoster();
-  }
-
-  document.getElementById('addPlayerBtn').addEventListener('click', async () => {
-    const number = document.getElementById('newNumber').value.trim();
-    const name = document.getElementById('newName').value.trim();
-    const position = document.getElementById('newPosition').value;
-    if (!name){
-      showMsg('rosterMsg', 'Enter a name before adding a player.', 'error');
-      return;
-    }
-    const { error } = await supabaseClient
-      .from('players')
-      .insert({ team_id: ourTeamId, name, primary_position: position || null, default_jersey_number: number || null });
-    if (error){
-      showMsg('rosterMsg', error.message, 'error');
-      return;
-    }
-    document.getElementById('newNumber').value = '';
-    document.getElementById('newName').value = '';
-    document.getElementById('newPosition').value = '';
-    loadRoster();
   });
 
-  document.getElementById('uploadRosterBtn').addEventListener('click', () => {
-    document.getElementById('rosterFile').click();
+  document.getElementById('uploadOpponentBtn').addEventListener('click', () => {
+    document.getElementById('opponentFile').click();
   });
 
-  let pendingUploadRows = null;
+  document.getElementById('skipOpponentBtn').addEventListener('click', () => {
+    const ok = confirm(
+      'Skip uploading a roster for the opponent?\n\n' +
+      'Entry for their team will be 100% manual for this whole game — you\'ll enter jersey numbers only, with no player names shown, and no offense/defense/special-teams sorting.\n\n' +
+      'You can still upload a roster afterward if you change your mind. Continue without one for now?'
+    );
+    if (!ok) return;
+    oppRosterSkipped = true;
+    oppRosterTouched = true;
+    oppResolved = {};
+    oppConflictsList = [];
+    document.getElementById('opponentAssignments').innerHTML = '';
+    document.getElementById('opponentConflicts').innerHTML = '';
+    document.getElementById('opponentRosterStatus').innerHTML =
+      '<div class="roster-summary" style="color:#a37a00;">No roster — entry for the opponent will be manual (numbers only) for this game.</div>';
+  });
 
-  document.getElementById('rosterFile').addEventListener('change', async (e) => {
+  document.getElementById('opponentFile').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const preview = document.getElementById('uploadPreview');
-    preview.classList.remove('hidden');
-    preview.innerHTML = '<p style="font-size:13px; color:#888; margin:0;">Reading file…</p>';
-
+    const statusEl = document.getElementById('opponentRosterStatus');
+    statusEl.innerHTML = '<div class="roster-summary" style="color:#888;">Reading file…</div>';
     const reader = new FileReader();
-    reader.onload = async (ev) => {
+    reader.onload = (ev) => {
       let rows;
       try {
         const wb = XLSX.read(ev.target.result, { type: 'array' });
         const sheet = wb.Sheets[wb.SheetNames[0]];
         rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
       } catch (err){
-        preview.innerHTML = '<p style="color:#a32d2d; margin:0;">Could not read that file: ' + err.message + '</p>';
+        showMsg('opponentRosterStatus', 'Could not read that file: ' + err.message, 'error');
         return;
       }
-
-      const parsed = [];
+      const entries = [];
       rows.forEach(row => {
-        const num = row[0], name = row[1], pos = row[2];
-        if (num === undefined || name === undefined) return;
-        if (!/^\d+$/.test(String(num).trim())) return; // skip header row / junk
-        parsed.push({
-          default_jersey_number: String(num).trim(),
-          name: String(name).trim(),
-          primary_position: pos ? String(pos).trim().toUpperCase() : null
-        });
+        const num = row[0], rawName = row[1], pos = row[2];
+        if (num === undefined || rawName === undefined) return;
+        if (!/^\d+$/.test(String(num).trim())) return;
+        const { cleanName, explicitUnit } = extractNameTag(rawName);
+        entries.push({ number: String(num).trim(), name: cleanName, position: pos ? String(pos).trim().toUpperCase() : null, explicitUnit });
       });
-
-      if (parsed.length === 0){
-        preview.innerHTML = '<p style="color:#a32d2d; margin:0;">No valid rows found. Expected column A = number, column B = name, column C = position.</p>';
+      if (entries.length === 0){
+        showMsg('opponentRosterStatus', 'No valid rows found. Expected column A = number, column B = name, column C = position.', 'error');
         return;
       }
-
-      // Skip anyone already on the roster by name, so re-uploading the
-      // same (or an updated) file doesn't create duplicates.
-      const { data: existing, error } = await supabaseClient
-        .from('players')
-        .select('name')
-        .eq('team_id', ourTeamId);
-      if (error){
-        preview.innerHTML = '<p style="color:#a32d2d; margin:0;">Could not check existing roster: ' + error.message + '</p>';
-        return;
-      }
-      const existingNames = new Set((existing || []).map(p => p.name.trim().toLowerCase()));
-      const newRows = parsed.filter(p => !existingNames.has(p.name.toLowerCase()));
-      const skipped = parsed.length - newRows.length;
-
-      pendingUploadRows = newRows;
-      preview.innerHTML =
-        '<p style="font-size:14px; margin:0 0 8px;"><strong>' + newRows.length + '</strong> new player(s) will be added.' +
-        (skipped > 0 ? ' <strong>' + skipped + '</strong> already on the roster and will be skipped.' : '') + '</p>' +
-        (newRows.length > 0 ? '<button id="confirmUploadBtn">Add ' + newRows.length + ' players</button> ' : '') +
-        '<button class="secondary" id="cancelUploadBtn">Cancel</button>';
-
-      const confirmBtn = document.getElementById('confirmUploadBtn');
-      if (confirmBtn) confirmBtn.addEventListener('click', async () => {
-        const toInsert = pendingUploadRows.map(p => Object.assign({ team_id: ourTeamId }, p));
-        const { error: insertError } = await supabaseClient.from('players').insert(toInsert);
-        if (insertError){
-          preview.innerHTML = '<p style="color:#a32d2d; margin:0;">' + insertError.message + '</p>';
-          return;
-        }
-        preview.classList.add('hidden');
-        preview.innerHTML = '';
-        document.getElementById('rosterFile').value = '';
-        loadRoster();
-      });
-      document.getElementById('cancelUploadBtn').addEventListener('click', () => {
-        preview.classList.add('hidden');
-        preview.innerHTML = '';
-        document.getElementById('rosterFile').value = '';
-        pendingUploadRows = null;
-      });
+      const { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
+      oppResolved = resolved;
+      oppRosterTouched = true;
+      oppRosterSkipped = false;
+      oppConflictsList = conflicts;
+      document.getElementById('opponentRosterStatus').innerHTML =
+        '<div class="roster-summary">' + entries.length + ' players loaded' +
+        (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>';
+      renderAssignmentUI('opponentAssignments', 'opp', needsAssignment, oppResolved);
+      renderConflictUI('opponentConflicts', 'opp', conflicts, oppResolved);
     };
     reader.readAsArrayBuffer(file);
   });
 
-  document.getElementById('backBtn').addEventListener('click', () => {
-    window.location.href = 'dashboard.html';
+  function buildGameRosterRows(resolved, teamSide){
+    const rows = [];
+    Object.keys(resolved).forEach(num => {
+      ['offense','defense','special'].forEach(unit => {
+        const entry = resolved[num][unit];
+        if (entry){
+          rows.push({
+            team_side: teamSide,
+            jersey_number: num,
+            player_name: entry.name,
+            unit,
+            position: entry.position || null,
+            player_id: entry.playerId || null
+          });
+        }
+      });
+    });
+    return rows;
+  }
+
+  let pendingOppLogoFile = null;
+  document.getElementById('chooseOppLogoBtn').addEventListener('click', () => document.getElementById('oppLogoInput').click());
+
+  function readFileAsDataURL(file){
+    return new Promise(resolve => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.readAsDataURL(file);
+    });
+  }
+  function detectLogoColors(dataUrl){
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const size = 60;
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, size, size);
+        let data;
+        try { data = ctx.getImageData(0, 0, size, size).data; }
+        catch (err){ resolve({ primary: null, secondary: null }); return; }
+        // Quantizes each pixel into a coarse color bucket so near-
+        // identical shades of the same color group together, then finds
+        // the bucket with the most pixels -- the actual dominant color,
+        // rather than averaging every pixel into one blended value
+        // (which is what turns a logo that's genuinely red and blue
+        // into a muddy purple).
+        const BUCKET = 32;
+        const buckets = {};
+        for (let i = 0; i < data.length; i += 4){
+          const alpha = data[i+3];
+          if (alpha < 100) continue;
+          const rr = data[i], gg = data[i+1], bb = data[i+2];
+          if (rr > 235 && gg > 235 && bb > 235) continue;
+          if (rr < 20 && gg < 20 && bb < 20) continue;
+          const key = Math.round(rr/BUCKET) + '_' + Math.round(gg/BUCKET) + '_' + Math.round(bb/BUCKET);
+          if (!buckets[key]) buckets[key] = { count: 0, rSum: 0, gSum: 0, bSum: 0 };
+          buckets[key].count++;
+          buckets[key].rSum += rr; buckets[key].gSum += gg; buckets[key].bSum += bb;
+        }
+        const entries = Object.values(buckets).map(bk => ({
+          count: bk.count,
+          r: Math.round(bk.rSum / bk.count), g: Math.round(bk.gSum / bk.count), b: Math.round(bk.bSum / bk.count)
+        })).sort((a, b) => b.count - a.count);
+        if (entries.length === 0){ resolve({ primary: null, secondary: null }); return; }
+        const toHex = c => '#' + [c.r, c.g, c.b].map(v => v.toString(16).padStart(2,'0')).join('');
+        const colorDistance = (a, b) => Math.sqrt((a.r-b.r)**2 + (a.g-b.g)**2 + (a.b-b.b)**2);
+        const primary = entries[0];
+        // The second color needs to be genuinely different in hue AND
+        // make up a real share of the image, not just a small cluster
+        // of edge-blend pixels where the logo's color anti-aliases into
+        // the white background during downscaling.
+        const secondEntry = entries.find(e => colorDistance(e, primary) > 60 && e.count > primary.count * 0.15);
+        resolve({ primary: toHex(primary), secondary: secondEntry ? toHex(secondEntry) : null });
+      };
+      img.onerror = () => resolve({ primary: null, secondary: null });
+      img.src = dataUrl;
+    });
+  }
+  function contrastingColor(hex){
+    const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+    const luminance = (0.299*r + 0.587*g + 0.114*b) / 255;
+    return luminance > 0.6 ? '#1a1a1a' : '#ffffff';
+  }
+
+  document.getElementById('oppLogoInput').addEventListener('change', async (e) => {
+    pendingOppLogoFile = e.target.files[0] || null;
+    if (!pendingOppLogoFile) return;
+    if (URL.createObjectURL){
+      try {
+        const img = document.getElementById('oppLogoPreview');
+        img.src = URL.createObjectURL(pendingOppLogoFile);
+        img.style.display = 'inline-block';
+      } catch (e){}
+    }
+    const dataUrl = await readFileAsDataURL(pendingOppLogoFile);
+    const detected = await detectLogoColors(dataUrl);
+    if (detected.primary){
+      document.getElementById('oppPrimaryColorInput').value = detected.primary;
+      document.getElementById('oppSecondaryColorInput').value = detected.secondary || contrastingColor(detected.primary);
+    }
+  });
+
+  async function uploadOppLogo(file, gameId){
+    const ext = file.name.split('.').pop();
+    const path = 'opponent/' + gameId + '/logo.' + ext;
+    const { error: uploadError } = await supabaseClient.storage
+      .from('team-logos').upload(path, file, { upsert: true });
+    if (uploadError) throw uploadError;
+    const { data } = supabaseClient.storage.from('team-logos').getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  document.getElementById('createGameBtn').addEventListener('click', async () => {
+    const designator = document.getElementById('designator').value.trim();
+    const seasonYearRaw = document.getElementById('seasonYear').value;
+    const seasonYear = parseInt(seasonYearRaw);
+    const gameDate = document.getElementById('gameDate').value || null;
+    const opponentName = document.getElementById('opponentName').value.trim();
+    const isHome = document.getElementById('homeAway').value === 'home';
+    const quarterLenRaw = document.getElementById('quarterLen').value;
+    const quarterLenMin = parseInt(quarterLenRaw);
+
+    if (!designator || !seasonYearRaw || isNaN(seasonYear) || !gameDate || !opponentName || !quarterLenRaw || isNaN(quarterLenMin) || quarterLenMin <= 0){
+      showMsg('setupMsg', 'Fill in every field above before creating the game — designator, season, date, opponent name, and quarter length all need a value.', 'error');
+      return;
+    }
+    // In edit mode, leaving the opponent roster untouched just keeps
+    // whatever's already saved -- only require a roster/skip decision
+    // when creating a new game, or when actively replacing it.
+    if (Object.keys(oppResolved).length === 0 && !oppRosterSkipped && (!editGameId || oppRosterTouched)){
+      showMsg('setupMsg', 'Upload the opponent roster, or click "Skip roster" to continue with manual entry.', 'error');
+      return;
+    }
+
+    const { data: teamRow } = await supabaseClient.from('teams').select('name').eq('id', ourTeamId).limit(1);
+    const ourName = (teamRow && teamRow[0] && teamRow[0].name) || 'Us';
+
+    const seedStarters = { teamA: {}, teamB: {} };
+    ['QB','RB1','RB2','WR1','WR2','WR3'].forEach(role => {
+      const ourVal = document.getElementById('ourStarter' + role).value.trim();
+      const oppVal = document.getElementById('oppStarter' + role).value.trim();
+      if (ourVal) seedStarters.teamA[role] = ourVal;
+      if (oppVal) seedStarters.teamB[role] = oppVal;
+    });
+
+    const gamePayload = {
+      designator,
+      season_year: seasonYear,
+      game_date: gameDate,
+      home_team_name: isHome ? ourName : opponentName,
+      away_team_name: isHome ? opponentName : ourName,
+      our_team_is_home: isHome,
+      quarter_length_seconds: quarterLenMin * 60,
+      opponent_primary_color: document.getElementById('oppPrimaryColorInput').value,
+      opponent_secondary_color: document.getElementById('oppSecondaryColorInput').value,
+      seed_starters: seedStarters
+    };
+
+    let gameId;
+    if (editGameId){
+      gameId = editGameId;
+      const { error: updateError } = await supabaseClient.from('games').update(gamePayload).eq('id', gameId);
+      if (updateError){
+        showMsg('setupMsg', 'Could not save changes: ' + updateError.message, 'error');
+        return;
+      }
+    } else {
+      gamePayload.status = 'setup';
+      const { data: game, error: gameError } = await supabaseClient
+        .from('games').insert(gamePayload).select('id').single();
+      if (gameError){
+        showMsg('setupMsg', 'Could not create game: ' + gameError.message, 'error');
+        return;
+      }
+      gameId = game.id;
+    }
+
+    if (pendingOppLogoFile){
+      try {
+        const logoUrl = await uploadOppLogo(pendingOppLogoFile, gameId);
+        await supabaseClient.from('games').update({ opponent_logo_url: logoUrl }).eq('id', gameId);
+      } catch (logoErr){
+        showMsg('setupMsg', 'Game saved, but opponent logo upload failed: ' + logoErr.message, 'error');
+      }
+    }
+
+    // Our roster is always freshly resolved from the current team roster,
+    // so it always gets replaced. The opponent roster only gets replaced
+    // if it was actually touched this session -- otherwise the existing
+    // saved roster is left completely alone.
+    if (editGameId){
+      await supabaseClient.from('game_rosters').delete().eq('game_id', gameId).eq('team_side', 'teamA');
+      if (oppRosterTouched){
+        await supabaseClient.from('game_rosters').delete().eq('game_id', gameId).eq('team_side', 'teamB');
+      }
+    }
+
+    const rosterRows = [
+      ...buildGameRosterRows(ourResolved, 'teamA'),
+      ...(!editGameId || oppRosterTouched ? buildGameRosterRows(oppResolved, 'teamB') : [])
+    ].map(r => Object.assign({ game_id: gameId }, r));
+
+    if (rosterRows.length > 0){
+      const { error: rosterError } = await supabaseClient.from('game_rosters').insert(rosterRows);
+      if (rosterError){
+        showMsg('setupMsg', 'Game saved, but roster snapshot failed: ' + rosterError.message, 'error');
+        return;
+      }
+    }
+
+    showMsg('setupMsg', editGameId ? 'Changes saved.' : 'Game created.', 'success');
+    setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
   });
 </script>
 </body>
