@@ -160,7 +160,7 @@
     document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
   }
 
-  let currentUserId = null, currentUserEmail = null, currentIsAdmin = false;
+  let currentUserId = null, currentUserEmail = null, currentIsAdmin = false, currentCanEnterGames = false;
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION'){
@@ -183,8 +183,10 @@
 
   async function loadIsAdmin(){
     const { data, error } = await supabaseClient
-      .from('profiles').select('is_admin').eq('id', currentUserId).limit(1);
-    currentIsAdmin = !error && data && data.length > 0 && !!data[0].is_admin;
+      .from('profiles').select('role').eq('id', currentUserId).limit(1);
+    const role = (!error && data && data.length > 0 && data[0].role) || 'view';
+    currentIsAdmin = role === 'admin';
+    currentCanEnterGames = role === 'admin' || role === 'game_entry';
     document.getElementById('newGameLink').classList.toggle('hidden', !currentIsAdmin);
     document.getElementById('rosterLink').classList.toggle('hidden', !currentIsAdmin);
     document.getElementById('customizeLink').classList.toggle('hidden', !currentIsAdmin);
@@ -349,7 +351,7 @@
     body.querySelectorAll('.game-row').forEach(row => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('.rowMenuBtn') || e.target.closest('.rowMenu')) return;
-        if (currentIsAdmin){
+        if (currentCanEnterGames){
           window.location.href = 'game.html?id=' + row.dataset.id;
         } else if (row.dataset.status === 'in_progress'){
           window.location.href = 'view.html?id=' + row.dataset.id;
