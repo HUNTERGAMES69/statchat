@@ -105,6 +105,7 @@
         <button class="ptypeBtn" data-type="sack">Sack</button>
         <button class="ptypeBtn" data-type="int">Interception</button>
         <button class="ptypeBtn" data-type="fumble">Fumble</button>
+        <button class="ptypeBtn" data-type="safety">Safety</button>
       </div>
       <p class="hint" style="margin:10px 0 6px;">Special teams</p>
       <div class="row">
@@ -497,6 +498,18 @@ function parseInput(raw, state){
       text: 'Penalty on ' + TEAMS[team].name + ' — ' + yds + ' yds',
       effect: { penaltyTeam: team, penaltyYds: yds, fieldDelta },
       flipEligible: false, team
+    };
+  }
+
+  const safetyMatch = tokens[0].match(/^sf$/i);
+  if (safetyMatch){
+    const rec = tokens[1];
+    let t = TEAMS[off].name + ' tackled in their own end zone — SAFETY';
+    if (rec) t += ', credit ' + nameInDefense(def, rec);
+    return {
+      text: t,
+      effect: { score: { team: def, points: 2 }, endsDrive: true },
+      flipEligible: false, team: off, quarter: state.quarter
     };
   }
 
@@ -1159,6 +1172,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input type="radio" name="pp_fumrec" value="own" checked> Recovered by own team</label>' +
         '<label class="inline" style="display:block;"><input type="radio" name="pp_fumrec" value="opp"> Recovered by opponent</label></div>' +
         '<div id="pp_fum_opp" style="display:none;">' + defBlock('Recovered by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot') + '</div>';
+    else if (type === 'safety') html =
+        '<p class="hint" style="margin:0 0 10px;">Offense tackled, or committed a foul, in their own end zone. Always 2 points for the defense, and ends the drive — the scoring team kicks off next, logged as its own play afterward.</p>' +
+        defBlock('Credited to (optional)');
     else if (type === 'kickoff') html = offBlock('kicker','Kicker') + yardsBlock('Kick distance') + defBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' + tdBlock + startingSpotFieldsHtml('pp_spot');
     else if (type === 'punt') html =
         offBlock('punter','Punter') +
@@ -1364,6 +1380,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         code = sel.carrier + 'f ' + sel.credit + (yds ? ' ' + yds : '') + (td ? ' td' : '');
         roles = { carrier: { team: off, num: sel.carrier }, defense: { team: def, num: sel.credit } };
       }
+    } else if (type === 'safety'){
+      code = 'sf' + (sel.credit ? ' ' + sel.credit : '');
+      roles = sel.credit ? { defense: { team: def, num: sel.credit }, playType: 'safety' } : null;
     } else if (type === 'kickoff'){
       if (!sel.kicker) return;
       const yds = yards('pp_yards') || '0';
