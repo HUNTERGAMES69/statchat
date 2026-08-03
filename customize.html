@@ -30,7 +30,7 @@
 <body>
 <div class="wrap">
 
-  <div id="loading" class="card"><h1>Loading…</h1></div>
+  <div id="loading" class="card"><div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:14px;"><img src="logo.png" alt="StatChat" style="width:48px; height:auto; border-radius:8px;"><img id="splashTeamIcon" style="display:none; width:48px; height:48px; border-radius:8px; object-fit:cover;"></div><h1>Loading…</h1></div>
 
   <div id="mainView" class="hidden">
     <div class="card">
@@ -69,6 +69,18 @@
         <img id="logoPreview" style="display:none; height:56px; border-radius:6px;">
       </div>
 
+      <div class="field-row" style="margin-top:14px;">
+        <div>
+          <label>Icon</label>
+          <button type="button" id="chooseIconBtn" class="secondary">Choose file</button>
+          <input type="file" id="iconInput" accept="image/*" style="display:none;">
+          <div class="hint">A square image — used as the browser tab icon, the home screen icon when added on an iPhone, and on the loading screen alongside the StatChat logo. Separate from the logo above.</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <img id="iconPreview" style="display:none; height:56px; width:56px; border-radius:8px; object-fit:cover;">
+      </div>
+
       <div class="field-row">
         <div>
           <label>Primary color</label>
@@ -87,6 +99,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="team-icon.js"></script>
 <script>
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
@@ -94,6 +107,7 @@
 
   let ourTeamId = null;
   let pendingLogoFile = null;
+  let pendingIconFile = null;
 
   function showView(name){
     ['loading', 'mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
@@ -126,7 +140,7 @@
 
   async function init(){
     const { data, error } = await supabaseClient
-      .from('teams').select('id, name, full_name, logo_url, primary_color, secondary_color, current_season_year')
+      .from('teams').select('id, name, full_name, logo_url, icon_url, primary_color, secondary_color, current_season_year')
       .eq('is_our_team', true).limit(1);
     if (error){
       showView('mainView');
@@ -147,6 +161,11 @@
     if (team.logo_url){
       const img = document.getElementById('logoPreview');
       img.src = team.logo_url;
+      img.style.display = 'inline-block';
+    }
+    if (team.icon_url){
+      const img = document.getElementById('iconPreview');
+      img.src = team.icon_url;
       img.style.display = 'inline-block';
     }
     showView('mainView');
@@ -218,6 +237,29 @@
     }
   });
 
+  document.getElementById('chooseIconBtn').addEventListener('click', () => document.getElementById('iconInput').click());
+  document.getElementById('iconInput').addEventListener('change', (e) => {
+    pendingIconFile = e.target.files[0] || null;
+    if (!pendingIconFile) return;
+    if (URL.createObjectURL){
+      try {
+        const img = document.getElementById('iconPreview');
+        img.src = URL.createObjectURL(pendingIconFile);
+        img.style.display = 'inline-block';
+      } catch (e){}
+    }
+  });
+
+  async function uploadIcon(file, teamId){
+    const ext = file.name.split('.').pop();
+    const path = teamId + '/icon.' + ext;
+    const { error: uploadError } = await supabaseClient.storage
+      .from('team-logos').upload(path, file, { upsert: true });
+    if (uploadError) throw uploadError;
+    const { data } = supabaseClient.storage.from('team-logos').getPublicUrl(path);
+    return data.publicUrl;
+  }
+
   async function uploadLogo(file, teamId){
     const ext = file.name.split('.').pop();
     const path = teamId + '/logo.' + ext;
@@ -248,6 +290,14 @@
         updates.logo_url = await uploadLogo(pendingLogoFile, ourTeamId);
       } catch (logoErr){
         showMsg('Logo upload failed: ' + logoErr.message, 'error');
+        return;
+      }
+    }
+    if (pendingIconFile){
+      try {
+        updates.icon_url = await uploadIcon(pendingIconFile, ourTeamId);
+      } catch (iconErr){
+        showMsg('Icon upload failed: ' + iconErr.message, 'error');
         return;
       }
     }
