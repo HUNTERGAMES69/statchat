@@ -525,8 +525,24 @@ function parseInput(raw, state){
 
   if (['r', 'p', 'i', 's'].includes(type)){
     let netYards = 0, tackler = null, text;
-    if (type === 'r'){ netYards = parseInt(rest[0]) || 0; tackler = rest[1]; text = O(p1) + ' rush for ' + netYards; }
-    else if (type === 'p'){ netYards = parseInt(rest[1]) || 0; tackler = rest[2]; text = O(p1) + ' pass to ' + O(rest[0]) + ' for ' + netYards; }
+    if (type === 'r'){
+      netYards = parseInt(rest[0]) || 0; tackler = rest[1];
+      if (isSafety){
+        return { text: O(p1) + ' rush for ' + netYards + ' — tackled in own end zone — SAFETY',
+          effect: { score: { team: def, points: 2 }, endsDrive: true },
+          flipEligible: false, team: off, quarter: state.quarter };
+      }
+      text = O(p1) + ' rush for ' + netYards;
+    }
+    else if (type === 'p'){
+      netYards = parseInt(rest[1]) || 0; tackler = rest[2];
+      if (isSafety){
+        return { text: O(p1) + ' pass to ' + O(rest[0]) + ' for ' + netYards + ' — tackled in own end zone — SAFETY',
+          effect: { score: { team: def, points: 2 }, endsDrive: true },
+          flipEligible: false, team: off, quarter: state.quarter };
+      }
+      text = O(p1) + ' pass to ' + O(rest[0]) + ' for ' + netYards;
+    }
     else if (type === 'i'){ netYards = 0; text = O(p1) + ' incomplete, intended for ' + O(rest[0]); }
     else if (type === 's'){
       netYards = parseInt(rest[0]) || 0; tackler = rest[1];
@@ -1179,8 +1195,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     let html = '';
     if (type === 'rush') html = offBlock('carrier','Ball carrier') +
-        '<div style="display:flex; align-items:flex-end; gap:14px;"><div>' + yardsBlock() + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_fumbled', 'Fumbled') + '</div></div>' +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div>' + yardsBlock() + '</div>' +
+        '<div id="pp_rush_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_fumbled', 'Fumbled') + '</div>' +
+        '<div id="pp_rush_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_safety', 'Safety') + '</div></div>' +
         defBlock('Tackled by (optional)') +
         '<div id="pp_rush_td_wrap">' + tdBlock + '</div>' +
         '<div id="pp_rush_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
@@ -1197,7 +1214,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap">' + yardsBlock() + '</div>' +
         '<div style="margin-bottom:6px;"><input type="checkbox" id="pp_incomplete" style="display:none;">' +
         '<button type="button" id="pp_incomplete_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
-        '<div id="pp_pass_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_fumbled', 'Fumbled') + '</div></div>' +
+        '<div id="pp_pass_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_fumbled', 'Fumbled') + '</div>' +
+        '<div id="pp_pass_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_safety', 'Safety') + '</div></div>' +
         '<div id="pp_pass_extra">' + defBlock('Tackled by (optional)') + '<div id="pp_pass_td_wrap">' + tdBlock + '</div></div>' +
         '<div id="pp_pass_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
           '<label class="inline" style="display:block;"><input type="radio" name="pp_pass_fumrec" value="own" checked> Recovered by own team</label>' +
@@ -1319,6 +1337,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         incToggle.textContent = cb.checked ? '✓ Incomplete' : 'Incomplete';
         const fumbledWrap = document.getElementById('pp_pass_fumbled_wrap');
         if (fumbledWrap) fumbledWrap.style.display = cb.checked ? 'none' : 'block';
+        const safetyWrap = document.getElementById('pp_pass_safety_wrap');
+        if (safetyWrap) safetyWrap.style.display = cb.checked ? 'none' : 'block';
         const fumbledCb = document.getElementById('pp_pass_fumbled');
         if (cb.checked && fumbledCb && fumbledCb.checked){
           fumbledCb.checked = false;
@@ -1326,6 +1346,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           fumbledBtn.style.background = '#fff'; fumbledBtn.style.color = '#555'; fumbledBtn.style.borderColor = '#ccc';
           fumbledBtn.textContent = 'Fumbled';
           document.getElementById('pp_pass_fumble_fields').style.display = 'none';
+          document.getElementById('pp_pass_td_wrap').style.display = 'block';
+        }
+        const safetyCb = document.getElementById('pp_pass_safety');
+        if (cb.checked && safetyCb && safetyCb.checked){
+          safetyCb.checked = false;
+          const safetyBtn = document.getElementById('pp_pass_safety_toggle');
+          safetyBtn.style.background = '#fff'; safetyBtn.style.color = '#555'; safetyBtn.style.borderColor = '#ccc';
+          safetyBtn.textContent = 'Safety';
           document.getElementById('pp_pass_td_wrap').style.display = 'block';
         }
         cb.dispatchEvent(new Event('change'));
@@ -1368,10 +1396,35 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     });
 
     if (type === 'rush'){
+      const resetToggle = (id, label) => {
+        const cb = document.getElementById(id);
+        if (!cb.checked) return;
+        cb.checked = false;
+        const btn = document.getElementById(id + '_toggle');
+        btn.style.background = '#fff'; btn.style.color = '#555'; btn.style.borderColor = '#ccc';
+        btn.textContent = label;
+      };
       document.getElementById('pp_rush_fumbled').addEventListener('change', (e) => {
         document.getElementById('pp_rush_fumble_fields').style.display = e.target.checked ? 'block' : 'none';
-        document.getElementById('pp_rush_td_wrap').style.display = e.target.checked ? 'none' : 'block';
+        if (e.target.checked){
+          resetToggle('pp_rush_safety', 'Safety');
+          document.getElementById('pp_rush_td_wrap').style.display = 'none';
+        } else if (!document.getElementById('pp_rush_safety').checked){
+          document.getElementById('pp_rush_td_wrap').style.display = 'block';
+        }
       });
+      const rushSafetyCb = document.getElementById('pp_rush_safety');
+      if (rushSafetyCb){
+        rushSafetyCb.addEventListener('change', (e) => {
+          if (e.target.checked){
+            resetToggle('pp_rush_fumbled', 'Fumbled');
+            document.getElementById('pp_rush_fumble_fields').style.display = 'none';
+            document.getElementById('pp_rush_td_wrap').style.display = 'none';
+          } else if (!document.getElementById('pp_rush_fumbled').checked){
+            document.getElementById('pp_rush_td_wrap').style.display = 'block';
+          }
+        });
+      }
       panel.querySelectorAll('input[name=pp_rush_fumrec]').forEach(r => r.addEventListener('change', () => {
         const isOpp = document.querySelector('input[name=pp_rush_fumrec]:checked').value === 'opp';
         document.getElementById('pp_rush_fum_opp').style.display = isOpp ? 'block' : 'none';
@@ -1390,10 +1443,35 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
     }
     if (type === 'pass'){
+      const resetToggle = (id, label) => {
+        const cb = document.getElementById(id);
+        if (!cb || !cb.checked) return;
+        cb.checked = false;
+        const btn = document.getElementById(id + '_toggle');
+        btn.style.background = '#fff'; btn.style.color = '#555'; btn.style.borderColor = '#ccc';
+        btn.textContent = label;
+      };
       document.getElementById('pp_pass_fumbled').addEventListener('change', (e) => {
         document.getElementById('pp_pass_fumble_fields').style.display = e.target.checked ? 'block' : 'none';
-        document.getElementById('pp_pass_td_wrap').style.display = e.target.checked ? 'none' : 'block';
+        if (e.target.checked){
+          resetToggle('pp_pass_safety', 'Safety');
+          document.getElementById('pp_pass_td_wrap').style.display = 'none';
+        } else if (!document.getElementById('pp_pass_safety').checked){
+          document.getElementById('pp_pass_td_wrap').style.display = 'block';
+        }
       });
+      const passSafetyCb = document.getElementById('pp_pass_safety');
+      if (passSafetyCb){
+        passSafetyCb.addEventListener('change', (e) => {
+          if (e.target.checked){
+            resetToggle('pp_pass_fumbled', 'Fumbled');
+            document.getElementById('pp_pass_fumble_fields').style.display = 'none';
+            document.getElementById('pp_pass_td_wrap').style.display = 'none';
+          } else if (!document.getElementById('pp_pass_fumbled').checked){
+            document.getElementById('pp_pass_td_wrap').style.display = 'block';
+          }
+        });
+      }
       panel.querySelectorAll('input[name=pp_pass_fumrec]').forEach(r => r.addEventListener('change', () => {
         const isOpp = document.querySelector('input[name=pp_pass_fumrec]:checked').value === 'opp';
         document.getElementById('pp_pass_fum_opp').style.display = isOpp ? 'block' : 'none';
@@ -1535,7 +1613,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           roles = { carrier: { team: off, num: sel.carrier }, defense: { team: def, num: fumCredit }, playType: 'fumble' };
         }
       } else {
-        code = sel.carrier + 'r ' + yds + (sel.credit ? ' ' + sel.credit : '') + (td ? ' td' : '');
+        const isRushSafety = document.getElementById('pp_rush_safety').checked;
+        code = sel.carrier + 'r ' + yds + (sel.credit ? ' ' + sel.credit : '') + (isRushSafety ? ' sf' : (td ? ' td' : ''));
         roles = { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0 } };
         if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
@@ -1570,7 +1649,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             roles = { carrier: { team: off, num: sel.receiver }, defense: { team: def, num: fumCredit }, playType: 'fumble' };
           }
         } else {
-          code = sel.passer + 'p ' + sel.receiver + ' ' + yds + (sel.credit ? ' ' + sel.credit : '') + (td ? ' td' : '');
+          const isPassSafety = document.getElementById('pp_pass_safety').checked;
+          code = sel.passer + 'p ' + sel.receiver + ' ' + yds + (sel.credit ? ' ' + sel.credit : '') + (isPassSafety ? ' sf' : (td ? ' td' : ''));
           roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0 } };
           if (sel.credit) roles.defense = { team: def, num: sel.credit };
         }
