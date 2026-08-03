@@ -335,8 +335,8 @@ function getLastClockAbsSec(){
 // legitimate correction to an earlier mistaken entry.
 function confirmClockAdvances(absSec, clockVal){
   const lastAbsSec = getLastClockAbsSec();
-  if (lastAbsSec !== null && absSec <= lastAbsSec){
-    return confirm('This clock value (' + clockVal + ') isn\'t later than the last time recorded for this game. Save it anyway?');
+  if (lastAbsSec !== null && absSec < lastAbsSec){
+    return confirm('This clock value (' + clockVal + ') is earlier than the last time recorded for this game. Click OK to save it anyway, or Cancel to go back and fix it -- nothing will be saved if you cancel.');
   }
   return true;
 }
@@ -1040,21 +1040,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const yds = document.getElementById('gr_yards').value.trim();
         const td = document.getElementById('gr_td').checked;
         if (!returnerNum || !yds) return;
+        const q = guided.quarter;
+
+        // Validate the clock before anything gets saved, same reasoning
+        // as the main save flow -- a rejected value should abort the
+        // whole thing, not commit the return and quietly drop the clock.
+        const clockVal = document.getElementById('guidedReturnClock').value.trim();
+        let clockAbsSec = null;
+        if (clockVal){
+          clockAbsSec = clockToAbsSeconds(q, clockVal);
+          if (clockAbsSec === null){
+            alert('"' + clockVal + '" isn\'t a valid clock value for this quarter. Check the format (M:SS) and that it doesn\'t exceed the quarter length. Nothing was saved -- fix the clock value and try again.');
+            return;
+          }
+          if (!confirmClockAdvances(clockAbsSec, clockVal)) return;
+        }
+
         let text = nameInDefense(guided.receivingTeam, returnerNum) + ' returns ' + yds;
         const effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
         if (td){ text += ' — TOUCHDOWN'; effect.score = { team: guided.receivingTeam, points: 6 }; }
         pushAndPersist({ id: nextId++, text, effect, team: guided.receivingTeam, quarter: guided.quarter, roles: { defense: { team: guided.receivingTeam, num: returnerNum }, playType: 'kickoff_return' } });
         const receivingName = TEAMS[guided.receivingTeam].name;
         const receivingTeamKey = guided.receivingTeam;
-        const q = guided.quarter;
-        const clockVal = document.getElementById('guidedReturnClock').value.trim();
-        if (clockVal){
-          const absSec = clockToAbsSeconds(q, clockVal);
-          if (absSec === null){
-            alert('"' + clockVal + '" isn\'t a valid clock value for this quarter -- the return was saved, but this clock time was not. Check the format (M:SS) and that it doesn\'t exceed the quarter length.');
-          } else if (confirmClockAdvances(absSec, clockVal)){
-            pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' start of possession (' + receivingName + ')', effect: { clockEvent: { type: 'start', team: receivingTeamKey, absSec } }, quarter: q });
-          }
+        if (clockVal && clockAbsSec !== null){
+          pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' start of possession (' + receivingName + ')', effect: { clockEvent: { type: 'start', team: receivingTeamKey, absSec: clockAbsSec } }, quarter: q });
         }
         const reset = getReturnReset();
         if (reset && !td){
@@ -1505,24 +1514,36 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       effect.flipApplied = confirmed;
       if (confirmed){ flipHappened = true; outgoingTeam = preState.possession; incomingTeam = pending.flipTo; }
     }
+
+    // Validate the clock before anything gets saved. A rejected value
+    // aborts the whole save here, rather than committing the play and
+    // silently dropping just the clock marker afterward -- so declining
+    // genuinely means "go back and fix it," not "save without a clock."
+    const clockVal = document.getElementById('confirmClockInput').value.trim();
+    let clockAbsSec = null;
+    if (clockVal){
+      const q0 = computeState().quarter;
+      clockAbsSec = clockToAbsSeconds(q0, clockVal);
+      if (clockAbsSec === null){
+        alert('"' + clockVal + '" isn\'t a valid clock value for this quarter. Check the format (M:SS) and that it doesn\'t exceed the quarter length. Nothing was saved -- fix the clock value and try again.');
+        return;
+      }
+      if (!confirmClockAdvances(clockAbsSec, clockVal)) return;
+    }
+
     pushAndPersist({ id: nextId++, text: pending.text, effect, unresolved: !!pending.unresolved, team: pending.team || null, quarter: pending.quarter || computeState().quarter, roles: pending.roles || null });
 
-    const clockVal = document.getElementById('confirmClockInput').value.trim();
-    if (clockVal){
+    if (clockVal && clockAbsSec !== null){
       const q = computeState().quarter;
-      const absSec = clockToAbsSeconds(q, clockVal);
-      if (absSec === null){
-        alert('"' + clockVal + '" isn\'t a valid clock value for this quarter -- the play was saved, but this clock time was not. Check the format (M:SS) and that it doesn\'t exceed the quarter length.');
-      } else if (confirmClockAdvances(absSec, clockVal)){
-        if (flipHappened){
-          pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' at change of possession (' + TEAMS[outgoingTeam].name + ' \u2192 ' + TEAMS[incomingTeam].name + ')', effect: { clockEvent: { type: 'transition', outgoingTeam, incomingTeam, absSec } }, quarter: q });
-        }
-        if (effect.endsDrive){
-          const scoringTeam = effect.score ? effect.score.team : preState.possession;
-          pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' end of possession (' + TEAMS[scoringTeam].name + ')', effect: { clockEvent: { type: 'end', team: scoringTeam, absSec } }, quarter: q });
-        } else if (flipHappened && effect.score && effect.score.points === 6){
-          pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' end of possession (' + TEAMS[effect.score.team].name + ')', effect: { clockEvent: { type: 'end', team: effect.score.team, absSec } }, quarter: q });
-        }
+      const absSec = clockAbsSec;
+      if (flipHappened){
+        pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' at change of possession (' + TEAMS[outgoingTeam].name + ' \u2192 ' + TEAMS[incomingTeam].name + ')', effect: { clockEvent: { type: 'transition', outgoingTeam, incomingTeam, absSec } }, quarter: q });
+      }
+      if (effect.endsDrive){
+        const scoringTeam = effect.score ? effect.score.team : preState.possession;
+        pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' end of possession (' + TEAMS[scoringTeam].name + ')', effect: { clockEvent: { type: 'end', team: scoringTeam, absSec } }, quarter: q });
+      } else if (flipHappened && effect.score && effect.score.points === 6){
+        pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' end of possession (' + TEAMS[effect.score.team].name + ')', effect: { clockEvent: { type: 'end', team: effect.score.team, absSec } }, quarter: q });
       }
     }
     if (pending.reset && flipHappened){
