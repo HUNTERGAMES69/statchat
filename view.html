@@ -374,9 +374,15 @@ function computeState(playsList){
   const RUSH_POS = new Set(['QB','RB','FB','HB','TB']);
   const RECEIVE_POS = new Set(['WR','TE','SE','FL','SLOT']);
 
-  function playerName(team, num){
+  function playerName(team, num, preferredUnit){
     const t = TEAMS[team];
-    return (t.rosterOffense[num] || t.rosterDefense[num] || (t.rosterSpecialTeams && t.rosterSpecialTeams[num]) || ('#' + num));
+    const buckets = { offense: t.rosterOffense, defense: t.rosterDefense, special: t.rosterSpecialTeams };
+    const order = preferredUnit ? [preferredUnit, ...Object.keys(buckets).filter(u => u !== preferredUnit)] : ['offense', 'defense', 'special'];
+    for (const unit of order){
+      const roster = buckets[unit];
+      if (roster && roster[num]) return roster[num];
+    }
+    return '#' + num;
   }
 
   function computeBoxScore(playsList){
@@ -551,7 +557,7 @@ function computeState(playsList){
       const stEntries = [];
       stNums.forEach(n => {
         const d = s.specialTeams[n];
-        const name = playerName(teamKey, n);
+        const name = playerName(teamKey, n, 'special');
         if (d.fgAtt){
           stEntries.push({ yds: d.fgLong||0, name, items: [item(d.fgAtt||0,'FG Att'), item(d.fgMade||0,'FG Made'), item(d.fgLong||0,'Long'), item(d.fgBlocked||0,'Blocked')] });
         }
