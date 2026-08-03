@@ -862,20 +862,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (!skip && val){
       const q = computeState().quarter;
       const absSec = clockToAbsSeconds(q, val);
-      if (absSec !== null && confirmClockAdvances(absSec, val)){
-        let effect, text;
-        if (clockPrompt.mode === 'transition'){
-          effect = { clockEvent: { type: 'transition', outgoingTeam: clockPrompt.outgoingTeam, incomingTeam: clockPrompt.incomingTeam, absSec } };
-          text = 'Clock — ' + val + ' at change of possession (' + TEAMS[clockPrompt.outgoingTeam].name + ' \u2192 ' + TEAMS[clockPrompt.incomingTeam].name + ')';
-        } else if (clockPrompt.mode === 'start'){
-          effect = { clockEvent: { type: 'start', team: clockPrompt.team, absSec } };
-          text = 'Clock — ' + val + ' start of possession (' + TEAMS[clockPrompt.team].name + ')';
-        } else {
-          effect = { clockEvent: { type: 'end', team: clockPrompt.team, absSec } };
-          text = 'Clock — ' + val + ' end of possession (' + TEAMS[clockPrompt.team].name + ')';
-        }
-        pushAndPersist({ id: nextId++, text, effect, quarter: q });
+      if (absSec === null){
+        alert('"' + val + '" isn\'t a valid clock value for this quarter -- check the format (M:SS) and that it doesn\'t exceed the quarter length.');
+        return;
       }
+      if (!confirmClockAdvances(absSec, val)) return;
+      let effect, text;
+      if (clockPrompt.mode === 'transition'){
+        effect = { clockEvent: { type: 'transition', outgoingTeam: clockPrompt.outgoingTeam, incomingTeam: clockPrompt.incomingTeam, absSec } };
+        text = 'Clock — ' + val + ' at change of possession (' + TEAMS[clockPrompt.outgoingTeam].name + ' \u2192 ' + TEAMS[clockPrompt.incomingTeam].name + ')';
+      } else if (clockPrompt.mode === 'start'){
+        effect = { clockEvent: { type: 'start', team: clockPrompt.team, absSec } };
+        text = 'Clock — ' + val + ' start of possession (' + TEAMS[clockPrompt.team].name + ')';
+      } else {
+        effect = { clockEvent: { type: 'end', team: clockPrompt.team, absSec } };
+        text = 'Clock — ' + val + ' end of possession (' + TEAMS[clockPrompt.team].name + ')';
+      }
+      pushAndPersist({ id: nextId++, text, effect, quarter: q });
     }
     const cb = clockPromptCallback;
     clockPrompt = null;
@@ -1047,7 +1050,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const clockVal = document.getElementById('guidedReturnClock').value.trim();
         if (clockVal){
           const absSec = clockToAbsSeconds(q, clockVal);
-          if (absSec !== null && confirmClockAdvances(absSec, clockVal)){
+          if (absSec === null){
+            alert('"' + clockVal + '" isn\'t a valid clock value for this quarter -- the return was saved, but this clock time was not. Check the format (M:SS) and that it doesn\'t exceed the quarter length.');
+          } else if (confirmClockAdvances(absSec, clockVal)){
             pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' start of possession (' + receivingName + ')', effect: { clockEvent: { type: 'start', team: receivingTeamKey, absSec } }, quarter: q });
           }
         }
@@ -1506,7 +1511,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (clockVal){
       const q = computeState().quarter;
       const absSec = clockToAbsSeconds(q, clockVal);
-      if (absSec !== null && confirmClockAdvances(absSec, clockVal)){
+      if (absSec === null){
+        alert('"' + clockVal + '" isn\'t a valid clock value for this quarter -- the play was saved, but this clock time was not. Check the format (M:SS) and that it doesn\'t exceed the quarter length.');
+      } else if (confirmClockAdvances(absSec, clockVal)){
         if (flipHappened){
           pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' at change of possession (' + TEAMS[outgoingTeam].name + ' \u2192 ' + TEAMS[incomingTeam].name + ')', effect: { clockEvent: { type: 'transition', outgoingTeam, incomingTeam, absSec } }, quarter: q });
         }
