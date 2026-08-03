@@ -315,7 +315,30 @@ function clockToAbsSeconds(quarter, clockStr){
   const m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return null;
   const remaining = parseInt(m[1]) * 60 + parseInt(m[2]);
+  // A clock value can never show more time than the quarter itself
+  // holds -- e.g. "15:00" is meaningless in a 12-minute quarter.
+  if (remaining > quarterLengthSec) return null;
   return (quarter - 1) * quarterLengthSec + (quarterLengthSec - remaining);
+}
+function getLastClockAbsSec(){
+  for (let i = plays.length - 1; i >= 0; i--){
+    if (plays[i].effect && plays[i].effect.clockEvent){
+      return plays[i].effect.clockEvent.absSec;
+    }
+  }
+  return null;
+}
+// Absolute game time only ever moves forward -- a new clock entry must
+// always be later than whatever was last recorded, regardless of which
+// of the several places in the app that clock gets entered from. Warns
+// rather than silently blocking, since there's no way to rule out a
+// legitimate correction to an earlier mistaken entry.
+function confirmClockAdvances(absSec, clockVal){
+  const lastAbsSec = getLastClockAbsSec();
+  if (lastAbsSec !== null && absSec <= lastAbsSec){
+    return confirm('This clock value (' + clockVal + ') isn\'t later than the last time recorded for this game. Save it anyway?');
+  }
+  return true;
 }
 function formatDuration(sec){
   const m = Math.floor(sec / 60), s = Math.round(sec % 60);
@@ -839,7 +862,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (!skip && val){
       const q = computeState().quarter;
       const absSec = clockToAbsSeconds(q, val);
-      if (absSec !== null){
+      if (absSec !== null && confirmClockAdvances(absSec, val)){
         let effect, text;
         if (clockPrompt.mode === 'transition'){
           effect = { clockEvent: { type: 'transition', outgoingTeam: clockPrompt.outgoingTeam, incomingTeam: clockPrompt.incomingTeam, absSec } };
@@ -879,6 +902,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   document.getElementById('endFirstHalfBtn').addEventListener('click', () => {
     const state = computeState();
     const absSec = clockToAbsSeconds(state.quarter, '0:00');
+    if (!confirmClockAdvances(absSec, '0:00')) return;
     pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
     pushAndPersist({ id: nextId++, text: 'End of 1st half', effect: {}, isDivider: true });
     gamePhase = 'halftime';
@@ -895,6 +919,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const ok = confirm('End the game now? Final score: ' + TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' + TEAMS.teamB.name + ' ' + state.scores.teamB + '.\n\nThis locks in the game as final.');
     if (!ok) return;
     const absSec = clockToAbsSeconds(state.quarter, '0:00');
+    if (!confirmClockAdvances(absSec, '0:00')) return;
     pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
     pushAndPersist({ id: nextId++, text: 'Final', effect: {}, isDivider: true });
     gamePhase = 'ended';
@@ -1022,7 +1047,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const clockVal = document.getElementById('guidedReturnClock').value.trim();
         if (clockVal){
           const absSec = clockToAbsSeconds(q, clockVal);
-          if (absSec !== null){
+          if (absSec !== null && confirmClockAdvances(absSec, clockVal)){
             pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' start of possession (' + receivingName + ')', effect: { clockEvent: { type: 'start', team: receivingTeamKey, absSec } }, quarter: q });
           }
         }
@@ -1464,7 +1489,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (clockVal){
       const q = computeState().quarter;
       const absSec = clockToAbsSeconds(q, clockVal);
-      if (absSec !== null){
+      if (absSec !== null && confirmClockAdvances(absSec, clockVal)){
         if (flipHappened){
           pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' at change of possession (' + TEAMS[outgoingTeam].name + ' \u2192 ' + TEAMS[incomingTeam].name + ')', effect: { clockEvent: { type: 'transition', outgoingTeam, incomingTeam, absSec } }, quarter: q });
         }
