@@ -155,7 +155,26 @@
 <script>
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
-  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  // A passive viewer (as opposed to whoever's actively typing plays) is
+  // far more likely to lock their screen or background the tab between
+  // checks -- and browsers, especially iOS, aggressively throttle JS
+  // timers in that state. That silently breaks the realtime connection's
+  // heartbeat with no visible error and no automatic recovery, which is
+  // exactly what was reported: it looked like an admin-vs-viewer
+  // permissions issue, but was actually just who happens to keep their
+  // device active. Both mitigations below are Supabase's own documented
+  // fix for this exact failure mode -- see
+  // https://supabase.com/docs/guides/troubleshooting/realtime-handling-silent-disconnections-in-backgrounded-applications-592794
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    realtime: {
+      worker: true,
+      heartbeatCallback: (status) => {
+        if (status === 'disconnected'){
+          supabaseClient.realtime.connect();
+        }
+      }
+    }
+  });
 
   // The display is designed against a fixed 1920x1080 canvas so every font
   // size and tile dimension throughout stays correct relative to every
