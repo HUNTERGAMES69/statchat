@@ -584,11 +584,11 @@ function parseInput(raw, state){
     const score = good ? { team: off, points: 1 } : null;
     return { text: ST(p1) + ' PAT — ' + (good ? 'GOOD' : 'MISSED'), effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: off, quarter: state.quarter };
   }
-  if (type === 'tp'){
+  if (type === 'tpr'){
     const res = rest[0];
     if (res === 'b' || res === 'B'){
       const rec = rest[1];
-      let t = O(p1) + ' 2PT attempt TURNED OVER';
+      let t = O(p1) + ' 2PT rush attempt FUMBLED, turned over';
       if (rec) t += ', recovered by ' + D(rec);
       let score = null;
       if (td){ t += ' — returned for 2 (defense)'; score = { team: def, points: 2 }; }
@@ -596,7 +596,23 @@ function parseInput(raw, state){
     }
     const good = res === 'g';
     const score = good ? { team: off, points: 2 } : null;
-    return { text: O(p1) + ' 2PT conversion — ' + (good ? 'GOOD' : 'NO GOOD'), effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: off, quarter: state.quarter };
+    return { text: O(p1) + ' 2PT rush conversion — ' + (good ? 'GOOD' : 'NO GOOD'), effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: off, quarter: state.quarter };
+  }
+  if (type === 'tpp'){
+    const receiverNum = rest[0], res = rest[1];
+    if (res === 'b' || res === 'B'){
+      const rec = rest[2];
+      let t = O(p1) + ' 2PT pass INTERCEPTED';
+      if (rec) t += ' by ' + D(rec);
+      let score = null;
+      if (td){ t += ' — returned for 2 (defense)'; score = { team: def, points: 2 }; }
+      return { text: t, effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: off, quarter: state.quarter };
+    }
+    if (res === 'x'){
+      return { text: O(p1) + ' 2PT pass to ' + O(receiverNum) + ' — INCOMPLETE', effect: { endsDrive: true }, flipEligible: false, team: off, quarter: state.quarter };
+    }
+    const score = { team: off, points: 2 };
+    return { text: O(p1) + ' 2PT pass to ' + O(receiverNum) + ' — GOOD', effect: { endsDrive: true, score }, flipEligible: false, team: off, quarter: state.quarter };
   }
   return null;
 }
@@ -1122,12 +1138,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_pat_blocked" style="display:none;">' + defBlock('Returned by (optional)') + yardsBlock('Return yards (optional)') +
         '<label class="inline" style="margin-top:6px; display:block;"><input type="checkbox" id="pp_pat_2pt"> Returned all the way (defense +2)</label></div>';
     else if (type === 'twopt') html =
-        offBlock('carrier','Player') +
-        '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input type="radio" name="pp_2ptres" value="g" checked> Good</label>' +
-        '<label class="inline" style="display:block;"><input type="radio" name="pp_2ptres" value="x"> No good</label>' +
-        '<label class="inline" style="display:block;"><input type="radio" name="pp_2ptres" value="b"> Turned over, returned by defense</label></div>' +
-        '<div id="pp_2pt_def" style="display:none;">' + defBlock('Returned by (optional)') +
-        '<label class="inline" style="margin-top:6px; display:block;"><input type="checkbox" id="pp_2pt_defTd"> Returned all the way (defense +2)</label></div>';
+        '<div style="margin-bottom:10px;"><label>Play type</label><div class="row">' +
+        '<button type="button" class="secondary" id="pp_2pt_rush_btn">Rush</button>' +
+        '<button type="button" class="secondary" id="pp_2pt_pass_btn">Pass</button>' +
+        '</div></div>' +
+        '<div id="pp_2pt_rush_fields">' +
+          offBlock('carrier','Ball carrier') +
+          '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input type="radio" name="pp_2pt_rush_res" value="g" checked> Good (scored)</label>' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_2pt_rush_res" value="x"> No good, stopped short</label>' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_2pt_rush_res" value="b"> Fumbled, turned over</label></div>' +
+          '<div id="pp_2pt_rush_def" style="display:none;">' + defBlock('Recovered by (optional)', '_2ptRush') +
+          '<label class="inline" style="margin-top:6px; display:block;"><input type="checkbox" id="pp_2pt_rush_defTd"> Returned all the way (defense +2)</label></div>' +
+        '</div>' +
+        '<div id="pp_2pt_pass_fields" style="display:none;">' +
+          offBlock('passer','Passer') + offBlock('receiver','Receiver') +
+          '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input type="radio" name="pp_2pt_pass_res" value="g" checked> Good (caught for the score)</label>' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_2pt_pass_res" value="x"> Incomplete</label>' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_2pt_pass_res" value="b"> Intercepted, turned over</label></div>' +
+          '<div id="pp_2pt_pass_def" style="display:none;">' + defBlock('Intercepted by (optional)', '_2ptPass') +
+          '<label class="inline" style="margin-top:6px; display:block;"><input type="checkbox" id="pp_2pt_pass_defTd"> Returned all the way (defense +2)</label></div>' +
+        '</div>';
 
     html += '<div class="row" style="margin-top:12px;"><button class="primary" id="pp_review">Review play</button><button class="secondary" id="pp_clear">Clear</button></div>';
     panel.innerHTML = html;
@@ -1168,7 +1198,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const manual = document.getElementById('pp_' + role + '_manual');
       if (manual) manual.addEventListener('input', e => { sel[role] = e.target.value.trim(); });
     });
-    ['', '_pb', '_fgb'].forEach(suffix => {
+    ['', '_pb', '_fgb', '_2ptRush', '_2ptPass'].forEach(suffix => {
       const creditGrid = document.getElementById('pp_credit_grid' + suffix);
       if (creditGrid) wirePickerButtons(panel, 'pp_credit_pick' + suffix, 'pp_credit_manual' + suffix, (num, resolvedName) => {
         if (resolvedName) TEAMS[def].rosterDefense[num] = resolvedName;
@@ -1200,8 +1230,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }));
     }
     if (type === 'twopt'){
-      panel.querySelectorAll('input[name=pp_2ptres]').forEach(r => r.addEventListener('change', () => {
-        document.getElementById('pp_2pt_def').style.display = (document.querySelector('input[name=pp_2ptres]:checked').value === 'b') ? 'block' : 'none';
+      const rushBtn = document.getElementById('pp_2pt_rush_btn');
+      const passBtn = document.getElementById('pp_2pt_pass_btn');
+      const rushFields = document.getElementById('pp_2pt_rush_fields');
+      const passFields = document.getElementById('pp_2pt_pass_fields');
+      function setSubType(sub){
+        rushFields.style.display = sub === 'rush' ? 'block' : 'none';
+        passFields.style.display = sub === 'pass' ? 'block' : 'none';
+        rushBtn.classList.toggle('primary', sub === 'rush');
+        passBtn.classList.toggle('primary', sub === 'pass');
+        panel.dataset.twoptSub = sub;
+      }
+      rushBtn.addEventListener('click', () => setSubType('rush'));
+      passBtn.addEventListener('click', () => setSubType('pass'));
+      setSubType('rush');
+      panel.querySelectorAll('input[name=pp_2pt_rush_res]').forEach(r => r.addEventListener('change', () => {
+        document.getElementById('pp_2pt_rush_def').style.display = (document.querySelector('input[name=pp_2pt_rush_res]:checked').value === 'b') ? 'block' : 'none';
+      }));
+      panel.querySelectorAll('input[name=pp_2pt_pass_res]').forEach(r => r.addEventListener('change', () => {
+        document.getElementById('pp_2pt_pass_def').style.display = (document.querySelector('input[name=pp_2pt_pass_res]:checked').value === 'b') ? 'block' : 'none';
       }));
     }
     if (type === 'pass'){
@@ -1310,16 +1357,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       roles = { kicker: { team: off, num: sel.kicker, result: res } };
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
     } else if (type === 'twopt'){
-      if (!sel.carrier) return;
-      const res = document.querySelector('input[name=pp_2ptres]:checked').value;
-      if (res === 'b'){
-        const defTd = document.getElementById('pp_2pt_defTd').checked;
-        code = sel.carrier + 'tp b' + (sel.credit ? ' ' + sel.credit : '') + (defTd ? ' td' : '');
+      const sub = document.getElementById('playPanel').dataset.twoptSub || 'rush';
+      if (sub === 'rush'){
+        if (!sel.carrier) return;
+        const res = document.querySelector('input[name=pp_2pt_rush_res]:checked').value;
+        if (res === 'b'){
+          const defTd = document.getElementById('pp_2pt_rush_defTd').checked;
+          code = sel.carrier + 'tpr b' + (sel.credit ? ' ' + sel.credit : '') + (defTd ? ' td' : '');
+        } else {
+          code = sel.carrier + 'tpr ' + res;
+        }
+        roles = { carrier: { team: off, num: sel.carrier, result: res } };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit };
       } else {
-        code = sel.carrier + 'tp ' + res;
+        if (!sel.passer || !sel.receiver) return;
+        const res = document.querySelector('input[name=pp_2pt_pass_res]:checked').value;
+        if (res === 'b'){
+          const defTd = document.getElementById('pp_2pt_pass_defTd').checked;
+          code = sel.passer + 'tpp ' + sel.receiver + ' b' + (sel.credit ? ' ' + sel.credit : '') + (defTd ? ' td' : '');
+        } else {
+          code = sel.passer + 'tpp ' + sel.receiver + ' ' + res;
+        }
+        roles = { passer: { team: off, num: sel.passer, result: res }, receiver: { team: off, num: sel.receiver, result: res } };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
-      roles = { carrier: { team: off, num: sel.carrier, result: res } };
-      if (sel.credit) roles.defense = { team: def, num: sel.credit };
     }
 
     if (!code) return;
