@@ -523,6 +523,8 @@ function parseInput(raw, state){
   if (td) rest.pop();
   const isSafety = rest[rest.length - 1] === 'sf';
   if (isSafety) rest.pop();
+  const isTouchback = rest[rest.length - 1] === 'tb';
+  if (isTouchback) rest.pop();
   const O = n => nameInOffense(off, n), D = n => nameInDefense(def, n), ST = n => nameInSpecialTeams(off, n);
 
   if (['r', 'p', 'i', 's'].includes(type)){
@@ -620,7 +622,8 @@ function parseInput(raw, state){
   if (type === 'ko'){
     const yds = rest[0], ret = rest[1], retyds = rest[2];
     let t = ST(p1) + ' kicks off ' + yds;
-    if (ret) t += ', returned by ' + D(ret) + (retyds ? ' for ' + retyds : '');
+    if (isTouchback) t += ' — TOUCHBACK';
+    else if (ret) t += ', returned by ' + D(ret) + (retyds ? ' for ' + retyds : '');
     let score = null;
     if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
@@ -1254,7 +1257,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     else if (type === 'safety') html =
         '<p class="hint" style="margin:0 0 10px;">Offense tackled, or committed a foul, in their own end zone. Always 2 points for the defense, and ends the drive — the scoring team kicks off next, logged as its own play afterward.</p>' +
         defBlock('Credited to (optional)');
-    else if (type === 'kickoff') html = offBlock('kicker','Kicker') + yardsBlock('Kick distance') + defBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' + tdBlock + startingSpotFieldsHtml('pp_spot');
+    else if (type === 'kickoff') html = offBlock('kicker','Kicker') + yardsBlock('Kick distance') +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_ko_ret_wrap">' + defBlock('Returned by (optional)') + '</div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_touchback', 'Touchback') + '</div></div>' +
+        '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' + tdBlock + startingSpotFieldsHtml('pp_spot');
     else if (type === 'punt') html =
         offBlock('punter','Punter') +
         '<div style="display:flex; align-items:flex-end; gap:14px;"><div>' + yardsBlock('Punt distance') + '</div>' +
@@ -1572,6 +1578,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         });
       }
     }
+    if (type === 'kickoff'){
+      const koTouchbackCb = document.getElementById('pp_ko_touchback');
+      if (koTouchbackCb){
+        koTouchbackCb.addEventListener('change', (e) => {
+          document.getElementById('pp_ko_ret_wrap').style.display = e.target.checked ? 'none' : 'block';
+          document.getElementById('pp_ret_yds_wrap').style.display = e.target.checked ? 'none' : 'block';
+        });
+      }
+    }
     if (type === 'punt'){
       const updatePuntTdVisibility = () => {
         const blocked = document.getElementById('pp_blocked').checked;
@@ -1775,10 +1790,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     } else if (type === 'kickoff'){
       if (!sel.kicker) return;
       const yds = yards('pp_yards') || '0';
-      const retyds = yards('pp_retyds');
-      code = sel.kicker + 'ko ' + yds + (sel.credit ? ' ' + sel.credit + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
-      roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0 } };
-      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+      const isTouchback = document.getElementById('pp_ko_touchback').checked;
+      if (isTouchback){
+        code = sel.kicker + 'ko ' + yds + ' tb';
+        roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0, touchback: true } };
+      } else {
+        const retyds = yards('pp_retyds');
+        code = sel.kicker + 'ko ' + yds + (sel.credit ? ' ' + sel.credit + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
+        roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0 } };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit };
+      }
     } else if (type === 'punt'){
       const blocked = document.getElementById('pp_blocked').checked;
       if (!sel.punter) return;
