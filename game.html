@@ -1129,6 +1129,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<input type="checkbox" id="pp_td" style="display:none;">' +
       '<button type="button" id="pp_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button>' +
       '</div>';
+    const blockedToggleHtml = (id) => '<input type="checkbox" id="' + id + '" style="display:none;">' +
+      '<button type="button" id="' + id + '_toggle" data-cb="' + id + '" class="pp-blocked-toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Blocked</button>';
 
     let html = '';
     if (type === 'rush') html = offBlock('carrier','Ball carrier') + yardsBlock() + defBlock('Tackled by (optional)') + tdBlock;
@@ -1145,21 +1147,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_fum_opp" style="display:none;">' + defBlock('Recovered by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot') + '</div>';
     else if (type === 'kickoff') html = offBlock('kicker','Kicker') + yardsBlock('Kick distance') + defBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' + tdBlock + startingSpotFieldsHtml('pp_spot');
     else if (type === 'punt') html =
-        '<label class="inline" style="display:block;"><input type="checkbox" id="pp_blocked"> Blocked</label>' +
         offBlock('punter','Punter') +
-        '<div id="pp_punt_normal">' + yardsBlock('Punt distance') + defBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div></div>' +
+        '<div style="display:flex; align-items:flex-end; gap:14px;"><div>' + yardsBlock('Punt distance') + '</div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_blocked') + '</div></div>' +
+        '<div id="pp_punt_normal">' + defBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div></div>' +
         '<div id="pp_punt_blocked" style="display:none;">' + defBlock('Recovered by', '_pb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + '</div>' + tdBlock + startingSpotFieldsHtml('pp_spot');
     else if (type === 'fg') html =
-        offBlock('kicker','Kicker') + yardsBlock('Distance') +
+        offBlock('kicker','Kicker') +
+        '<div style="display:flex; align-items:flex-end; gap:14px;"><div>' + yardsBlock('Distance') + '</div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_blocked_cb') + '</div></div>' +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input type="radio" name="pp_fgres" value="g" checked> Good</label>' +
-        '<label class="inline" style="display:block;"><input type="radio" name="pp_fgres" value="x"> Missed</label>' +
-        '<label class="inline" style="display:block;"><input type="radio" name="pp_fgres" value="b"> Blocked</label></div>' +
+        '<label class="inline" style="display:block;"><input type="radio" name="pp_fgres" value="x"> Missed</label></div>' +
         '<div id="pp_fg_blocked" style="display:none;">' + defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + tdBlock + '</div>';
     else if (type === 'pat') html =
         offBlock('kicker','Kicker') +
+        '<div style="margin-top:8px;">' + blockedToggleHtml('pp_pat_blocked_cb') + '</div>' +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input type="radio" name="pp_patres" value="g" checked> Good</label>' +
-        '<label class="inline" style="display:block;"><input type="radio" name="pp_patres" value="x"> Missed</label>' +
-        '<label class="inline" style="display:block;"><input type="radio" name="pp_patres" value="b"> Blocked</label></div>' +
+        '<label class="inline" style="display:block;"><input type="radio" name="pp_patres" value="x"> Missed</label></div>' +
         '<div id="pp_pat_blocked" style="display:none;">' + defBlock('Returned by (optional)') + yardsBlock('Return yards (optional)') +
         '<label class="inline" style="margin-top:6px; display:block;"><input type="checkbox" id="pp_pat_2pt"> Returned all the way (defense +2)</label></div>';
     else if (type === 'twopt') html =
@@ -1209,6 +1213,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         cb.dispatchEvent(new Event('change'));
       });
     }
+    panel.querySelectorAll('.pp-blocked-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cb = document.getElementById(btn.dataset.cb);
+        cb.checked = !cb.checked;
+        btn.style.background = cb.checked ? '#a32d2d' : '#fff';
+        btn.style.color = cb.checked ? '#fff' : '#555';
+        btn.style.borderColor = cb.checked ? '#a32d2d' : '#ccc';
+        btn.textContent = cb.checked ? '✓ Blocked' : 'Blocked';
+        cb.dispatchEvent(new Event('change'));
+      });
+    });
     currentSpotGetter = (type === 'kickoff' || type === 'punt' || type === 'int' || type === 'fumble') ? wireStartingSpot(panel, 'pp_spot') : null;
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
 
@@ -1245,14 +1260,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       });
     }
     if (type === 'fg'){
-      panel.querySelectorAll('input[name=pp_fgres]').forEach(r => r.addEventListener('change', () => {
-        document.getElementById('pp_fg_blocked').style.display = (document.querySelector('input[name=pp_fgres]:checked').value === 'b') ? 'block' : 'none';
-      }));
+      document.getElementById('pp_fg_blocked_cb').addEventListener('change', (e) => {
+        document.getElementById('pp_fg_blocked').style.display = e.target.checked ? 'block' : 'none';
+      });
     }
     if (type === 'pat'){
-      panel.querySelectorAll('input[name=pp_patres]').forEach(r => r.addEventListener('change', () => {
-        document.getElementById('pp_pat_blocked').style.display = (document.querySelector('input[name=pp_patres]:checked').value === 'b') ? 'block' : 'none';
-      }));
+      document.getElementById('pp_pat_blocked_cb').addEventListener('change', (e) => {
+        document.getElementById('pp_pat_blocked').style.display = e.target.checked ? 'block' : 'none';
+      });
     }
     if (type === 'twopt'){
       const rushBtn = document.getElementById('pp_2pt_rush_btn');
@@ -1360,7 +1375,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     } else if (type === 'fg'){
       if (!sel.kicker) return;
       const yds = yards('pp_yards') || '0';
-      const res = document.querySelector('input[name=pp_fgres]:checked').value;
+      const blocked = document.getElementById('pp_fg_blocked_cb').checked;
+      const res = blocked ? 'b' : document.querySelector('input[name=pp_fgres]:checked').value;
       if (res === 'b'){
         const retyds = yards('pp_blockretyds');
         code = sel.kicker + 'fg b' + (sel.credit ? ' ' + sel.credit : '') + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
@@ -1371,7 +1387,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
     } else if (type === 'pat'){
       if (!sel.kicker) return;
-      const res = document.querySelector('input[name=pp_patres]:checked').value;
+      const blocked = document.getElementById('pp_pat_blocked_cb').checked;
+      const res = blocked ? 'b' : document.querySelector('input[name=pp_patres]:checked').value;
       if (res === 'b'){
         const twoPt = document.getElementById('pp_pat_2pt').checked;
         const retyds = yards('pp_yards');
