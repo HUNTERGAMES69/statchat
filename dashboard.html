@@ -102,6 +102,7 @@
         <div>
           <h1 style="font-size:20px; margin:0;">Games</h1>
           <select id="seasonPicker" style="font-size:13px; color:#555; border:1px solid #ddd; border-radius:6px; padding:3px 6px; background:#fff;"></select>
+          <button type="button" id="refreshGamesBtn" class="secondary" style="font-size:13px; padding:3px 10px; margin-left:6px;">Refresh</button>
         </div>
         <a class="button-link" id="newGameLink" href="create_game.html">+ New game</a>
       </div>
@@ -260,7 +261,9 @@
 
   let allGames = [];
 
-  async function loadGames(defaultSeasonYear){
+  document.getElementById('refreshGamesBtn').addEventListener('click', refreshGames);
+
+  async function fetchGames(){
     // Fetches every game regardless of season, rather than filtering by
     // one fixed year server-side -- a game moved to a different season
     // was previously just invisible with no way back to it. Filtering
@@ -272,10 +275,15 @@
       .order('game_date', { ascending: false });
     if (error){
       showMsg('dashboardMsg', 'Could not load games: ' + error.message, 'error');
-      hideSplash();
-      return;
+      return false;
     }
     allGames = data || [];
+    return true;
+  }
+
+  async function loadGames(defaultSeasonYear){
+    const ok = await fetchGames();
+    if (!ok){ hideSplash(); return; }
     const years = Array.from(new Set(allGames.map(g => g.season_year).filter(y => y !== null && y !== undefined))).sort((a, b) => b - a);
     if (!years.includes(defaultSeasonYear)) years.unshift(defaultSeasonYear);
     const picker = document.getElementById('seasonPicker');
@@ -284,6 +292,31 @@
     picker.addEventListener('change', renderForSelectedSeason);
     renderForSelectedSeason();
     hideSplash();
+  }
+
+  async function refreshGames(){
+    // A lighter-weight re-fetch for the manual refresh button, used
+    // when someone else (an admin, most likely) has added games since
+    // this page loaded. Deliberately doesn't touch the season picker's
+    // options or re-attach its change listener the way loadGames does
+    // on first load -- both would be wrong here: rebuilding the picker
+    // risks resetting it back to the default season out from under
+    // someone who's deliberately looking at a past one, and attaching
+    // the listener again on every refresh click would stack up
+    // duplicate handlers over time.
+    const btn = document.getElementById('refreshGamesBtn');
+    if (btn){ btn.disabled = true; btn.textContent = 'Refreshing…'; }
+    const ok = await fetchGames();
+    if (ok){
+      const picker = document.getElementById('seasonPicker');
+      const selectedYear = parseInt(picker.value);
+      const years = Array.from(new Set(allGames.map(g => g.season_year).filter(y => y !== null && y !== undefined))).sort((a, b) => b - a);
+      if (!years.includes(selectedYear)) years.unshift(selectedYear);
+      picker.innerHTML = years.map(y => '<option value="' + y + '">' + y + ' season</option>').join('');
+      picker.value = selectedYear;
+      renderForSelectedSeason();
+    }
+    if (btn){ btn.disabled = false; btn.textContent = 'Refresh'; }
   }
 
   function renderForSelectedSeason(){
