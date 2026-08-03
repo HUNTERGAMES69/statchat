@@ -37,6 +37,7 @@
   .set-password-inline { display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap; }
   .set-password-inline input { width:auto; flex:1; min-width:140px; }
   .badge-admin { display:inline-block; font-size:10px; font-weight:700; color:#a37a00; background:#fff3cd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+  .badge-gameentry { display:inline-block; font-size:10px; font-weight:700; color:#1a7a4c; background:#e3f7ec; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
   .badge-invited { display:inline-block; font-size:10px; font-weight:700; color:#1565c0; background:#e3f2fd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
   @media (min-width: 640px) { body { padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); } .card { padding:24px; } }
 </style>
@@ -172,12 +173,12 @@
   async function init(){
     document.getElementById('accountEmail').textContent = currentUserEmail;
     const { data, error } = await supabaseClient
-      .from('profiles').select('display_name, avatar_url, is_admin').eq('id', currentUserId).limit(1);
+      .from('profiles').select('display_name, avatar_url, role').eq('id', currentUserId).limit(1);
     if (!error && data && data.length > 0){
       const profile = data[0];
       if (profile.display_name) document.getElementById('fullNameInput').value = profile.display_name;
       if (profile.avatar_url) document.getElementById('avatarPreview').src = profile.avatar_url;
-      if (profile.is_admin){
+      if (profile.role === 'admin'){
         document.getElementById('userMgmtCard').classList.remove('hidden');
         setTimeout(() => {
           document.getElementById('inviteEmailInput').value = '';
@@ -332,11 +333,20 @@
     document.getElementById('usersListContainer').innerHTML = users.map(u => {
       const name = u.displayName || '(no name set)';
       const pending = !u.lastSignInAt;
+      const roleBadge = u.role === 'admin' ? '<span class="badge-admin">ADMIN</span>'
+        : u.role === 'game_entry' ? '<span class="badge-gameentry">GAME ENTRY</span>' : '';
+      const isSelf = u.id === currentUserId;
+      const roleSelectHtml = '<select data-action="setRole" ' + (isSelf ? 'disabled title="You can\'t change your own role here."' : '') + '>' +
+        ['view', 'game_entry', 'admin'].map(r =>
+          '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>' +
+          (r === 'view' ? 'View' : r === 'game_entry' ? 'Game entry' : 'Admin') + '</option>'
+        ).join('') + '</select>';
       return '<div class="user-row" data-user-id="' + u.id + '" data-email="' + u.email + '">' +
-        '<div class="user-row-head"><span class="user-row-name">' + name + (u.isAdmin ? '<span class="badge-admin">ADMIN</span>' : '') + (pending ? '<span class="badge-invited">INVITED</span>' : '') + '</span></div>' +
+        '<div class="user-row-head"><span class="user-row-name">' + name + roleBadge + (pending ? '<span class="badge-invited">INVITED</span>' : '') + '</span></div>' +
         '<div class="user-row-email">' + u.email + '</div>' +
         '<div class="user-row-meta">Joined ' + formatDate(u.createdAt) + ' &middot; Last sign-in: ' + formatDate(u.lastSignInAt) + (pending ? ' &middot; invite pending' : '') + '</div>' +
         '<div class="user-row-actions">' +
+        '<label style="font-size:12px; color:#888; display:inline-flex; align-items:center; gap:4px;">Role: ' + roleSelectHtml + '</label>' +
         '<button class="secondary" data-action="showSetPassword">Set password</button>' +
         '<button class="secondary" data-action="sendReset">Send reset email</button>' +
         (pending ? '<button class="secondary" data-action="resendInvite">Resend invite</button>' : '') +
@@ -432,6 +442,24 @@
         btn.disabled = false;
       }
       return;
+    }
+  });
+
+  document.getElementById('usersListContainer').addEventListener('change', async (e) => {
+    const select = e.target.closest('select[data-action="setRole"]');
+    if (!select) return;
+    const row = select.closest('.user-row');
+    const userId = row.getAttribute('data-user-id');
+    const email = row.getAttribute('data-email');
+    const newRole = select.value;
+    select.disabled = true;
+    try {
+      await callManageUsers('setRole', { userId, role: newRole });
+      showMsg('userMgmtMsg', 'Updated role for ' + email + '.', 'success');
+      loadUsers();
+    } catch (err){
+      showMsg('userMgmtMsg', err.message, 'error');
+      loadUsers(); // revert the dropdown to the actual saved role
     }
   });
 
