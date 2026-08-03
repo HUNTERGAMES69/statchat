@@ -62,7 +62,8 @@
   table.stattable td { text-align:right; padding:2px 6px; border-bottom:none; }
   table.stattable tbody tr:nth-child(even) { background:rgba(0,0,0,0.03); }
   table.stattable tr.totalRow { font-weight:700; border-top:1px solid #333; }
-  .stat-category-grid { column-count:2; column-gap:8px; }
+  .stat-category-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:start; }
+  .stat-category-col { display:flex; flex-direction:column; min-width:0; }
   .stat-category-tile { background:#eef1f5; border:1px solid #c9d0d9; border-radius:6px; padding:calc(6px * var(--stat-scale, 1)) 8px calc(4px * var(--stat-scale, 1)); margin-bottom:calc(6px * var(--stat-scale, 1)); min-width:0; break-inside:avoid; }
   .stat-category-label { font-size:calc(11px * var(--stat-scale, 1)); font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.02em; margin:0 0 3px; background:#4a5568; display:inline-block; padding:2px 7px; border-radius:3px; }
   table.player-stat-table { width:100%; border-collapse:collapse; font-size:calc(13px * var(--stat-scale, 1)); }
@@ -88,7 +89,7 @@
     .quad { border:1px solid #1a1a1a; overflow-y:visible; padding:10px; }
     #quadTR { order:99; }
     .team-summary-row { flex-direction:column; gap:16px; }
-    .stat-category-grid { column-count:1; }
+    .stat-category-grid { grid-template-columns:1fr; }
     #centerLogoLink { display:none; }
     #mobileBackLink { display:block; }
     .inline-stat-line { flex-wrap:wrap; }
@@ -523,7 +524,7 @@ function computeState(playsList){
   function renderTeamBoxScore(teamKey, box){
       const team = TEAMS[teamKey];
       const s = box[teamKey];
-      let html = '';
+      let leftHtml = '', rightHtml = '';
 
       const sum = (nums, obj, key) => nums.reduce((t, n) => t + ((obj[n] && obj[n][key]) || 0), 0);
       const tile = (label, inner) => '<div class="stat-category-tile"><div class="stat-category-label">' + label + '</div>' + inner + '</div>';
@@ -549,7 +550,7 @@ function computeState(playsList){
       const passSorted = sortByYds(Object.keys(s.passing), s.passing, 'yds');
       const passNums = capWithTdException(passSorted, s.passing, 'td');
       if (passNums.length){
-        html += tile('Passing', table(['Att','Comp','%','Yds','TD','Int'], passNums.map((n, i) => {
+        leftHtml += tile('Passing', table(['Att','Comp','%','Yds','TD','Int'], passNums.map((n, i) => {
           const d = s.passing[n];
           const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
           return { name: playerName(teamKey, n), leader: i === 0 && passNums.length > 1, values: [d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0] };
@@ -558,7 +559,7 @@ function computeState(playsList){
       const rushSorted = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
       const rushNums = capWithTdException(rushSorted, s.rushing, 'td');
       if (rushNums.length){
-        html += tile('Rushing', table(['Att','Yds','TD'], rushNums.map((n, i) => {
+        rightHtml += tile('Rushing', table(['Att','Yds','TD'], rushNums.map((n, i) => {
           const d = s.rushing[n];
           return { name: playerName(teamKey, n), leader: i === 0 && rushNums.length > 1, values: [d.att||0, d.yds||0, d.td||0] };
         })));
@@ -566,7 +567,7 @@ function computeState(playsList){
       const recSorted = sortByYds(Object.keys(s.receiving), s.receiving, 'yds');
       const recNums = capWithTdException(recSorted, s.receiving, 'td');
       if (recNums.length){
-        html += tile('Receiving', table(['Rec','Yds','TD'], recNums.map((n, i) => {
+        leftHtml += tile('Receiving', table(['Rec','Yds','TD'], recNums.map((n, i) => {
           const d = s.receiving[n];
           return { name: playerName(teamKey, n), leader: i === 0 && recNums.length > 1, values: [d.rec||0, d.yds||0, d.td||0] };
         })));
@@ -590,17 +591,17 @@ function computeState(playsList){
       stEntries.sort((a, b) => b.yds - a.yds);
       if (stEntries.length){
         const headers = stEntries[0].headers;
-        html += tile('Special Teams', table(headers, stEntries.slice(0, 5).map(e => ({ name: e.name, values: e.values }))));
+        rightHtml += tile('Special Teams', table(headers, stEntries.slice(0, 5).map(e => ({ name: e.name, values: e.values }))));
       }
       const defNums = Object.keys(s.defense);
       if (defNums.length){
-        html += tile('Defense', table(['Int','Fum Rec','Sacks'], [{ name: 'Team', values: [sum(defNums,s.defense,'int'), sum(defNums,s.defense,'fumRec'), sum(defNums,s.defense,'sacks')] }]));
+        rightHtml += tile('Defense', table(['Int','Fum Rec','Sacks'], [{ name: 'Team', values: [sum(defNums,s.defense,'int'), sum(defNums,s.defense,'fumRec'), sum(defNums,s.defense,'sacks')] }]));
       }
       if (!rushNums.length && !passNums.length && !recNums.length && !stEntries.length && !defNums.length){
-        html += '<p class="hint">No stats yet for ' + team.name + '.</p>';
+        leftHtml += '<p class="hint">No stats yet for ' + team.name + '.</p>';
       }
       const totalRows = passNums.length + rushNums.length + recNums.length + Math.min(stEntries.length, 5) + (defNums.length ? 1 : 0);
-      return { html: '<div class="stat-category-grid">' + html + '</div>', totalRows };
+      return { html: '<div class="stat-category-grid"><div class="stat-category-col">' + leftHtml + '</div><div class="stat-category-col">' + rightHtml + '</div></div>', totalRows };
   }
 
   function renderBoxScore(){
