@@ -29,6 +29,8 @@
   .metric-tile .metric-val { font-size:22px; font-weight:700; }
   .metric-tile .metric-label { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.02em; margin-top:2px; }
   .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-bottom:14px; }
+  .chart-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:32px; margin-bottom:14px; }
+  .chart-row-3 .chart-col:not(:first-child) { border-left:1px solid #eee; padding-left:32px; margin-left:-1px; }
   .chart-col { min-width:0; }
   .chart-col:last-child { border-left:1px solid #eee; padding-left:40px; margin-left:-1px; }
   .chart-col-metrics { display:flex; justify-content:space-around; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
@@ -515,7 +517,8 @@
       pointsScored: finalState.scores.teamA, pointsAllowed: finalState.scores.teamB,
       d3Pct: ownDowns.d3att ? Math.round(100*ownDowns.d3conv/ownDowns.d3att) : null,
       oppD3Pct: oppDowns.d3att ? Math.round(100*oppDowns.d3conv/oppDowns.d3att) : null,
-      penCount: pen.count, penYds: pen.yds
+      penCount: pen.count, penYds: pen.yds,
+      turnovers: turnovers.teamA || 0, sacked: sumStat(box.teamA.passing, 'sacked')
     });
 
     // XLS export rows -- same 43-column "Stats" schema and "Game
@@ -738,13 +741,20 @@
       '</div>';
 
     html += '<div class="section"><div class="section-title">Discipline</div>' +
-      '<div class="metric-grid">' +
-      [[t.turnovers,'Turnovers'],[per(t.turnovers),'Per game'],[t.sacked,'Sacks allowed'],[per(t.sacked),'Per game'],
-       [t.penCount,'Penalties'],[per(t.penCount),'Pen/game'],[t.penYds,'Penalty yds'],[per(t.penYds),'Pen yds/game']]
-        .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-      '</div>' +
-      '<div class="chart-box wide"><canvas id="chartPenaltiesByGame"></canvas></div>' +
-      '</div>';
+      '<div class="chart-row-3">' +
+      '<div class="chart-col"><div class="chart-col-metrics">' +
+        [[t.turnovers,'Turnovers'],[per(t.turnovers),'Per game']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div><div class="chart-box"><canvas id="chartTurnoversByGame"></canvas></div></div>' +
+      '<div class="chart-col"><div class="chart-col-metrics">' +
+        [[t.sacked,'Sacks allowed'],[per(t.sacked),'Per game']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div><div class="chart-box"><canvas id="chartSacksByGame"></canvas></div></div>' +
+      '<div class="chart-col"><div class="chart-col-metrics">' +
+        [[t.penCount,'Penalties'],[per(t.penCount),'Pen/game'],[t.penYds,'Penalty yds'],[per(t.penYds),'Pen yds/game']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div><div class="chart-box"><canvas id="chartPenaltiesByGame"></canvas></div></div>' +
+      '</div></div>';
 
     html += '<div class="section"><div class="section-title">Efficiency</div>' +
       '<div class="metric-grid">' +
@@ -878,6 +888,14 @@
     new Chart(document.getElementById('chartRunPassYds'), { type:'doughnut', data:{ labels:['Rush yds','Pass yds'],
       datasets:[{ data:[t.rushYds, t.passYds], backgroundColor:[primary, secondary] }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Run / pass yardage %', font:{size:12} }, legend:{ position:'bottom' }, datalabels:pctOfTotal } }) });
+
+    new Chart(document.getElementById('chartTurnoversByGame'), { type:'bar', data:{ labels,
+      datasets:[{ label:'Turnovers', data:games.map(g=>g.turnovers), backgroundColor:primary }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Turnovers by game', font:{size:12} }, legend:{ display:false }, datalabels:showVal } }) });
+
+    new Chart(document.getElementById('chartSacksByGame'), { type:'bar', data:{ labels,
+      datasets:[{ label:'Sacks allowed', data:games.map(g=>g.sacked), backgroundColor:secondary }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Sacks allowed by game', font:{size:12} }, legend:{ display:false }, datalabels:showVal } }) });
 
     new Chart(document.getElementById('chartPenaltiesByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'Penalties', data:games.map(g=>g.penCount), backgroundColor:primary, yAxisID:'y' },
