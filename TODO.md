@@ -33,28 +33,104 @@ called `parseInput()` directly, bypassing the real HTML input fields
 where the bug actually lived.
 
 ### Can do without further input from Andy
-- [ ] **Internal consistency checks** — for a batch of test games, verify
-  total yardage computed two independent ways (sum of individual
-  player stats vs. sum of raw play-log yardage) always agree.
-- [ ] **Sign-convention review** — go through every "yards"-type input
-  field on every play panel in `game.html` one at a time: does the
-  label imply a signed number or a magnitude, and does the code
-  reading it agree? This is the class of review that would have
-  caught the sack bug by inspection alone.
-- [ ] **Re-run the ~440 real NFL games through the actual UI** — extend the
-  existing UI-driving test harness (`ui_test_harness.js` /
-  `ui_driver.js` / `ui_game_runner.js` / `ui_batch_runner.js`, or
-  their equivalents) so it actually populates real HTML fields on
-  each play panel, rather than calling `parseInput()` directly. This
-  is the single biggest, most valuable piece here, and the most
-  mechanical/time-consuming.
-- [ ] **Re-verify team-level stats against real box scores, deliberately**
-  — same method used to verify the sack-yardage methodology, applied
-  to every team-level metric (turnovers, penalties, possessions,
-  etc.) rather than only the one someone happened to ask about. Note:
-  StatChat-specific metrics with no real NFL equivalent (e.g. the
-  exact 20yd+ "explosive play" threshold) can't be checked this way —
-  those need careful logical review instead.
+- [x] **Internal consistency checks** — DONE (Aug 4, 2026). Extended the
+  NFL fuzz-test harness with a yardage cross-check (box-score sum vs.
+  raw play-log sum) across all 285 available 2024-season games: zero
+  mismatches. Also added a direct down/distance logical check (loss of
+  yardage must increase distance-to-go, gain must decrease it) — this
+  is the check that would have caught the sack bug directly, unlike a
+  yardage-totals check, which wouldn't have (see the sack bug note
+  below for why). 18,358 logic checks run, zero violations.
+- [x] **Sign-convention review** — DONE (Aug 4, 2026). Read through every
+  "yards"-type field across every play panel in `game.html`. Findings:
+  Rush/Pass's generic "Yards" label correctly expects signed input, and
+  the code reads it as signed with no adjustment needed. Sack's "Yards
+  lost" (magnitude-implying) is now correctly negated after the earlier
+  fix. Penalty's "Yards" field is safe by design — direction comes from
+  a separate "On offense/On defense" toggle, not from the sign of the
+  number typed. Every "Return yards (optional)" field on turnovers and
+  special-teams plays is consistently display-only, never fed into
+  field-position math at all — a deliberate pattern, not an omission.
+  No new sign bugs found.
+- [~] **Re-run NFL games through the actual UI** — IN PROGRESS, substantial
+  build done (Aug 4, 2026), but not safe to trust yet -- see the
+  critical finding below before treating any of this as verified.
+  - What's built: a real UI-driving test (`ui_code_driver.js`,
+    `full_ui_audit.js`, `full_ui_batch_runner.js` in `/home/claude/stat_tracker/`,
+    though that's a sandbox path that won't survive to a fresh
+    session -- these need to be committed to the repo, not left there)
+    that actually opens each play panel, types into real `<input>`
+    fields, dispatches real `input` events, and clicks the real Review
+    and Save buttons -- not `parseInput()` shortcuts. Supports rush,
+    pass, incomplete, sack (incl. safety), interception, kickoff (incl.
+    returns), punt (incl. blocked, both recovery cases, incl. returns),
+    field goal (incl. blocked), PAT (incl. blocked), and both 2-point
+    conversion types. Standalone fumbles and bare safety supported.
+    Fumble-during-rush/pass/sack sub-flows and the fumble-recovered-by-
+    own-team sub-case are NOT yet supported (will show up as
+    `standalone-fumble-not-yet-supported` or similar in skip counts if
+    hit -- they weren't hit in the current NFL dataset, but that's
+    coincidence, not coverage).
+  - While building this, found and fixed three genuine bugs in the test
+    driver itself (not the app): punt returns/return-TDs were silently
+    dropped (never wired the returner/return-yards/TD fields at all);
+    FG-blocked and PAT-blocked weren't wired up; and bare "sf" was
+    being faked by writing directly to a hidden internal `#code` field
+    instead of driving the real Safety panel -- which doesn't actually
+    test anything, since a coach has no way to do that.
+  - Found one code pattern the test converter produces that has NO
+    corresponding real UI action at all: direct score-adjustment
+    commands (`score teamA +6` etc.), used for rare edge cases like a
+    fumble-recovery TD with no jersey number on the ball carrier. No
+    button or field produces this in the real app. Now correctly
+    skipped rather than faked -- but it means those specific games will
+    always show a combined-score gap unless/until an alternate real
+    path is found for the underlying event.
+  - **Critical finding, not yet acted on**: the "combined score match"
+    check this whole audit (both the old `parseInput()`-direct version
+    and the new UI-driven version) has been relying on is too weak. It
+    only checks the *sum* of both teams' scores, not which team scored
+    what. Confirmed concretely on `2024_01_DEN_SEA`: even the
+    `parseInput()`-direct method gives 24-22, matching neither team's
+    real score (26-20) -- but 24+22=46 equals the real *combined* total
+    (26+20=46), so the earlier batch run's "combinedMatch: true" passed
+    anyway, completely masking a real per-team attribution error. This
+    means the earlier "only 3 mismatches, all explained by laterals"
+    conclusion (see `PROJECT_NOTES.md`) was based on an incomplete
+    check and should not be trusted as-is.
+  - **Update (Aug 4, 2026)**: the per-team check was built and the full
+    285-game batch re-run with it. Result: 241/285 games (84.6%) have a
+    per-team mismatch, 223 of them masked by the old check. This is one
+    systematic pattern (a home/away score swap, confirmed on
+    `2024_01_ARI_BUF`), not 241 separate bugs -- full root-cause
+    analysis in `PROJECT_NOTES.md`'s "Systematic per-team score
+    mismatch" entry. **Not yet resolved**: whether this is a real
+    engine bug in possession-inference, or an inherent limitation of
+    testing with play codes that never state which team a player is
+    on (team attribution is inferred purely from prior plays' effects,
+    with no explicit possession marker from the converter). Next step
+    is determining which, most likely by having the converter also
+    emit accurate possession/drive-start markers from nflverse's own
+    drive data and checking whether that eliminates the mismatches --
+    if it does, this was a test-data gap, not an app bug.
+- [~] **Re-verify team-level stats against real box scores** — PARTIAL
+  (Aug 4, 2026). Turnovers verified exactly against the same real,
+  published game used for the sack-yardage verification (1-1, matches
+  official box score exactly). **Found a real gap while doing this**:
+  the NFL play-by-play converter never generates penalty codes at all
+  — it explicitly treats "penalty-only plays" as out of scope and skips
+  them. This means penalties have never actually been exercised by any
+  of this NFL-based testing, ever. Possessions also untested this way
+  (no natural nflverse equivalent to check against cheaply). Extending
+  the converter to handle penalties (nflverse has `penalty_team` /
+  `penalty_yards` per play) is a real, moderate-scope follow-up, not
+  done yet — added as its own item below.
+  - [ ] Extend the NFL converter to generate penalty codes (`po`/`pd`)
+    from nflverse's `penalty_team`/`penalty_yards` columns, then
+    re-verify penalty counts/yards against real box scores the same
+    way sack yardage and turnovers were verified.
+  - [ ] Possessions has no cheap real-world check available; falls
+    back to careful logical review rather than data verification.
 
 ### Need a decision from Andy before building
 - [ ] **Golden-scenarios test suite** — a committed file (e.g.
