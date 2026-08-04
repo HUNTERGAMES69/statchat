@@ -545,8 +545,11 @@
       '</div>').join('') +
       '</div></div>';
 
-    html += '<div class="section player-section page-break">' +
-      '<h2>' + TEAMS.teamA.name + ' — Passing</h2>' + renderLeadersStrip(box) +
+    const leadersHtml = renderLeadersStrip(box);
+    if (leadersHtml) html += '<div class="section page-break">' + leadersHtml + '</div>';
+
+    html += '<div class="section player-section' + (leadersHtml ? '' : ' page-break') + '">' +
+      '<h2>' + TEAMS.teamA.name + ' — Passing</h2>' +
       (playerTable('teamA', box.teamA.passing, ['Att','Comp','%','Yds','Y/C','Long','TD','Int','Sack'],
         d => [d.att||0, d.comp||0, d.att ? Math.round(100*(d.comp||0)/d.att) : 0, d.yds||0, d.comp ? (d.yds/d.comp).toFixed(1) : '0.0', d.long||0, d.td||0, d.intThrown||0, d.sacked||0],
         (obj, nums) => { const att=sumStat(obj,'att'), comp=sumStat(obj,'comp'), yds=sumStat(obj,'yds');
