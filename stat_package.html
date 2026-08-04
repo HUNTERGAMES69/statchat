@@ -461,9 +461,42 @@
 
   function buildWorkbook(){
     const box = computeBoxScore(plays);
+    const finalState = computeState();
+    const possessions = countPossessions(plays);
+    const turnovers = countTurnovers(plays);
     const gameIdMatch = (gameLabel || '').match(/(\d+)/);
     const gameId = gameIdMatch ? parseInt(gameIdMatch[1]) : (gameLabel || '');
     const oppKey = 'teamB';
+
+    // Quarter-by-quarter scoring, with any 5th-or-later quarter folded
+    // into a single OT total rather than clamped into Q4.
+    const quarterScores = { teamA: [0,0,0,0], teamB: [0,0,0,0] };
+    const otScores = { teamA: 0, teamB: 0 };
+    plays.forEach(p => {
+      const q = p.quarter || 1;
+      const points = (p.effect && p.effect.score) ? p.effect.score : null;
+      const adjust = (p.effect && p.effect.scoreAdjust) ? p.effect.scoreAdjust : null;
+      if (points){
+        if (q >= 5) otScores[points.team] += points.points;
+        else quarterScores[points.team][q-1] += points.points;
+      }
+      if (adjust){
+        if (q >= 5) otScores[adjust.team] += adjust.pts;
+        else quarterScores[adjust.team][q-1] += adjust.pts;
+      }
+    });
+
+    // Half-by-half yardage, split into rushing and passing separately
+    // (quarters 1-2 = first half, 3+ = second half) -- nothing
+    // upstream computes this, so it's built directly from the play log.
+    const halfYards = { teamA: { h1Rush:0, h1Pass:0, h2Rush:0, h2Pass:0 }, teamB: { h1Rush:0, h1Pass:0, h2Rush:0, h2Pass:0 } };
+    plays.forEach(p => {
+      const r = p.roles;
+      if (!r) return;
+      const half = (p.quarter || 1) <= 2 ? 'h1' : 'h2';
+      if (r.playType === 'rush' && r.carrier) halfYards[r.carrier.team][half+'Rush'] += (r.carrier.yards || 0);
+      if (r.playType === 'pass' && r.passer) halfYards[r.passer.team][half+'Pass'] += (r.passer.yards || 0);
+    });
 
     const headers = ['GameID','Team','Player','Rush Attempts','Rush Yards','Yds Per Carry','Long Rush','Rush TD',
       'Pass Attempts','Pass Completions','Comp Pctg','Pass Yards','Long Pass','Pass TD','INT','SACK',
@@ -604,6 +637,36 @@
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Stats');
+
+    // Game Totals -- one row per team, matching the reference sheet's
+    // exact columns (including its "Penalites" spelling, since a
+    // downstream dashboard may already query that exact name).
+    const gtHeaders = ['GameID','Team','Q1','Q2','Q3','Q4','OT','Final','Penalites','Penalty Yards',
+      'H1 Yards','H2 Yards','Total Yards','Sacks','TO','Possessions','3D Att','3D Conv','4D Att','4D Conv',
+      'H1 Rushing','H1 Passing','H2 Rushing','H2 Passing'];
+    const gtRows = [gtHeaders];
+    [ 'teamA', oppKey ].forEach(teamKey => {
+      const pen = finalState.penalties[teamKey];
+      const hy = halfYards[teamKey];
+      const h1Total = hy.h1Rush + hy.h1Pass, h2Total = hy.h2Rush + hy.h2Pass;
+      const own = box[otherTeam(teamKey)].oppDowns; // this team's own offensive down conversions
+      const gtRow = new Array(gtHeaders.length).fill('');
+      const setGt = (obj) => Object.keys(obj).forEach(k => { gtRow[gtHeaders.indexOf(k)] = obj[k]; });
+      setGt({
+        GameID: gameId, Team: TEAMS[teamKey].name,
+        Q1: quarterScores[teamKey][0], Q2: quarterScores[teamKey][1], Q3: quarterScores[teamKey][2], Q4: quarterScores[teamKey][3],
+        OT: otScores[teamKey] || '', Final: finalState.scores[teamKey],
+        Penalites: pen.count || '', 'Penalty Yards': pen.yds || '',
+        'H1 Yards': h1Total, 'H2 Yards': h2Total, 'Total Yards': h1Total + h2Total,
+        Sacks: sumStat(box[teamKey].passing, 'sacked') || '', TO: turnovers[teamKey] || 0,
+        Possessions: possessions[teamKey] || 0,
+        '3D Att': own.d3att || '', '3D Conv': own.d3conv || '', '4D Att': own.d4att || '', '4D Conv': own.d4conv || '',
+        'H1 Rushing': hy.h1Rush, 'H1 Passing': hy.h1Pass, 'H2 Rushing': hy.h2Rush, 'H2 Passing': hy.h2Pass
+      });
+      gtRows.push(gtRow);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(gtRows), 'Game Totals');
+
     return wb;
   }
 
