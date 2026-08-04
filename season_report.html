@@ -804,51 +804,66 @@
     return Object.assign({ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ font:{ size:11 } } } } }, extra || {});
   }
 
+  function lighten(hex, amt){
+    const c = hex.replace('#','');
+    const r = parseInt(c.slice(0,2),16), g = parseInt(c.slice(2,4),16), b = parseInt(c.slice(4,6),16);
+    const mix = (v) => Math.round(v + (255-v)*amt);
+    return '#' + [mix(r),mix(g),mix(b)].map(v => v.toString(16).padStart(2,'0')).join('');
+  }
+
   function initCharts(){
     const t = seasonAgg.totals;
     const games = seasonAgg.perGame;
     const labels = games.map((g,i) => g.label || ('G' + (i+1)));
 
+    // Chart colors are derived from the team's own branded primary/
+    // secondary colors (set in account settings), not a fixed
+    // categorical palette, so the report visually matches the team.
+    const primary = seasonAgg.ourBranding.primary_color || '#1a1a2e';
+    const secondary = seasonAgg.ourBranding.secondary_color || '#8B0000';
+    const primaryLight = lighten(primary, 0.45);
+    const secondaryLight = lighten(secondary, 0.45);
+
     new Chart(document.getElementById('chartPointsByQuarter'), { type:'bar', data:{ labels:['Q1','Q2','Q3','Q4'],
-      datasets:[{ label:'Scored', data:seasonAgg.quarterScored, backgroundColor:'#0F6E56' },
-        { label:'Allowed', data:seasonAgg.quarterAllowed, backgroundColor:'#993C1D' }] },
+      datasets:[{ label:'Scored', data:seasonAgg.quarterScored, backgroundColor:primary },
+        { label:'Allowed', data:seasonAgg.quarterAllowed, backgroundColor:secondary }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Points by quarter', font:{size:12} }, legend:{ position:'bottom' } } }) });
 
     new Chart(document.getElementById('chartHalfYards'), { type:'bar', data:{ labels:['1st half','2nd half'],
       datasets:[
-        { label:'Neville', data:[games.reduce((s,g)=>s+g.h1Yds,0), games.reduce((s,g)=>s+g.h2Yds,0)], backgroundColor:'#534AB7' },
-        { label:'Opponent', data:[null,null], backgroundColor:'#ccc', hidden:true }
+        { label:'Neville', data:[games.reduce((s,g)=>s+g.h1Yds,0), games.reduce((s,g)=>s+g.h2Yds,0)], backgroundColor:primary },
+        { label:'Opponent', data:[null,null], backgroundColor:secondary, hidden:true }
       ] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Total yardage by half', font:{size:12} }, legend:{ position:'bottom' } } }) });
 
     new Chart(document.getElementById('chartRunPassAtt'), { type:'doughnut', data:{ labels:['Rush att','Pass att'],
-      datasets:[{ data:[t.rushAtt, t.passAtt], backgroundColor:['#993C1D','#0F6E56'] }] },
+      datasets:[{ data:[t.rushAtt, t.passAtt], backgroundColor:[primary, secondary] }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Run / pass mix', font:{size:12} }, legend:{ position:'bottom' } } }) });
 
     new Chart(document.getElementById('chartRunPassYds'), { type:'doughnut', data:{ labels:['Rush yds','Pass yds'],
-      datasets:[{ data:[t.rushYds, t.passYds], backgroundColor:['#993C1D','#0F6E56'] }] },
+      datasets:[{ data:[t.rushYds, t.passYds], backgroundColor:[primary, secondary] }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Run / pass yardage %', font:{size:12} }, legend:{ position:'bottom' } } }) });
 
     new Chart(document.getElementById('chartPenaltiesByGame'), { type:'bar', data:{ labels,
-      datasets:[{ label:'Penalties', data:games.map(g=>g.penCount), backgroundColor:'#993556', yAxisID:'y' },
-        { label:'Yards', data:games.map(g=>g.penYds), backgroundColor:'#D4537E', yAxisID:'y1' }] },
+      datasets:[{ label:'Penalties', data:games.map(g=>g.penCount), backgroundColor:primary, yAxisID:'y' },
+        { label:'Yards', data:games.map(g=>g.penYds), backgroundColor:secondary, yAxisID:'y1' }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Penalties by game', font:{size:12} }, legend:{ position:'bottom' } },
         scales:{ y:{ position:'left' }, y1:{ position:'right', grid:{ drawOnChartArea:false } } } }) });
 
     new Chart(document.getElementById('chart3rdDownByGame'), { type:'line', data:{ labels,
-      datasets:[{ label:'Offense 3rd down %', data:games.map(g=>g.d3Pct), borderColor:'#0F6E56', backgroundColor:'#0F6E56', tension:0.2 },
-        { label:'Opponent 3rd down %', data:games.map(g=>g.oppD3Pct), borderColor:'#993C1D', backgroundColor:'#993C1D', tension:0.2 }] },
+      datasets:[{ label:'Offense 3rd down %', data:games.map(g=>g.d3Pct), borderColor:primary, backgroundColor:primary, tension:0.2 },
+        { label:'Opponent 3rd down %', data:games.map(g=>g.oppD3Pct), borderColor:secondary, backgroundColor:secondary, tension:0.2 }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'3rd down % by game', font:{size:12} }, legend:{ position:'bottom' } } }) });
 
     new Chart(document.getElementById('chartYardsByGame'), { type:'bar', data:{ labels,
-      datasets:[{ label:'1st half', data:games.map(g=>g.h1Yds), backgroundColor:'#7F77DD', stack:'a' },
-        { label:'2nd half', data:games.map(g=>g.h2Yds), backgroundColor:'#3C3489', stack:'a' }] },
+      datasets:[{ label:'1st half', data:games.map(g=>g.h1Yds), backgroundColor:primaryLight, stack:'a' },
+        { label:'2nd half', data:games.map(g=>g.h2Yds), backgroundColor:primary, stack:'a' }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Total yards by game', font:{size:12} }, legend:{ position:'bottom' } },
         scales:{ x:{ stacked:true }, y:{ stacked:true } } }) });
 
     new Chart(document.getElementById('chartPassRushByGame'), { type:'bar', data:{ labels,
-      datasets:[{ label:'Pass yds', data:games.map(g=>g.passYds), backgroundColor:'#0F6E56' },
-        { label:'Rush yds', data:games.map(g=>g.rushYds), backgroundColor:'#993C1D' }] },
+      datasets:[{ label:'Pass yds', data:games.map(g=>g.passYds), backgroundColor:secondary },
+        { label:'Rush yds', data:games.map(g=>g.rushYds), backgroundColor:primary }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Pass / rush yards by game', font:{size:12} }, legend:{ position:'bottom' } } }) });
   }
 
