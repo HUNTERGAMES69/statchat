@@ -14,7 +14,8 @@
   .topbar button { background:#1a7a4c; color:#fff; border:none; border-radius:8px; padding:10px 18px; font-size:14px; font-weight:700; cursor:pointer; }
   .msg { padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:14px; }
   .msg.error { background:#fde8e8; color:#a32d2d; }
-  .header { text-align:center; margin-bottom:20px; background:#fff; border-radius:12px; padding:24px; box-shadow:0 2px 10px rgba(0,0,0,0.06); }
+  .header { position:relative; text-align:center; margin-bottom:20px; background:#fff; border-radius:12px; padding:24px; box-shadow:0 2px 10px rgba(0,0,0,0.06); }
+  .statchat-logo { position:absolute; top:16px; right:16px; width:70px; height:auto; border-radius:6px; }
   .header .sub { color:#888; font-size:13px; margin-top:4px; }
   .scoreboard { display:flex; justify-content:center; align-items:center; gap:36px; margin:18px 0 20px; }
   .team-block { text-align:center; min-width:140px; }
@@ -534,7 +535,7 @@
     const homeKey = TEAMS.teamA.isHome ? 'teamA' : 'teamB';
     const tV = teamHtml(visitorKey), tH = teamHtml(homeKey);
 
-    let html = '<div class="header">' +
+    let html = '<div class="header"><img class="statchat-logo" src="logo.png" alt="StatChat">' +
       '<div class="sub">' + (gameLabel || '') + (gameDate ? ' &middot; ' + new Date(gameDate + 'T00:00:00').toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'}) : '') + '</div>' +
       '<div class="scoreboard">' +
         '<div class="team-block">' + (TEAMS[visitorKey].logo ? '<img class="team-logo" src="'+TEAMS[visitorKey].logo+'">' : '') + '<div class="team-name">' + TEAMS[visitorKey].name + '</div><div class="team-score">' + finalState.scores[visitorKey] + '</div></div>' +
@@ -680,8 +681,14 @@
     }));
 
     document.title = 'Game Recap — ' + TEAMS.teamA.name + ' vs ' + TEAMS.teamB.name;
-    document.getElementById('recapContent').innerHTML = renderRecap();
-    showView('mainView');
+    try {
+      document.getElementById('recapContent').innerHTML = renderRecap();
+      showView('mainView');
+    } catch (err) {
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = 'This recap could not be built: ' + err.message;
+      console.error(err);
+    }
   }
 
   document.getElementById('downloadBtn').addEventListener('click', () => window.print());
