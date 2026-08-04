@@ -37,6 +37,45 @@
   .chart-col-metrics .metric-tile { flex:1; min-width:70px; }
   .chart-box { position:relative; height:220px; min-width:0; }
   .chart-box.wide { height:260px; }
+
+  @media (max-width: 700px) {
+    .wrap { padding:14px 12px 40px; }
+    .topbar { flex-wrap:wrap; gap:10px; }
+    .topbar .actions { width:100%; }
+    .topbar .actions button { flex:1; }
+    .report-header { padding:14px; }
+    .statchat-logo { width:44px; top:10px; right:10px; }
+    .section { padding:12px; }
+    .metric-grid { grid-template-columns:repeat(auto-fit, minmax(88px, 1fr)); gap:8px; }
+    .metric-tile .metric-val { font-size:19px; }
+
+    /* Collapse 2- and 3-column chart rows to one column. The DOM is
+       flat siblings (all metric-groups, then all charts) relying on
+       grid column position to pair each metric-group with its chart
+       -- naively stacking in DOM order would put every metric-group
+       together, then every chart together, losing that pairing. CSS
+       order fixes the visual sequence back to metrics-then-chart,
+       metrics-then-chart, without touching the DOM or the JS that
+       generates it. */
+    .chart-row, .chart-row-3 { grid-template-columns:1fr; gap:0; }
+    .chart-row > *, .chart-row-3 > * { border-left:none !important; padding-left:0 !important; margin-left:0 !important; margin-bottom:14px; }
+    .chart-row > :last-child, .chart-row-3 > :last-child { margin-bottom:0; }
+
+    .chart-row > :nth-child(1){ order:0; } .chart-row > :nth-child(3){ order:1; }
+    .chart-row > :nth-child(2){ order:2; } .chart-row > :nth-child(4){ order:3; }
+
+    .chart-row-3 > :nth-child(1){ order:0; } .chart-row-3 > :nth-child(4){ order:1; }
+    .chart-row-3 > :nth-child(2){ order:2; } .chart-row-3 > :nth-child(5){ order:3; }
+    .chart-row-3 > :nth-child(3){ order:4; } .chart-row-3 > :nth-child(6){ order:5; }
+
+    .chart-box { height:200px; }
+    .chart-box.wide { height:220px; }
+    .chart-col-metrics { justify-content:space-between; }
+
+    .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -12px; padding:0 12px; }
+    table.stat-table { font-size:12px; }
+    table.stat-table th, table.stat-table td { padding:5px 6px; }
+  }
   table.stat-table { width:100%; border-collapse:collapse; font-size:13px; background:#fff; margin-bottom:6px; }
   table.stat-table th, table.stat-table td { padding:6px 8px; text-align:right; border:1px solid #eee; }
   table.stat-table th:first-child, table.stat-table td:first-child { text-align:left; }
@@ -805,7 +844,7 @@
       let h = '<table class="stat-table"><tr><th></th>' + headers.map(x=>'<th>'+x+'</th>').join('') + '</tr>';
       sorted.forEach(name => { h += '<tr><td>'+name+'</td>'+rowFn(bucketObj[name]).map(v=>'<td>'+v+'</td>').join('')+'</tr>'; });
       h += '<tr class="total-row"><td>Total</td>'+totalFn(bucketObj, sorted).map(v=>'<td>'+v+'</td>').join('')+'</tr>';
-      return h + '</table>';
+      return '<div class="table-scroll">' + h + '</table></div>';
     };
 
     html += '<div class="section page-break"><div class="section-title">' + TEAMS.teamA.name + ' — Passing</div>' +
