@@ -785,8 +785,8 @@ function computeState(playsList){
       if (scrimmageTypes.includes(r.playType)) totalPlays++;
       if (p.effect && typeof p.effect.statYds === 'number') totalYds += p.effect.statYds;
       const yds = (p.effect && p.effect.statYds) || 0;
-      if (r.playType === 'rush' || r.playType === 'sack'){ rushes++; rushYds += yds; }
-      else if (r.playType === 'pass' || r.playType === 'incomplete' || r.playType === 'int'){ passes++; passYds += yds; }
+      if (r.playType === 'rush'){ rushes++; rushYds += yds; }
+      else if (r.playType === 'pass' || r.playType === 'incomplete' || r.playType === 'int' || r.playType === 'sack'){ passes++; passYds += yds; }
       else if (r.playType === 'fumble' && r.carrier){
         const pos = ((TEAMS[driveTeam] && TEAMS[driveTeam].posOffense[r.carrier.num]) || '').toUpperCase();
         if (RECEIVE_POS.has(pos)){ passes++; passYds += yds; }
@@ -857,7 +857,13 @@ function computeState(playsList){
       const team = TEAMS[teamKey];
       const s = box[teamKey];
       const rushYds = Object.keys(s.rushing).reduce((t, n) => t + (s.rushing[n].yds || 0), 0);
-      const passYds = Object.keys(s.passing).reduce((t, n) => t + (s.passing[n].yds || 0), 0);
+      // Verified against real NFL box scores: sack yardage lost comes
+      // out of the team's Pass Yards total, not Rushing.
+      const sackYardsLost = plays.reduce((t, p) => {
+        const r = p.roles;
+        return (r && r.playType === 'sack' && r.passer && r.passer.team === teamKey) ? t + (r.passer.yards || 0) : t;
+      }, 0);
+      const passYds = Object.keys(s.passing).reduce((t, n) => t + (s.passing[n].yds || 0), 0) - sackYardsLost;
       const totalYds = rushYds + passYds;
       // A team's own offensive 3rd/4th down conversion rate is stored on
       // the OTHER team's oppDowns entry (that's "the other team's defense

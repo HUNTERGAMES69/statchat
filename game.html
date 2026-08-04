@@ -550,13 +550,14 @@ function parseInput(raw, state){
     }
     else if (type === 'i'){ netYards = 0; text = O(p1) + ' incomplete, intended for ' + O(rest[0]); }
     else if (type === 's'){
-      netYards = parseInt(rest[0]) || 0; tackler = rest[1];
+      const sackLossYards = parseInt(rest[0]) || 0; tackler = rest[1];
+      netYards = -sackLossYards;
       if (isSafety){
-        return { text: O(p1) + ' sacked for ' + netYards + ' yds — SAFETY',
+        return { text: O(p1) + ' sacked for ' + sackLossYards + ' yds — SAFETY',
           effect: { score: { team: def, points: 2 }, endsDrive: true },
           flipEligible: false, team: off, quarter: state.quarter };
       }
-      text = O(p1) + ' sacked for ' + netYards + ' yds';
+      text = O(p1) + ' sacked for ' + sackLossYards + ' yds';
     }
 
     const curDown = state.down || 1, curDist = state.distance || 10;
