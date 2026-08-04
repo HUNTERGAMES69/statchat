@@ -28,14 +28,14 @@
   .metric-tile { text-align:center; padding:8px 4px; }
   .metric-tile .metric-val { font-size:22px; font-weight:700; }
   .metric-tile .metric-label { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.02em; margin-top:2px; }
-  .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-bottom:14px; }
-  .chart-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:32px; margin-bottom:14px; }
-  .chart-row-3 .chart-col:not(:first-child) { border-left:1px solid #eee; padding-left:32px; margin-left:-1px; }
-  .chart-col { min-width:0; }
-  .chart-col:last-child { border-left:1px solid #eee; padding-left:40px; margin-left:-1px; }
-  .chart-col-metrics { display:flex; justify-content:space-around; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:40px 40px; margin-bottom:14px; align-items:start; }
+  .chart-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:32px 32px; margin-bottom:14px; align-items:start; }
+  .chart-row > :nth-child(even) { border-left:1px solid #eee; padding-left:40px; margin-left:-1px; }
+  .chart-row-3 > :nth-child(3n+2) { border-left:1px solid #eee; padding-left:32px; margin-left:-1px; }
+  .chart-row-3 > :nth-child(3n+3) { border-left:1px solid #eee; padding-left:32px; margin-left:-1px; }
+  .chart-col-metrics { display:flex; justify-content:space-around; gap:8px; flex-wrap:wrap; align-content:flex-start; min-width:0; }
   .chart-col-metrics .metric-tile { flex:1; min-width:70px; }
-  .chart-box { position:relative; height:220px; }
+  .chart-box { position:relative; height:220px; min-width:0; }
   .chart-box.wide { height:260px; }
   table.stat-table { width:100%; border-collapse:collapse; font-size:13px; background:#fff; margin-bottom:6px; }
   table.stat-table th, table.stat-table td { padding:6px 8px; text-align:right; border:1px solid #eee; }
@@ -714,27 +714,31 @@
 
     html += '<div class="section"><div class="section-title">Season totals</div>' +
       '<div class="chart-row">' +
-      '<div class="chart-col"><div class="chart-col-metrics">' +
+      '<div class="chart-col-metrics">' +
         [[t.pointsScored,'Points scored'],[per(t.pointsScored),'Scored/game'],[t.pointsAllowed,'Points allowed'],[per(t.pointsAllowed),'Allowed/game']]
           .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div><div class="chart-box"><canvas id="chartPointsByQuarter"></canvas></div></div>' +
-      '<div class="chart-col"><div class="chart-col-metrics">' +
+        '</div>' +
+      '<div class="chart-col-metrics">' +
         [[totalYds,'Total yards'],[per(totalYds),'Yards/game'],[oppTotalYds,'Yards allowed'],[per(oppTotalYds),'Allowed/game']]
           .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div><div class="chart-box"><canvas id="chartHalfYards"></canvas></div></div>' +
+        '</div>' +
+      '<div class="chart-box"><canvas id="chartPointsByQuarter"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chartHalfYards"></canvas></div>' +
       '</div></div>';
 
     html += '<div class="section"><div class="section-title">Run / pass mix</div>' +
       '<div class="chart-row">' +
-      '<div class="chart-col"><div class="chart-col-metrics">' +
+      '<div class="chart-col-metrics">' +
         [[t.rushAtt,'Rush att'],[t.passAtt,'Pass att']]
           .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div><div class="chart-box"><canvas id="chartRunPassAtt"></canvas></div></div>' +
-      '<div class="chart-col"><div class="chart-col-metrics">' +
+        '</div>' +
+      '<div class="chart-col-metrics">' +
         [[t.rushYds,'Rush yds'],[t.rushAtt?+(t.rushYds/t.rushAtt).toFixed(1):0,'Yds/rush'],
          [t.passYds,'Pass yds'],[t.passAtt?+(t.passYds/t.passAtt).toFixed(1):0,'Yds/pass']]
           .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div><div class="chart-box"><canvas id="chartRunPassYds"></canvas></div></div>' +
+        '</div>' +
+      '<div class="chart-box"><canvas id="chartRunPassAtt"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chartRunPassYds"></canvas></div>' +
       '</div></div>';
 
     html += '<div class="section page-break"><div class="section-title">Yards by game</div>' +
@@ -744,18 +748,21 @@
 
     html += '<div class="section"><div class="section-title">Discipline</div>' +
       '<div class="chart-row-3">' +
-      '<div class="chart-col"><div class="chart-col-metrics">' +
+      '<div class="chart-col-metrics">' +
         [[t.turnovers,'Turnovers'],[per(t.turnovers),'Per game']]
           .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div><div class="chart-box"><canvas id="chartTurnoversByGame"></canvas></div></div>' +
-      '<div class="chart-col"><div class="chart-col-metrics">' +
+        '</div>' +
+      '<div class="chart-col-metrics">' +
         [[t.sacked,'Sacks allowed'],[per(t.sacked),'Per game']]
           .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div><div class="chart-box"><canvas id="chartSacksByGame"></canvas></div></div>' +
-      '<div class="chart-col"><div class="chart-col-metrics">' +
+        '</div>' +
+      '<div class="chart-col-metrics">' +
         [[t.penCount,'Penalties'],[per(t.penCount),'Pen/game'],[t.penYds,'Penalty yds'],[per(t.penYds),'Pen yds/game']]
           .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div><div class="chart-box"><canvas id="chartPenaltiesByGame"></canvas></div></div>' +
+        '</div>' +
+      '<div class="chart-box"><canvas id="chartTurnoversByGame"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chartSacksByGame"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chartPenaltiesByGame"></canvas></div>' +
       '</div></div>';
 
     html += '<div class="section"><div class="section-title">Efficiency</div>' +
@@ -858,6 +865,10 @@
     const t = seasonAgg.totals;
     const games = seasonAgg.perGame;
     const labels = games.map((g,i) => g.label || ('G' + (i+1)));
+    const headroom = (...dataArrays) => {
+      const max = Math.max(0, ...dataArrays.flat().filter(v => typeof v === 'number'));
+      return max === 0 ? undefined : Math.ceil(max * 1.2);
+    };
 
     // Chart colors are derived from the team's own branded primary/
     // secondary colors (set in account settings), not a fixed
@@ -874,14 +885,18 @@
     new Chart(document.getElementById('chartPointsByQuarter'), { type:'bar', data:{ labels:['Q1','Q2','Q3','Q4'],
       datasets:[{ label:'Scored', data:seasonAgg.quarterScored, backgroundColor:primary },
         { label:'Allowed', data:seasonAgg.quarterAllowed, backgroundColor:secondary }] },
-      options: chartOpts({ plugins:{ title:{ display:true, text:'Points by quarter', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal } }) });
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Points by quarter', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal },
+        scales:{ y:{ suggestedMax: headroom(seasonAgg.quarterScored, seasonAgg.quarterAllowed) } } }) });
 
     new Chart(document.getElementById('chartHalfYards'), { type:'bar', data:{ labels:['1st half','2nd half'],
       datasets:[
         { label:TEAMS.teamA.name, data:[games.reduce((s,g)=>s+g.h1Yds,0), games.reduce((s,g)=>s+g.h2Yds,0)], backgroundColor:primary },
         { label:'Opponent', data:[games.reduce((s,g)=>s+g.oppH1Yds,0), games.reduce((s,g)=>s+g.oppH2Yds,0)], backgroundColor:secondary }
       ] },
-      options: chartOpts({ plugins:{ title:{ display:true, text:'Total yardage by half', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal } }) });
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Total yardage by half', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal },
+        scales:{ y:{ suggestedMax: headroom(
+          [games.reduce((s,g)=>s+g.h1Yds,0), games.reduce((s,g)=>s+g.h2Yds,0)],
+          [games.reduce((s,g)=>s+g.oppH1Yds,0), games.reduce((s,g)=>s+g.oppH2Yds,0)]) } } }) });
 
     new Chart(document.getElementById('chartRunPassAtt'), { type:'doughnut', data:{ labels:['Rush att','Pass att'],
       datasets:[{ data:[t.rushAtt, t.passAtt], backgroundColor:[primary, secondary] }] },
@@ -893,23 +908,27 @@
 
     new Chart(document.getElementById('chartTurnoversByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'Turnovers', data:games.map(g=>g.turnovers), backgroundColor:primary }] },
-      options: chartOpts({ plugins:{ title:{ display:true, text:'Turnovers by game', font:{size:12} }, legend:{ display:false }, datalabels:showVal } }) });
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Turnovers by game', font:{size:12} }, legend:{ display:false }, datalabels:showVal },
+        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.turnovers)) } } }) });
 
     new Chart(document.getElementById('chartSacksByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'Sacks allowed', data:games.map(g=>g.sacked), backgroundColor:secondary }] },
-      options: chartOpts({ plugins:{ title:{ display:true, text:'Sacks allowed by game', font:{size:12} }, legend:{ display:false }, datalabels:showVal } }) });
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Sacks allowed by game', font:{size:12} }, legend:{ display:false }, datalabels:showVal },
+        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.sacked)) } } }) });
 
     new Chart(document.getElementById('chartPenaltiesByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'Penalties', data:games.map(g=>g.penCount), backgroundColor:primary, yAxisID:'y' },
         { label:'Yards', data:games.map(g=>g.penYds), backgroundColor:secondary, yAxisID:'y1' }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Penalties by game', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal },
-        scales:{ y:{ position:'left' }, y1:{ position:'right', grid:{ drawOnChartArea:false } } } }) });
+        scales:{ y:{ position:'left', suggestedMax: headroom(games.map(g=>g.penCount)) },
+          y1:{ position:'right', grid:{ drawOnChartArea:false }, suggestedMax: headroom(games.map(g=>g.penYds)) } } }) });
 
     new Chart(document.getElementById('chart3rdDownByGame'), { type:'line', data:{ labels,
       datasets:[{ label:'Offense 3rd down %', data:games.map(g=>g.d3Pct), borderColor:primary, backgroundColor:primary, tension:0.2 },
         { label:'Opponent 3rd down %', data:games.map(g=>g.oppD3Pct), borderColor:secondary, backgroundColor:secondary, tension:0.2 }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'3rd down % by game', font:{size:12} }, legend:{ position:'bottom' },
-        datalabels:{ color:'#000', align:'top', font:{size:9}, formatter:(v) => (v===null||v===undefined) ? '' : v+'%' } } }) });
+        datalabels:{ color:'#000', align:'top', font:{size:9}, formatter:(v) => (v===null||v===undefined) ? '' : v+'%' } },
+        scales:{ y:{ suggestedMax: Math.min(100, headroom(games.map(g=>g.d3Pct), games.map(g=>g.oppD3Pct)) || 20) } } }) });
 
     new Chart(document.getElementById('chartYardsByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'1st half', data:games.map(g=>g.h1Yds), backgroundColor:primaryLight, stack:'a' },
@@ -921,7 +940,8 @@
     new Chart(document.getElementById('chartPassRushByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'Pass yds', data:games.map(g=>g.passYds), backgroundColor:secondary },
         { label:'Rush yds', data:games.map(g=>g.rushYds), backgroundColor:primary }] },
-      options: chartOpts({ plugins:{ title:{ display:true, text:'Pass / rush yards by game', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal } }) });
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Pass / rush yards by game', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal },
+        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.passYds), games.map(g=>g.rushYds)) } } }) });
   }
 
   if (window.Chart && window.ChartDataLabels) Chart.register(ChartDataLabels);
