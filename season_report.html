@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StatChat — Season Report</title>
+<style>
+  html, body { margin:0; padding:0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; color:#1a1a1a; }
+  .wrap { max-width:960px; margin:0 auto; padding:24px 24px 60px; box-sizing:border-box; }
+  .hidden { display:none !important; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+  .topbar a { color:#555; text-decoration:none; font-size:14px; font-weight:600; }
+  .topbar .actions { display:flex; gap:10px; }
+  .topbar button { border:none; border-radius:8px; padding:10px 18px; font-size:14px; font-weight:700; cursor:pointer; }
+  .topbar button.pdf { background:#1a7a4c; color:#fff; }
+  .topbar button.xls { background:#0f6e56; color:#fff; }
+  .msg { padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:14px; }
+  .msg.error { background:#fde8e8; color:#a32d2d; }
+  .report-header { position:relative; text-align:center; margin-bottom:16px; background:#fff; border:1px solid #ddd; padding:16px; }
+  .statchat-logo { position:absolute; top:12px; right:12px; width:60px; height:auto; border-radius:6px; }
+  .report-header h1 { font-size:18px; margin:0 0 4px; }
+  .report-header .sub { color:#666; font-size:13px; }
+  .report-header .record { font-size:13px; font-weight:600; margin-top:4px; }
+  .section { background:#fff; border:1px solid #ddd; padding:16px; margin-bottom:16px; }
+  .section-title { font-size:14px; font-weight:700; margin:0 0 12px; text-transform:uppercase; letter-spacing:0.03em; color:#333; }
+  .metric-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:10px; margin-bottom:14px; }
+  .metric-tile { text-align:center; padding:8px 4px; }
+  .metric-tile .metric-val { font-size:22px; font-weight:700; }
+  .metric-tile .metric-label { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.02em; margin-top:2px; }
+  .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:14px; }
+  .chart-box { position:relative; height:220px; }
+  .chart-box.wide { height:260px; }
+  table.stat-table { width:100%; border-collapse:collapse; font-size:13px; background:#fff; margin-bottom:6px; }
+  table.stat-table th, table.stat-table td { padding:6px 8px; text-align:right; border:1px solid #eee; }
+  table.stat-table th:first-child, table.stat-table td:first-child { text-align:left; }
+  table.stat-table th { background:#f5f5f5; color:#555; font-weight:600; font-size:11px; text-transform:uppercase; }
+  table.stat-table tr.total-row { font-weight:800; background:#fafafa; }
+  .no-stats { color:#999; font-size:13px; font-style:italic; }
+  .st-subsection { margin-top:14px; }
+  .st-subsection-label { font-size:11px; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.03em; margin-bottom:4px; }
+  @media print {
+    body { background:#fff; }
+    .wrap { max-width:none; padding:0 20px; }
+    .no-print { display:none !important; }
+    .section, .report-header { page-break-inside:avoid; break-inside:avoid; }
+    .page-break { page-break-before:always; break-before:always; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="loading">Loading…</div>
+    <div id="errorView" class="hidden">
+      <p id="errorMsg" class="msg error"></p>
+    </div>
+    <div id="mainView" class="hidden">
+      <div class="topbar no-print">
+        <a href="reports.html">&larr; Back to reports</a>
+        <div class="actions">
+          <button class="xls" id="downloadXlsBtn" type="button">Download XLS</button>
+          <button class="pdf" id="downloadPdfBtn" type="button">Download PDF</button>
+        </div>
+      </div>
+      <div id="reportContent"></div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="team-icon.js"></script>
+<script>
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  function showView(name){
+    ['loading','errorView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+  }
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION'){
+      if (session){ init(); } else { window.location.href = '/'; }
+    } else if (event === 'SIGNED_OUT'){
+      window.location.href = '/';
+    }
+  });
+
+  let plays = [], startingPossession = 'teamA', quarterLengthSec = 720;
+  const TEAMS = {};
+
+  // --- Proven read-only engine core, extracted verbatim from game.html / view.html ---
+  function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+  function nameInOffense(teamKey, num){
+    const n = TEAMS[teamKey].rosterOffense[num] || (TEAMS[teamKey].rosterSpecialTeams && TEAMS[teamKey].rosterSpecialTeams[num]);
+    return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
+  }
+  function nameInDefense(teamKey, num){
+    const n = TEAMS[teamKey].rosterDefense[num];
+    return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
+  }
+  function nameInSpecialTeams(teamKey, num){
+    const n = (TEAMS[teamKey].rosterSpecialTeams && TEAMS[teamKey].rosterSpecialTeams[num]) || TEAMS[teamKey].rosterOffense[num];
+    return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
+  }
+
+  function computeState(playsList){
+    const list = playsList || plays;
+    const state = {
+      possession: startingPossession,
+      quarter: 1,
+      scores: { teamA: 0, teamB: 0 },
+      possessionTime: { teamA: 0, teamB: 0 },
+      down: null, distance: null, fieldPos: null, startSpot: null, statYards: 0,
+      penalties: { teamA: { count: 0, yds: 0 }, teamB: { count: 0, yds: 0 } }
+    };
+    const pendingClockStart = { teamA: null, teamB: null };
+    for (const p of list){
+      const e = p.effect;
+      if (!e) continue;
+      if (e.isReset){
+        state.down = e.down; state.distance = e.distance; state.fieldPos = e.fieldPos;
+        state.startSpot = e.fieldPos; state.statYards = 0;
+      }
+      if (e.isStat){
+        if (state.fieldPos !== null){
+          state.fieldPos += e.fieldDelta;
+          state.fieldPos = Math.max(0, Math.min(100, state.fieldPos));
+        }
+        state.statYards += e.statYds;
+        if (e.td){
+          state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+        } else {
+          if (e.converts){
+            state.down = 1;
+            state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+          }
+          else if (e.turnoverOnDowns && e.flipApplied){
+            state.possession = otherTeam(state.possession);
+            state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+          } else if (!e.turnoverOnDowns){
+            state.down = (state.down || 1) + 1;
+            state.distance = Math.max((state.distance || 10) - e.statYds, 1);
+          }
+        }
+      }
+      if (e.endsDrive && !e.isStat){
+        state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+      }
+      if (e.penaltyTeam){
+        state.penalties[e.penaltyTeam].count += 1;
+        state.penalties[e.penaltyTeam].yds += e.penaltyYds;
+        if (state.fieldPos !== null){
+          state.fieldPos += e.fieldDelta;
+          state.fieldPos = Math.max(0, Math.min(100, state.fieldPos));
+        }
+      }
+      if (e.score){ state.scores[e.score.team] += e.score.points; }
+      if (e.scoreAdjust){ state.scores[e.scoreAdjust.team] += e.scoreAdjust.pts; }
+      if (e.flip && e.flipApplied && !e.isStat){
+        state.possession = e.flipTo;
+        state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+      }
+      if (e.forcePossession){ state.possession = e.forcePossession; }
+      if (e.setQuarter){ state.quarter = e.setQuarter; }
+      if (e.clockEvent){
+        const ce = e.clockEvent;
+        if (ce.type === 'start'){ pendingClockStart[ce.team] = ce.absSec; }
+        if (ce.type === 'end' && pendingClockStart[ce.team] !== null){
+          state.possessionTime[ce.team] += Math.max(0, ce.absSec - pendingClockStart[ce.team]);
+          pendingClockStart[ce.team] = null;
+        }
+        if (ce.type === 'transition'){
+          if (pendingClockStart[ce.outgoingTeam] !== null){
+            state.possessionTime[ce.outgoingTeam] += Math.max(0, ce.absSec - pendingClockStart[ce.outgoingTeam]);
+            pendingClockStart[ce.outgoingTeam] = null;
+          }
+          pendingClockStart[ce.incomingTeam] = ce.absSec;
+        }
+      }
+      if (e.setScores){ state.scores.teamA = e.setScores.teamA; state.scores.teamB = e.setScores.teamB; }
+    }
+    return state;
+  }
+  // --- End engine core ---
+
+  function luminance(hex){
+    const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+    return (0.299*r + 0.587*g + 0.114*b) / 255;
+  }
+  function safeTextColor(bgHex, preferredHex){
+    if (Math.abs(luminance(bgHex) - luminance(preferredHex)) > 0.35) return preferredHex;
+    return luminance(bgHex) > 0.55 ? '#1a1a1a' : '#ffffff';
+  }
+  function colorDistance(hexA, hexB){
+    const a = { r: parseInt(hexA.slice(1,3),16), g: parseInt(hexA.slice(3,5),16), b: parseInt(hexA.slice(5,7),16) };
+    const b = { r: parseInt(hexB.slice(1,3),16), g: parseInt(hexB.slice(3,5),16), b: parseInt(hexB.slice(5,7),16) };
+    return Math.sqrt((a.r-b.r)**2 + (a.g-b.g)**2 + (a.b-b.b)**2);
+  }
+  function buildTeams(game, rosterRows, ourBranding){
+    const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
+    const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null,
+      isHome: !!game.our_team_is_home };
+    const oppPrimary = game.opponent_primary_color || '#8B0000', oppSecondary = game.opponent_secondary_color || '#ffffff';
+    TEAMS.teamB = { name: oppName, bg: oppPrimary, text: oppSecondary,
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null,
+      isHome: !game.our_team_is_home };
+    if (colorDistance(TEAMS.teamA.bg, TEAMS.teamB.bg) < 60){
+      if (colorDistance(TEAMS.teamA.bg, oppSecondary) >= 60){
+        TEAMS.teamB.bg = oppSecondary;
+        TEAMS.teamB.text = oppPrimary;
+      } else {
+        TEAMS.teamB.bg = luminance(TEAMS.teamA.bg) > 0.5 ? '#3a3a3a' : '#c8c8c8';
+        TEAMS.teamB.text = luminance(TEAMS.teamB.bg) > 0.55 ? '#1a1a1a' : '#ffffff';
+      }
+    }
+    rosterRows.forEach(r => {
+      const team = TEAMS[r.team_side];
+      if (!team) return;
+      if (r.unit === 'offense'){ team.rosterOffense[r.jersey_number] = r.player_name; team.posOffense[r.jersey_number] = r.position; }
+      else if (r.unit === 'defense'){ team.rosterDefense[r.jersey_number] = r.player_name; }
+      else if (r.unit === 'special'){ team.rosterSpecialTeams[r.jersey_number] = r.player_name; }
+    });
+  }
+  function playerName(team, num, preferredUnit){
+    const t = TEAMS[team];
+    const buckets = { offense: t.rosterOffense, defense: t.rosterDefense, special: t.rosterSpecialTeams };
+    const order = preferredUnit ? [preferredUnit, ...Object.keys(buckets).filter(u => u !== preferredUnit)] : ['offense', 'defense', 'special'];
+    for (const unit of order){
+      const roster = buckets[unit];
+      if (roster && roster[num]) return roster[num];
+    }
+    return '#' + num;
+  }
+
+  function computeBoxScore(playsList){
+    const stats = {
+      teamA: { rushing:{}, passing:{}, receiving:{}, defense:{}, specialTeams:{} },
+      teamB: { rushing:{}, passing:{}, receiving:{}, defense:{}, specialTeams:{} }
+    };
+    function bucket(team, cat, num){
+      if (!team || !stats[team]) return null;
+      const b = stats[team][cat];
+      if (!b[num]) b[num] = {};
+      return b[num];
+    }
+    playsList.forEach(p => {
+      const r = p.roles || {};
+      const e = p.effect || {};
+      const type = r.playType;
+
+      if (r.carrier && type === 'rush'){
+        const s = bucket(r.carrier.team, 'rushing', r.carrier.num);
+        if (s){
+          s.att = (s.att||0) + 1;
+          s.yds = (s.yds||0) + (r.carrier.yards||0);
+          s.long = Math.max(s.long||0, r.carrier.yards||0);
+          if (e.td) s.td = (s.td||0) + 1;
+        }
+      }
+      if (r.carrier && type === 'fumble'){
+        const teamObj = TEAMS[r.carrier.team];
+        const pos = ((teamObj && teamObj.posOffense[r.carrier.num]) || '').toUpperCase();
+        const targetCat = RECEIVE_POS.has(pos) ? 'receiving' : 'rushing';
+        const s = bucket(r.carrier.team, targetCat, r.carrier.num);
+        if (s) s.fum = (s.fum||0) + 1;
+      }
+      if (r.passer && type === 'incomplete'){
+        const s = bucket(r.passer.team, 'passing', r.passer.num);
+        if (s) s.att = (s.att||0) + 1;
+      }
+      if (r.passer && type === 'pass'){
+        const s = bucket(r.passer.team, 'passing', r.passer.num);
+        if (s){
+          s.att = (s.att||0) + 1;
+          s.comp = (s.comp||0) + 1;
+          s.yds = (s.yds||0) + (r.passer.yards||0);
+          s.long = Math.max(s.long||0, r.passer.yards||0);
+          if (e.td) s.td = (s.td||0) + 1;
+        }
+        if (r.receiver){
+          const rs = bucket(r.receiver.team, 'receiving', r.receiver.num);
+          if (rs){
+            rs.rec = (rs.rec||0) + 1;
+            rs.yds = (rs.yds||0) + (r.receiver.yards||0);
+            rs.long = Math.max(rs.long||0, r.receiver.yards||0);
+            if (e.td) rs.td = (rs.td||0) + 1;
+          }
+        }
+      }
+      if (r.passer && type === 'sack'){
+        const s = bucket(r.passer.team, 'passing', r.passer.num);
+        if (s) s.sacked = (s.sacked||0) + 1;
+      }
+      if (r.passer && type === 'int'){
+        const s = bucket(r.passer.team, 'passing', r.passer.num);
+        if (s){
+          s.att = (s.att||0) + 1;
+          s.intThrown = (s.intThrown||0) + 1;
+        }
+      }
+      if (r.defense){
+        const s = bucket(r.defense.team, 'defense', r.defense.num);
+        if (s){
+          if (type === 'int') s.int = (s.int||0) + 1;
+          if (type === 'sack') s.sacks = (s.sacks||0) + 1;
+          if (type === 'fumble') s.fumRec = (s.fumRec||0) + 1;
+        }
+      }
+      if (r.kicker && type === 'kickoff'){
+        const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
+        if (s){
+          s.kickoffs = (s.kickoffs||0) + 1;
+          if (r.kicker.touchback) s.touchbacks = (s.touchbacks||0) + 1;
+        }
+      }
+      if (r.kicker && type === 'fg'){
+        const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
+        if (s){
+          s.fgAtt = (s.fgAtt||0) + 1;
+          if (r.kicker.result === 'g'){
+            s.fgMade = (s.fgMade||0) + 1;
+            s.fgLong = Math.max(s.fgLong||0, r.kicker.yards||0);
+          }
+          if (r.kicker.result === 'b') s.fgBlocked = (s.fgBlocked||0) + 1;
+        }
+      }
+      if (r.kicker && type === 'pat'){
+        const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
+        if (s){
+          s.patAtt = (s.patAtt||0) + 1;
+          if (r.kicker.result === 'g') s.patMade = (s.patMade||0) + 1;
+          if (r.kicker.result === 'b') s.patBlocked = (s.patBlocked||0) + 1;
+        }
+      }
+      if (r.punter && type === 'punt'){
+        const s = bucket(r.punter.team, 'specialTeams', r.punter.num);
+        if (s){
+          s.punts = (s.punts||0) + 1;
+          if (!r.punter.blocked){
+            s.puntYds = (s.puntYds||0) + (r.punter.yards||0);
+            s.puntsWithYards = (s.puntsWithYards||0) + 1;
+            s.puntLong = Math.max(s.puntLong||0, r.punter.yards||0);
+          } else {
+            s.blocked = (s.blocked||0) + 1;
+          }
+        }
+      }
+    });
+
+    ['teamA','teamB'].forEach(defTeam => {
+      const offTeam = otherTeam(defTeam);
+      let d3att=0, d3conv=0, d4att=0, d4conv=0, explosive=0;
+      for (let i = 0; i < playsList.length; i++){
+        const p = playsList[i];
+        const type = p.roles && p.roles.playType;
+        if (!['rush','pass','sack','int','fumble'].includes(type)) continue;
+        const before = computeState(playsList.slice(0, i));
+        if (before.possession !== offTeam) continue;
+        const down = before.down;
+        const success = !!(p.effect && (p.effect.converts || p.effect.td));
+        if (down === 3){ d3att++; if (success) d3conv++; }
+        else if (down === 4){ d4att++; if (success) d4conv++; }
+        if (((p.effect && p.effect.statYds) || 0) >= 20) explosive++;
+      }
+      stats[defTeam].oppDowns = {
+        d3Pct: d3att ? Math.round(100*d3conv/d3att) : null, d3att, d3conv,
+        d4Pct: d4att ? Math.round(100*d4conv/d4att) : null, d4att, d4conv,
+        explosive
+      };
+    });
+
+    return stats;
+  }
+
+  function countPossessions(playsList){
+    const counts = { teamA: 0, teamB: 0 };
+    for (let i = 0; i < playsList.length; i++){
+      if (playsList[i].effect && playsList[i].effect.isReset){
+        const after = computeState(playsList.slice(0, i + 1));
+        if (after.possession === 'teamA' || after.possession === 'teamB') counts[after.possession]++;
+      }
+    }
+    return counts;
+  }
+  function countTurnovers(playsList){
+    const counts = { teamA: 0, teamB: 0 };
+    playsList.forEach(p => {
+      const r = p.roles;
+      if (!r) return;
+      if (r.playType === 'int' && r.passer) counts[r.passer.team] = (counts[r.passer.team] || 0) + 1;
+      if (r.playType === 'fumble' && r.carrier && r.defense) counts[r.carrier.team] = (counts[r.carrier.team] || 0) + 1;
+    });
+    return counts;
+  }
+
+  const RECEIVE_POS = new Set(['WR','TE','SE','FL','SLOT']);
+
+  function sumStat(bucketObj, key){
+    return Object.keys(bucketObj).reduce((t, n) => t + (bucketObj[n][key] || 0), 0);
+  }
+  function maxStat(bucketObj, key){
+    return Object.keys(bucketObj).reduce((t, n) => Math.max(t, bucketObj[n][key] || 0), 0);
+  }
+  function mergeInto(target, key, delta){
+    if (!target[key]) target[key] = {};
+    Object.keys(delta).forEach(k => {
+      if (k === 'long' || k === 'fgLong' || k === 'puntLong'){
+        target[key][k] = Math.max(target[key][k] || 0, delta[k] || 0);
+      } else {
+        target[key][k] = (target[key][k] || 0) + (delta[k] || 0);
+      }
+    });
+  }
+
+  let seasonYearLabel = '';
+  const seasonAgg = {
+    rushing: {}, passing: {}, receiving: {}, specialTeams: {},
+    defense: { int: 0, fumRec: 0, sacks: 0 },
+    perGame: [],
+    totals: { rushAtt:0, rushYds:0, rushTd:0, passAtt:0, passComp:0, passYds:0, passTd:0, sacked:0, totalPlays:0, possessions:0, turnovers:0, penCount:0, penYds:0,
+      oppD3att:0, oppD3conv:0, oppD4att:0, oppD4conv:0, explosiveFor:0,
+      oppRushAtt:0, oppRushYds:0, oppRushTd:0, oppPassAtt:0, oppPassComp:0, oppPassYds:0, oppPassTd:0,
+      pointsScored:0, pointsAllowed:0, explosiveAgainst:0 },
+    quarterScored: [0,0,0,0], quarterAllowed: [0,0,0,0],
+    wins: 0, losses: 0, ties: 0
+  };
+
+  function processGame(game, rosterRows, gamePlays){
+    buildTeams(game, rosterRows, seasonAgg.ourBranding || {});
+    const box = computeBoxScore(gamePlays);
+    plays = gamePlays;
+    const finalState = computeState(gamePlays);
+    const possessions = countPossessions(gamePlays);
+    const turnovers = countTurnovers(gamePlays);
+    const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
+    const playsFor = (teamKey) => gamePlays.filter(p => p.team === teamKey && p.roles && scrimmageTypes.includes(p.roles.playType)).length;
+
+    ['rushing','passing','receiving'].forEach(cat => {
+      Object.keys(box.teamA[cat]).forEach(n => {
+        mergeInto(seasonAgg[cat], playerName('teamA', n), box.teamA[cat][n]);
+      });
+    });
+    Object.keys(box.teamA.specialTeams).forEach(n => {
+      mergeInto(seasonAgg.specialTeams, playerName('teamA', n, 'special'), box.teamA.specialTeams[n]);
+    });
+    seasonAgg.defense.int += sumStat(box.teamA.defense, 'int');
+    seasonAgg.defense.fumRec += sumStat(box.teamA.defense, 'fumRec');
+    seasonAgg.defense.sacks += sumStat(box.teamA.defense, 'sacks');
+
+    const t = seasonAgg.totals;
+    const ownDowns = box.teamB.oppDowns, oppDowns = box.teamA.oppDowns;
+    const rushYds = sumStat(box.teamA.rushing,'yds'), rushAtt = sumStat(box.teamA.rushing,'att'), rushTd = sumStat(box.teamA.rushing,'td');
+    const passYds = sumStat(box.teamA.passing,'yds'), passAtt = sumStat(box.teamA.passing,'att'), passComp = sumStat(box.teamA.passing,'comp'), passTd = sumStat(box.teamA.passing,'td');
+    const oppRushYds = sumStat(box.teamB.rushing,'yds'), oppRushAtt = sumStat(box.teamB.rushing,'att'), oppRushTd = sumStat(box.teamB.rushing,'td');
+    const oppPassYds = sumStat(box.teamB.passing,'yds'), oppPassAtt = sumStat(box.teamB.passing,'att'), oppPassComp = sumStat(box.teamB.passing,'comp'), oppPassTd = sumStat(box.teamB.passing,'td');
+    const pen = finalState.penalties.teamA;
+    t.rushAtt += rushAtt; t.rushYds += rushYds; t.rushTd += rushTd;
+    t.passAtt += passAtt; t.passComp += passComp; t.passYds += passYds; t.passTd += passTd;
+    t.sacked += sumStat(box.teamA.passing, 'sacked');
+    t.totalPlays += playsFor('teamA');
+    t.possessions += possessions.teamA || 0;
+    t.turnovers += turnovers.teamA || 0;
+    t.penCount += pen.count; t.penYds += pen.yds;
+    t.oppD3att += oppDowns.d3att; t.oppD3conv += oppDowns.d3conv;
+    t.oppD4att += oppDowns.d4att; t.oppD4conv += oppDowns.d4conv;
+    t.explosiveFor += ownDowns.explosive;
+    t.explosiveAgainst += oppDowns.explosive;
+    t.oppRushAtt += oppRushAtt; t.oppRushYds += oppRushYds; t.oppRushTd += oppRushTd;
+    t.oppPassAtt += oppPassAtt; t.oppPassComp += oppPassComp; t.oppPassYds += oppPassYds; t.oppPassTd += oppPassTd;
+    t.pointsScored += finalState.scores.teamA; t.pointsAllowed += finalState.scores.teamB;
+
+    if (finalState.scores.teamA > finalState.scores.teamB) seasonAgg.wins++;
+    else if (finalState.scores.teamA < finalState.scores.teamB) seasonAgg.losses++;
+    else seasonAgg.ties++;
+
+    const quarterScored = [0,0,0,0], quarterAllowed = [0,0,0,0];
+    let h1Rush=0, h1Pass=0, h2Rush=0, h2Pass=0;
+    gamePlays.forEach(p => {
+      const q = Math.min(4, Math.max(1, p.quarter || 1)) - 1;
+      if (p.effect && p.effect.score){
+        if (p.effect.score.team === 'teamA') quarterScored[q] += p.effect.score.points; else quarterAllowed[q] += p.effect.score.points;
+      }
+      if (p.effect && p.effect.scoreAdjust){
+        if (p.effect.scoreAdjust.team === 'teamA') quarterScored[q] += p.effect.scoreAdjust.pts; else quarterAllowed[q] += p.effect.scoreAdjust.pts;
+      }
+      const r = p.roles;
+      if (!r) return;
+      const half = (p.quarter || 1) <= 2 ? 1 : 2;
+      if (r.playType === 'rush' && r.carrier && r.carrier.team === 'teamA'){ if (half===1) h1Rush += (r.carrier.yards||0); else h2Rush += (r.carrier.yards||0); }
+      if (r.playType === 'pass' && r.passer && r.passer.team === 'teamA'){ if (half===1) h1Pass += (r.passer.yards||0); else h2Pass += (r.passer.yards||0); }
+    });
+    for (let i=0;i<4;i++){ seasonAgg.quarterScored[i] += quarterScored[i]; seasonAgg.quarterAllowed[i] += quarterAllowed[i]; }
+
+    seasonAgg.perGame.push({
+      label: game.designator || '', totalYds: rushYds+passYds, rushYds, passYds,
+      h1Yds: h1Rush+h1Pass, h2Yds: h2Rush+h2Pass, h1Rush, h1Pass, h2Rush, h2Pass,
+      oppTotalYds: oppRushYds+oppPassYds,
+      pointsScored: finalState.scores.teamA, pointsAllowed: finalState.scores.teamB,
+      d3Pct: ownDowns.d3att ? Math.round(100*ownDowns.d3conv/ownDowns.d3att) : null,
+      oppD3Pct: oppDowns.d3att ? Math.round(100*oppDowns.d3conv/oppDowns.d3att) : null,
+      penCount: pen.count, penYds: pen.yds
+    });
+
+    // XLS export rows -- same 43-column "Stats" schema and "Game
+    // Totals" schema as stat_package.html's single-game export, just
+    // appended here once per game so the season file ends up with
+    // every game stacked together, matching the original reference
+    // spreadsheet's multi-game structure.
+    const gameIdMatch = (game.designator || '').match(/(\d+)/);
+    const gameId = gameIdMatch ? parseInt(gameIdMatch[1]) : (game.designator || '');
+    const blankRow = () => xlsStatsHeaders.map(() => '');
+    const setCols = (row, obj) => { Object.keys(obj).forEach(k => { const i = xlsStatsHeaders.indexOf(k); if (i>=0) row[i] = obj[k]; }); return row; };
+
+    Object.keys(box.teamA.rushing).forEach(n => {
+      const d = box.teamA.rushing[n], row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
+        'Rush Attempts': d.att||0, 'Rush Yards': d.yds||0, 'Yds Per Carry': d.att?+(d.yds/d.att).toFixed(1):'',
+        'Long Rush': d.long||0, 'Rush TD': d.td||0, FUMBLE: d.fum || '' });
+      xlsStatsRows.push(row);
+    });
+    Object.keys(box.teamA.passing).forEach(n => {
+      const d = box.teamA.passing[n], row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
+        'Pass Attempts': d.att||0, 'Pass Completions': d.comp||0, 'Comp Pctg': d.att?+(100*(d.comp||0)/d.att).toFixed(1):'',
+        'Pass Yards': d.yds||0, 'Long Pass': d.long||0, 'Pass TD': d.td||0, INT: d.intThrown||0, SACK: d.sacked||0 });
+      xlsStatsRows.push(row);
+    });
+    Object.keys(box.teamA.receiving).forEach(n => {
+      const d = box.teamA.receiving[n], row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
+        Receptions: d.rec||0, 'Receiving Yards': d.yds||0, 'Yards Per Catch': d.rec?+(d.yds/d.rec).toFixed(1):'',
+        'Long Recept': d.long||0, 'Receiving TD': d.td||0, FUMBLE: d.fum || '' });
+      xlsStatsRows.push(row);
+    });
+    Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].kickoffs).forEach(n => {
+      const d = box.teamA.specialTeams[n], row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n, 'special'),
+        'KO Attempt': d.kickoffs||0, 'KO Touchback': d.touchbacks||0 });
+      xlsStatsRows.push(row);
+    });
+    Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].patAtt).forEach(n => {
+      const d = box.teamA.specialTeams[n], row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n, 'special'),
+        'PA Attempt': d.patAtt||0, 'PA Made': d.patMade||0, 'PA Block': d.patBlocked||0 });
+      xlsStatsRows.push(row);
+    });
+    gamePlays.forEach(p => {
+      const r = p.roles;
+      if (r && r.playType === 'fg' && r.kicker && r.kicker.team === 'teamA'){
+        const row = blankRow();
+        setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', r.kicker.num, 'special'),
+          'FG Attempt': 1, 'FG Made': r.kicker.result==='g'?1:0, 'FG Block': r.kicker.result==='b'?1:0, 'FG Yards': r.kicker.yards||0 });
+        xlsStatsRows.push(row);
+      }
+      if (r && r.playType === 'punt' && r.punter && r.punter.team === 'teamA'){
+        const row = blankRow();
+        setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', r.punter.num, 'special'),
+          'Punt Attempt': 1, 'Punt Yards': r.punter.blocked?0:(r.punter.yards||0), 'PUNT BLK': r.punter.blocked?1:'' });
+        xlsStatsRows.push(row);
+      }
+    });
+    let sackCount=0, sackYardsLost=0;
+    gamePlays.forEach(p => { const r=p.roles; if (r && r.playType==='sack' && r.passer && r.passer.team==='teamA'){ sackCount++; sackYardsLost += (r.passer.yards||0); } });
+    if (sackCount){
+      const row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Sacks and Bad Snaps', 'Rush Attempts': sackCount, 'Rush Yards': -sackYardsLost });
+      xlsStatsRows.push(row);
+    }
+    const defRow = blankRow();
+    setCols(defRow, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Defense',
+      'D-Sack': sumStat(box.teamA.defense,'sacks')||'', 'D-INT': sumStat(box.teamA.defense,'int')||'', 'D-FUM': sumStat(box.teamA.defense,'fumRec')||'',
+      'D-3rdAtt': oppDowns.d3att||'', 'D-3rdConv': oppDowns.d3conv||'', 'D-4thAtt': oppDowns.d4att||'',
+      'D-4thStop': oppDowns.d4att ? (oppDowns.d4att-oppDowns.d4conv) : '', 'D-20PlusPlay': oppDowns.explosive||'' });
+    xlsStatsRows.push(defRow);
+    const offRow = blankRow();
+    setCols(offRow, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Offense', 'D-20PlusPlay': ownDowns.explosive||'' });
+    xlsStatsRows.push(offRow);
+    const oppRow = blankRow();
+    setCols(oppRow, { GameID: gameId, Team: TEAMS.teamB.name, Player: TEAMS.teamB.name,
+      'Rush Attempts': oppRushAtt||'', 'Rush Yards': oppRushYds||'', 'Rush TD': oppRushTd||'',
+      'Pass Attempts': oppPassAtt||'', 'Pass Completions': oppPassComp||'', 'Pass Yards': oppPassYds||'', 'Pass TD': oppPassTd||'' });
+    xlsStatsRows.push(oppRow);
+
+    const visitorGtKey = game.our_team_is_home ? 'teamB' : 'teamA';
+    [ { key:'teamA', name: TEAMS.teamA.name, down: ownDowns, sacked: sumStat(box.teamA.passing,'sacked') },
+      { key:'teamB', name: TEAMS.teamB.name, down: null, sacked: '' } ].forEach(({key,name,down,sacked}) => {
+      const gtRow = xlsGtHeaders.map(() => '');
+      const setGt = (obj) => Object.keys(obj).forEach(k => { const i = xlsGtHeaders.indexOf(k); if (i>=0) gtRow[i] = obj[k]; });
+      setGt({ GameID: gameId, Team: name,
+        Q1: key==='teamB'?quarterAllowed[0]:quarterScored[0],
+        Q2: key==='teamB'?quarterAllowed[1]:quarterScored[1], Q3: key==='teamB'?quarterAllowed[2]:quarterScored[2], Q4: key==='teamB'?quarterAllowed[3]:quarterScored[3],
+        Final: finalState.scores[key],
+        Penalites: finalState.penalties[key].count||'', 'Penalty Yards': finalState.penalties[key].yds||'',
+        'H1 Yards': key==='teamA'?(h1Rush+h1Pass):'', 'H2 Yards': key==='teamA'?(h2Rush+h2Pass):'',
+        'Total Yards': key==='teamA'?(rushYds+passYds):(oppRushYds+oppPassYds),
+        Sacks: key==='teamA'?(sacked||''):'', TO: turnovers[key]||0, Possessions: possessions[key]||0,
+        'H1 Rushing': key==='teamA'?h1Rush:'', 'H1 Passing': key==='teamA'?h1Pass:'', 'H2 Rushing': key==='teamA'?h2Rush:'', 'H2 Passing': key==='teamA'?h2Pass:'' });
+      if (down){ setGt({ '3D Att': down.d3att||'', '3D Conv': down.d3conv||'', '4D Att': down.d4att||'', '4D Conv': down.d4conv||'' }); }
+      xlsGtRows.push(gtRow);
+    });
+  }
+
+  const xlsStatsHeaders = ['GameID','Team','Player','Rush Attempts','Rush Yards','Yds Per Carry','Long Rush','Rush TD',
+    'Pass Attempts','Pass Completions','Comp Pctg','Pass Yards','Long Pass','Pass TD','INT','SACK',
+    'Receptions','Receiving Yards','Yards Per Catch','Long Recept','Receiving TD','FUMBLE',
+    'KO Attempt','KO Touchback','PA Attempt','PA Made','PA Block','FG Attempt','FG Made','FG Block','FG Yards','Long FG',
+    'Punt Attempt','Punt Yards','Long Punt','PUNT BLK',
+    'D-Sack','D-INT','D-FUM','D-3rdAtt','D-3rdConv','D-4thAtt','D-4thStop','D-20PlusPlay'];
+  const xlsGtHeaders = ['GameID','Team','Q1','Q2','Q3','Q4','OT','Final','Penalites','Penalty Yards',
+    'H1 Yards','H2 Yards','Total Yards','Sacks','TO','Possessions','3D Att','3D Conv','4D Att','4D Conv',
+    'H1 Rushing','H1 Passing','H2 Rushing','H2 Passing'];
+  const xlsStatsRows = [], xlsGtRows = [];
+
+  function buildWorkbook(){
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([xlsStatsHeaders, ...xlsStatsRows]), 'Stats');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([xlsGtHeaders, ...xlsGtRows]), 'Game Totals');
+    return wb;
+  }
+
+  document.getElementById('downloadXlsBtn').addEventListener('click', () => {
+    const wb = buildWorkbook();
+    const filename = 'Neville_' + seasonYearLabel + '_season_stats.xlsx';
+    XLSX.writeFile(wb, filename.replace(/[^a-z0-9._-]+/gi, '_'));
+  });
+
+
+  async function init(){
+    const params = new URLSearchParams(window.location.search);
+    const season = params.get('season');
+    if (!season){
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = 'No season specified.';
+      return;
+    }
+    seasonYearLabel = season;
+
+    const { data: teamRows } = await supabaseClient
+      .from('teams').select('primary_color, secondary_color, logo_url').eq('is_our_team', true).limit(1);
+    seasonAgg.ourBranding = (teamRows && teamRows[0]) || {};
+
+    const { data: gameRows, error: gameError } = await supabaseClient
+      .from('games').select('*').eq('season_year', parseInt(season)).eq('status', 'final')
+      .order('game_date', { ascending: true });
+    if (gameError){
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = gameError.message;
+      return;
+    }
+    if (!gameRows || gameRows.length === 0){
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = 'No finalized games found for this season.';
+      return;
+    }
+
+    try {
+      for (const game of gameRows){
+        const { data: rosterRows, error: rosterError } = await supabaseClient
+          .from('game_rosters').select('*').eq('game_id', game.id);
+        if (rosterError) throw new Error('Roster for ' + (game.designator||game.id) + ': ' + rosterError.message);
+        const { data: gamePlaysRaw, error: playsError } = await supabaseClient
+          .from('plays').select('*').eq('game_id', game.id).order('sequence_number', { ascending: true });
+        if (playsError) throw new Error('Plays for ' + (game.designator||game.id) + ': ' + playsError.message);
+        const gamePlays = (gamePlaysRaw || []).map(p => ({
+          text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+          roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+        }));
+        processGame(game, rosterRows || [], gamePlays);
+      }
+
+      document.title = 'Season Report — ' + seasonYearLabel;
+      document.getElementById('reportContent').innerHTML = renderSeasonReport();
+      showView('mainView');
+      initCharts();
+    } catch (err) {
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = 'This report could not be built: ' + err.message;
+      console.error(err);
+    }
+  }
+
+  function renderSeasonReport(){
+    const t = seasonAgg.totals, gamesPlayed = seasonAgg.perGame.length;
+    const totalYds = t.rushYds + t.passYds, oppTotalYds = t.oppRushYds + t.oppPassYds;
+    const per = (v) => gamesPlayed ? +(v/gamesPlayed).toFixed(1) : 0;
+    const pct = (c,a) => a ? Math.round(100*c/a) : 0;
+
+    let html = '<div class="report-header"><img class="statchat-logo" src="logo.png" alt="StatChat">' +
+      '<h1>' + TEAMS.teamA.name + ' — ' + seasonYearLabel + ' season</h1>' +
+      '<div class="record">' + seasonAgg.wins + '-' + seasonAgg.losses + (seasonAgg.ties ? '-' + seasonAgg.ties : '') +
+      ' &middot; ' + gamesPlayed + ' games</div></div>';
+
+    html += '<div class="section"><div class="section-title">Season totals</div>' +
+      '<div class="metric-grid">' +
+      [[totalYds,'Total yards'],[per(totalYds),'Yards/game'],[t.pointsScored,'Points scored'],[per(t.pointsScored),'Scored/game'],
+       [t.pointsAllowed,'Points allowed'],[per(t.pointsAllowed),'Allowed/game'],[oppTotalYds,'Yards allowed'],[per(oppTotalYds),'Allowed/game']]
+        .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+      '</div>' +
+      '<div class="chart-row"><div class="chart-box"><canvas id="chartPointsByQuarter"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chartHalfYards"></canvas></div></div>' +
+      '</div>';
+
+    html += '<div class="section"><div class="section-title">Run / pass mix</div>' +
+      '<div class="metric-grid">' +
+      [[t.rushAtt,'Rush att'],[t.rushYds,'Rush yds'],[t.rushAtt?+(t.rushYds/t.rushAtt).toFixed(1):0,'Yds/rush'],[t.rushTd,'Rush TD'],
+       [t.passAtt,'Pass att'],[t.passYds,'Pass yds'],[t.passAtt?+(t.passYds/t.passAtt).toFixed(1):0,'Yds/pass'],[t.passTd,'Pass TD']]
+        .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+      '</div>' +
+      '<div class="chart-row"><div class="chart-box"><canvas id="chartRunPassAtt"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chartRunPassYds"></canvas></div></div>' +
+      '</div>';
+
+    html += '<div class="section"><div class="section-title">Discipline &amp; efficiency</div>' +
+      '<div class="metric-grid">' +
+      [[t.sacked,'Sacks allowed'],[per(t.sacked),'Per game'],[t.turnovers,'Turnovers'],[per(t.turnovers),'Per game'],
+       [t.penCount,'Penalties'],[t.penYds,'Penalty yds'],[per(t.penCount),'Pen/game'],[per(t.penYds),'Pen yds/game'],
+       [t.oppD3att?pct(t.oppD3conv,t.oppD3att)+'%':'—','3rd down %'],[t.oppD4att?pct(t.oppD4conv,t.oppD4att)+'%':'—','4th down %'],
+       [t.explosiveFor,'20yd+ plays'],[t.explosiveAgainst,'20yd+ allowed'],[t.possessions,'Possessions'],[per(t.possessions),'Poss/game'],[per(t.totalPlays),'Plays/game']]
+        .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+      '</div>' +
+      '<div class="chart-row"><div class="chart-box"><canvas id="chartPenaltiesByGame"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chart3rdDownByGame"></canvas></div></div>' +
+      '</div>';
+
+    html += '<div class="section page-break"><div class="section-title">Yards by game</div>' +
+      '<div class="chart-box wide"><canvas id="chartYardsByGame"></canvas></div>' +
+      '<div class="chart-box wide" style="margin-top:14px;"><canvas id="chartPassRushByGame"></canvas></div>' +
+      '</div>';
+
+    const seasonStatTable = (bucketObj, headers, rowFn, totalFn, sortKey) => {
+      const names = Object.keys(bucketObj);
+      if (!names.length) return '<p class="no-stats">No stats recorded.</p>';
+      const sorted = names.slice().sort((a,b) => (bucketObj[b][sortKey]||0) - (bucketObj[a][sortKey]||0));
+      let h = '<table class="stat-table"><tr><th></th>' + headers.map(x=>'<th>'+x+'</th>').join('') + '</tr>';
+      sorted.forEach(name => { h += '<tr><td>'+name+'</td>'+rowFn(bucketObj[name]).map(v=>'<td>'+v+'</td>').join('')+'</tr>'; });
+      h += '<tr class="total-row"><td>Total</td>'+totalFn(bucketObj, sorted).map(v=>'<td>'+v+'</td>').join('')+'</tr>';
+      return h + '</table>';
+    };
+
+    html += '<div class="section page-break"><div class="section-title">' + TEAMS.teamA.name + ' — Passing</div>' +
+      seasonStatTable(seasonAgg.passing, ['Att','Comp','%','Yds','Y/C','Long','TD','Int','Sacked'],
+        d => [d.att||0, d.comp||0, d.att?Math.round(100*(d.comp||0)/d.att):0, d.yds||0, d.comp?+(d.yds/d.comp).toFixed(1):0, d.long||0, d.td||0, d.intThrown||0, d.sacked||0],
+        (obj, names) => { const att=names.reduce((t,n)=>t+(obj[n].att||0),0), comp=names.reduce((t,n)=>t+(obj[n].comp||0),0), yds=names.reduce((t,n)=>t+(obj[n].yds||0),0);
+          return [att, comp, att?Math.round(100*comp/att):0, yds, comp?+(yds/comp).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].long||0)), names.reduce((t,n)=>t+(obj[n].td||0),0), names.reduce((t,n)=>t+(obj[n].intThrown||0),0), names.reduce((t,n)=>t+(obj[n].sacked||0),0)]; },
+        'yds') + '</div>';
+
+    html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Receiving</div>' +
+      seasonStatTable(seasonAgg.receiving, ['Rec','Yds','Y/C','Long','TD','Fum'],
+        d => [d.rec||0, d.yds||0, d.rec?+(d.yds/d.rec).toFixed(1):0, d.long||0, d.td||0, d.fum||0],
+        (obj, names) => { const rec=names.reduce((t,n)=>t+(obj[n].rec||0),0), yds=names.reduce((t,n)=>t+(obj[n].yds||0),0);
+          return [rec, yds, rec?+(yds/rec).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].long||0)), names.reduce((t,n)=>t+(obj[n].td||0),0), names.reduce((t,n)=>t+(obj[n].fum||0),0)]; },
+        'yds') + '</div>';
+
+    html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Rushing</div>' +
+      seasonStatTable(seasonAgg.rushing, ['Att','Yds','Y/C','Long','TD','Fum'],
+        d => [d.att||0, d.yds||0, d.att?+(d.yds/d.att).toFixed(1):0, d.long||0, d.td||0, d.fum||0],
+        (obj, names) => { const att=names.reduce((t,n)=>t+(obj[n].att||0),0), yds=names.reduce((t,n)=>t+(obj[n].yds||0),0);
+          return [att, yds, att?+(yds/att).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].long||0)), names.reduce((t,n)=>t+(obj[n].td||0),0), names.reduce((t,n)=>t+(obj[n].fum||0),0)]; },
+        'yds') + '</div>';
+
+    html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Defense</div>' +
+      (seasonAgg.defense.int || seasonAgg.defense.fumRec || seasonAgg.defense.sacks
+        ? '<table class="stat-table"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th></tr><tr><td>Defense</td><td>'+seasonAgg.defense.int+'</td><td>'+seasonAgg.defense.fumRec+'</td><td>'+seasonAgg.defense.sacks+'</td></tr></table>'
+        : '<p class="no-stats">No defensive stats recorded.</p>') + '</div>';
+
+    const koNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].kickoffs);
+    const puntNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].punts);
+    const kickNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].fgAtt || seasonAgg.specialTeams[n].patAtt);
+    let stHtml = '';
+    const stSub = (label, tableHtml) => tableHtml ? '<div class="st-subsection"><div class="st-subsection-label">'+label+'</div>'+tableHtml+'</div>' : '';
+    if (koNames.length){
+      const bucket = Object.fromEntries(koNames.map(n=>[n,seasonAgg.specialTeams[n]]));
+      stHtml += stSub('Kickoffs', seasonStatTable(bucket, ['Kickoffs','Touchbacks','TB %'],
+        d => [d.kickoffs||0, d.touchbacks||0, d.kickoffs?Math.round(100*(d.touchbacks||0)/d.kickoffs)+'%':'—'],
+        (obj,names) => { const k=names.reduce((t,n)=>t+(obj[n].kickoffs||0),0), tb=names.reduce((t,n)=>t+(obj[n].touchbacks||0),0); return [k, tb, k?Math.round(100*tb/k)+'%':'—']; },
+        'kickoffs'));
+    }
+    if (puntNames.length){
+      const bucket = Object.fromEntries(puntNames.map(n=>[n,seasonAgg.specialTeams[n]]));
+      stHtml += stSub('Punting', seasonStatTable(bucket, ['Punts','Yds Per Punt','Long','Blocked'],
+        d => [d.punts||0, d.puntsWithYards?+(d.puntYds/d.puntsWithYards).toFixed(1):0, d.puntLong||0, d.blocked||0],
+        (obj,names) => { const p=names.reduce((t,n)=>t+(obj[n].punts||0),0), yds=names.reduce((t,n)=>t+(obj[n].puntYds||0),0), wy=names.reduce((t,n)=>t+(obj[n].puntsWithYards||0),0);
+          return [p, wy?+(yds/wy).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].puntLong||0)), names.reduce((t,n)=>t+(obj[n].blocked||0),0)]; },
+        'puntYds'));
+    }
+    if (kickNames.length){
+      const bucket = Object.fromEntries(kickNames.map(n=>[n,seasonAgg.specialTeams[n]]));
+      stHtml += stSub('Kicking', seasonStatTable(bucket, ['FG Att','FG Made','Long FG','FG %','FG Blk','XP Att','XP Made','XP %','XP Blk'],
+        d => [d.fgAtt||0, d.fgMade||0, d.fgLong||0, d.fgAtt?Math.round(100*(d.fgMade||0)/d.fgAtt)+'%':'—', d.fgBlocked||0, d.patAtt||0, d.patMade||0, d.patAtt?Math.round(100*(d.patMade||0)/d.patAtt)+'%':'—', d.patBlocked||0],
+        (obj,names) => { const fa=names.reduce((t,n)=>t+(obj[n].fgAtt||0),0), fm=names.reduce((t,n)=>t+(obj[n].fgMade||0),0), pa=names.reduce((t,n)=>t+(obj[n].patAtt||0),0), pm=names.reduce((t,n)=>t+(obj[n].patMade||0),0);
+          return [fa, fm, Math.max(0,...names.map(n=>obj[n].fgLong||0)), fa?Math.round(100*fm/fa)+'%':'—', names.reduce((t,n)=>t+(obj[n].fgBlocked||0),0), pa, pm, pa?Math.round(100*pm/pa)+'%':'—', names.reduce((t,n)=>t+(obj[n].patBlocked||0),0)]; },
+        'fgAtt'));
+    }
+    html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Special Teams</div>' + (stHtml || '<p class="no-stats">No special teams stats recorded.</p>') + '</div>';
+
+    return html;
+  }
+
+  function chartOpts(extra){
+    return Object.assign({ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ font:{ size:11 } } } } }, extra || {});
+  }
+
+  function initCharts(){
+    const t = seasonAgg.totals;
+    const games = seasonAgg.perGame;
+    const labels = games.map((g,i) => g.label || ('G' + (i+1)));
+
+    new Chart(document.getElementById('chartPointsByQuarter'), { type:'bar', data:{ labels:['Q1','Q2','Q3','Q4'],
+      datasets:[{ label:'Scored', data:seasonAgg.quarterScored, backgroundColor:'#0F6E56' },
+        { label:'Allowed', data:seasonAgg.quarterAllowed, backgroundColor:'#993C1D' }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Points by quarter', font:{size:12} }, legend:{ position:'bottom' } } }) });
+
+    new Chart(document.getElementById('chartHalfYards'), { type:'bar', data:{ labels:['1st half','2nd half'],
+      datasets:[
+        { label:'Neville', data:[games.reduce((s,g)=>s+g.h1Yds,0), games.reduce((s,g)=>s+g.h2Yds,0)], backgroundColor:'#534AB7' },
+        { label:'Opponent', data:[null,null], backgroundColor:'#ccc', hidden:true }
+      ] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Total yardage by half', font:{size:12} }, legend:{ position:'bottom' } } }) });
+
+    new Chart(document.getElementById('chartRunPassAtt'), { type:'doughnut', data:{ labels:['Rush att','Pass att'],
+      datasets:[{ data:[t.rushAtt, t.passAtt], backgroundColor:['#993C1D','#0F6E56'] }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Run / pass mix', font:{size:12} }, legend:{ position:'bottom' } } }) });
+
+    new Chart(document.getElementById('chartRunPassYds'), { type:'doughnut', data:{ labels:['Rush yds','Pass yds'],
+      datasets:[{ data:[t.rushYds, t.passYds], backgroundColor:['#993C1D','#0F6E56'] }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Run / pass yardage %', font:{size:12} }, legend:{ position:'bottom' } } }) });
+
+    new Chart(document.getElementById('chartPenaltiesByGame'), { type:'bar', data:{ labels,
+      datasets:[{ label:'Penalties', data:games.map(g=>g.penCount), backgroundColor:'#993556', yAxisID:'y' },
+        { label:'Yards', data:games.map(g=>g.penYds), backgroundColor:'#D4537E', yAxisID:'y1' }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Penalties by game', font:{size:12} }, legend:{ position:'bottom' } },
+        scales:{ y:{ position:'left' }, y1:{ position:'right', grid:{ drawOnChartArea:false } } } }) });
+
+    new Chart(document.getElementById('chart3rdDownByGame'), { type:'line', data:{ labels,
+      datasets:[{ label:'Offense 3rd down %', data:games.map(g=>g.d3Pct), borderColor:'#0F6E56', backgroundColor:'#0F6E56', tension:0.2 },
+        { label:'Opponent 3rd down %', data:games.map(g=>g.oppD3Pct), borderColor:'#993C1D', backgroundColor:'#993C1D', tension:0.2 }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'3rd down % by game', font:{size:12} }, legend:{ position:'bottom' } } }) });
+
+    new Chart(document.getElementById('chartYardsByGame'), { type:'bar', data:{ labels,
+      datasets:[{ label:'1st half', data:games.map(g=>g.h1Yds), backgroundColor:'#7F77DD', stack:'a' },
+        { label:'2nd half', data:games.map(g=>g.h2Yds), backgroundColor:'#3C3489', stack:'a' }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Total yards by game', font:{size:12} }, legend:{ position:'bottom' } },
+        scales:{ x:{ stacked:true }, y:{ stacked:true } } }) });
+
+    new Chart(document.getElementById('chartPassRushByGame'), { type:'bar', data:{ labels,
+      datasets:[{ label:'Pass yds', data:games.map(g=>g.passYds), backgroundColor:'#0F6E56' },
+        { label:'Rush yds', data:games.map(g=>g.rushYds), backgroundColor:'#993C1D' }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Pass / rush yards by game', font:{size:12} }, legend:{ position:'bottom' } } }) });
+  }
+
+  document.getElementById('downloadPdfBtn').addEventListener('click', () => window.print());
+
+</script>
+</body>
+</html>
