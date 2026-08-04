@@ -1020,7 +1020,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const team = guided.receivingTeam;
       content.innerHTML =
         '<p class="hint">' + TEAMS[team].name + ' starts overtime. Starting spot (most rule sets: opponent\'s 10 — adjust to your association\'s format):</p>' +
-        startingSpotFieldsHtml('ot_spot', 'Starting spot') +
+        startingSpotFieldsHtml('ot_spot', 'Starting spot', team) +
         '<div class="row" style="margin-top:12px;"><button class="primary" id="ot_review">Set drive</button></div>';
       const getReset = wireStartingSpot(content, 'ot_spot');
       document.getElementById('ot_review').addEventListener('click', () => {
@@ -1085,7 +1085,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<label class="inline">Return yards <input type="text" id="gr_yards" style="width:70px; margin-left:6px; display:inline-block;"></label>' +
         '<label class="inline" style="margin-left:12px; display:inline-block;"><input type="checkbox" id="gr_td"> Touchdown</label>' +
         '<label class="inline" style="margin-left:12px; display:inline-block;">Clock <input type="text" id="guidedReturnClock" placeholder="M:SS" style="width:80px; margin-left:6px; display:inline-block;"></label>' +
-        startingSpotFieldsHtml('gr_spot', 'Ball spot after the return (sets 1st down for ' + TEAMS[guided.receivingTeam].name + ')') +
+        startingSpotFieldsHtml('gr_spot', 'Ball spot after the return (sets 1st down for ' + TEAMS[guided.receivingTeam].name + ')', guided.receivingTeam) +
         '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedReturnSave">Save return</button></div>';
       let returnerNum = null;
       const getReturnReset = wireStartingSpot(content, 'gr_spot');
@@ -1153,10 +1153,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   document.querySelectorAll('.ptypeBtn').forEach(b => b.addEventListener('click', () => renderPlayPanel(b.dataset.type)));
   let currentSpotGetter = null;
 
-  function startingSpotFieldsHtml(idPrefix, label){
+  function startingSpotFieldsHtml(idPrefix, label, driveTeamKey){
+    const driveTeamLabel = driveTeamKey ? TEAMS[driveTeamKey].name + "'s side" : 'Our side';
+    const otherTeamLabel = driveTeamKey ? TEAMS[otherTeam(driveTeamKey)].name + "'s side" : 'Their side';
     return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label || 'Starting spot for the ensuing drive (optional — leave blank to set later)') + '</p>' +
-      '<button type="button" class="' + idPrefix + '_side" data-side="own">Our side</button> ' +
-      '<button type="button" class="' + idPrefix + '_side" data-side="opp">Their side</button> ' +
+      '<button type="button" class="' + idPrefix + '_side" data-side="own">' + driveTeamLabel + '</button> ' +
+      '<button type="button" class="' + idPrefix + '_side" data-side="opp">' + otherTeamLabel + '</button> ' +
       '<input type="text" id="' + idPrefix + '_yardline" style="width:70px; display:inline-block;" placeholder="Yard line">';
   }
   function wireStartingSpot(container, idPrefix){
@@ -1256,20 +1258,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '<button type="button" id="pp_sackfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
           '</div>' +
         '</div>';
-    else if (type === 'int') html = offBlock('passer','Passer') + defBlock('Intercepted by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot');
+    else if (type === 'int') html = offBlock('passer','Passer') + defBlock('Intercepted by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot', null, def);
     else if (type === 'fumble') html = offBlock('carrier','Who fumbled') +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input type="radio" name="pp_fumrec" value="own" checked> Recovered by own team</label>' +
         '<label class="inline" style="display:block;"><input type="radio" name="pp_fumrec" value="opp"> Recovered by opponent</label></div>' +
         '<div id="pp_fum_own" style="margin-top:10px;"><input type="checkbox" id="pp_fum_safety" style="display:none;">' +
         '<button type="button" id="pp_fum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
-        '<div id="pp_fum_opp" style="display:none;">' + defBlock('Recovered by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot') + '</div>';
+        '<div id="pp_fum_opp" style="display:none;">' + defBlock('Recovered by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot', null, def) + '</div>';
     else if (type === 'safety') html =
         '<p class="hint" style="margin:0 0 10px;">Offense tackled, or committed a foul, in their own end zone. Always 2 points for the defense, and ends the drive — the scoring team kicks off next, logged as its own play afterward.</p>' +
         defBlock('Credited to (optional)');
     else if (type === 'kickoff') html = offBlock('kicker','Kicker') + yardsBlock('Kick distance') +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_ko_ret_wrap">' + defBlock('Returned by (optional)') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_touchback', 'Touchback') + '</div></div>' +
-        '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' + tdBlock + startingSpotFieldsHtml('pp_spot');
+        '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' + tdBlock + startingSpotFieldsHtml('pp_spot', null, def);
     else if (type === 'punt') html =
         offBlock('punter','Punter') +
         '<div style="display:flex; align-items:flex-end; gap:14px;"><div>' + yardsBlock('Punt distance') + '</div>' +
@@ -1282,7 +1284,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_punt_block_own" style="display:none; margin-top:10px;"><input type="checkbox" id="pp_punt_safety" style="display:none;">' +
           '<button type="button" id="pp_punt_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
         '</div>' +
-        '<div id="pp_punt_td_wrap">' + tdBlock + '</div>' + startingSpotFieldsHtml('pp_spot');
+        '<div id="pp_punt_td_wrap">' + tdBlock + '</div>' + startingSpotFieldsHtml('pp_spot', null, def);
     else if (type === 'fg') html =
         offBlock('kicker','Kicker') +
         '<div style="display:flex; align-items:flex-end; gap:14px;"><div>' + yardsBlock('Distance') + '</div>' +
