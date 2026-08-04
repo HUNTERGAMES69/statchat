@@ -35,6 +35,10 @@
   .leader-card .leader-label { font-size:11px; color:#999; margin-bottom:4px; }
   .leader-card .leader-name { font-weight:700; font-size:14px; color:#1a1a1a; }
   .leader-card .leader-stat { font-size:20px; font-weight:800; margin-top:2px; color:#1a1a1a; }
+  .team-header-row { display:flex; align-items:center; gap:16px; }
+  .team-header-logo { width:56px; height:56px; object-fit:contain; flex-shrink:0; }
+  .team-header-row .leaders-strip { flex:1; margin-bottom:0; }
+  .opp-header-name { font-weight:700; font-size:18px; color:#1a1a1a; }
   .leader-card .leader-stat span { font-size:11px; color:#888; font-weight:600; }
   .team-compare { display:grid; grid-template-columns:1fr auto 1fr; gap:0 18px; }
   .team-compare .col-head { font-weight:800; font-size:14px; text-align:center; padding-bottom:8px; border-bottom:2px solid #eee; margin-bottom:2px; }
@@ -478,7 +482,7 @@
         '<div class="leader-label">' + cat.label + '</div>' +
         '<div class="leader-name">' + playerName('teamA', leaderNum) + '</div>' +
         '<div class="leader-stat">' + statVal + ' <span>' + statUnit + '</span></div>' +
-        '<div style="font-size:11px; color:#999; margin-top:2px;">' + cat.sub(d) + '</div>' +
+        '<div style="font-size:12px; color:#666; margin-top:3px; font-weight:500;">' + cat.sub(d) + '</div>' +
         '</div>';
     });
     return cards ? '<div class="leaders-strip">' + cards + '</div>' : '';
@@ -551,65 +555,79 @@
       '</div>').join('') +
       '</div></div>';
 
+    function renderPlayerStatsSections(teamKey, box, useAccents){
+      const teamName = TEAMS[teamKey].name;
+      const accent = (key) => useAccents ? CATEGORY_ACCENT[key] : undefined;
+      let out = '';
+      out += '<div class="section player-section"><h2>' + teamName + ' — Passing</h2>' +
+        (playerTable(teamKey, box[teamKey].passing, ['Att','Comp','%','Yds','Y/C','Long','TD','Int','Sack'],
+          d => [d.att||0, d.comp||0, d.att ? Math.round(100*(d.comp||0)/d.att) : 0, d.yds||0, d.comp ? (d.yds/d.comp).toFixed(1) : '0.0', d.long||0, d.td||0, d.intThrown||0, d.sacked||0],
+          (obj) => { const att=sumStat(obj,'att'), comp=sumStat(obj,'comp'), yds=sumStat(obj,'yds');
+            return [att, comp, att?Math.round(100*comp/att):0, yds, comp?(yds/comp).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'intThrown'), sumStat(obj,'sacked')]; },
+          'yds', null, accent('passing')) || '<p class="no-stats">No passing stats recorded.</p>') + '</div>';
+
+      out += '<div class="section player-section"><h2>' + teamName + ' — Rushing</h2>' +
+        (playerTable(teamKey, box[teamKey].rushing, ['Att','Yds','Y/A','Long','TD','Fum'],
+          d => [d.att||0, d.yds||0, d.att ? (d.yds/d.att).toFixed(1) : '0.0', d.long||0, d.td||0, d.fum||0],
+          (obj) => { const att=sumStat(obj,'att'), yds=sumStat(obj,'yds');
+            return [att, yds, att?(yds/att).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
+          'yds', null, accent('rushing')) || '<p class="no-stats">No rushing stats recorded.</p>') + '</div>';
+
+      out += '<div class="section player-section"><h2>' + teamName + ' — Receiving</h2>' +
+        (playerTable(teamKey, box[teamKey].receiving, ['Rec','Yds','Y/R','Long','TD','Fum'],
+          d => [d.rec||0, d.yds||0, d.rec ? (d.yds/d.rec).toFixed(1) : '0.0', d.long||0, d.td||0, d.fum||0],
+          (obj) => { const rec=sumStat(obj,'rec'), yds=sumStat(obj,'yds');
+            return [rec, yds, rec?(yds/rec).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
+          'yds', null, accent('receiving')) || '<p class="no-stats">No receiving stats recorded.</p>') + '</div>';
+
+      const defNums = Object.keys(box[teamKey].defense);
+      const defTable = defNums.length
+        ? '<table class="player-table"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th></tr>' +
+          '<tr><td>Team</td><td>' + sumStat(box[teamKey].defense,'int') + '</td><td>' + sumStat(box[teamKey].defense,'fumRec') + '</td><td>' + sumStat(box[teamKey].defense,'sacks') + '</td></tr></table>'
+        : '<p class="no-stats">No defensive stats recorded.</p>';
+      out += '<div class="section player-section"><h2>' + teamName + ' — Defense</h2>' + defTable + '</div>';
+
+      const koNums = Object.keys(box[teamKey].specialTeams).filter(n => box[teamKey].specialTeams[n].kickoffs);
+      const puntNums = Object.keys(box[teamKey].specialTeams).filter(n => box[teamKey].specialTeams[n].punts);
+      const kickNums = Object.keys(box[teamKey].specialTeams).filter(n => box[teamKey].specialTeams[n].fgAtt || box[teamKey].specialTeams[n].patAtt);
+      const stSubsection = (label, tableHtml) => tableHtml
+        ? '<div class="st-subsection"><div class="st-subsection-label">' + label + '</div>' + tableHtml + '</div>'
+        : '';
+      let stHtml = '';
+      if (koNums.length){
+        stHtml += stSubsection('Kickoffs', playerTable(teamKey, Object.fromEntries(koNums.map(n=>[n,box[teamKey].specialTeams[n]])), ['Kickoffs','Touchbacks','TB %'],
+          d => [d.kickoffs||0, d.touchbacks||0, d.kickoffs ? Math.round(100*(d.touchbacks||0)/d.kickoffs)+'%' : '—'],
+          (obj) => { const k=sumStat(obj,'kickoffs'), tb=sumStat(obj,'touchbacks'); return [k, tb, k?Math.round(100*tb/k)+'%':'—']; },
+          'kickoffs', 'special'));
+      }
+      if (puntNums.length){
+        stHtml += stSubsection('Punting', playerTable(teamKey, Object.fromEntries(puntNums.map(n=>[n,box[teamKey].specialTeams[n]])), ['Punts','Yds','Avg','Long','Blocked'],
+          d => [d.punts||0, d.puntYds||0, d.puntsWithYards ? (d.puntYds/d.puntsWithYards).toFixed(1) : '0.0', d.puntLong||0, d.blocked||0],
+          (obj) => { const p=sumStat(obj,'punts'), yds=sumStat(obj,'puntYds'), wy=sumStat(obj,'puntsWithYards');
+            return [p, yds, wy?(yds/wy).toFixed(1):'0.0', maxStat(obj,'puntLong'), sumStat(obj,'blocked')]; },
+          'puntYds', 'special'));
+      }
+      if (kickNums.length){
+        stHtml += stSubsection('Kicking', playerTable(teamKey, Object.fromEntries(kickNums.map(n=>[n,box[teamKey].specialTeams[n]])), ['FG Att','FG Made','Long FG','FG Blk','XP Att','XP Made','XP Blk'],
+          d => [d.fgAtt||0, d.fgMade||0, d.fgLong||0, d.fgBlocked||0, d.patAtt||0, d.patMade||0, d.patBlocked||0],
+          (obj) => [sumStat(obj,'fgAtt'), sumStat(obj,'fgMade'), maxStat(obj,'fgLong'), sumStat(obj,'fgBlocked'), sumStat(obj,'patAtt'), sumStat(obj,'patMade'), sumStat(obj,'patBlocked')],
+          'fgAtt', 'special'));
+      }
+      out += '<div class="section player-section"><h2>' + teamName + ' — Special Teams</h2>' + (stHtml || '<p class="no-stats">No special teams stats recorded.</p>') + '</div>';
+      return out;
+    }
+
     const leadersHtml = renderLeadersStrip(box);
-    if (leadersHtml) html += '<div class="section page-break">' + leadersHtml + '</div>';
-
-    html += '<div class="section player-section' + (leadersHtml ? '' : ' page-break') + '">' +
-      '<h2>' + TEAMS.teamA.name + ' — Passing</h2>' +
-      (playerTable('teamA', box.teamA.passing, ['Att','Comp','%','Yds','Y/C','Long','TD','Int','Sack'],
-        d => [d.att||0, d.comp||0, d.att ? Math.round(100*(d.comp||0)/d.att) : 0, d.yds||0, d.comp ? (d.yds/d.comp).toFixed(1) : '0.0', d.long||0, d.td||0, d.intThrown||0, d.sacked||0],
-        (obj, nums) => { const att=sumStat(obj,'att'), comp=sumStat(obj,'comp'), yds=sumStat(obj,'yds');
-          return [att, comp, att?Math.round(100*comp/att):0, yds, comp?(yds/comp).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'intThrown'), sumStat(obj,'sacked')]; },
-        'yds', null, CATEGORY_ACCENT.passing) || '<p class="no-stats">No passing stats recorded.</p>') + '</div>';
-
-    html += '<div class="section player-section"><h2>' + TEAMS.teamA.name + ' — Rushing</h2>' +
-      (playerTable('teamA', box.teamA.rushing, ['Att','Yds','Y/A','Long','TD','Fum'],
-        d => [d.att||0, d.yds||0, d.att ? (d.yds/d.att).toFixed(1) : '0.0', d.long||0, d.td||0, d.fum||0],
-        (obj) => { const att=sumStat(obj,'att'), yds=sumStat(obj,'yds');
-          return [att, yds, att?(yds/att).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
-        'yds', null, CATEGORY_ACCENT.rushing) || '<p class="no-stats">No rushing stats recorded.</p>') + '</div>';
-
-    html += '<div class="section player-section"><h2>' + TEAMS.teamA.name + ' — Receiving</h2>' +
-      (playerTable('teamA', box.teamA.receiving, ['Rec','Yds','Y/R','Long','TD','Fum'],
-        d => [d.rec||0, d.yds||0, d.rec ? (d.yds/d.rec).toFixed(1) : '0.0', d.long||0, d.td||0, d.fum||0],
-        (obj) => { const rec=sumStat(obj,'rec'), yds=sumStat(obj,'yds');
-          return [rec, yds, rec?(yds/rec).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
-        'yds', null, CATEGORY_ACCENT.receiving) || '<p class="no-stats">No receiving stats recorded.</p>') + '</div>';
-
-    const defNums = Object.keys(box.teamA.defense);
-    const defTable = defNums.length
-      ? '<table class="player-table"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th></tr>' +
-        '<tr><td>Team</td><td>' + sumStat(box.teamA.defense,'int') + '</td><td>' + sumStat(box.teamA.defense,'fumRec') + '</td><td>' + sumStat(box.teamA.defense,'sacks') + '</td></tr></table>'
-      : '<p class="no-stats">No defensive stats recorded.</p>';
-    html += '<div class="section player-section"><h2>' + TEAMS.teamA.name + ' — Defense</h2>' + defTable + '</div>';
-
-    const koNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].kickoffs);
-    const puntNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].punts);
-    const kickNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].fgAtt || box.teamA.specialTeams[n].patAtt);
-    const stSubsection = (label, tableHtml) => tableHtml
-      ? '<div class="st-subsection"><div class="st-subsection-label">' + label + '</div>' + tableHtml + '</div>'
-      : '';
-    let stHtml = '';
-    if (koNums.length){
-      stHtml += stSubsection('Kickoffs', playerTable('teamA', Object.fromEntries(koNums.map(n=>[n,box.teamA.specialTeams[n]])), ['Kickoffs','Touchbacks','TB %'],
-        d => [d.kickoffs||0, d.touchbacks||0, d.kickoffs ? Math.round(100*(d.touchbacks||0)/d.kickoffs)+'%' : '—'],
-        (obj) => { const k=sumStat(obj,'kickoffs'), tb=sumStat(obj,'touchbacks'); return [k, tb, k?Math.round(100*tb/k)+'%':'—']; },
-        'kickoffs', 'special'));
+    const ourLogoHtml = TEAMS.teamA.logo ? '<img class="team-header-logo" src="' + TEAMS.teamA.logo + '">' : '';
+    if (leadersHtml){
+      html += '<div class="section page-break"><div class="team-header-row">' + ourLogoHtml + leadersHtml + '</div></div>';
     }
-    if (puntNums.length){
-      stHtml += stSubsection('Punting', playerTable('teamA', Object.fromEntries(puntNums.map(n=>[n,box.teamA.specialTeams[n]])), ['Punts','Yds','Avg','Long','Blocked'],
-        d => [d.punts||0, d.puntYds||0, d.puntsWithYards ? (d.puntYds/d.puntsWithYards).toFixed(1) : '0.0', d.puntLong||0, d.blocked||0],
-        (obj) => { const p=sumStat(obj,'punts'), yds=sumStat(obj,'puntYds'), wy=sumStat(obj,'puntsWithYards');
-          return [p, yds, wy?(yds/wy).toFixed(1):'0.0', maxStat(obj,'puntLong'), sumStat(obj,'blocked')]; },
-        'puntYds', 'special'));
-    }
-    if (kickNums.length){
-      stHtml += stSubsection('Kicking', playerTable('teamA', Object.fromEntries(kickNums.map(n=>[n,box.teamA.specialTeams[n]])), ['FG Att','FG Made','Long FG','FG Blk','XP Att','XP Made','XP Blk'],
-        d => [d.fgAtt||0, d.fgMade||0, d.fgLong||0, d.fgBlocked||0, d.patAtt||0, d.patMade||0, d.patBlocked||0],
-        (obj) => [sumStat(obj,'fgAtt'), sumStat(obj,'fgMade'), maxStat(obj,'fgLong'), sumStat(obj,'fgBlocked'), sumStat(obj,'patAtt'), sumStat(obj,'patMade'), sumStat(obj,'patBlocked')],
-        'fgAtt', 'special'));
-    }
-    html += '<div class="section player-section"><h2>' + TEAMS.teamA.name + ' — Special Teams</h2>' + (stHtml || '<p class="no-stats">No special teams stats recorded.</p>') + '</div>';
+    html += renderPlayerStatsSections('teamA', box, true);
+
+    const oppLogoHtml = TEAMS.teamB.logo ? '<img class="team-header-logo" src="' + TEAMS.teamB.logo + '">' : '';
+    html += '<div class="section page-break"><div class="team-header-row">' + oppLogoHtml +
+      '<div class="opp-header-name">' + TEAMS.teamB.name + '</div></div></div>';
+    html += renderPlayerStatsSections('teamB', box, false);
 
     return html;
   }
