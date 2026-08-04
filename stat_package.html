@@ -461,87 +461,149 @@
 
   function buildWorkbook(){
     const box = computeBoxScore(plays);
-    const finalState = computeState();
-    const possessions = countPossessions(plays);
-    const turnovers = countTurnovers(plays);
-    const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
-    const playsFor = (teamKey) => plays.filter(p => p.team === teamKey && p.roles && scrimmageTypes.includes(p.roles.playType)).length;
-    const quarterScores = { teamA: [0,0,0,0], teamB: [0,0,0,0] };
-    plays.forEach(p => {
-      const q = Math.min(4, Math.max(1, p.quarter || 1)) - 1;
-      if (p.effect && p.effect.score) quarterScores[p.effect.score.team][q] += p.effect.score.points;
-      if (p.effect && p.effect.scoreAdjust) quarterScores[p.effect.scoreAdjust.team][q] += p.effect.scoreAdjust.pts;
-    });
-    const visitorKey = TEAMS.teamA.isHome ? 'teamB' : 'teamA';
-    const homeKey = TEAMS.teamA.isHome ? 'teamA' : 'teamB';
+    const gameIdMatch = (gameLabel || '').match(/(\d+)/);
+    const gameId = gameIdMatch ? parseInt(gameIdMatch[1]) : (gameLabel || '');
+    const oppKey = 'teamB';
 
-    const wb = XLSX.utils.book_new();
+    const headers = ['GameID','Team','Player','Rush Attempts','Rush Yards','Yds Per Carry','Long Rush','Rush TD',
+      'Pass Attempts','Pass Completions','Comp Pctg','Pass Yards','Long Pass','Pass TD','INT','SACK',
+      'Receptions','Receiving Yards','Yards Per Catch','Long Recept','Receiving TD','FUMBLE',
+      'KO Attempt','KO Touchback','PA Attempt','PA Made','PA Block','FG Attempt','FG Made','FG Block','FG Yards','Long FG',
+      'Punt Attempt','Punt Yards','Long Punt','PUNT BLK',
+      'D-Sack','D-INT','D-FUM','D-3rdAtt','D-3rdConv','D-4thAtt','D-4thStop','D-20PlusPlay'];
+    const blankRow = () => headers.map(() => '');
+    const setCols = (row, obj) => { Object.keys(obj).forEach(k => { row[headers.indexOf(k)] = obj[k]; }); return row; };
+    const rows = [headers];
 
-    const boxRows = [['Team','Q1','Q2','Q3','Q4','Final']];
-    [visitorKey, homeKey].forEach(k => boxRows.push([TEAMS[k].name, ...quarterScores[k], finalState.scores[k]]));
-    boxRows.push([]);
-    ['teamA','teamB'].forEach(teamKey => {
-      const s = box[teamKey];
-      const rushYds = sumStat(s.rushing,'yds'), rushAtt = sumStat(s.rushing,'att'), rushTd = sumStat(s.rushing,'td');
-      const passYds = sumStat(s.passing,'yds'), passAtt = sumStat(s.passing,'att'), sacked = sumStat(s.passing,'sacked'), passTd = sumStat(s.passing,'td');
-      const totalYds = rushYds + passYds, totalPlays = playsFor(teamKey);
-      const own = box[otherTeam(teamKey)].oppDowns;
-      const pen = finalState.penalties[teamKey];
-      boxRows.push([TEAMS[teamKey].name]);
-      boxRows.push(['Total Yards', totalYds, 'Total Plays', totalPlays, 'Yards Per Play', totalPlays?+(totalYds/totalPlays).toFixed(1):0]);
-      boxRows.push(['Pass Yards', passYds, 'Yards Per Pass', passAtt?+(passYds/passAtt).toFixed(1):0, 'Pass TD', passTd]);
-      boxRows.push(['Rush Yards', rushYds, 'Yards Per Rush', rushAtt?+(rushYds/rushAtt).toFixed(1):0, 'Rush TD', rushTd]);
-      boxRows.push(['Possessions', possessions[teamKey]||0, 'Turnovers', turnovers[teamKey]||0, 'Sacks Allowed', sacked]);
-      boxRows.push(['Penalties', pen.count, 'Penalty Yards', pen.yds]);
-      boxRows.push(['3rd Down', own.d3Pct!==null ? own.d3conv+'/'+own.d3att+' ('+own.d3Pct+'%)' : '', '4th Down', own.d4Pct!==null ? own.d4conv+'/'+own.d4att+' ('+own.d4Pct+'%)' : '', '20yd+ Plays', own.explosive]);
-      boxRows.push([]);
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(boxRows), 'Box Score');
-
-    const passRows = [['Player','Att','Comp','%','Yds','Y/C','Long','TD','Int','Sacked','Rush TD','Fumble']];
-    Object.keys(box.teamA.passing).forEach(n => {
-      const d = box.teamA.passing[n], rd = box.teamA.rushing[n] || {};
-      passRows.push([playerName('teamA', n), d.att||0, d.comp||0, d.att?Math.round(100*(d.comp||0)/d.att):0, d.yds||0, d.comp?+(d.yds/d.comp).toFixed(1):0, d.long||0, d.td||0, d.intThrown||0, d.sacked||0, rd.td||0, (d.fum||0)+(rd.fum||0)]);
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(passRows), 'Passing');
-
-    const recRows = [['Player','Rec','Yds','Y/C','Long','TD','Fumble']];
-    Object.keys(box.teamA.receiving).forEach(n => {
-      const d = box.teamA.receiving[n];
-      recRows.push([playerName('teamA', n), d.rec||0, d.yds||0, d.rec?+(d.yds/d.rec).toFixed(1):0, d.long||0, d.td||0, d.fum||0]);
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(recRows), 'Receiving');
-
-    const rushRows = [['Player','Att','Yds','Y/C','Long','TD','Fumble']];
+    // Rushing -- one row per rusher, aggregated for the game, with a
+    // Long field since that's how the reference tracks rush/pass/rec.
     Object.keys(box.teamA.rushing).forEach(n => {
       const d = box.teamA.rushing[n];
-      rushRows.push([playerName('teamA', n), d.att||0, d.yds||0, d.att?+(d.yds/d.att).toFixed(1):0, d.long||0, d.td||0, d.fum||0]);
+      const row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
+        'Rush Attempts': d.att||0, 'Rush Yards': d.yds||0,
+        'Yds Per Carry': d.att ? +(d.yds/d.att).toFixed(1) : '', 'Long Rush': d.long||0, 'Rush TD': d.td||0,
+        FUMBLE: d.fum || '' });
+      rows.push(row);
     });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rushRows), 'Rushing');
 
-    const defOwn = box.teamB.oppDowns;
-    const defRows = [['','Int','Fum Forced','Sacks','Opp 3rd %','Opp 4th %','Plays Over 20 Allowed'],
-      ['Defense', sumStat(box.teamA.defense,'int'), sumStat(box.teamA.defense,'fumRec'), sumStat(box.teamA.defense,'sacks'),
-       defOwn.d3Pct!==null ? defOwn.d3Pct+'%' : '', defOwn.d4Pct!==null ? defOwn.d4Pct+'%' : '', defOwn.explosive]];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(defRows), 'Defense');
+    // Passing -- one row per passer, aggregated for the game.
+    Object.keys(box.teamA.passing).forEach(n => {
+      const d = box.teamA.passing[n];
+      const row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
+        'Pass Attempts': d.att||0, 'Pass Completions': d.comp||0,
+        'Comp Pctg': d.att ? +(100*(d.comp||0)/d.att).toFixed(1) : '',
+        'Pass Yards': d.yds||0, 'Long Pass': d.long||0, 'Pass TD': d.td||0, INT: d.intThrown||0, SACK: d.sacked||0 });
+      rows.push(row);
+    });
 
-    const stRows = [['Kickoffs'], ['Player','Kickoffs','Touchbacks','TB %']];
+    // Receiving -- one row per receiver, aggregated for the game.
+    Object.keys(box.teamA.receiving).forEach(n => {
+      const d = box.teamA.receiving[n];
+      const row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
+        Receptions: d.rec||0, 'Receiving Yards': d.yds||0,
+        'Yards Per Catch': d.rec ? +(d.yds/d.rec).toFixed(1) : '', 'Long Recept': d.long||0, 'Receiving TD': d.td||0,
+        FUMBLE: d.fum || '' });
+      rows.push(row);
+    });
+
+    // Kickoffs -- aggregated per kicker for the game.
     Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].kickoffs).forEach(n => {
       const d = box.teamA.specialTeams[n];
-      stRows.push([playerName('teamA', n, 'special'), d.kickoffs||0, d.touchbacks||0, d.kickoffs?Math.round(100*(d.touchbacks||0)/d.kickoffs)+'%':'']);
+      const row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n, 'special'),
+        'KO Attempt': d.kickoffs||0, 'KO Touchback': d.touchbacks||0 });
+      rows.push(row);
     });
-    stRows.push([], ['Punting'], ['Player','Punts','Yds Per Punt','Long','Blocked']);
-    Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].punts).forEach(n => {
-      const d = box.teamA.specialTeams[n];
-      stRows.push([playerName('teamA', n, 'special'), d.punts||0, d.puntsWithYards?+(d.puntYds/d.puntsWithYards).toFixed(1):0, d.puntLong||0, d.blocked||0]);
-    });
-    stRows.push([], ['Kicking'], ['Player','FG Att','FG Made','Long FG','FG %','FG Blk','XP Att','XP Made','XP %','XP Blk']);
-    Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].fgAtt || box.teamA.specialTeams[n].patAtt).forEach(n => {
-      const d = box.teamA.specialTeams[n];
-      stRows.push([playerName('teamA', n, 'special'), d.fgAtt||0, d.fgMade||0, d.fgLong||0, d.fgAtt?Math.round(100*(d.fgMade||0)/d.fgAtt)+'%':'', d.fgBlocked||0, d.patAtt||0, d.patMade||0, d.patAtt?Math.round(100*(d.patMade||0)/d.patAtt)+'%':'', d.patBlocked||0]);
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(stRows), 'Special Teams');
 
+    // PAT -- aggregated per kicker for the game.
+    Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].patAtt).forEach(n => {
+      const d = box.teamA.specialTeams[n];
+      const row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n, 'special'),
+        'PA Attempt': d.patAtt||0, 'PA Made': d.patMade||0, 'PA Block': d.patBlocked||0 });
+      rows.push(row);
+    });
+
+    // FG and Punts -- one row per individual attempt, matching the
+    // reference exactly, since "Long FG"/"Long Punt" and block status
+    // are per-play facts, not something that survives aggregation the
+    // way rush/pass/rec's single Long field does. Read straight off
+    // the play log rather than the aggregated box score buckets.
+    plays.forEach(p => {
+      const r = p.roles;
+      if (!r || r.playType !== 'fg' || !r.kicker || r.kicker.team !== 'teamA') return;
+      const row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', r.kicker.num, 'special'),
+        'FG Attempt': 1, 'FG Made': r.kicker.result === 'g' ? 1 : 0, 'FG Block': r.kicker.result === 'b' ? 1 : 0,
+        'FG Yards': r.kicker.yards || 0 });
+      rows.push(row);
+    });
+    plays.forEach(p => {
+      const r = p.roles;
+      if (!r || r.playType !== 'punt' || !r.punter || r.punter.team !== 'teamA') return;
+      const row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', r.punter.num, 'special'),
+        'Punt Attempt': 1, 'Punt Yards': r.punter.blocked ? 0 : (r.punter.yards || 0), 'PUNT BLK': r.punter.blocked ? 1 : '' });
+      rows.push(row);
+    });
+
+    // Sacks and Bad Snaps -- yardage lost to sacks against our own
+    // passer, tracked as a negative rushing line per football
+    // convention. computeBoxScore only counts sacks, it never sums
+    // the yardage lost, so this reads the raw play log directly.
+    let sackCount = 0, sackYardsLost = 0;
+    plays.forEach(p => {
+      const r = p.roles;
+      if (r && r.playType === 'sack' && r.passer && r.passer.team === 'teamA'){
+        sackCount++; sackYardsLost += (r.passer.yards || 0);
+      }
+    });
+    if (sackCount){
+      const row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Sacks and Bad Snaps',
+        'Rush Attempts': sackCount, 'Rush Yards': -sackYardsLost });
+      rows.push(row);
+    }
+
+    // Defense -- our own defense's totals against the opponent's offense.
+    // The opponent's own offensive numbers are stored on box.teamA's
+    // oppDowns entry (that's "the other team's -- teamB's -- own
+    // offense", by the same logic the team-stats section already uses).
+    const oppOffenseVsUs = box.teamA.oppDowns;
+    const defRow = blankRow();
+    setCols(defRow, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Defense',
+      'D-Sack': sumStat(box.teamA.defense,'sacks')||'', 'D-INT': sumStat(box.teamA.defense,'int')||'',
+      'D-FUM': sumStat(box.teamA.defense,'fumRec')||'',
+      'D-3rdAtt': oppOffenseVsUs.d3att||'', 'D-3rdConv': oppOffenseVsUs.d3conv||'',
+      'D-4thAtt': oppOffenseVsUs.d4att||'', 'D-4thStop': oppOffenseVsUs.d4att ? (oppOffenseVsUs.d4att - oppOffenseVsUs.d4conv) : '',
+      'D-20PlusPlay': oppOffenseVsUs.explosive||'' });
+    rows.push(defRow);
+
+    // Offense -- our own explosive-play count, stored on box.teamB's
+    // oppDowns entry (that's "the other team's defense against this
+    // team's offense", i.e. our own numbers).
+    const ourOffense = box.teamB.oppDowns;
+    const offRow = blankRow();
+    setCols(offRow, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Offense', 'D-20PlusPlay': ourOffense.explosive||'' });
+    rows.push(offRow);
+
+    // Opponent -- one combined team-total row, since individual
+    // opponent players aren't tracked (StatChat has no way to enter
+    // an opponent roster).
+    const oppRush = box[oppKey].rushing, oppPass = box[oppKey].passing;
+    const oppRushAtt = sumStat(oppRush,'att'), oppRushYds = sumStat(oppRush,'yds'), oppRushTd = sumStat(oppRush,'td');
+    const oppPassAtt = sumStat(oppPass,'att'), oppPassComp = sumStat(oppPass,'comp'), oppPassYds = sumStat(oppPass,'yds'), oppPassTd = sumStat(oppPass,'td');
+    const oppRow = blankRow();
+    setCols(oppRow, { GameID: gameId, Team: TEAMS[oppKey].name, Player: TEAMS[oppKey].name,
+      'Rush Attempts': oppRushAtt||'', 'Rush Yards': oppRushYds||'', 'Rush TD': oppRushTd||'',
+      'Pass Attempts': oppPassAtt||'', 'Pass Completions': oppPassComp||'', 'Pass Yards': oppPassYds||'', 'Pass TD': oppPassTd||'' });
+    rows.push(oppRow);
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Stats');
     return wb;
   }
 
