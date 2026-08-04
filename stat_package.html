@@ -715,11 +715,12 @@
       const s = box[teamKey];
       const rushYds = sumStat(s.rushing, 'yds'), rushAtt = sumStat(s.rushing, 'att'), rushTd = sumStat(s.rushing, 'td');
       const passYds = sumStat(s.passing, 'yds'), passAtt = sumStat(s.passing, 'att'), sacked = sumStat(s.passing, 'sacked');
+      const passComp = sumStat(s.passing, 'comp');
       const passTd = sumStat(s.passing, 'td');
       const totalYds = rushYds + passYds, totalPlays = playsFor(teamKey);
       const own = box[otherTeam(teamKey)].oppDowns;
       const pen = finalState.penalties[teamKey];
-      return { totalYds, totalPlays, passYds, passAtt, passTd, rushYds, rushAtt, rushTd, sacked,
+      return { totalYds, totalPlays, passYds, passAtt, passComp, passTd, rushYds, rushAtt, rushTd, sacked,
         turnovers: turnovers[teamKey]||0, penCount: pen.count, penYds: pen.yds,
         possessions: possessions[teamKey]||0, own };
     };
@@ -744,6 +745,7 @@
           [m.totalYds, allowedLabel ? 'Yds allowed' : 'Total yds'], [m.totalPlays, 'Plays'],
           [m.totalPlays ? (m.totalYds/m.totalPlays).toFixed(1) : '0.0', 'Yds/play'], [m.possessions, 'Possessions'] ] },
         { color: '#0F6E56', label: 'Passing', items: [
+          [m.passAtt ? Math.round(100*m.passComp/m.passAtt)+'%' : '—', 'Comp %'],
           [m.passYds, 'Yds'], [m.passAtt ? (m.passYds/m.passAtt).toFixed(1) : '0.0', 'Yds/att'], [m.passTd, 'TD'] ] },
         { color: '#993C1D', label: 'Rushing', items: [
           [m.rushYds, 'Yds'], [m.rushAtt ? (m.rushYds/m.rushAtt).toFixed(1) : '0.0', 'Yds/att'], [m.rushTd, 'TD'] ] },
