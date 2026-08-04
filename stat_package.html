@@ -27,10 +27,12 @@
   .team-block { background:#fff; border:1px solid #ddd; padding:14px 16px; margin-bottom:16px; }
   .team-block-header { display:flex; align-items:center; gap:10px; font-weight:700; font-size:15px; margin-bottom:10px; padding-bottom:8px; border-bottom:2px solid #eee; }
   .team-block-logo { width:32px; height:32px; object-fit:contain; }
-  .metric-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(100px, 1fr)); gap:8px; }
-  .metric-tile { text-align:center; padding:6px 4px; }
-  .metric-tile .metric-val { font-size:20px; font-weight:700; }
-  .metric-tile .metric-label { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.02em; margin-top:2px; }
+  .metric-group { border-left:3px solid #ccc; padding-left:14px; margin-bottom:14px; }
+  .metric-group:last-child { margin-bottom:0; }
+  .metric-group-label { font-size:11px; color:#999; text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px; }
+  .metric-group-row { display:flex; gap:28px; flex-wrap:wrap; }
+  .metric-group-row .metric-item .metric-val { font-size:20px; font-weight:700; }
+  .metric-group-row .metric-item .metric-label { font-size:11px; color:#888; margin-left:4px; }
   .section-title { font-size:14px; font-weight:700; margin:22px 0 8px; text-transform:uppercase; letter-spacing:0.03em; color:#333; }
   table.stat-table { width:100%; border-collapse:collapse; font-size:13px; background:#fff; margin-bottom:6px; }
   table.stat-table th, table.stat-table td { padding:6px 8px; text-align:right; border:1px solid #eee; }
@@ -737,21 +739,29 @@
 
     const teamBlock = (teamKey, allowedLabel) => {
       const m = teamMetrics(teamKey);
-      const tiles = [
-        [m.turnovers, 'Turnovers'], [m.sacked, 'Sacks Allowed'], [m.penCount, 'Penalties'], [m.penYds, 'Penalty Yards'],
-        [m.possessions, 'Possessions'],
-        [m.own.d3Pct !== null ? m.own.d3conv+'/'+m.own.d3att+' ('+m.own.d3Pct+'%)' : '—', '3rd Down %'],
-        [m.own.d4Pct !== null ? m.own.d4conv+'/'+m.own.d4att+' ('+m.own.d4Pct+'%)' : '—', '4th Down %'],
-        [m.own.explosive, '20yd+ Plays'],
-        [m.totalYds, allowedLabel ? 'Total Yards Allowed' : 'Total Yards Gained'], [m.totalPlays, 'Total Plays'],
-        [m.totalPlays ? (m.totalYds/m.totalPlays).toFixed(1) : '0.0', 'Yards Per Play'],
-        [m.passYds, 'Pass Yards'], [m.passAtt ? (m.passYds/m.passAtt).toFixed(1) : '0.0', 'Yards Per Pass'], [m.passTd, 'Pass TD'],
-        [m.rushYds, 'Rush Yards'], [m.rushAtt ? (m.rushYds/m.rushAtt).toFixed(1) : '0.0', 'Yards Per Rush'], [m.rushTd, 'Rush TD']
+      const groups = [
+        { color: '#534AB7', label: 'Overall', items: [
+          [m.totalYds, allowedLabel ? 'Yds allowed' : 'Total yds'], [m.totalPlays, 'Plays'],
+          [m.totalPlays ? (m.totalYds/m.totalPlays).toFixed(1) : '0.0', 'Yds/play'], [m.possessions, 'Possessions'] ] },
+        { color: '#0F6E56', label: 'Passing', items: [
+          [m.passYds, 'Yds'], [m.passAtt ? (m.passYds/m.passAtt).toFixed(1) : '0.0', 'Yds/att'], [m.passTd, 'TD'] ] },
+        { color: '#993C1D', label: 'Rushing', items: [
+          [m.rushYds, 'Yds'], [m.rushAtt ? (m.rushYds/m.rushAtt).toFixed(1) : '0.0', 'Yds/att'], [m.rushTd, 'TD'] ] },
+        { color: '#993556', label: 'Discipline', items: [
+          [m.turnovers, 'Turnovers'], [m.sacked, 'Sacks allowed'], [m.penCount + '-' + m.penYds, 'Penalties'] ] },
+        { color: '#999', label: 'Efficiency', items: [
+          [m.own.d3Pct !== null ? m.own.d3conv+'/'+m.own.d3att+' ('+m.own.d3Pct+'%)' : '—', '3rd down'],
+          [m.own.d4Pct !== null ? m.own.d4conv+'/'+m.own.d4att+' ('+m.own.d4Pct+'%)' : '—', '4th down'],
+          [m.own.explosive, '20yd+ plays'] ] }
       ];
+      const groupHtml = groups.map(g => '<div class="metric-group" style="border-left-color:' + g.color + ';">' +
+        '<div class="metric-group-label">' + g.label + '</div>' +
+        '<div class="metric-group-row">' + g.items.map(([val,label]) =>
+          '<div class="metric-item"><span class="metric-val">' + val + '</span><span class="metric-label">' + label + '</span></div>').join('') +
+        '</div></div>').join('');
       return '<div class="team-block">' +
         '<div class="team-block-header">' + (TEAMS[teamKey].logo ? '<img class="team-block-logo" src="'+TEAMS[teamKey].logo+'">' : '') + TEAMS[teamKey].name + '</div>' +
-        '<div class="metric-grid">' + tiles.map(([val,label]) => '<div class="metric-tile"><div class="metric-val">'+val+'</div><div class="metric-label">'+label+'</div></div>').join('') +
-        '</div></div>';
+        groupHtml + '</div>';
     };
     html += teamBlock('teamA', false) + teamBlock('teamB', true);
 
