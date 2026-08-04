@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>StatChat — Statistics Report</title>
+<title>StatChat — Season Report</title>
 <style>
   html, body { margin:0; padding:0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; color:#1a1a1a; }
@@ -21,19 +21,22 @@
   .statchat-logo { position:absolute; top:12px; right:12px; width:60px; height:auto; border-radius:6px; }
   .report-header h1 { font-size:18px; margin:0 0 4px; }
   .report-header .sub { color:#666; font-size:13px; }
-  table.quarter-table { width:100%; border-collapse:collapse; margin:0 auto 16px; font-size:13px; background:#fff; border:1px solid #ddd; }
-  table.quarter-table th, table.quarter-table td { padding:6px 10px; text-align:center; border:1px solid #eee; }
-  table.quarter-table th:first-child, table.quarter-table td:first-child { text-align:left; font-weight:700; }
-  .team-block { background:#fff; border:1px solid #ddd; padding:14px 16px; margin-bottom:16px; }
-  .team-block-header { display:flex; align-items:center; gap:10px; font-weight:700; font-size:15px; margin-bottom:10px; padding-bottom:8px; border-bottom:2px solid #eee; }
-  .team-block-logo { width:32px; height:32px; object-fit:contain; }
-  .metric-group { border-top:0.5px solid #eee; padding-top:12px; margin-top:12px; }
-  .metric-group:first-child { border-top:none; padding-top:0; margin-top:0; }
-  .metric-group-label { font-size:11px; color:#999; text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px; }
-  .metric-group-row { display:flex; gap:28px; flex-wrap:wrap; }
-  .metric-group-row .metric-item .metric-val { font-size:20px; font-weight:700; }
-  .metric-group-row .metric-item .metric-label { font-size:11px; color:#888; margin-left:4px; }
-  .section-title { font-size:14px; font-weight:700; margin:22px 0 8px; text-transform:uppercase; letter-spacing:0.03em; color:#333; }
+  .report-header .record { font-size:13px; font-weight:600; margin-top:4px; }
+  .section { background:#fff; border:1px solid #ddd; padding:16px; margin-bottom:16px; }
+  .section-title { font-size:14px; font-weight:700; margin:0 0 12px; text-transform:uppercase; letter-spacing:0.03em; color:#333; }
+  .metric-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:10px; margin-bottom:22px; padding-bottom:16px; border-bottom:1px solid #f0f0f0; }
+  .metric-tile { text-align:center; padding:8px 4px; }
+  .metric-tile .metric-val { font-size:22px; font-weight:700; }
+  .metric-tile .metric-label { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.02em; margin-top:2px; }
+  .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:40px 40px; margin-bottom:14px; align-items:start; }
+  .chart-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:32px 32px; margin-bottom:14px; align-items:start; }
+  .chart-row > :nth-child(even) { border-left:1px solid #eee; padding-left:40px; margin-left:-1px; }
+  .chart-row-3 > :nth-child(3n+2) { border-left:1px solid #eee; padding-left:32px; margin-left:-1px; }
+  .chart-row-3 > :nth-child(3n+3) { border-left:1px solid #eee; padding-left:32px; margin-left:-1px; }
+  .chart-col-metrics { display:flex; justify-content:space-around; gap:8px; flex-wrap:wrap; align-content:flex-start; min-width:0; }
+  .chart-col-metrics .metric-tile { flex:1; min-width:70px; }
+  .chart-box { position:relative; height:220px; min-width:0; }
+  .chart-box.wide { height:260px; }
   table.stat-table { width:100%; border-collapse:collapse; font-size:13px; background:#fff; margin-bottom:6px; }
   table.stat-table th, table.stat-table td { padding:6px 8px; text-align:right; border:1px solid #eee; }
   table.stat-table th:first-child, table.stat-table td:first-child { text-align:left; }
@@ -46,7 +49,7 @@
     body { background:#fff; }
     .wrap { max-width:none; padding:0 20px; }
     .no-print { display:none !important; }
-    .team-block { page-break-inside:avoid; break-inside:avoid; }
+    .section, .report-header { page-break-inside:avoid; break-inside:avoid; }
     .page-break { page-break-before:always; break-before:always; }
   }
 </style>
@@ -71,6 +74,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script src="team-icon.js"></script>
 <script>
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
@@ -89,7 +94,7 @@
     }
   });
 
-  let plays = [], startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '', gameDate = null;
+  let plays = [], startingPossession = 'teamA', quarterLengthSec = 720;
   const TEAMS = {};
 
   // --- Proven read-only engine core, extracted verbatim from game.html / view.html ---
@@ -401,57 +406,298 @@
 
   const RECEIVE_POS = new Set(['WR','TE','SE','FL','SLOT']);
 
+  function sumStat(bucketObj, key){
+    return Object.keys(bucketObj).reduce((t, n) => t + (bucketObj[n][key] || 0), 0);
+  }
+  function maxStat(bucketObj, key){
+    return Object.keys(bucketObj).reduce((t, n) => Math.max(t, bucketObj[n][key] || 0), 0);
+  }
+  function mergeInto(target, key, delta){
+    if (!target[key]) target[key] = {};
+    Object.keys(delta).forEach(k => {
+      if (k === 'long' || k === 'fgLong' || k === 'puntLong'){
+        target[key][k] = Math.max(target[key][k] || 0, delta[k] || 0);
+      } else {
+        target[key][k] = (target[key][k] || 0) + (delta[k] || 0);
+      }
+    });
+  }
+
+  let seasonYearLabel = '';
+  const seasonAgg = {
+    rushing: {}, passing: {}, receiving: {}, specialTeams: {},
+    defense: { int: 0, fumRec: 0, sacks: 0 },
+    perGame: [],
+    totals: { rushAtt:0, rushYds:0, rushTd:0, passAtt:0, passComp:0, passYds:0, passTd:0, sacked:0, totalPlays:0, possessions:0, turnovers:0, penCount:0, penYds:0,
+      oppD3att:0, oppD3conv:0, oppD4att:0, oppD4conv:0, explosiveFor:0,
+      oppRushAtt:0, oppRushYds:0, oppRushTd:0, oppPassAtt:0, oppPassComp:0, oppPassYds:0, oppPassTd:0,
+      pointsScored:0, pointsAllowed:0, explosiveAgainst:0 },
+    quarterScored: [0,0,0,0], quarterAllowed: [0,0,0,0],
+    wins: 0, losses: 0, ties: 0
+  };
+
+  function processGame(game, rosterRows, gamePlays){
+    buildTeams(game, rosterRows, seasonAgg.ourBranding || {});
+    const box = computeBoxScore(gamePlays);
+    plays = gamePlays;
+    const finalState = computeState(gamePlays);
+    const possessions = countPossessions(gamePlays);
+    const turnovers = countTurnovers(gamePlays);
+    const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
+    const playsFor = (teamKey) => gamePlays.filter(p => p.team === teamKey && p.roles && scrimmageTypes.includes(p.roles.playType)).length;
+
+    ['rushing','passing','receiving'].forEach(cat => {
+      Object.keys(box.teamA[cat]).forEach(n => {
+        mergeInto(seasonAgg[cat], playerName('teamA', n), box.teamA[cat][n]);
+      });
+    });
+    Object.keys(box.teamA.specialTeams).forEach(n => {
+      mergeInto(seasonAgg.specialTeams, playerName('teamA', n, 'special'), box.teamA.specialTeams[n]);
+    });
+    seasonAgg.defense.int += sumStat(box.teamA.defense, 'int');
+    seasonAgg.defense.fumRec += sumStat(box.teamA.defense, 'fumRec');
+    seasonAgg.defense.sacks += sumStat(box.teamA.defense, 'sacks');
+
+    const t = seasonAgg.totals;
+    const ownDowns = box.teamB.oppDowns, oppDowns = box.teamA.oppDowns;
+    const rushYds = sumStat(box.teamA.rushing,'yds'), rushAtt = sumStat(box.teamA.rushing,'att'), rushTd = sumStat(box.teamA.rushing,'td');
+    // Verified against real NFL box scores: sack yardage lost comes
+    // out of the team's Pass Yards total, not Rushing. Individual
+    // passer season totals in seasonAgg.passing stay unadjusted,
+    // matching each player's own personal statline.
+    const sackYardsLostFor = (teamKey) => gamePlays.reduce((tot, p) => {
+      const r = p.roles;
+      return (r && r.playType === 'sack' && r.passer && r.passer.team === teamKey) ? tot + (r.passer.yards || 0) : tot;
+    }, 0);
+    const passYds = sumStat(box.teamA.passing,'yds') - sackYardsLostFor('teamA'), passAtt = sumStat(box.teamA.passing,'att'), passComp = sumStat(box.teamA.passing,'comp'), passTd = sumStat(box.teamA.passing,'td');
+    const oppRushYds = sumStat(box.teamB.rushing,'yds'), oppRushAtt = sumStat(box.teamB.rushing,'att'), oppRushTd = sumStat(box.teamB.rushing,'td');
+    const oppPassYds = sumStat(box.teamB.passing,'yds') - sackYardsLostFor('teamB'), oppPassAtt = sumStat(box.teamB.passing,'att'), oppPassComp = sumStat(box.teamB.passing,'comp'), oppPassTd = sumStat(box.teamB.passing,'td');
+    const pen = finalState.penalties.teamA;
+    t.rushAtt += rushAtt; t.rushYds += rushYds; t.rushTd += rushTd;
+    t.passAtt += passAtt; t.passComp += passComp; t.passYds += passYds; t.passTd += passTd;
+    t.sacked += sumStat(box.teamA.passing, 'sacked');
+    t.totalPlays += playsFor('teamA');
+    t.possessions += possessions.teamA || 0;
+    t.turnovers += turnovers.teamA || 0;
+    t.penCount += pen.count; t.penYds += pen.yds;
+    t.oppD3att += oppDowns.d3att; t.oppD3conv += oppDowns.d3conv;
+    t.oppD4att += oppDowns.d4att; t.oppD4conv += oppDowns.d4conv;
+    t.explosiveFor += ownDowns.explosive;
+    t.explosiveAgainst += oppDowns.explosive;
+    t.oppRushAtt += oppRushAtt; t.oppRushYds += oppRushYds; t.oppRushTd += oppRushTd;
+    t.oppPassAtt += oppPassAtt; t.oppPassComp += oppPassComp; t.oppPassYds += oppPassYds; t.oppPassTd += oppPassTd;
+    t.pointsScored += finalState.scores.teamA; t.pointsAllowed += finalState.scores.teamB;
+
+    if (finalState.scores.teamA > finalState.scores.teamB) seasonAgg.wins++;
+    else if (finalState.scores.teamA < finalState.scores.teamB) seasonAgg.losses++;
+    else seasonAgg.ties++;
+
+    const quarterScored = [0,0,0,0], quarterAllowed = [0,0,0,0];
+    let h1Rush=0, h1Pass=0, h2Rush=0, h2Pass=0, oppH1Rush=0, oppH1Pass=0, oppH2Rush=0, oppH2Pass=0;
+    gamePlays.forEach(p => {
+      const q = Math.min(4, Math.max(1, p.quarter || 1)) - 1;
+      if (p.effect && p.effect.score){
+        if (p.effect.score.team === 'teamA') quarterScored[q] += p.effect.score.points; else quarterAllowed[q] += p.effect.score.points;
+      }
+      if (p.effect && p.effect.scoreAdjust){
+        if (p.effect.scoreAdjust.team === 'teamA') quarterScored[q] += p.effect.scoreAdjust.pts; else quarterAllowed[q] += p.effect.scoreAdjust.pts;
+      }
+      const r = p.roles;
+      if (!r) return;
+      const half = (p.quarter || 1) <= 2 ? 1 : 2;
+      if (r.playType === 'rush' && r.carrier && r.carrier.team === 'teamA'){ if (half===1) h1Rush += (r.carrier.yards||0); else h2Rush += (r.carrier.yards||0); }
+      if (r.playType === 'pass' && r.passer && r.passer.team === 'teamA'){ if (half===1) h1Pass += (r.passer.yards||0); else h2Pass += (r.passer.yards||0); }
+      if (r.playType === 'rush' && r.carrier && r.carrier.team === 'teamB'){ if (half===1) oppH1Rush += (r.carrier.yards||0); else oppH2Rush += (r.carrier.yards||0); }
+      if (r.playType === 'pass' && r.passer && r.passer.team === 'teamB'){ if (half===1) oppH1Pass += (r.passer.yards||0); else oppH2Pass += (r.passer.yards||0); }
+    });
+    for (let i=0;i<4;i++){ seasonAgg.quarterScored[i] += quarterScored[i]; seasonAgg.quarterAllowed[i] += quarterAllowed[i]; }
+
+    seasonAgg.perGame.push({
+      label: game.designator || '', totalYds: rushYds+passYds, rushYds, passYds,
+      h1Yds: h1Rush+h1Pass, h2Yds: h2Rush+h2Pass, h1Rush, h1Pass, h2Rush, h2Pass,
+      oppTotalYds: oppRushYds+oppPassYds, oppH1Yds: oppH1Rush+oppH1Pass, oppH2Yds: oppH2Rush+oppH2Pass,
+      pointsScored: finalState.scores.teamA, pointsAllowed: finalState.scores.teamB,
+      d3Pct: ownDowns.d3att ? Math.round(100*ownDowns.d3conv/ownDowns.d3att) : null,
+      oppD3Pct: oppDowns.d3att ? Math.round(100*oppDowns.d3conv/oppDowns.d3att) : null,
+      d4Pct: ownDowns.d4att ? Math.round(100*ownDowns.d4conv/ownDowns.d4att) : null,
+      oppD4Pct: oppDowns.d4att ? Math.round(100*oppDowns.d4conv/oppDowns.d4att) : null,
+      explosiveFor: ownDowns.explosive || 0, explosiveAgainst: oppDowns.explosive || 0,
+      possessions: possessions.teamA || 0, totalPlays: playsFor('teamA'),
+      penCount: pen.count, penYds: pen.yds,
+      turnovers: turnovers.teamA || 0, sacked: sumStat(box.teamA.passing, 'sacked')
+    });
+
+    // XLS export rows -- same 43-column "Stats" schema and "Game
+    // Totals" schema as stat_package.html's single-game export, just
+    // appended here once per game so the season file ends up with
+    // every game stacked together, matching the original reference
+    // spreadsheet's multi-game structure.
+    const gameIdMatch = (game.designator || '').match(/(\d+)/);
+    const gameId = gameIdMatch ? parseInt(gameIdMatch[1]) : (game.designator || '');
+    const blankRow = () => xlsStatsHeaders.map(() => '');
+    const setCols = (row, obj) => { Object.keys(obj).forEach(k => { const i = xlsStatsHeaders.indexOf(k); if (i>=0) row[i] = obj[k]; }); return row; };
+
+    Object.keys(box.teamA.rushing).forEach(n => {
+      const d = box.teamA.rushing[n], row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
+        'Rush Attempts': d.att||0, 'Rush Yards': d.yds||0, 'Yds Per Carry': d.att?+(d.yds/d.att).toFixed(1):'',
+        'Long Rush': d.long||0, 'Rush TD': d.td||0, FUMBLE: d.fum || '' });
+      xlsStatsRows.push(row);
+    });
+    Object.keys(box.teamA.passing).forEach(n => {
+      const d = box.teamA.passing[n], row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
+        'Pass Attempts': d.att||0, 'Pass Completions': d.comp||0, 'Comp Pctg': d.att?+(100*(d.comp||0)/d.att).toFixed(1):'',
+        'Pass Yards': d.yds||0, 'Long Pass': d.long||0, 'Pass TD': d.td||0, INT: d.intThrown||0, SACK: d.sacked||0 });
+      xlsStatsRows.push(row);
+    });
+    Object.keys(box.teamA.receiving).forEach(n => {
+      const d = box.teamA.receiving[n], row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
+        Receptions: d.rec||0, 'Receiving Yards': d.yds||0, 'Yards Per Catch': d.rec?+(d.yds/d.rec).toFixed(1):'',
+        'Long Recept': d.long||0, 'Receiving TD': d.td||0, FUMBLE: d.fum || '' });
+      xlsStatsRows.push(row);
+    });
+    Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].kickoffs).forEach(n => {
+      const d = box.teamA.specialTeams[n], row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n, 'special'),
+        'KO Attempt': d.kickoffs||0, 'KO Touchback': d.touchbacks||0 });
+      xlsStatsRows.push(row);
+    });
+    Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].patAtt).forEach(n => {
+      const d = box.teamA.specialTeams[n], row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n, 'special'),
+        'PA Attempt': d.patAtt||0, 'PA Made': d.patMade||0, 'PA Block': d.patBlocked||0 });
+      xlsStatsRows.push(row);
+    });
+    gamePlays.forEach(p => {
+      const r = p.roles;
+      if (r && r.playType === 'fg' && r.kicker && r.kicker.team === 'teamA'){
+        const row = blankRow();
+        setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', r.kicker.num, 'special'),
+          'FG Attempt': 1, 'FG Made': r.kicker.result==='g'?1:0, 'FG Block': r.kicker.result==='b'?1:0, 'FG Yards': r.kicker.yards||0 });
+        xlsStatsRows.push(row);
+      }
+      if (r && r.playType === 'punt' && r.punter && r.punter.team === 'teamA'){
+        const row = blankRow();
+        setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', r.punter.num, 'special'),
+          'Punt Attempt': 1, 'Punt Yards': r.punter.blocked?0:(r.punter.yards||0), 'PUNT BLK': r.punter.blocked?1:'' });
+        xlsStatsRows.push(row);
+      }
+    });
+    let sackCount=0, sackYardsLost=0;
+    gamePlays.forEach(p => { const r=p.roles; if (r && r.playType==='sack' && r.passer && r.passer.team==='teamA'){ sackCount++; sackYardsLost += (r.passer.yards||0); } });
+    if (sackCount){
+      const row = blankRow();
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Sacks and Bad Snaps', 'Rush Attempts': sackCount, 'Rush Yards': -sackYardsLost });
+      xlsStatsRows.push(row);
+    }
+    const defRow = blankRow();
+    setCols(defRow, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Defense',
+      'D-Sack': sumStat(box.teamA.defense,'sacks')||'', 'D-INT': sumStat(box.teamA.defense,'int')||'', 'D-FUM': sumStat(box.teamA.defense,'fumRec')||'',
+      'D-3rdAtt': oppDowns.d3att||'', 'D-3rdConv': oppDowns.d3conv||'', 'D-4thAtt': oppDowns.d4att||'',
+      'D-4thStop': oppDowns.d4att ? (oppDowns.d4att-oppDowns.d4conv) : '', 'D-20PlusPlay': oppDowns.explosive||'' });
+    xlsStatsRows.push(defRow);
+    const offRow = blankRow();
+    setCols(offRow, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Offense', 'D-20PlusPlay': ownDowns.explosive||'' });
+    xlsStatsRows.push(offRow);
+    const oppRow = blankRow();
+    setCols(oppRow, { GameID: gameId, Team: TEAMS.teamB.name, Player: TEAMS.teamB.name,
+      'Rush Attempts': oppRushAtt||'', 'Rush Yards': oppRushYds||'', 'Rush TD': oppRushTd||'',
+      'Pass Attempts': oppPassAtt||'', 'Pass Completions': oppPassComp||'', 'Pass Yards': oppPassYds||'', 'Pass TD': oppPassTd||'' });
+    xlsStatsRows.push(oppRow);
+
+    const visitorGtKey = game.our_team_is_home ? 'teamB' : 'teamA';
+    [ { key:'teamA', name: TEAMS.teamA.name, down: ownDowns, sacked: sumStat(box.teamA.passing,'sacked') },
+      { key:'teamB', name: TEAMS.teamB.name, down: null, sacked: '' } ].forEach(({key,name,down,sacked}) => {
+      const gtRow = xlsGtHeaders.map(() => '');
+      const setGt = (obj) => Object.keys(obj).forEach(k => { const i = xlsGtHeaders.indexOf(k); if (i>=0) gtRow[i] = obj[k]; });
+      setGt({ GameID: gameId, Team: name,
+        Q1: key==='teamB'?quarterAllowed[0]:quarterScored[0],
+        Q2: key==='teamB'?quarterAllowed[1]:quarterScored[1], Q3: key==='teamB'?quarterAllowed[2]:quarterScored[2], Q4: key==='teamB'?quarterAllowed[3]:quarterScored[3],
+        Final: finalState.scores[key],
+        Penalites: finalState.penalties[key].count||'', 'Penalty Yards': finalState.penalties[key].yds||'',
+        'H1 Yards': key==='teamA'?(h1Rush+h1Pass):'', 'H2 Yards': key==='teamA'?(h2Rush+h2Pass):'',
+        'Total Yards': key==='teamA'?(rushYds+passYds):(oppRushYds+oppPassYds),
+        Sacks: key==='teamA'?(sacked||''):'', TO: turnovers[key]||0, Possessions: possessions[key]||0,
+        'H1 Rushing': key==='teamA'?h1Rush:'', 'H1 Passing': key==='teamA'?h1Pass:'', 'H2 Rushing': key==='teamA'?h2Rush:'', 'H2 Passing': key==='teamA'?h2Pass:'' });
+      if (down){ setGt({ '3D Att': down.d3att||'', '3D Conv': down.d3conv||'', '4D Att': down.d4att||'', '4D Conv': down.d4conv||'' }); }
+      xlsGtRows.push(gtRow);
+    });
+  }
+
+  const xlsStatsHeaders = ['GameID','Team','Player','Rush Attempts','Rush Yards','Yds Per Carry','Long Rush','Rush TD',
+    'Pass Attempts','Pass Completions','Comp Pctg','Pass Yards','Long Pass','Pass TD','INT','SACK',
+    'Receptions','Receiving Yards','Yards Per Catch','Long Recept','Receiving TD','FUMBLE',
+    'KO Attempt','KO Touchback','PA Attempt','PA Made','PA Block','FG Attempt','FG Made','FG Block','FG Yards','Long FG',
+    'Punt Attempt','Punt Yards','Long Punt','PUNT BLK',
+    'D-Sack','D-INT','D-FUM','D-3rdAtt','D-3rdConv','D-4thAtt','D-4thStop','D-20PlusPlay'];
+  const xlsGtHeaders = ['GameID','Team','Q1','Q2','Q3','Q4','OT','Final','Penalites','Penalty Yards',
+    'H1 Yards','H2 Yards','Total Yards','Sacks','TO','Possessions','3D Att','3D Conv','4D Att','4D Conv',
+    'H1 Rushing','H1 Passing','H2 Rushing','H2 Passing'];
+  const xlsStatsRows = [], xlsGtRows = [];
+
+  function buildWorkbook(){
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([xlsStatsHeaders, ...xlsStatsRows]), 'Stats');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([xlsGtHeaders, ...xlsGtRows]), 'Game Totals');
+    return wb;
+  }
+
+  document.getElementById('downloadXlsBtn').addEventListener('click', () => {
+    const wb = buildWorkbook();
+    const filename = 'Neville_' + seasonYearLabel + '_season_stats.xlsx';
+    XLSX.writeFile(wb, filename.replace(/[^a-z0-9._-]+/gi, '_'));
+  });
+
+
   async function init(){
     const params = new URLSearchParams(window.location.search);
-    const currentGameId = params.get('id');
-    if (!currentGameId){
+    const season = params.get('season');
+    if (!season){
       showView('errorView');
-      document.getElementById('errorMsg').textContent = 'No game specified.';
+      document.getElementById('errorMsg').textContent = 'No season specified.';
       return;
     }
-
-    const { data: gameRows, error: gameError } = await supabaseClient
-      .from('games').select('*').eq('id', currentGameId).limit(1);
-    if (gameError || !gameRows || gameRows.length === 0){
-      showView('errorView');
-      document.getElementById('errorMsg').textContent = gameError ? gameError.message : 'That game could not be found.';
-      return;
-    }
-    const game = gameRows[0];
-    gameLabel = game.designator;
-    gameDate = game.game_date;
-    quarterLengthSec = game.quarter_length_seconds || 720;
-
-    const { data: rosterRows, error: rosterError } = await supabaseClient
-      .from('game_rosters').select('*').eq('game_id', currentGameId);
-    if (rosterError){
-      showView('errorView');
-      document.getElementById('errorMsg').textContent = rosterError.message;
-      return;
-    }
+    seasonYearLabel = season;
 
     const { data: teamRows } = await supabaseClient
       .from('teams').select('primary_color, secondary_color, logo_url').eq('is_our_team', true).limit(1);
-    const ourBranding = (teamRows && teamRows[0]) || {};
+    seasonAgg.ourBranding = (teamRows && teamRows[0]) || {};
 
-    buildTeams(game, rosterRows || [], ourBranding);
-
-    const { data: existingPlays, error: playsError } = await supabaseClient
-      .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
-    if (playsError){
+    const { data: gameRows, error: gameError } = await supabaseClient
+      .from('games').select('*').eq('season_year', parseInt(season)).eq('status', 'final')
+      .order('game_date', { ascending: true });
+    if (gameError){
       showView('errorView');
-      document.getElementById('errorMsg').textContent = playsError.message;
+      document.getElementById('errorMsg').textContent = gameError.message;
       return;
     }
-    plays = (existingPlays || []).map(p => ({
-      text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
-      roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
-    }));
+    if (!gameRows || gameRows.length === 0){
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = 'No finalized games found for this season.';
+      return;
+    }
 
-    document.title = 'Statistics Report — ' + TEAMS.teamA.name + ' vs ' + TEAMS.teamB.name;
     try {
-      document.getElementById('reportContent').innerHTML = renderReport();
+      for (const game of gameRows){
+        const { data: rosterRows, error: rosterError } = await supabaseClient
+          .from('game_rosters').select('*').eq('game_id', game.id);
+        if (rosterError) throw new Error('Roster for ' + (game.designator||game.id) + ': ' + rosterError.message);
+        const { data: gamePlaysRaw, error: playsError } = await supabaseClient
+          .from('plays').select('*').eq('game_id', game.id).order('sequence_number', { ascending: true });
+        if (playsError) throw new Error('Plays for ' + (game.designator||game.id) + ': ' + playsError.message);
+        const gamePlays = (gamePlaysRaw || []).map(p => ({
+          text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+          roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+        }));
+        processGame(game, rosterRows || [], gamePlays);
+      }
+
+      document.title = 'Season Report — ' + seasonYearLabel;
+      document.getElementById('reportContent').innerHTML = renderSeasonReport();
       showView('mainView');
+      initCharts();
     } catch (err) {
       showView('errorView');
       document.getElementById('errorMsg').textContent = 'This report could not be built: ' + err.message;
@@ -459,386 +705,288 @@
     }
   }
 
-  document.getElementById('downloadPdfBtn').addEventListener('click', () => window.print());
-
-  function buildWorkbook(){
-    const box = computeBoxScore(plays);
-    const finalState = computeState();
-    const possessions = countPossessions(plays);
-    const turnovers = countTurnovers(plays);
-    const gameIdMatch = (gameLabel || '').match(/(\d+)/);
-    const gameId = gameIdMatch ? parseInt(gameIdMatch[1]) : (gameLabel || '');
-    const oppKey = 'teamB';
-
-    // Quarter-by-quarter scoring, with any 5th-or-later quarter folded
-    // into a single OT total rather than clamped into Q4.
-    const quarterScores = { teamA: [0,0,0,0], teamB: [0,0,0,0] };
-    const otScores = { teamA: 0, teamB: 0 };
-    plays.forEach(p => {
-      const q = p.quarter || 1;
-      const points = (p.effect && p.effect.score) ? p.effect.score : null;
-      const adjust = (p.effect && p.effect.scoreAdjust) ? p.effect.scoreAdjust : null;
-      if (points){
-        if (q >= 5) otScores[points.team] += points.points;
-        else quarterScores[points.team][q-1] += points.points;
-      }
-      if (adjust){
-        if (q >= 5) otScores[adjust.team] += adjust.pts;
-        else quarterScores[adjust.team][q-1] += adjust.pts;
-      }
-    });
-
-    // Half-by-half yardage, split into rushing and passing separately
-    // (quarters 1-2 = first half, 3+ = second half) -- nothing
-    // upstream computes this, so it's built directly from the play log.
-    const halfYards = { teamA: { h1Rush:0, h1Pass:0, h2Rush:0, h2Pass:0 }, teamB: { h1Rush:0, h1Pass:0, h2Rush:0, h2Pass:0 } };
-    plays.forEach(p => {
-      const r = p.roles;
-      if (!r) return;
-      const half = (p.quarter || 1) <= 2 ? 'h1' : 'h2';
-      if (r.playType === 'rush' && r.carrier) halfYards[r.carrier.team][half+'Rush'] += (r.carrier.yards || 0);
-      if (r.playType === 'pass' && r.passer) halfYards[r.passer.team][half+'Pass'] += (r.passer.yards || 0);
-    });
-
-    const headers = ['GameID','Team','Player','Rush Attempts','Rush Yards','Yds Per Carry','Long Rush','Rush TD',
-      'Pass Attempts','Pass Completions','Comp Pctg','Pass Yards','Long Pass','Pass TD','INT','SACK',
-      'Receptions','Receiving Yards','Yards Per Catch','Long Recept','Receiving TD','FUMBLE',
-      'KO Attempt','KO Touchback','PA Attempt','PA Made','PA Block','FG Attempt','FG Made','FG Block','FG Yards','Long FG',
-      'Punt Attempt','Punt Yards','Long Punt','PUNT BLK',
-      'D-Sack','D-INT','D-FUM','D-3rdAtt','D-3rdConv','D-4thAtt','D-4thStop','D-20PlusPlay'];
-    const blankRow = () => headers.map(() => '');
-    const setCols = (row, obj) => { Object.keys(obj).forEach(k => { row[headers.indexOf(k)] = obj[k]; }); return row; };
-    const rows = [headers];
-
-    // Rushing -- one row per rusher, aggregated for the game, with a
-    // Long field since that's how the reference tracks rush/pass/rec.
-    Object.keys(box.teamA.rushing).forEach(n => {
-      const d = box.teamA.rushing[n];
-      const row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
-        'Rush Attempts': d.att||0, 'Rush Yards': d.yds||0,
-        'Yds Per Carry': d.att ? +(d.yds/d.att).toFixed(1) : '', 'Long Rush': d.long||0, 'Rush TD': d.td||0,
-        FUMBLE: d.fum || '' });
-      rows.push(row);
-    });
-
-    // Passing -- one row per passer, aggregated for the game.
-    Object.keys(box.teamA.passing).forEach(n => {
-      const d = box.teamA.passing[n];
-      const row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
-        'Pass Attempts': d.att||0, 'Pass Completions': d.comp||0,
-        'Comp Pctg': d.att ? +(100*(d.comp||0)/d.att).toFixed(1) : '',
-        'Pass Yards': d.yds||0, 'Long Pass': d.long||0, 'Pass TD': d.td||0, INT: d.intThrown||0, SACK: d.sacked||0 });
-      rows.push(row);
-    });
-
-    // Receiving -- one row per receiver, aggregated for the game.
-    Object.keys(box.teamA.receiving).forEach(n => {
-      const d = box.teamA.receiving[n];
-      const row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
-        Receptions: d.rec||0, 'Receiving Yards': d.yds||0,
-        'Yards Per Catch': d.rec ? +(d.yds/d.rec).toFixed(1) : '', 'Long Recept': d.long||0, 'Receiving TD': d.td||0,
-        FUMBLE: d.fum || '' });
-      rows.push(row);
-    });
-
-    // Kickoffs -- aggregated per kicker for the game.
-    Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].kickoffs).forEach(n => {
-      const d = box.teamA.specialTeams[n];
-      const row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n, 'special'),
-        'KO Attempt': d.kickoffs||0, 'KO Touchback': d.touchbacks||0 });
-      rows.push(row);
-    });
-
-    // PAT -- aggregated per kicker for the game.
-    Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].patAtt).forEach(n => {
-      const d = box.teamA.specialTeams[n];
-      const row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n, 'special'),
-        'PA Attempt': d.patAtt||0, 'PA Made': d.patMade||0, 'PA Block': d.patBlocked||0 });
-      rows.push(row);
-    });
-
-    // FG and Punts -- one row per individual attempt, matching the
-    // reference exactly, since "Long FG"/"Long Punt" and block status
-    // are per-play facts, not something that survives aggregation the
-    // way rush/pass/rec's single Long field does. Read straight off
-    // the play log rather than the aggregated box score buckets.
-    plays.forEach(p => {
-      const r = p.roles;
-      if (!r || r.playType !== 'fg' || !r.kicker || r.kicker.team !== 'teamA') return;
-      const row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', r.kicker.num, 'special'),
-        'FG Attempt': 1, 'FG Made': r.kicker.result === 'g' ? 1 : 0, 'FG Block': r.kicker.result === 'b' ? 1 : 0,
-        'FG Yards': r.kicker.yards || 0 });
-      rows.push(row);
-    });
-    plays.forEach(p => {
-      const r = p.roles;
-      if (!r || r.playType !== 'punt' || !r.punter || r.punter.team !== 'teamA') return;
-      const row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', r.punter.num, 'special'),
-        'Punt Attempt': 1, 'Punt Yards': r.punter.blocked ? 0 : (r.punter.yards || 0), 'PUNT BLK': r.punter.blocked ? 1 : '' });
-      rows.push(row);
-    });
-
-    // Sacks and Bad Snaps -- yardage lost to sacks against our own
-    // passer, tracked as a negative rushing line per football
-    // convention. computeBoxScore only counts sacks, it never sums
-    // the yardage lost, so this reads the raw play log directly.
-    let sackCount = 0, sackYardsLost = 0;
-    plays.forEach(p => {
-      const r = p.roles;
-      if (r && r.playType === 'sack' && r.passer && r.passer.team === 'teamA'){
-        sackCount++; sackYardsLost += (r.passer.yards || 0);
-      }
-    });
-    if (sackCount){
-      const row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Sacks and Bad Snaps',
-        'Rush Attempts': sackCount, 'Rush Yards': -sackYardsLost });
-      rows.push(row);
-    }
-
-    // Defense -- our own defense's totals against the opponent's offense.
-    // The opponent's own offensive numbers are stored on box.teamA's
-    // oppDowns entry (that's "the other team's -- teamB's -- own
-    // offense", by the same logic the team-stats section already uses).
-    const oppOffenseVsUs = box.teamA.oppDowns;
-    const defRow = blankRow();
-    setCols(defRow, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Defense',
-      'D-Sack': sumStat(box.teamA.defense,'sacks')||'', 'D-INT': sumStat(box.teamA.defense,'int')||'',
-      'D-FUM': sumStat(box.teamA.defense,'fumRec')||'',
-      'D-3rdAtt': oppOffenseVsUs.d3att||'', 'D-3rdConv': oppOffenseVsUs.d3conv||'',
-      'D-4thAtt': oppOffenseVsUs.d4att||'', 'D-4thStop': oppOffenseVsUs.d4att ? (oppOffenseVsUs.d4att - oppOffenseVsUs.d4conv) : '',
-      'D-20PlusPlay': oppOffenseVsUs.explosive||'' });
-    rows.push(defRow);
-
-    // Offense -- our own explosive-play count, stored on box.teamB's
-    // oppDowns entry (that's "the other team's defense against this
-    // team's offense", i.e. our own numbers).
-    const ourOffense = box.teamB.oppDowns;
-    const offRow = blankRow();
-    setCols(offRow, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Offense', 'D-20PlusPlay': ourOffense.explosive||'' });
-    rows.push(offRow);
-
-    // Opponent -- one combined team-total row, since individual
-    // opponent players aren't tracked (StatChat has no way to enter
-    // an opponent roster).
-    const oppRush = box[oppKey].rushing, oppPass = box[oppKey].passing;
-    const oppRushAtt = sumStat(oppRush,'att'), oppRushYds = sumStat(oppRush,'yds'), oppRushTd = sumStat(oppRush,'td');
-    const oppPassAtt = sumStat(oppPass,'att'), oppPassComp = sumStat(oppPass,'comp'), oppPassYds = sumStat(oppPass,'yds'), oppPassTd = sumStat(oppPass,'td');
-    const oppRow = blankRow();
-    setCols(oppRow, { GameID: gameId, Team: TEAMS[oppKey].name, Player: TEAMS[oppKey].name,
-      'Rush Attempts': oppRushAtt||'', 'Rush Yards': oppRushYds||'', 'Rush TD': oppRushTd||'',
-      'Pass Attempts': oppPassAtt||'', 'Pass Completions': oppPassComp||'', 'Pass Yards': oppPassYds||'', 'Pass TD': oppPassTd||'' });
-    rows.push(oppRow);
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Stats');
-
-    // Game Totals -- one row per team, matching the reference sheet's
-    // exact columns (including its "Penalites" spelling, since a
-    // downstream dashboard may already query that exact name).
-    const gtHeaders = ['GameID','Team','Q1','Q2','Q3','Q4','OT','Final','Penalites','Penalty Yards',
-      'H1 Yards','H2 Yards','Total Yards','Sacks','TO','Possessions','3D Att','3D Conv','4D Att','4D Conv',
-      'H1 Rushing','H1 Passing','H2 Rushing','H2 Passing'];
-    const gtRows = [gtHeaders];
-    [ 'teamA', oppKey ].forEach(teamKey => {
-      const pen = finalState.penalties[teamKey];
-      const hy = halfYards[teamKey];
-      const h1Total = hy.h1Rush + hy.h1Pass, h2Total = hy.h2Rush + hy.h2Pass;
-      const own = box[otherTeam(teamKey)].oppDowns; // this team's own offensive down conversions
-      const gtRow = new Array(gtHeaders.length).fill('');
-      const setGt = (obj) => Object.keys(obj).forEach(k => { gtRow[gtHeaders.indexOf(k)] = obj[k]; });
-      setGt({
-        GameID: gameId, Team: TEAMS[teamKey].name,
-        Q1: quarterScores[teamKey][0], Q2: quarterScores[teamKey][1], Q3: quarterScores[teamKey][2], Q4: quarterScores[teamKey][3],
-        OT: otScores[teamKey] || '', Final: finalState.scores[teamKey],
-        Penalites: pen.count || '', 'Penalty Yards': pen.yds || '',
-        'H1 Yards': h1Total, 'H2 Yards': h2Total, 'Total Yards': h1Total + h2Total,
-        Sacks: sumStat(box[teamKey].passing, 'sacked') || '', TO: turnovers[teamKey] || 0,
-        Possessions: possessions[teamKey] || 0,
-        '3D Att': own.d3att || '', '3D Conv': own.d3conv || '', '4D Att': own.d4att || '', '4D Conv': own.d4conv || '',
-        'H1 Rushing': hy.h1Rush, 'H1 Passing': hy.h1Pass, 'H2 Rushing': hy.h2Rush, 'H2 Passing': hy.h2Pass
-      });
-      gtRows.push(gtRow);
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(gtRows), 'Game Totals');
-
-    return wb;
-  }
-
-  document.getElementById('downloadXlsBtn').addEventListener('click', () => {
-    const wb = buildWorkbook();
-    const filename = (gameLabel || 'game') + '_stat_package.xlsx';
-    XLSX.writeFile(wb, filename.replace(/[^a-z0-9._-]+/gi, '_'));
-  });
-
-  function sumStat(bucketObj, key){
-    return Object.keys(bucketObj).reduce((t, n) => t + (bucketObj[n][key] || 0), 0);
-  }
-  function maxStat(bucketObj, key){
-    return Object.keys(bucketObj).reduce((t, n) => Math.max(t, bucketObj[n][key] || 0), 0);
-  }
-  function statTable(teamKey, bucketObj, headers, rowFn, totalFn, sortKey, nameUnit){
-    const nums = Object.keys(bucketObj);
-    if (!nums.length) return '';
-    const sorted = nums.slice().sort((a, b) => (bucketObj[b][sortKey]||0) - (bucketObj[a][sortKey]||0));
-    let h = '<table class="stat-table"><tr><th></th>' + headers.map(x => '<th>' + x + '</th>').join('') + '</tr>';
-    sorted.forEach(n => {
-      h += '<tr><td>' + playerName(teamKey, n, nameUnit) + '</td>' + rowFn(bucketObj[n], n).map(v => '<td>' + v + '</td>').join('') + '</tr>';
-    });
-    h += '<tr class="total-row"><td>Total</td>' + totalFn(bucketObj, nums).map(v => '<td>' + v + '</td>').join('') + '</tr>';
-    return h + '</table>';
-  }
-
-  function renderReport(){
-    const box = computeBoxScore(plays);
-    const finalState = computeState();
-    const possessions = countPossessions(plays);
-    const turnovers = countTurnovers(plays);
-    const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
-    const playsFor = (teamKey) => plays.filter(p => p.team === teamKey && p.roles && scrimmageTypes.includes(p.roles.playType)).length;
-
-    const quarterScores = { teamA: [0,0,0,0], teamB: [0,0,0,0] };
-    plays.forEach(p => {
-      const q = Math.min(4, Math.max(1, p.quarter || 1)) - 1;
-      if (p.effect && p.effect.score) quarterScores[p.effect.score.team][q] += p.effect.score.points;
-      if (p.effect && p.effect.scoreAdjust) quarterScores[p.effect.scoreAdjust.team][q] += p.effect.scoreAdjust.pts;
-    });
-
-    const teamMetrics = (teamKey) => {
-      const s = box[teamKey];
-      const rushYds = sumStat(s.rushing, 'yds'), rushAtt = sumStat(s.rushing, 'att'), rushTd = sumStat(s.rushing, 'td');
-      // Verified against real NFL box scores: sack yardage lost comes
-      // out of the team's Pass Yards total, not Rushing. A passer's
-      // own personal statline stays unadjusted -- only this team-level
-      // total subtracts it. computeBoxScore only counts sacks, never
-      // sums their yardage, so this reads the raw play log directly.
-      const sackYardsLost = plays.reduce((t, p) => {
-        const r = p.roles;
-        return (r && r.playType === 'sack' && r.passer && r.passer.team === teamKey) ? t + (r.passer.yards || 0) : t;
-      }, 0);
-      const passYds = sumStat(s.passing, 'yds') - sackYardsLost, passAtt = sumStat(s.passing, 'att'), sacked = sumStat(s.passing, 'sacked');
-      const passComp = sumStat(s.passing, 'comp');
-      const passTd = sumStat(s.passing, 'td');
-      const totalYds = rushYds + passYds, totalPlays = playsFor(teamKey);
-      const own = box[otherTeam(teamKey)].oppDowns;
-      const pen = finalState.penalties[teamKey];
-      return { totalYds, totalPlays, passYds, passAtt, passComp, passTd, rushYds, rushAtt, rushTd, sacked,
-        turnovers: turnovers[teamKey]||0, penCount: pen.count, penYds: pen.yds,
-        possessions: possessions[teamKey]||0, own };
-    };
-
-    const visitorKey = TEAMS.teamA.isHome ? 'teamB' : 'teamA';
-    const homeKey = TEAMS.teamA.isHome ? 'teamA' : 'teamB';
+  function renderSeasonReport(){
+    const t = seasonAgg.totals, gamesPlayed = seasonAgg.perGame.length;
+    const totalYds = t.rushYds + t.passYds, oppTotalYds = t.oppRushYds + t.oppPassYds;
+    const per = (v) => gamesPlayed ? +(v/gamesPlayed).toFixed(1) : 0;
+    const pct = (c,a) => a ? Math.round(100*c/a) : 0;
 
     let html = '<div class="report-header"><img class="statchat-logo" src="logo.png" alt="StatChat">' +
-      '<h1>' + TEAMS[visitorKey].name + ' @ ' + TEAMS[homeKey].name + '</h1>' +
-      '<div class="sub">' + (gameLabel || '') + (gameDate ? ' &middot; ' + new Date(gameDate + 'T00:00:00').toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'}) : '') + '</div>' +
+      '<h1>' + TEAMS.teamA.name + ' — ' + seasonYearLabel + ' season</h1>' +
+      '<div class="record">' + seasonAgg.wins + '-' + seasonAgg.losses + (seasonAgg.ties ? '-' + seasonAgg.ties : '') +
+      ' &middot; ' + gamesPlayed + ' games</div></div>';
+
+    html += '<div class="section"><div class="section-title">Season totals</div>' +
+      '<div class="chart-row">' +
+      '<div class="chart-col-metrics">' +
+        [[t.pointsScored,'Points scored'],[per(t.pointsScored),'Scored/game'],[t.pointsAllowed,'Points allowed'],[per(t.pointsAllowed),'Allowed/game']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div>' +
+      '<div class="chart-col-metrics">' +
+        [[totalYds,'Total yards'],[per(totalYds),'Yards/game'],[oppTotalYds,'Yards allowed'],[per(oppTotalYds),'Allowed/game']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div>' +
+      '<div class="chart-box"><canvas id="chartPointsByQuarter"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chartHalfYards"></canvas></div>' +
+      '</div></div>';
+
+    html += '<div class="section"><div class="section-title">Run / pass mix</div>' +
+      '<div class="chart-row">' +
+      '<div class="chart-col-metrics">' +
+        [[t.rushAtt,'Rush att'],[t.passAtt,'Pass att']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div>' +
+      '<div class="chart-col-metrics">' +
+        [[t.rushYds,'Rush yds'],[t.rushAtt?+(t.rushYds/t.rushAtt).toFixed(1):0,'Yds/rush'],
+         [t.passYds,'Pass yds'],[t.passAtt?+(t.passYds/t.passAtt).toFixed(1):0,'Yds/pass']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div>' +
+      '<div class="chart-box"><canvas id="chartRunPassAtt"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chartRunPassYds"></canvas></div>' +
+      '</div></div>';
+
+    html += '<div class="section page-break"><div class="section-title">Yards by game</div>' +
+      '<div class="chart-box wide"><canvas id="chartYardsByGame"></canvas></div>' +
+      '<div class="chart-box wide" style="margin-top:14px;"><canvas id="chartPassRushByGame"></canvas></div>' +
       '</div>';
 
-    html += '<table class="quarter-table"><tr><th></th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Final</th></tr>' +
-      '<tr><td>' + TEAMS[visitorKey].name + '</td>' + quarterScores[visitorKey].map(v=>'<td>'+v+'</td>').join('') + '<td>' + finalState.scores[visitorKey] + '</td></tr>' +
-      '<tr><td>' + TEAMS[homeKey].name + '</td>' + quarterScores[homeKey].map(v=>'<td>'+v+'</td>').join('') + '<td>' + finalState.scores[homeKey] + '</td></tr>' +
-      '</table>';
+    html += '<div class="section"><div class="section-title">Discipline</div>' +
+      '<div class="chart-row-3">' +
+      '<div class="chart-col-metrics">' +
+        [[t.turnovers,'Turnovers'],[per(t.turnovers),'Per game']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div>' +
+      '<div class="chart-col-metrics">' +
+        [[t.sacked,'Sacks allowed'],[per(t.sacked),'Per game']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div>' +
+      '<div class="chart-col-metrics">' +
+        [[t.penCount,'Penalties'],[per(t.penCount),'Pen/game'],[t.penYds,'Penalty yds'],[per(t.penYds),'Pen yds/game']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div>' +
+      '<div class="chart-box"><canvas id="chartTurnoversByGame"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chartSacksByGame"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chartPenaltiesByGame"></canvas></div>' +
+      '</div></div>';
 
-    const teamBlock = (teamKey, allowedLabel) => {
-      const m = teamMetrics(teamKey);
-      const groups = [
-        { color: '#534AB7', label: 'Overall', items: [
-          [m.totalYds, allowedLabel ? 'Yds allowed' : 'Total yds'], [m.totalPlays, 'Plays'],
-          [m.totalPlays ? (m.totalYds/m.totalPlays).toFixed(1) : '0.0', 'Yds/play'], [m.possessions, 'Possessions'] ] },
-        { color: '#0F6E56', label: 'Passing', items: [
-          [m.passYds, 'Yds'], [m.passAtt ? (m.passYds/m.passAtt).toFixed(1) : '0.0', 'Yds/att'], [m.passTd, 'TD'],
-          [m.passAtt ? Math.round(100*m.passComp/m.passAtt)+'%' : '—', 'Comp %'] ] },
-        { color: '#993C1D', label: 'Rushing', items: [
-          [m.rushYds, 'Yds'], [m.rushAtt ? (m.rushYds/m.rushAtt).toFixed(1) : '0.0', 'Yds/att'], [m.rushTd, 'TD'] ] },
-        { color: '#993556', label: 'Discipline', items: [
-          [m.turnovers, 'Turnovers'], [m.sacked, 'Sacks allowed'], [m.penCount + '-' + m.penYds, 'Penalties'] ] },
-        { color: '#999', label: 'Efficiency', items: [
-          [m.own.d3Pct !== null ? m.own.d3conv+'/'+m.own.d3att+' ('+m.own.d3Pct+'%)' : '—', '3rd down'],
-          [m.own.d4Pct !== null ? m.own.d4conv+'/'+m.own.d4att+' ('+m.own.d4Pct+'%)' : '—', '4th down'],
-          [m.own.explosive, '20yd+ plays'] ] }
-      ];
-      const groupHtml = groups.map(g => '<div class="metric-group">' +
-        '<div class="metric-group-label">' + g.label + '</div>' +
-        '<div class="metric-group-row">' + g.items.map(([val,label]) =>
-          '<div class="metric-item"><span class="metric-val">' + val + '</span><span class="metric-label">' + label + '</span></div>').join('') +
-        '</div></div>').join('');
-      return '<div class="team-block">' +
-        '<div class="team-block-header">' + (TEAMS[teamKey].logo ? '<img class="team-block-logo" src="'+TEAMS[teamKey].logo+'">' : '') + TEAMS[teamKey].name + '</div>' +
-        groupHtml + '</div>';
+    html += '<div class="section"><div class="section-title">Efficiency</div>' +
+      '<div class="chart-row">' +
+      '<div class="chart-col-metrics">' +
+        [[t.oppD3att?pct(t.oppD3conv,t.oppD3att)+'%':'—','3rd down %']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div>' +
+      '<div class="chart-col-metrics">' +
+        [[t.oppD4att?pct(t.oppD4conv,t.oppD4att)+'%':'—','4th down %']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div>' +
+      '<div class="chart-box"><canvas id="chart3rdDownByGame"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chart4thDownByGame"></canvas></div>' +
+      '</div>' +
+      '<div class="chart-row" style="margin-top:24px;">' +
+      '<div class="chart-col-metrics">' +
+        [[t.explosiveFor,'20yd+ plays'],[t.explosiveAgainst,'20yd+ allowed']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div>' +
+      '<div class="chart-col-metrics">' +
+        [[t.possessions,'Possessions'],[per(t.possessions),'Poss/game'],[per(t.totalPlays),'Plays/game']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div>' +
+      '<div class="chart-box"><canvas id="chartExplosiveByGame"></canvas></div>' +
+      '<div class="chart-box"><canvas id="chartPossPlaysByGame"></canvas></div>' +
+      '</div></div>';
+
+    const seasonStatTable = (bucketObj, headers, rowFn, totalFn, sortKey) => {
+      const names = Object.keys(bucketObj);
+      if (!names.length) return '<p class="no-stats">No stats recorded.</p>';
+      const sorted = names.slice().sort((a,b) => (bucketObj[b][sortKey]||0) - (bucketObj[a][sortKey]||0));
+      let h = '<table class="stat-table"><tr><th></th>' + headers.map(x=>'<th>'+x+'</th>').join('') + '</tr>';
+      sorted.forEach(name => { h += '<tr><td>'+name+'</td>'+rowFn(bucketObj[name]).map(v=>'<td>'+v+'</td>').join('')+'</tr>'; });
+      h += '<tr class="total-row"><td>Total</td>'+totalFn(bucketObj, sorted).map(v=>'<td>'+v+'</td>').join('')+'</tr>';
+      return h + '</table>';
     };
-    html += teamBlock('teamA', false) + teamBlock('teamB', true);
 
-    html += '<div class="section-title">' + TEAMS.teamA.name + ' — Passing</div>' +
-      (statTable('teamA', box.teamA.passing, ['Att','Comp','%','Yds','Y/C','Long','TD','Int','Sacked','Rush TD','Fumble'],
-        (d, n) => { const rd = box.teamA.rushing[n] || {};
-          return [d.att||0, d.comp||0, d.att?Math.round(100*(d.comp||0)/d.att):0, d.yds||0, d.comp?(d.yds/d.comp).toFixed(1):'0.0', d.long||0, d.td||0, d.intThrown||0, d.sacked||0, rd.td||0, (d.fum||0)+(rd.fum||0)]; },
-        (obj, nums) => { const att=sumStat(obj,'att'), comp=sumStat(obj,'comp'), yds=sumStat(obj,'yds');
-          const rushTdTotal = nums.reduce((t,n) => t + ((box.teamA.rushing[n]&&box.teamA.rushing[n].td)||0), 0);
-          const fumTotal = nums.reduce((t,n) => t + ((obj[n].fum||0) + ((box.teamA.rushing[n]&&box.teamA.rushing[n].fum)||0)), 0);
-          return [att, comp, att?Math.round(100*comp/att):0, yds, comp?(yds/comp).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'intThrown'), sumStat(obj,'sacked'), rushTdTotal, fumTotal]; },
-        'yds') || '<p class="no-stats">No passing stats recorded.</p>');
+    html += '<div class="section page-break"><div class="section-title">' + TEAMS.teamA.name + ' — Passing</div>' +
+      seasonStatTable(seasonAgg.passing, ['Att','Comp','%','Yds','Y/C','Long','TD','Int','Sacked'],
+        d => [d.att||0, d.comp||0, d.att?Math.round(100*(d.comp||0)/d.att):0, d.yds||0, d.comp?+(d.yds/d.comp).toFixed(1):0, d.long||0, d.td||0, d.intThrown||0, d.sacked||0],
+        (obj, names) => { const att=names.reduce((t,n)=>t+(obj[n].att||0),0), comp=names.reduce((t,n)=>t+(obj[n].comp||0),0), yds=names.reduce((t,n)=>t+(obj[n].yds||0),0);
+          return [att, comp, att?Math.round(100*comp/att):0, yds, comp?+(yds/comp).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].long||0)), names.reduce((t,n)=>t+(obj[n].td||0),0), names.reduce((t,n)=>t+(obj[n].intThrown||0),0), names.reduce((t,n)=>t+(obj[n].sacked||0),0)]; },
+        'yds') + '</div>';
 
-    html += '<div class="section-title">' + TEAMS.teamA.name + ' — Receiving</div>' +
-      (statTable('teamA', box.teamA.receiving, ['Rec','Yds','Y/C','Long','TD','Fumble'],
-        d => [d.rec||0, d.yds||0, d.rec?(d.yds/d.rec).toFixed(1):'0.0', d.long||0, d.td||0, d.fum||0],
-        (obj) => { const rec=sumStat(obj,'rec'), yds=sumStat(obj,'yds');
-          return [rec, yds, rec?(yds/rec).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
-        'yds') || '<p class="no-stats">No receiving stats recorded.</p>');
+    html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Receiving</div>' +
+      seasonStatTable(seasonAgg.receiving, ['Rec','Yds','Y/C','Long','TD','Fum'],
+        d => [d.rec||0, d.yds||0, d.rec?+(d.yds/d.rec).toFixed(1):0, d.long||0, d.td||0, d.fum||0],
+        (obj, names) => { const rec=names.reduce((t,n)=>t+(obj[n].rec||0),0), yds=names.reduce((t,n)=>t+(obj[n].yds||0),0);
+          return [rec, yds, rec?+(yds/rec).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].long||0)), names.reduce((t,n)=>t+(obj[n].td||0),0), names.reduce((t,n)=>t+(obj[n].fum||0),0)]; },
+        'yds') + '</div>';
 
-    html += '<div class="section-title">' + TEAMS.teamA.name + ' — Rushing</div>' +
-      (statTable('teamA', box.teamA.rushing, ['Att','Yds','Y/C','Long','TD','Fumble'],
-        d => [d.att||0, d.yds||0, d.att?(d.yds/d.att).toFixed(1):'0.0', d.long||0, d.td||0, d.fum||0],
-        (obj) => { const att=sumStat(obj,'att'), yds=sumStat(obj,'yds');
-          return [att, yds, att?(yds/att).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
-        'yds') || '<p class="no-stats">No rushing stats recorded.</p>');
+    html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Rushing</div>' +
+      seasonStatTable(seasonAgg.rushing, ['Att','Yds','Y/C','Long','TD','Fum'],
+        d => [d.att||0, d.yds||0, d.att?+(d.yds/d.att).toFixed(1):0, d.long||0, d.td||0, d.fum||0],
+        (obj, names) => { const att=names.reduce((t,n)=>t+(obj[n].att||0),0), yds=names.reduce((t,n)=>t+(obj[n].yds||0),0);
+          return [att, yds, att?+(yds/att).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].long||0)), names.reduce((t,n)=>t+(obj[n].td||0),0), names.reduce((t,n)=>t+(obj[n].fum||0),0)]; },
+        'yds') + '</div>';
 
-    const defOwn = box.teamB.oppDowns;
-    const defNums = Object.keys(box.teamA.defense);
-    html += '<div class="section-title">' + TEAMS.teamA.name + ' — Defense</div>';
-    html += defNums.length || defOwn.d3att || defOwn.d4att || defOwn.explosive
-      ? '<table class="stat-table"><tr><th></th><th>Int</th><th>Fum Forced</th><th>Sacks</th><th>Opp 3rd %</th><th>Opp 4th %</th><th>Plays Over 20 Allowed</th></tr>' +
-        '<tr><td>Defense</td><td>' + sumStat(box.teamA.defense,'int') + '</td><td>' + sumStat(box.teamA.defense,'fumRec') + '</td><td>' + sumStat(box.teamA.defense,'sacks') + '</td>' +
-        '<td>' + (defOwn.d3Pct !== null ? defOwn.d3Pct+'%' : '—') + '</td><td>' + (defOwn.d4Pct !== null ? defOwn.d4Pct+'%' : '—') + '</td><td>' + defOwn.explosive + '</td></tr></table>'
-      : '<p class="no-stats">No defensive stats recorded.</p>';
+    html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Defense</div>' +
+      (seasonAgg.defense.int || seasonAgg.defense.fumRec || seasonAgg.defense.sacks
+        ? '<table class="stat-table"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th></tr><tr><td>Defense</td><td>'+seasonAgg.defense.int+'</td><td>'+seasonAgg.defense.fumRec+'</td><td>'+seasonAgg.defense.sacks+'</td></tr></table>'
+        : '<p class="no-stats">No defensive stats recorded.</p>') + '</div>';
 
-    const koNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].kickoffs);
-    const puntNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].punts);
-    const kickNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].fgAtt || box.teamA.specialTeams[n].patAtt);
-    html += '<div class="section-title">' + TEAMS.teamA.name + ' — Special Teams</div>';
-    const stSub = (label, tableHtml) => tableHtml ? '<div class="st-subsection"><div class="st-subsection-label">' + label + '</div>' + tableHtml + '</div>' : '';
+    const koNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].kickoffs);
+    const puntNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].punts);
+    const kickNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].fgAtt || seasonAgg.specialTeams[n].patAtt);
     let stHtml = '';
-    if (koNums.length){
-      stHtml += stSub('Kickoffs', statTable('teamA', Object.fromEntries(koNums.map(n=>[n,box.teamA.specialTeams[n]])), ['Kickoffs','Touchbacks','TB %'],
+    const stSub = (label, tableHtml) => tableHtml ? '<div class="st-subsection"><div class="st-subsection-label">'+label+'</div>'+tableHtml+'</div>' : '';
+    if (koNames.length){
+      const bucket = Object.fromEntries(koNames.map(n=>[n,seasonAgg.specialTeams[n]]));
+      stHtml += stSub('Kickoffs', seasonStatTable(bucket, ['Kickoffs','Touchbacks','TB %'],
         d => [d.kickoffs||0, d.touchbacks||0, d.kickoffs?Math.round(100*(d.touchbacks||0)/d.kickoffs)+'%':'—'],
-        (obj) => { const k=sumStat(obj,'kickoffs'), tb=sumStat(obj,'touchbacks'); return [k, tb, k?Math.round(100*tb/k)+'%':'—']; },
-        'kickoffs', 'special'));
+        (obj,names) => { const k=names.reduce((t,n)=>t+(obj[n].kickoffs||0),0), tb=names.reduce((t,n)=>t+(obj[n].touchbacks||0),0); return [k, tb, k?Math.round(100*tb/k)+'%':'—']; },
+        'kickoffs'));
     }
-    if (puntNums.length){
-      stHtml += stSub('Punting', statTable('teamA', Object.fromEntries(puntNums.map(n=>[n,box.teamA.specialTeams[n]])), ['Punts','Yds Per Punt','Long','Blocked'],
-        d => [d.punts||0, d.puntsWithYards?(d.puntYds/d.puntsWithYards).toFixed(1):'0.0', d.puntLong||0, d.blocked||0],
-        (obj) => { const p=sumStat(obj,'punts'), yds=sumStat(obj,'puntYds'), wy=sumStat(obj,'puntsWithYards');
-          return [p, wy?(yds/wy).toFixed(1):'0.0', maxStat(obj,'puntLong'), sumStat(obj,'blocked')]; },
-        'puntYds', 'special'));
+    if (puntNames.length){
+      const bucket = Object.fromEntries(puntNames.map(n=>[n,seasonAgg.specialTeams[n]]));
+      stHtml += stSub('Punting', seasonStatTable(bucket, ['Punts','Yds Per Punt','Long','Blocked'],
+        d => [d.punts||0, d.puntsWithYards?+(d.puntYds/d.puntsWithYards).toFixed(1):0, d.puntLong||0, d.blocked||0],
+        (obj,names) => { const p=names.reduce((t,n)=>t+(obj[n].punts||0),0), yds=names.reduce((t,n)=>t+(obj[n].puntYds||0),0), wy=names.reduce((t,n)=>t+(obj[n].puntsWithYards||0),0);
+          return [p, wy?+(yds/wy).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].puntLong||0)), names.reduce((t,n)=>t+(obj[n].blocked||0),0)]; },
+        'puntYds'));
     }
-    if (kickNums.length){
-      stHtml += stSub('Kicking', statTable('teamA', Object.fromEntries(kickNums.map(n=>[n,box.teamA.specialTeams[n]])), ['FG Att','FG Made','Long FG','FG %','FG Blk','XP Att','XP Made','XP %','XP Blk'],
+    if (kickNames.length){
+      const bucket = Object.fromEntries(kickNames.map(n=>[n,seasonAgg.specialTeams[n]]));
+      stHtml += stSub('Kicking', seasonStatTable(bucket, ['FG Att','FG Made','Long FG','FG %','FG Blk','XP Att','XP Made','XP %','XP Blk'],
         d => [d.fgAtt||0, d.fgMade||0, d.fgLong||0, d.fgAtt?Math.round(100*(d.fgMade||0)/d.fgAtt)+'%':'—', d.fgBlocked||0, d.patAtt||0, d.patMade||0, d.patAtt?Math.round(100*(d.patMade||0)/d.patAtt)+'%':'—', d.patBlocked||0],
-        (obj) => { const fa=sumStat(obj,'fgAtt'), fm=sumStat(obj,'fgMade'), pa=sumStat(obj,'patAtt'), pm=sumStat(obj,'patMade');
-          return [fa, fm, maxStat(obj,'fgLong'), fa?Math.round(100*fm/fa)+'%':'—', sumStat(obj,'fgBlocked'), pa, pm, pa?Math.round(100*pm/pa)+'%':'—', sumStat(obj,'patBlocked')]; },
-        'fgAtt', 'special'));
+        (obj,names) => { const fa=names.reduce((t,n)=>t+(obj[n].fgAtt||0),0), fm=names.reduce((t,n)=>t+(obj[n].fgMade||0),0), pa=names.reduce((t,n)=>t+(obj[n].patAtt||0),0), pm=names.reduce((t,n)=>t+(obj[n].patMade||0),0);
+          return [fa, fm, Math.max(0,...names.map(n=>obj[n].fgLong||0)), fa?Math.round(100*fm/fa)+'%':'—', names.reduce((t,n)=>t+(obj[n].fgBlocked||0),0), pa, pm, pa?Math.round(100*pm/pa)+'%':'—', names.reduce((t,n)=>t+(obj[n].patBlocked||0),0)]; },
+        'fgAtt'));
     }
-    html += stHtml || '<p class="no-stats">No special teams stats recorded.</p>';
+    html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Special Teams</div>' + (stHtml || '<p class="no-stats">No special teams stats recorded.</p>') + '</div>';
 
     return html;
   }
+
+  function chartOpts(extra){
+    return Object.assign({ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ font:{ size:11 } } } } }, extra || {});
+  }
+
+  function lighten(hex, amt){
+    const c = hex.replace('#','');
+    const r = parseInt(c.slice(0,2),16), g = parseInt(c.slice(2,4),16), b = parseInt(c.slice(4,6),16);
+    const mix = (v) => Math.round(v + (255-v)*amt);
+    return '#' + [mix(r),mix(g),mix(b)].map(v => v.toString(16).padStart(2,'0')).join('');
+  }
+  function readableOn(hex){
+    const c = hex.replace('#','');
+    const r = parseInt(c.slice(0,2),16), g = parseInt(c.slice(2,4),16), b = parseInt(c.slice(4,6),16);
+    const luminance = (0.299*r + 0.587*g + 0.114*b) / 255;
+    return luminance > 0.55 ? '#000' : '#fff';
+  }
+
+  function initCharts(){
+    const t = seasonAgg.totals;
+    const games = seasonAgg.perGame;
+    const labels = games.map((g,i) => g.label || ('G' + (i+1)));
+    const headroom = (...dataArrays) => {
+      const max = Math.max(0, ...dataArrays.flat().filter(v => typeof v === 'number'));
+      return max === 0 ? undefined : Math.ceil(max * 1.2);
+    };
+
+    // Chart colors are derived from the team's own branded primary/
+    // secondary colors (set in account settings), not a fixed
+    // categorical palette, so the report visually matches the team.
+    const primary = seasonAgg.ourBranding.primary_color || '#1a1a2e';
+    const secondary = seasonAgg.ourBranding.secondary_color || '#8B0000';
+    const primaryLight = lighten(primary, 0.45);
+    const secondaryLight = lighten(secondary, 0.45);
+
+    const showVal = { color:'#000', anchor:'end', align:'top', formatter:(v) => v ? v : '' };
+    const pctOfTotal = { color:(ctx) => readableOn(ctx.dataset.backgroundColor[ctx.dataIndex]), font:{ size:12, weight:'bold' },
+      formatter:(v, ctx) => { const total = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return total ? Math.round(100*v/total)+'%' : ''; } };
+
+    new Chart(document.getElementById('chartPointsByQuarter'), { type:'bar', data:{ labels:['Q1','Q2','Q3','Q4'],
+      datasets:[{ label:'Scored', data:seasonAgg.quarterScored, backgroundColor:primary },
+        { label:'Allowed', data:seasonAgg.quarterAllowed, backgroundColor:secondary }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Points by quarter', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal },
+        scales:{ y:{ suggestedMax: headroom(seasonAgg.quarterScored, seasonAgg.quarterAllowed) } } }) });
+
+    new Chart(document.getElementById('chartHalfYards'), { type:'bar', data:{ labels:['1st half','2nd half'],
+      datasets:[
+        { label:TEAMS.teamA.name, data:[games.reduce((s,g)=>s+g.h1Yds,0), games.reduce((s,g)=>s+g.h2Yds,0)], backgroundColor:primary },
+        { label:'Opponent', data:[games.reduce((s,g)=>s+g.oppH1Yds,0), games.reduce((s,g)=>s+g.oppH2Yds,0)], backgroundColor:secondary }
+      ] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Total yardage by half', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal },
+        scales:{ y:{ suggestedMax: headroom(
+          [games.reduce((s,g)=>s+g.h1Yds,0), games.reduce((s,g)=>s+g.h2Yds,0)],
+          [games.reduce((s,g)=>s+g.oppH1Yds,0), games.reduce((s,g)=>s+g.oppH2Yds,0)]) } } }) });
+
+    new Chart(document.getElementById('chartRunPassAtt'), { type:'doughnut', data:{ labels:['Rush att','Pass att'],
+      datasets:[{ data:[t.rushAtt, t.passAtt], backgroundColor:[primary, secondary] }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Run / pass mix', font:{size:12} }, legend:{ position:'bottom' }, datalabels:pctOfTotal } }) });
+
+    new Chart(document.getElementById('chartRunPassYds'), { type:'doughnut', data:{ labels:['Rush yds','Pass yds'],
+      datasets:[{ data:[t.rushYds, t.passYds], backgroundColor:[primary, secondary] }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Run / pass yardage %', font:{size:12} }, legend:{ position:'bottom' }, datalabels:pctOfTotal } }) });
+
+    new Chart(document.getElementById('chartTurnoversByGame'), { type:'bar', data:{ labels,
+      datasets:[{ label:'Turnovers', data:games.map(g=>g.turnovers), backgroundColor:primary }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Turnovers by game', font:{size:12} }, legend:{ display:false }, datalabels:showVal },
+        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.turnovers)) } } }) });
+
+    new Chart(document.getElementById('chartSacksByGame'), { type:'bar', data:{ labels,
+      datasets:[{ label:'Sacks allowed', data:games.map(g=>g.sacked), backgroundColor:secondary }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Sacks allowed by game', font:{size:12} }, legend:{ display:false }, datalabels:showVal },
+        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.sacked)) } } }) });
+
+    new Chart(document.getElementById('chartPenaltiesByGame'), { type:'bar', data:{ labels,
+      datasets:[{ label:'Penalties', data:games.map(g=>g.penCount), backgroundColor:primary, yAxisID:'y' },
+        { label:'Yards', data:games.map(g=>g.penYds), backgroundColor:secondary, yAxisID:'y1' }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Penalties by game', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal },
+        scales:{ y:{ position:'left', suggestedMax: headroom(games.map(g=>g.penCount)) },
+          y1:{ position:'right', grid:{ drawOnChartArea:false }, suggestedMax: headroom(games.map(g=>g.penYds)) } } }) });
+
+    new Chart(document.getElementById('chart3rdDownByGame'), { type:'line', data:{ labels,
+      datasets:[{ label:'Offense 3rd down %', data:games.map(g=>g.d3Pct), borderColor:primary, backgroundColor:primary, tension:0.2 },
+        { label:'Opponent 3rd down %', data:games.map(g=>g.oppD3Pct), borderColor:secondary, backgroundColor:secondary, tension:0.2 }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'3rd down % by game', font:{size:12} }, legend:{ position:'bottom' },
+        datalabels:{ color:'#000', align:'top', font:{size:9}, formatter:(v) => (v===null||v===undefined) ? '' : v+'%' } },
+        scales:{ y:{ suggestedMax: Math.min(100, headroom(games.map(g=>g.d3Pct), games.map(g=>g.oppD3Pct)) || 20) } } }) });
+
+    new Chart(document.getElementById('chart4thDownByGame'), { type:'line', data:{ labels,
+      datasets:[{ label:'Offense 4th down %', data:games.map(g=>g.d4Pct), borderColor:primary, backgroundColor:primary, tension:0.2 },
+        { label:'Opponent 4th down %', data:games.map(g=>g.oppD4Pct), borderColor:secondary, backgroundColor:secondary, tension:0.2 }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'4th down % by game', font:{size:12} }, legend:{ position:'bottom' },
+        datalabels:{ color:'#000', align:'top', font:{size:9}, formatter:(v) => (v===null||v===undefined) ? '' : v+'%' } },
+        scales:{ y:{ suggestedMax: Math.min(100, headroom(games.map(g=>g.d4Pct), games.map(g=>g.oppD4Pct)) || 20) } } }) });
+
+    new Chart(document.getElementById('chartExplosiveByGame'), { type:'bar', data:{ labels,
+      datasets:[{ label:'20yd+ plays', data:games.map(g=>g.explosiveFor), backgroundColor:primary },
+        { label:'20yd+ allowed', data:games.map(g=>g.explosiveAgainst), backgroundColor:secondary }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'20yd+ plays by game', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal },
+        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.explosiveFor), games.map(g=>g.explosiveAgainst)) } } }) });
+
+    new Chart(document.getElementById('chartPossPlaysByGame'), { type:'line', data:{ labels,
+      datasets:[{ label:'Possessions', data:games.map(g=>g.possessions), borderColor:primary, backgroundColor:primary, tension:0.2 },
+        { label:'Plays', data:games.map(g=>g.totalPlays), borderColor:secondary, backgroundColor:secondary, tension:0.2 }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Possessions & plays by game', font:{size:12} }, legend:{ position:'bottom' },
+        datalabels:{ color:'#000', align:'top', font:{size:9}, formatter:(v) => v ? v : '' } },
+        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.possessions), games.map(g=>g.totalPlays)) } } }) });
+
+    new Chart(document.getElementById('chartYardsByGame'), { type:'bar', data:{ labels,
+      datasets:[{ label:'1st half', data:games.map(g=>g.h1Yds), backgroundColor:primaryLight, stack:'a' },
+        { label:'2nd half', data:games.map(g=>g.h2Yds), backgroundColor:primary, stack:'a' }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Total yards by game', font:{size:12} }, legend:{ position:'bottom' },
+        datalabels:{ color:(ctx) => readableOn(ctx.dataset.backgroundColor), anchor:'center', align:'center', font:{size:9,weight:'bold'}, formatter:(v) => v ? v : '' } },
+        scales:{ x:{ stacked:true }, y:{ stacked:true } } }) });
+
+    new Chart(document.getElementById('chartPassRushByGame'), { type:'bar', data:{ labels,
+      datasets:[{ label:'Pass yds', data:games.map(g=>g.passYds), backgroundColor:secondary },
+        { label:'Rush yds', data:games.map(g=>g.rushYds), backgroundColor:primary }] },
+      options: chartOpts({ plugins:{ title:{ display:true, text:'Pass / rush yards by game', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal },
+        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.passYds), games.map(g=>g.rushYds)) } } }) });
+  }
+
+  if (window.Chart && window.ChartDataLabels) Chart.register(ChartDataLabels);
+  document.getElementById('downloadPdfBtn').addEventListener('click', () => window.print());
+
 </script>
 </body>
 </html>
