@@ -28,7 +28,11 @@
   .metric-tile { text-align:center; padding:8px 4px; }
   .metric-tile .metric-val { font-size:22px; font-weight:700; }
   .metric-tile .metric-label { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.02em; margin-top:2px; }
-  .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:14px; }
+  .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-bottom:14px; }
+  .chart-col { min-width:0; }
+  .chart-col:last-child { border-left:1px solid #eee; padding-left:40px; margin-left:-1px; }
+  .chart-col-metrics { display:flex; justify-content:space-around; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .chart-col-metrics .metric-tile { flex:1; min-width:70px; }
   .chart-box { position:relative; height:220px; }
   .chart-box.wide { height:260px; }
   table.stat-table { width:100%; border-collapse:collapse; font-size:13px; background:#fff; margin-bottom:6px; }
@@ -704,23 +708,33 @@
       ' &middot; ' + gamesPlayed + ' games</div></div>';
 
     html += '<div class="section"><div class="section-title">Season totals</div>' +
-      '<div class="metric-grid">' +
-      [[totalYds,'Total yards'],[per(totalYds),'Yards/game'],[oppTotalYds,'Yards allowed'],[per(oppTotalYds),'Allowed/game'],
-       [t.pointsScored,'Points scored'],[per(t.pointsScored),'Scored/game'],[t.pointsAllowed,'Points allowed'],[per(t.pointsAllowed),'Allowed/game']]
-        .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-      '</div>' +
-      '<div class="chart-row"><div class="chart-box"><canvas id="chartPointsByQuarter"></canvas></div>' +
-      '<div class="chart-box"><canvas id="chartHalfYards"></canvas></div></div>' +
-      '</div>';
+      '<div class="chart-row">' +
+      '<div class="chart-col"><div class="chart-col-metrics">' +
+        [[t.pointsScored,'Points scored'],[per(t.pointsScored),'Scored/game'],[t.pointsAllowed,'Points allowed'],[per(t.pointsAllowed),'Allowed/game']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div><div class="chart-box"><canvas id="chartPointsByQuarter"></canvas></div></div>' +
+      '<div class="chart-col"><div class="chart-col-metrics">' +
+        [[totalYds,'Total yards'],[per(totalYds),'Yards/game'],[oppTotalYds,'Yards allowed'],[per(oppTotalYds),'Allowed/game']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div><div class="chart-box"><canvas id="chartHalfYards"></canvas></div></div>' +
+      '</div></div>';
 
     html += '<div class="section"><div class="section-title">Run / pass mix</div>' +
-      '<div class="metric-grid">' +
-      [[t.rushAtt,'Rush att'],[t.rushYds,'Rush yds'],[t.rushAtt?+(t.rushYds/t.rushAtt).toFixed(1):0,'Yds/rush'],[t.rushTd,'Rush TD'],
-       [t.passAtt,'Pass att'],[t.passYds,'Pass yds'],[t.passAtt?+(t.passYds/t.passAtt).toFixed(1):0,'Yds/pass'],[t.passTd,'Pass TD']]
-        .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-      '</div>' +
-      '<div class="chart-row"><div class="chart-box"><canvas id="chartRunPassAtt"></canvas></div>' +
-      '<div class="chart-box"><canvas id="chartRunPassYds"></canvas></div></div>' +
+      '<div class="chart-row">' +
+      '<div class="chart-col"><div class="chart-col-metrics">' +
+        [[t.rushAtt,'Rush att'],[t.passAtt,'Pass att']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div><div class="chart-box"><canvas id="chartRunPassAtt"></canvas></div></div>' +
+      '<div class="chart-col"><div class="chart-col-metrics">' +
+        [[t.rushYds,'Rush yds'],[t.rushAtt?+(t.rushYds/t.rushAtt).toFixed(1):0,'Yds/rush'],
+         [t.passYds,'Pass yds'],[t.passAtt?+(t.passYds/t.passAtt).toFixed(1):0,'Yds/pass']]
+          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+        '</div><div class="chart-box"><canvas id="chartRunPassYds"></canvas></div></div>' +
+      '</div></div>';
+
+    html += '<div class="section page-break"><div class="section-title">Yards by game</div>' +
+      '<div class="chart-box wide"><canvas id="chartYardsByGame"></canvas></div>' +
+      '<div class="chart-box wide" style="margin-top:14px;"><canvas id="chartPassRushByGame"></canvas></div>' +
       '</div>';
 
     html += '<div class="section"><div class="section-title">Discipline</div>' +
@@ -740,11 +754,6 @@
         .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
       '</div>' +
       '<div class="chart-box wide"><canvas id="chart3rdDownByGame"></canvas></div>' +
-      '</div>';
-
-    html += '<div class="section page-break"><div class="section-title">Yards by game</div>' +
-      '<div class="chart-box wide"><canvas id="chartYardsByGame"></canvas></div>' +
-      '<div class="chart-box wide" style="margin-top:14px;"><canvas id="chartPassRushByGame"></canvas></div>' +
       '</div>';
 
     const seasonStatTable = (bucketObj, headers, rowFn, totalFn, sortKey) => {
@@ -840,7 +849,7 @@
     const primaryLight = lighten(primary, 0.45);
     const secondaryLight = lighten(secondary, 0.45);
 
-    const showVal = { anchor:'end', align:'top', formatter:(v) => v ? v : '' };
+    const showVal = { color:'#000', anchor:'end', align:'top', formatter:(v) => v ? v : '' };
     const pctOfTotal = { color:'#fff', font:{ size:12, weight:'bold' },
       formatter:(v, ctx) => { const total = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return total ? Math.round(100*v/total)+'%' : ''; } };
 
@@ -874,7 +883,7 @@
       datasets:[{ label:'Offense 3rd down %', data:games.map(g=>g.d3Pct), borderColor:primary, backgroundColor:primary, tension:0.2 },
         { label:'Opponent 3rd down %', data:games.map(g=>g.oppD3Pct), borderColor:secondary, backgroundColor:secondary, tension:0.2 }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'3rd down % by game', font:{size:12} }, legend:{ position:'bottom' },
-        datalabels:{ align:'top', font:{size:9}, formatter:(v) => (v===null||v===undefined) ? '' : v+'%' } } }) });
+        datalabels:{ color:'#000', align:'top', font:{size:9}, formatter:(v) => (v===null||v===undefined) ? '' : v+'%' } } }) });
 
     new Chart(document.getElementById('chartYardsByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'1st half', data:games.map(g=>g.h1Yds), backgroundColor:primaryLight, stack:'a' },
