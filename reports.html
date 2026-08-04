@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StatChat — Statistics Reports</title>
+<style>
+  html, body { margin:0; padding:0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; color:#1a1a1a; }
+  .wrap { max-width:640px; margin:0 auto; padding:24px; box-sizing:border-box; }
+  .hidden { display:none !important; }
+  .topbar { margin-bottom:18px; }
+  .topbar a { color:#555; text-decoration:none; font-size:14px; font-weight:600; }
+  .msg { padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:14px; }
+  .msg.error { background:#fde8e8; color:#a32d2d; }
+  h1 { font-size:20px; margin:0 0 14px; }
+  select#seasonPicker { font-size:14px; padding:8px 10px; border:1px solid #ddd; border-radius:8px; background:#fff; margin-bottom:18px; width:100%; box-sizing:border-box; }
+  .card { background:#fff; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 2px 10px rgba(0,0,0,0.06); }
+  .card h2 { font-size:14px; margin:0 0 4px; color:#444; }
+  .card p { font-size:13px; color:#777; margin:0 0 10px; }
+  .card a.season-report-link { display:inline-block; background:#0f6e56; color:#fff; padding:10px 18px; border-radius:8px; text-decoration:none; font-weight:700; font-size:14px; }
+  .game-row { display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid #f0f0f0; }
+  .game-row:last-child { border-bottom:none; }
+  .game-row .game-info { font-size:14px; }
+  .game-row .game-info .opp { font-weight:600; }
+  .game-row .game-info .date { color:#888; font-size:12px; margin-top:2px; }
+  .game-row a.report-link { color:#1565c0; text-decoration:none; font-size:13px; font-weight:600; white-space:nowrap; }
+  .hint { color:#999; font-size:13px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="loading">Loading…</div>
+    <div id="errorView" class="hidden">
+      <p id="errorMsg" class="msg error"></p>
+    </div>
+    <div id="mainView" class="hidden">
+      <div class="topbar"><a href="dashboard.html">&larr; Back to dashboard</a></div>
+      <h1>Statistics reports</h1>
+      <select id="seasonPicker"></select>
+      <div id="seasonReportCard" class="card hidden">
+        <h2>Full season report</h2>
+        <p>Aggregated statistics across every game in the selected season.</p>
+        <a class="season-report-link" id="seasonReportLink" href="#">Coming soon</a>
+      </div>
+      <div class="card">
+        <h2>Games</h2>
+        <div id="gamesList"></div>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="team-icon.js"></script>
+<script>
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  function showView(name){
+    ['loading','errorView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+  }
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION'){
+      if (session){ init(); } else { window.location.href = '/'; }
+    } else if (event === 'SIGNED_OUT'){
+      window.location.href = '/';
+    }
+  });
+
+  let allGames = [];
+
+  async function init(){
+    let seasonYear = new Date().getFullYear();
+    const { data: teamRows } = await supabaseClient
+      .from('teams').select('current_season_year').eq('is_our_team', true).limit(1);
+    if (teamRows && teamRows[0] && teamRows[0].current_season_year) seasonYear = teamRows[0].current_season_year;
+
+    const { data: gameRows, error } = await supabaseClient
+      .from('games').select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status')
+      .eq('status', 'final')
+      .order('game_date', { ascending: false });
+    if (error){
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = error.message;
+      return;
+    }
+    allGames = gameRows || [];
+
+    const years = Array.from(new Set(allGames.map(g => g.season_year).filter(y => y !== null && y !== undefined))).sort((a,b) => b-a);
+    if (!years.includes(seasonYear)) years.unshift(seasonYear);
+    const picker = document.getElementById('seasonPicker');
+    picker.innerHTML = years.map(y => '<option value="' + y + '">' + y + ' season</option>').join('');
+    picker.value = seasonYear;
+    picker.addEventListener('change', renderForSelectedSeason);
+
+    renderForSelectedSeason();
+    showView('mainView');
+  }
+
+  function renderForSelectedSeason(){
+    const selectedYear = parseInt(document.getElementById('seasonPicker').value);
+    const games = allGames.filter(g => g.season_year === selectedYear);
+
+    document.getElementById('seasonReportCard').classList.toggle('hidden', games.length === 0);
+
+    const listEl = document.getElementById('gamesList');
+    if (!games.length){
+      listEl.innerHTML = '<p class="hint">No finalized games in this season yet.</p>';
+      return;
+    }
+    listEl.innerHTML = games.map(g => {
+      const opp = g.our_team_is_home ? g.away_team_name : g.home_team_name;
+      const atOrVs = g.our_team_is_home ? 'vs' : '@';
+      const dateStr = g.game_date ? new Date(g.game_date + 'T00:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'}) : '';
+      return '<div class="game-row">' +
+        '<div class="game-info"><span class="opp">' + atOrVs + ' ' + opp + '</span>' + (g.designator ? ' &middot; ' + g.designator : '') +
+        '<div class="date">' + dateStr + '</div></div>' +
+        '<a class="report-link" href="stat_package.html?id=' + g.id + '">View report &rarr;</a>' +
+      '</div>';
+    }).join('');
+  }
+</script>
+</body>
+</html>
