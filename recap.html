@@ -520,11 +520,12 @@
           return [rec, yds, rec?(yds/rec).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
         'yds') || '<p class="no-stats">No receiving stats recorded.</p>') + '</div>';
 
-    html += '<div class="section"><h2>' + TEAMS.teamA.name + ' — Defense</h2>' +
-      (playerTable('teamA', box.teamA.defense, ['Int','Fum Rec','Sacks'],
-        d => [d.int||0, d.fumRec||0, d.sacks||0],
-        (obj) => [sumStat(obj,'int'), sumStat(obj,'fumRec'), sumStat(obj,'sacks')],
-        'sacks', 'defense') || '<p class="no-stats">No defensive stats recorded.</p>') + '</div>';
+    const defNums = Object.keys(box.teamA.defense);
+    const defTable = defNums.length
+      ? '<table class="player-table"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th></tr>' +
+        '<tr><td>Team</td><td>' + sumStat(box.teamA.defense,'int') + '</td><td>' + sumStat(box.teamA.defense,'fumRec') + '</td><td>' + sumStat(box.teamA.defense,'sacks') + '</td></tr></table>'
+      : '<p class="no-stats">No defensive stats recorded.</p>';
+    html += '<div class="section"><h2>' + TEAMS.teamA.name + ' — Defense</h2>' + defTable + '</div>';
 
     const koNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].kickoffs);
     const puntNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].punts);
