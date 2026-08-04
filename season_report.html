@@ -835,6 +835,12 @@
     const mix = (v) => Math.round(v + (255-v)*amt);
     return '#' + [mix(r),mix(g),mix(b)].map(v => v.toString(16).padStart(2,'0')).join('');
   }
+  function readableOn(hex){
+    const c = hex.replace('#','');
+    const r = parseInt(c.slice(0,2),16), g = parseInt(c.slice(2,4),16), b = parseInt(c.slice(4,6),16);
+    const luminance = (0.299*r + 0.587*g + 0.114*b) / 255;
+    return luminance > 0.55 ? '#000' : '#fff';
+  }
 
   function initCharts(){
     const t = seasonAgg.totals;
@@ -850,7 +856,7 @@
     const secondaryLight = lighten(secondary, 0.45);
 
     const showVal = { color:'#000', anchor:'end', align:'top', formatter:(v) => v ? v : '' };
-    const pctOfTotal = { color:'#fff', font:{ size:12, weight:'bold' },
+    const pctOfTotal = { color:(ctx) => readableOn(ctx.dataset.backgroundColor[ctx.dataIndex]), font:{ size:12, weight:'bold' },
       formatter:(v, ctx) => { const total = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return total ? Math.round(100*v/total)+'%' : ''; } };
 
     new Chart(document.getElementById('chartPointsByQuarter'), { type:'bar', data:{ labels:['Q1','Q2','Q3','Q4'],
@@ -889,7 +895,7 @@
       datasets:[{ label:'1st half', data:games.map(g=>g.h1Yds), backgroundColor:primaryLight, stack:'a' },
         { label:'2nd half', data:games.map(g=>g.h2Yds), backgroundColor:primary, stack:'a' }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Total yards by game', font:{size:12} }, legend:{ position:'bottom' },
-        datalabels:{ color:'#fff', anchor:'center', align:'center', font:{size:9,weight:'bold'}, formatter:(v) => v ? v : '' } },
+        datalabels:{ color:(ctx) => readableOn(ctx.dataset.backgroundColor), anchor:'center', align:'center', font:{size:9,weight:'bold'}, formatter:(v) => v ? v : '' } },
         scales:{ x:{ stacked:true }, y:{ stacked:true } } }) });
 
     new Chart(document.getElementById('chartPassRushByGame'), { type:'bar', data:{ labels,
