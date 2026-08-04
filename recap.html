@@ -50,6 +50,9 @@
   table.player-table th { color:#888; font-weight:600; font-size:11px; text-transform:uppercase; }
   table.player-table tr.total-row { font-weight:800; border-top:2px solid #ddd; }
   table.player-table tr.total-row td:first-child { color:#555; }
+  .st-subsection { margin-top:22px; padding-top:14px; border-top:1px solid #eee; }
+  .st-subsection:first-child { margin-top:0; padding-top:0; border-top:none; }
+  .st-subsection-label { font-size:11px; font-weight:700; color:#999; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:6px; }
   .no-stats { color:#999; font-size:13px; font-style:italic; }
   @media print {
     body { background:#fff; }
@@ -224,10 +227,12 @@
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
     const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
     TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null,
+      isHome: !!game.our_team_is_home };
     const oppPrimary = game.opponent_primary_color || '#8B0000', oppSecondary = game.opponent_secondary_color || '#ffffff';
     TEAMS.teamB = { name: oppName, bg: oppPrimary, text: oppSecondary,
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null,
+      isHome: !game.our_team_is_home };
     if (colorDistance(TEAMS.teamA.bg, TEAMS.teamB.bg) < 60){
       if (colorDistance(TEAMS.teamA.bg, oppSecondary) >= 60){
         TEAMS.teamB.bg = oppSecondary;
@@ -521,27 +526,28 @@
         ]
       };
     };
-    const homeKey = 'teamA', awayKey = 'teamB'; // teamA is always our team in this app's model
-    const tA = teamHtml('teamA'), tB = teamHtml('teamB');
+    const visitorKey = TEAMS.teamA.isHome ? 'teamB' : 'teamA';
+    const homeKey = TEAMS.teamA.isHome ? 'teamA' : 'teamB';
+    const tV = teamHtml(visitorKey), tH = teamHtml(homeKey);
 
     let html = '<div class="header">' +
       '<div class="sub">' + (gameLabel || '') + (gameDate ? ' &middot; ' + new Date(gameDate + 'T00:00:00').toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'}) : '') + '</div>' +
       '<div class="scoreboard">' +
-        '<div class="team-block">' + (TEAMS.teamA.logo ? '<img class="team-logo" src="'+TEAMS.teamA.logo+'">' : '') + '<div class="team-name">' + TEAMS.teamA.name + '</div><div class="team-score">' + finalState.scores.teamA + '</div></div>' +
-        '<div class="vs-sep">vs</div>' +
-        '<div class="team-block">' + (TEAMS.teamB.logo ? '<img class="team-logo" src="'+TEAMS.teamB.logo+'">' : '') + '<div class="team-name">' + TEAMS.teamB.name + '</div><div class="team-score">' + finalState.scores.teamB + '</div></div>' +
+        '<div class="team-block">' + (TEAMS[visitorKey].logo ? '<img class="team-logo" src="'+TEAMS[visitorKey].logo+'">' : '') + '<div class="team-name">' + TEAMS[visitorKey].name + '</div><div class="team-score">' + finalState.scores[visitorKey] + '</div></div>' +
+        '<div class="vs-sep">@</div>' +
+        '<div class="team-block">' + (TEAMS[homeKey].logo ? '<img class="team-logo" src="'+TEAMS[homeKey].logo+'">' : '') + '<div class="team-name">' + TEAMS[homeKey].name + '</div><div class="team-score">' + finalState.scores[homeKey] + '</div></div>' +
       '</div>' +
       '<table class="quarter-table"><tr><th></th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Final</th></tr>' +
-      '<tr><td>' + TEAMS.teamA.name + '</td>' + quarterScores.teamA.map(v=>'<td>'+v+'</td>').join('') + '<td>' + finalState.scores.teamA + '</td></tr>' +
-      '<tr><td>' + TEAMS.teamB.name + '</td>' + quarterScores.teamB.map(v=>'<td>'+v+'</td>').join('') + '<td>' + finalState.scores.teamB + '</td></tr>' +
+      '<tr><td>' + TEAMS[visitorKey].name + '</td>' + quarterScores[visitorKey].map(v=>'<td>'+v+'</td>').join('') + '<td>' + finalState.scores[visitorKey] + '</td></tr>' +
+      '<tr><td>' + TEAMS[homeKey].name + '</td>' + quarterScores[homeKey].map(v=>'<td>'+v+'</td>').join('') + '<td>' + finalState.scores[homeKey] + '</td></tr>' +
       '</table></div>';
 
     html += '<div class="section"><h2>Team Stats</h2><div class="team-compare">' +
-      '<div class="col-head">' + tA.team.name + '</div><div></div><div class="col-head">' + tB.team.name + '</div>' +
-      tA.rows.map((row, i) => '<div class="stat-row">' +
+      '<div class="col-head">' + tV.team.name + '</div><div></div><div class="col-head">' + tH.team.name + '</div>' +
+      tV.rows.map((row, i) => '<div class="stat-row">' +
         '<div class="stat-val">' + row[1] + '</div>' +
         '<div class="stat-label">' + row[0] + '</div>' +
-        '<div class="stat-val">' + tB.rows[i][1] + '</div>' +
+        '<div class="stat-val">' + tH.rows[i][1] + '</div>' +
       '</div>').join('') +
       '</div></div>';
 
@@ -580,25 +586,28 @@
     const koNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].kickoffs);
     const puntNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].punts);
     const kickNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].fgAtt || box.teamA.specialTeams[n].patAtt);
+    const stSubsection = (label, tableHtml) => tableHtml
+      ? '<div class="st-subsection"><div class="st-subsection-label">' + label + '</div>' + tableHtml + '</div>'
+      : '';
     let stHtml = '';
     if (koNums.length){
-      stHtml += playerTable('teamA', Object.fromEntries(koNums.map(n=>[n,box.teamA.specialTeams[n]])), ['Kickoffs','Touchbacks','TB %'],
+      stHtml += stSubsection('Kickoffs', playerTable('teamA', Object.fromEntries(koNums.map(n=>[n,box.teamA.specialTeams[n]])), ['Kickoffs','Touchbacks','TB %'],
         d => [d.kickoffs||0, d.touchbacks||0, d.kickoffs ? Math.round(100*(d.touchbacks||0)/d.kickoffs)+'%' : '—'],
         (obj) => { const k=sumStat(obj,'kickoffs'), tb=sumStat(obj,'touchbacks'); return [k, tb, k?Math.round(100*tb/k)+'%':'—']; },
-        'kickoffs', 'special');
+        'kickoffs', 'special'));
     }
     if (puntNums.length){
-      stHtml += playerTable('teamA', Object.fromEntries(puntNums.map(n=>[n,box.teamA.specialTeams[n]])), ['Punts','Yds','Avg','Long','Blocked'],
+      stHtml += stSubsection('Punting', playerTable('teamA', Object.fromEntries(puntNums.map(n=>[n,box.teamA.specialTeams[n]])), ['Punts','Yds','Avg','Long','Blocked'],
         d => [d.punts||0, d.puntYds||0, d.puntsWithYards ? (d.puntYds/d.puntsWithYards).toFixed(1) : '0.0', d.puntLong||0, d.blocked||0],
         (obj) => { const p=sumStat(obj,'punts'), yds=sumStat(obj,'puntYds'), wy=sumStat(obj,'puntsWithYards');
           return [p, yds, wy?(yds/wy).toFixed(1):'0.0', maxStat(obj,'puntLong'), sumStat(obj,'blocked')]; },
-        'puntYds', 'special');
+        'puntYds', 'special'));
     }
     if (kickNums.length){
-      stHtml += playerTable('teamA', Object.fromEntries(kickNums.map(n=>[n,box.teamA.specialTeams[n]])), ['FG Att','FG Made','Long FG','FG Blk','XP Att','XP Made','XP Blk'],
+      stHtml += stSubsection('Kicking', playerTable('teamA', Object.fromEntries(kickNums.map(n=>[n,box.teamA.specialTeams[n]])), ['FG Att','FG Made','Long FG','FG Blk','XP Att','XP Made','XP Blk'],
         d => [d.fgAtt||0, d.fgMade||0, d.fgLong||0, d.fgBlocked||0, d.patAtt||0, d.patMade||0, d.patBlocked||0],
         (obj) => [sumStat(obj,'fgAtt'), sumStat(obj,'fgMade'), maxStat(obj,'fgLong'), sumStat(obj,'fgBlocked'), sumStat(obj,'patAtt'), sumStat(obj,'patMade'), sumStat(obj,'patBlocked')],
-        'fgAtt', 'special');
+        'fgAtt', 'special'));
     }
     html += '<div class="section player-section"><h2>' + TEAMS.teamA.name + ' — Special Teams</h2>' + (stHtml || '<p class="no-stats">No special teams stats recorded.</p>') + '</div>';
 
