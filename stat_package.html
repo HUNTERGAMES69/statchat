@@ -17,7 +17,8 @@
   .topbar button.xls { background:#0f6e56; color:#fff; }
   .msg { padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:14px; }
   .msg.error { background:#fde8e8; color:#a32d2d; }
-  .report-header { text-align:center; margin-bottom:16px; background:#fff; border:1px solid #ddd; padding:16px; }
+  .report-header { position:relative; text-align:center; margin-bottom:16px; background:#fff; border:1px solid #ddd; padding:16px; }
+  .statchat-logo { position:absolute; top:12px; right:12px; width:60px; height:auto; border-radius:6px; }
   .report-header h1 { font-size:18px; margin:0 0 4px; }
   .report-header .sub { color:#666; font-size:13px; }
   table.quarter-table { width:100%; border-collapse:collapse; margin:0 auto 16px; font-size:13px; background:#fff; border:1px solid #ddd; }
@@ -444,8 +445,14 @@
     }));
 
     document.title = 'Statistics Report — ' + TEAMS.teamA.name + ' vs ' + TEAMS.teamB.name;
-    document.getElementById('reportContent').innerHTML = renderReport();
-    showView('mainView');
+    try {
+      document.getElementById('reportContent').innerHTML = renderReport();
+      showView('mainView');
+    } catch (err) {
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = 'This report could not be built: ' + err.message;
+      console.error(err);
+    }
   }
 
   document.getElementById('downloadPdfBtn').addEventListener('click', () => window.print());
@@ -591,7 +598,7 @@
     const visitorKey = TEAMS.teamA.isHome ? 'teamB' : 'teamA';
     const homeKey = TEAMS.teamA.isHome ? 'teamA' : 'teamB';
 
-    let html = '<div class="report-header">' +
+    let html = '<div class="report-header"><img class="statchat-logo" src="logo.png" alt="StatChat">' +
       '<h1>' + TEAMS[visitorKey].name + ' @ ' + TEAMS[homeKey].name + '</h1>' +
       '<div class="sub">' + (gameLabel || '') + (gameDate ? ' &middot; ' + new Date(gameDate + 'T00:00:00').toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'}) : '') + '</div>' +
       '</div>';
