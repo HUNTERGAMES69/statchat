@@ -506,9 +506,19 @@ function parseInput(raw, state){
     const yds = parseInt(tokens[1]) || 0;
     const team = which === 'po' ? off : def;
     const fieldDelta = which === 'po' ? -yds : yds;
-    const grantsFirstDown = state.down !== null && state.down !== 1 && state.distance !== null && (state.distance - fieldDelta) <= 0;
+    // Mirrors computeState's own penalty handling exactly, so the text
+    // always states the resulting down & distance -- not just when it
+    // happens to be a first down -- rather than leaving the reader to
+    // do that math themselves from the yardage alone.
+    const newFieldPos = state.fieldPos !== null ? Math.max(0, Math.min(100, state.fieldPos + fieldDelta)) : null;
+    let newDown = state.down, newDistance = state.distance !== null ? (state.distance - fieldDelta) : null;
+    if (newDistance !== null && newDistance <= 0){
+      newDown = 1;
+      newDistance = newFieldPos !== null ? Math.max(1, Math.min(10, 100 - newFieldPos)) : 10;
+    }
+    const downDistanceText = (newDown !== null && newDistance !== null) ? (' — ' + ordinal(newDown) + ' & ' + newDistance) : '';
     return {
-      text: 'Penalty on ' + TEAMS[team].name + ' — ' + yds + ' yds' + (grantsFirstDown ? ' — 1st down' : ''),
+      text: 'Penalty on ' + TEAMS[team].name + ' — ' + yds + ' yds' + downDistanceText,
       effect: { penaltyTeam: team, penaltyYds: yds, fieldDelta },
       flipEligible: false, team
     };
