@@ -848,11 +848,23 @@ function computeState(playsList){
 
   function countPossessions(playsList){
     const counts = { teamA: 0, teamB: 0 };
+    let priorPoss = startingPossession;
     for (let i = 0; i < playsList.length; i++){
       if (playsList[i].effect && playsList[i].effect.isReset){
-        const after = computeState(playsList.slice(0, i + 1));
-        if (after.possession === 'teamA' || after.possession === 'teamB') counts[after.possession]++;
+        const after = computeState(playsList.slice(0, i + 1)).possession;
+        if (after === 'teamA' || after === 'teamB') counts[after]++;
+        priorPoss = after;
+        continue;
       }
+      // A turnover on downs (and similar) changes possession without
+      // ever setting isReset -- detect the change directly so it
+      // still counts as a new possession, same fix as the drive-
+      // boundary detection above.
+      const possAfter = computeState(playsList.slice(0, i + 1)).possession;
+      if (possAfter !== priorPoss && (possAfter === 'teamA' || possAfter === 'teamB')){
+        counts[possAfter]++;
+      }
+      priorPoss = possAfter;
     }
     return counts;
   }
