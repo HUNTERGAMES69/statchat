@@ -160,6 +160,203 @@ comparisons against the real world's team labels. Their "zero
 violations" / "zero mismatches" results stand independent of this
 finding.
 
+## Possession-relative labeling (the "own"/"opp" convention) -- a recurring source of real confusion this session, worth understanding fully
+
+Field position throughout this app (`fieldPos`, 0-100) is always
+relative to whoever currently has the ball -- NOT a fixed Neville
+perspective. `markerLabel()` reads this directly: `fp <= 50` means
+"still on my own half" (labeled "own"), `fp > 50` means "past midfield,
+into the opponent's half" (labeled "opp"). Critically, "own"/"opp" here
+means "the current offense's own/opponent's territory" -- when
+possession flips, the SAME fieldPos value's own/opp label flips
+meaning too, even though the number didn't change.
+
+This is correct and by design, but it created two real, separate bugs
+this session because several UI widgets that feed a value into this
+system used ambiguous "Our side"/"Their side" labels instead of stating
+which team explicitly:
+
+1. **`startingSpotFieldsHtml()`** (used by kickoff/punt/interception/
+   fumble return-spot fields, and overtime setup) -- "Our side" read
+   naturally as "Neville's side" (since Neville is "our" team
+   everywhere else in the app), but the widget actually needed "our"
+   to mean "whichever team's drive is being set up" (which is often
+   the OTHER team, e.g. TEST OPP receiving a kickoff). Fixed by making
+   the buttons show the actual team name, computed from whichever team
+   the drive-start applies to.
+2. **The "New drive / correct down" utility** had its own, completely
+   separate, hardcoded copy of the same "Our side"/"Their side" labels
+   -- missed entirely by the first fix since it doesn't call
+   `startingSpotFieldsHtml()` at all. This utility never changes
+   possession itself (no `forcePossession` in its effect) -- it only
+   corrects down/distance/fieldPos for whoever currently has the ball,
+   so its labels are relative to `computeState().possession` at the
+   time it's opened.
+
+**The general lesson for any future widget that lets a coach specify a
+field-position/starting-spot value**: always show the actual team
+name the label refers to, and always be explicit about *whose*
+perspective "own"/"opp" is from at that specific widget -- never reuse
+"our"/"their" as if there's one fixed perspective throughout the app.
+Search for `startingSpotFieldsHtml` and for any other hardcoded
+"Our side"/"Their side" or "own"/"their" pairs before assuming a fix
+in one place covers every place this pattern appears.
+
+## Drive-boundary and possession-change detection -- the `isReset`-only assumption was wrong (found August 4-5, 2026)
+
+Several pieces of logic needed to know "when did the current drive
+start" or "how many possessions has each team had." All of them
+originally looked *only* for an explicit `effect.isReset` flag on a
+play. That flag is set by two things: an explicit "New drive" marker
+(from the return-spot fields, or the "New drive / correct down"
+utility), or a kickoff/punt/etc. that includes one.
+
+**The gap**: a turnover on downs changes possession via
+`effect.turnoverOnDowns` + `effect.flipApplied` -- it never sets
+`isReset` at all, and there's no separate "New drive" marker required
+or auto-generated afterward. The very next scrimmage play's own
+down/distance fallback logic (`state.down || 1`, `state.distance ||
+10`) papers over this silently for stat-tracking purposes, which is
+exactly why this went unnoticed for a long time: normal play entry
+"looks fine" even though nothing ever marked where the new drive
+began.
+
+This broke two independent things the same way:
+- **"Current drive"/"Previous drive" segmentation** (`game.html`,
+  `view.html`) -- with no boundary to split on, "current drive" would
+  silently span both teams' plays across the turnover.
+- **`countPossessions`** (all four report/view files) -- a team that
+  gained the ball via a turnover on downs and ran real plays would
+  still show 0 possessions, since nothing ever incremented the count.
+
+**The fix, `findDriveStarts()`**: instead of only checking `isReset`,
+walk the play list computing `computeState()` on progressively longer
+slices and detect any actual possession change directly, whether or
+not it came with an explicit marker. One subtlety that took a couple
+of iterations to get right: an explicit `isReset` marker play IS
+itself the first play of the new drive (a dedicated announcement --
+include it, same as before). But a *detected*, unmarked possession
+change (like a turnover on downs) means the play that caused the
+change still belongs to the *previous* possessor's drive -- the new
+drive starts at the next play index, not that one. Getting this
+backwards produces a boundary that's off by one play in the wrong
+direction.
+
+**If a future feature needs to know "who's possession is this" or
+"where did this drive start" from the play list**, use this same
+possession-change-detection approach, not a bare `isReset` check --
+the fix currently lives duplicated in `game.html` and `view.html` (for
+drive segmentation) and in all four report/view files (for
+`countPossessions`), consistent with the rest of the engine being
+duplicated rather than shared (see below). Consolidating the engine
+into one file would also consolidate this fix into one place.
+
+## Penalties never adjusted distance-to-go (found August 4-5, 2026)
+
+`computeState`'s penalty handling adjusted `fieldPos` by the penalty's
+`fieldDelta` but never touched `distance` at all -- so "4th & 7" plus
+a 10-yard penalty on the offense stayed "4th & 7" instead of becoming
+"4th & 17", and the next play would get evaluated against the wrong,
+stale distance-to-go (a 12-yard gain incorrectly converting a down
+that a real 4th-and-17 should not have converted).
+
+Fixed by adjusting `distance` by the same `fieldDelta`, in the opposite
+direction of possession's progress (subtracting it, so a penalty on
+offense -- negative `fieldDelta` -- increases distance, and a penalty
+on defense -- positive `fieldDelta` -- decreases it). While fixing
+this, also implemented the actual football rule this naturally enables
+and that was previously entirely unhandled: if penalty yardage alone
+reaches or exceeds the remaining distance, it's an automatic first
+down regardless of what down it was. `game.html`'s penalty-text
+generation (a separate, save-time-only concern, not shared with the
+other files) now also always states the resulting down & distance in
+the log line itself (e.g. "Penalty on Neville -- 5 yds -- 4th & 11"),
+mirroring this same math, so a reader never has to compute it by hand
+from the yardage alone.
+
+This bug and the drive-boundary bug above share a lesson worth naming
+explicitly: `computeState`'s per-play-type branches each need to fully
+update *every* piece of state a play can affect (down, distance,
+fieldPos, possession) -- a branch that only updates some of them can
+look correct in isolation while leaving stale state that a later,
+unrelated play then reads and gets wrong.
+
+## `roles.defense` is overloaded between real defensive credit and special-teams return credit (found August 4-5, 2026)
+
+`roles.defense` is set in ten different places in `game.html` -- some
+are genuine defensive credit (interception, sack, fumble recovery),
+and some are a kickoff/punt returner's "Returned by" credit, which is
+a special-teams role, not a defensive one. `computeBoxScore` (in all
+four report/view files) was treating any `roles.defense`-tagged player
+as deserving a defensive-stat bucket entry regardless of play type,
+so a returner with zero actual interceptions/sacks/fumble-recoveries
+still got an empty bucket entry created -- which was enough for
+`view.html`'s "does this team have any defensive stats to show" check
+to render an empty "Defense" tile.
+
+Fixed at the single, central point where the bucket actually gets
+created: only do so when the play type is actually `int`, `sack`, or
+`fumble`. Deliberately not touched: the ten places that set
+`roles.defense` itself, since a returner legitimately needs to be
+tagged with *some* role for name-resolution purposes elsewhere, and
+retagging all ten call sites with a new, separate field (e.g.
+`roles.returner`) would have been a much larger, higher-risk change for
+the same result. If a future feature needs to distinguish "actually
+credited on defense" from "credited as a special-teams returner" for
+some other purpose, remember this overload exists rather than assuming
+`roles.defense` always means defense.
+
+## `view.html`'s fixed-1920x1080-plus-transform-scale architecture
+
+The entire live-view page is built at a fixed 1920x1080 reference
+size (`.wrap { width:1920px; height:1080px; }`), then a JS function
+(`applyDisplayScale`, tied to `window.resize`) scales the whole thing
+with a CSS `transform` to fit whatever the real screen is. This keeps
+every internal size (fonts, padding, gaps) as fixed px values that
+stay proportional to each other automatically, without needing to
+rewrite the whole stylesheet in relative units.
+
+The scale factor used to be `Math.min(scaleX, scaleY)` -- one uniform
+number preserving the fixed 16:9 aspect ratio, which necessarily
+leaves the leftover space empty on whichever axis doesn't match the
+real screen's actual ratio (confirmed concretely on a real 2496x1664
+screen: 260px of wasted vertical space). Changed to independent
+`scale(scaleX, scaleY)`, stretching non-uniformly to exactly fill any
+screen on any aspect ratio. The trade-off is a very slight, usually
+imperceptible distortion on screens far from 16:9 -- acceptable here
+specifically because almost everything on this page is text, tables,
+and tiles, not shapes or images where aspect ratio would visibly
+matter.
+
+Separately, there's a second, independent scaling mechanism just for
+the stat-category tiles within the bottom two quadrants (`--stat-scale`
+CSS custom property, computed in `renderBoxScore()`), which grows or
+shrinks tile font-size/padding based on *vertical* fit only (available
+quadrant height vs. actual rendered content height) so a team with
+modest stats doesn't render tiny and leave empty space, and a team
+with a lot of stats doesn't overflow. This mechanism does not consider
+horizontal fit at all -- it was not touched or extended during the
+scaleX/scaleY fix above, since the primary fix (making the whole
+canvas correctly fill the real screen) addresses the bulk of any
+wasted-space problem on its own. If a similar "text too small/too
+large for the available space" issue is reported specifically within
+the stats tiles after confirming the canvas-level fix is deployed,
+this second, separate mechanism is where to look next.
+
+## `game.html`'s Pass panel now also reaches Sack and Interception
+
+Sack and Interception used to be their own top-level "Scrimmage"
+buttons. They're now reached from two buttons ("Sacked"/"Intercepted")
+at the top of the Pass panel instead, since both are really outcomes
+of a pass attempt. Deliberately implemented as the lowest-risk option
+available: clicking either button simply calls `renderPlayPanel('sack')`
+/ `renderPlayPanel('int')` directly -- the exact same, unmodified panels
+and save logic as before, just reached from a different entry point.
+No merging, no rebuilding of the sack/interception HTML or logic
+happened. If Sack or Interception need a change in the future, they're
+still just `renderPlayPanel('sack')`/`renderPlayPanel('int')`,
+unaffected by how a coach gets there.
+
 ## Why the engine is duplicated across pages, not shared yet
 
 `view.html`, `recap.html`, `stat_package.html`, and `season_report.html`

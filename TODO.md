@@ -133,6 +133,7 @@ where the bug actually lived.
     back to careful logical review rather than data verification.
 
 ### Need a decision from Andy before building
+
 - [ ] **Golden-scenarios test suite** — a committed file (e.g.
   `tests/golden_scenarios.js`) covering sack, safety, 2pt, muffed
   kickoff, etc., re-run before shipping any engine change. Needs to
@@ -159,6 +160,145 @@ where the bug actually lived.
   analyzes any 2 games, or an arbitrary subset of games, side by
   side (distinct from the existing single-game and full-season
   reports).
+
+## 4. Live-entry (`game.html`) bug fixes and UI changes — this session (Aug 4-5, 2026)
+
+All of the following are DONE and shipped. Listed here so a new session
+doesn't re-investigate or re-fix any of these from scratch.
+
+### Bug fixes
+- [x] **Mobile responsiveness** for `recap.html`, `stat_package.html`,
+  `season_report.html` — media queries below 700px, tables wrapped in
+  horizontally-scrollable containers, `season_report.html`'s 2/3-column
+  chart-rows collapse to one column using CSS `order` to preserve the
+  metric-above-its-chart pairing (the DOM is flat siblings relying on
+  grid column position — naively stacking in DOM order would have
+  grouped all metrics together then all charts together). `view.html`
+  and `game.html` already had their own separate mobile-responsive
+  designs from before this session and were not touched here.
+- [x] **Ambiguous "Our side"/"Their side" field-position labels** — these
+  labels are relative to whoever's drive is being set up, not a fixed
+  Neville perspective, but the wording made the natural (wrong) reading
+  the opposite of what the underlying math needed. Fixed in
+  `startingSpotFieldsHtml()` (used by kickoff/punt/interception/fumble
+  return-spot fields and overtime setup) AND separately in the "New
+  drive / correct down" utility, which had its own independent,
+  hardcoded copy of the same ambiguous labels that the first fix missed
+  entirely. Both now show the actual team names. See PROJECT_NOTES.md's
+  "Possession-relative labeling" entry for the general pattern.
+- [x] **Redundant "the" in field-position text** — "at the own 15"
+  →"at own 15", since `markerLabel()` always returns "own X"/"opp X",
+  never a bare number needing "the". Fixed in `game.html` (6 places,
+  where this text is generated) and separately in `view.html` (1 place
+  — it computes its own live banner independently rather than
+  displaying stored text, so it had its own separate copy of this).
+- [x] **Empty "Defense" stat tile for special-teams returners** — a
+  kickoff/punt returner is credited via the same `roles.defense` field
+  used for actual interception/sack/fumble-recovery credit, so
+  `computeBoxScore` was creating an empty defensive-stat bucket entry
+  for any returner even with zero actual defensive stats. Fixed in all
+  four files that have their own copy of `computeBoxScore`
+  (`view.html`, `recap.html`, `stat_package.html`, `season_report.html`)
+  to only create the entry when the play type is actually int/sack/
+  fumble.
+- [x] **"Current drive"/"Previous drive" never updating past a turnover
+  on downs** — that play type changes possession internally but never
+  sets `effect.isReset`, which drive-boundary detection relied on
+  exclusively. Added `findDriveStarts()` (detects any possession change
+  directly, not just explicit `isReset` markers) in both `game.html`
+  and `view.html`. Subtlety worth remembering: an explicit `isReset`
+  marker IS the first play of its new drive (a dedicated announcement)
+  and is included; a detected-but-unmarked possession change means the
+  play that caused it still belongs to the *previous* possessor, so the
+  new drive starts at the next play instead.
+- [x] **Possessions count not incrementing after a turnover on downs** —
+  identical root cause to the above, different function
+  (`countPossessions`). Fixed with the same detect-any-possession-
+  change approach in all four report/view files.
+- [x] **Penalties never adjusting distance-to-go** — `computeState`'s
+  penalty handling adjusted `fieldPos` but never `distance`, so a
+  penalty could leave a stale down/distance and let a later play
+  incorrectly convert (or fail to convert) a down. Fixed in all five
+  files with a copy of `computeState` (`game.html`, `view.html`,
+  `recap.html`, `stat_package.html`, `season_report.html`), including
+  the real football rule this enables: if penalty yardage alone reaches
+  or passes the marker, it's an automatic first down regardless of down.
+- [x] **Penalty log text now always states the resulting down &
+  distance** — e.g. "Penalty on Neville — 5 yds — 4th & 11", not just
+  the yardage, mirroring the exact math in `computeState`'s (now-fixed)
+  penalty handling. `game.html` only — this text is generated once at
+  save time and stored; other pages just display it.
+- [x] **Colon-less clock entry** — `clockToAbsSeconds()` now accepts
+  "1156" as equivalent to "11:56" (last two digits are seconds,
+  everything before is minutes; requires ≥2 digits so the split is
+  never ambiguous). Colon format still works unchanged. All three clock
+  input placeholders updated to "M:SS or MSS". `game.html` only.
+- [x] **`view.html` wasted space on non-16:9 screens** — the whole page
+  is built at a fixed 1920×1080 reference size and scaled by one
+  `transform` to fit the real screen. The old scale was
+  `Math.min(scaleX, scaleY)`, which preserves the fixed 16:9 shape and
+  always leaves the leftover space empty on whichever axis doesn't
+  match. Changed to independent `scale(scaleX, scaleY)` so the whole
+  canvas — and everything inside it — stretches to exactly fill any
+  screen, on any aspect ratio. Very slightly non-uniform on screens far
+  from 16:9, but unnoticeable for text/tables/tiles, which is nearly
+  everything on this page.
+- [x] **Fumble-recovery default changed to "Recovered by opponent"** —
+  was "Recovered by own team" in all four places this choice appears
+  (standalone Fumble, and the fumble sub-flows within Rush/Pass/Sack).
+  Important subtlety: flipping which radio is `checked` alone was NOT
+  enough — each panel also has a static initial-visibility setting on
+  the two sub-field `<div>`s (which player recovered, return yards,
+  etc.) that doesn't react until a radio is actually clicked. Both the
+  `checked` attribute AND the initial `display:none` placement had to
+  be swapped together, in all four panels.
+
+### UI restructuring (`game.html` only, no engine/logic changes)
+- [x] Sack and Interception removed as top-level Scrimmage buttons;
+  now reached via two new buttons ("Sacked"/"Intercepted") at the top
+  of the Pass panel, which simply re-trigger the existing, unmodified
+  Sack/Interception panels. Deliberately done this way — lowest risk,
+  reuses fully-tested logic rather than rebuilding it.
+- [x] Fumble and Safety moved from Scrimmage into the Utilities row.
+- [x] "Quarter marker" moved out of Utilities into the game-control
+  row, directly between "End 1st half" and "Start 2nd half" (so it
+  always sits adjacent to whichever game-phase button is currently
+  visible, since only one of Start game/End 1st half/Start 2nd half/
+  End game is ever shown at once). Styled green (`.primary`).
+  Utilities row order: Penalty, Fumble, Safety, New drive/correct down,
+  Flip possession.
+- [x] "Flip possession" moved from the floating-actions corner into the
+  Utilities row (last position). Styled black (default button, no
+  class) — was white/outline (`.secondary`) before.
+- [x] "Penalty" moved to first position in the Utilities row, styled
+  penalty-flag yellow (`#ffc72c` background, dark text).
+
+### Investigated, not reproduced, not confirmed as a bug
+- Andy reported "Previous drive" showing no stats after an
+  interception (just the Clock event, attributed to the wrong team).
+  Rebuilt the exact scenario twice, including the full multi-play drive
+  with a penalty, through the real save flow — both times it worked
+  correctly. Most likely explanation: Andy was testing against a
+  `view.html` from before the `findDriveStarts` fix above (an
+  interception without an explicit "New drive" marker is exactly the
+  kind of possession change that fix was built for). Andy said to
+  disregard. **If this recurs after confirming the latest `view.html`
+  is actually deployed, it's worth a fresh, careful look** — don't
+  assume it's the same stale-file explanation twice.
+
+## 5. NFL UI-driven testing infrastructure — status carried over, unchanged this session
+
+No new work happened on this thread during the stretch covered by
+section 4 above. Everything below is exactly as it stood before — see
+section 2 for the full detail. Restating only the single most important
+fact so it isn't lost: **the test scripts (`ui_code_driver.js`,
+`full_ui_audit.js`, `full_ui_batch_runner.js`, `full_audit_runner.js`,
+`summarize_results.js`) still only exist in the sandbox
+(`/home/claude/stat_tracker/`) and have never been packaged as files
+for Andy to commit to the repo.** A fresh session starting this work
+would need to rebuild all of it from scratch unless that packaging
+happens first.
+
 
 ## Other known-outstanding items (from earlier sessions, may be stale)
 
