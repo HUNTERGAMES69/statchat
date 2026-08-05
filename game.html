@@ -93,7 +93,7 @@
       <div class="row" style="margin-bottom:8px;">
         <button class="primary" id="startGameBtn">Start game</button>
         <button class="primary" id="endFirstHalfBtn" style="display:none;">End 1st half</button>
-        <button id="quarterUtilBtn">Quarter marker</button>
+        <button class="primary" id="quarterUtilBtn">Quarter marker</button>
         <button class="primary" id="startHalfBtn" style="display:none;">Start 2nd half</button>
         <button class="primary" id="endGameBtn" style="display:none;">End game</button>
         <button id="otUtilBtn" style="display:none;">Start overtime</button>
@@ -115,11 +115,11 @@
       </div>
       <p class="hint" style="margin:10px 0 6px;">Utilities</p>
       <div class="row">
+        <button id="penUtilBtn" style="background:#ffc72c; color:#1a1a1a;">Penalty</button>
         <button class="ptypeBtn" data-type="fumble">Fumble</button>
         <button class="ptypeBtn" data-type="safety">Safety</button>
-        <button id="penUtilBtn">Penalty</button>
         <button id="driveUtilBtn">New drive / correct down</button>
-        <button class="secondary" id="flipBtn">Flip possession</button>
+        <button id="flipBtn">Flip possession</button>
       </div>
 
       <div id="playPanel" style="display:none;"></div>
@@ -2058,12 +2058,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('confirmCard').style.display = 'none';
     const panel = document.getElementById('playPanel');
     panel.style.display = 'block';
+    const driveTeam = computeState().possession;
+    const driveTeamLabel = TEAMS[driveTeam].name + "'s side";
+    const otherTeamLabel = TEAMS[otherTeam(driveTeam)].name + "'s side";
     panel.innerHTML =
       '<p style="font-size:13px; color:#888; margin:0 0 6px;">New drive / correct down</p>' +
       '<div style="margin-bottom:8px;"><span style="font-size:13px; margin-right:6px;">Down</span>' +
       ['1','2','3','4'].map(d => '<button type="button" class="driveDownBtn" data-d="' + d + '">' + (d==='1'?'1st':d==='2'?'2nd':d==='3'?'3rd':'4th') + '</button>').join(' ') + '</div>' +
       '<label class="inline">Distance <input type="text" id="drive_dist" style="width:60px; display:inline-block;"></label>' +
-      '<div style="margin-top:8px;"><button type="button" class="driveSideBtn" data-side="own">Our side</button> <button type="button" class="driveSideBtn" data-side="opp">Their side</button> ' +
+      '<div style="margin-top:8px;"><button type="button" class="driveSideBtn" data-side="own">' + driveTeamLabel + '</button> <button type="button" class="driveSideBtn" data-side="opp">' + otherTeamLabel + '</button> ' +
       '<input type="text" id="drive_yardline" style="width:70px; display:inline-block;" placeholder="Yard line"></div>' +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="drive_review">Review</button><button class="secondary" id="drive_clear">Clear</button></div>';
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
