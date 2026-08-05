@@ -285,31 +285,49 @@
       return ['QB','RB1','RB2','WR1','WR2','WR3'].map(role => s[role]).filter(Boolean);
     };
     TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null, seedOrder: seedOrderFor('teamA') };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: ourBranding.logo_url || null, seedOrder: seedOrderFor('teamA') };
     TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#8B0000', text: game.opponent_secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null, seedOrder: seedOrderFor('teamB') };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: game.opponent_logo_url || null, seedOrder: seedOrderFor('teamB') };
     rosterRows.forEach(r => {
       const team = TEAMS[r.team_side];
       if (!team) return;
       if (r.unit === 'offense'){ team.rosterOffense[r.jersey_number] = r.player_name; team.posOffense[r.jersey_number] = r.position; }
-      else if (r.unit === 'defense'){ team.rosterDefense[r.jersey_number] = r.player_name; }
-      else if (r.unit === 'special'){ team.rosterSpecialTeams[r.jersey_number] = r.player_name; }
+      else if (r.unit === 'defense'){ team.rosterDefense[r.jersey_number] = r.player_name; team.posDefense[r.jersey_number] = r.position; }
+      else if (r.unit === 'special'){ team.rosterSpecialTeams[r.jersey_number] = r.player_name; team.posSpecialTeams[r.jersey_number] = r.position; }
     });
   }
 
 
   // --- Proven engine core, ported verbatim from the tested entry app ---
 function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+// Jersey numbers resolve across ALL THREE roster units, not just the one
+// the play type implies. High-school rosters routinely list a player
+// under a single unit even though they play several, and a dedicated
+// kick/punt returner is normally rostered on special teams only -- which
+// is why returners used to render in the log as a bare "#25".
+//
+// A fallback can only ever turn "#25" into a name; it can never change a
+// name that already resolved, because the expected unit is always
+// searched first. This mirrors playerName() in the report pages.
+function rosterName(teamKey, num, order){
+  const t = TEAMS[teamKey];
+  const buckets = { offense: t.rosterOffense, defense: t.rosterDefense, special: t.rosterSpecialTeams };
+  for (const unit of order){
+    const roster = buckets[unit];
+    if (roster && roster[num]) return roster[num];
+  }
+  return null;
+}
 function nameInOffense(teamKey, num){
-  const n = TEAMS[teamKey].rosterOffense[num];
+  const n = rosterName(teamKey, num, ['offense','special','defense']);
   return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
 }
 function nameInDefense(teamKey, num){
-  const n = TEAMS[teamKey].rosterDefense[num];
+  const n = rosterName(teamKey, num, ['defense','special','offense']);
   return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
 }
 function nameInSpecialTeams(teamKey, num){
-  const n = TEAMS[teamKey].rosterSpecialTeams && TEAMS[teamKey].rosterSpecialTeams[num];
+  const n = rosterName(teamKey, num, ['special','offense','defense']);
   return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
 }
 function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':n===4?'4th':(n+'th'); }
@@ -798,9 +816,77 @@ function specialTeamsEligible(team){
   const resolvedList = Object.keys(roster).sort().map(num => ({ num, name: roster[num] }));
   return ambiguousList.concat(resolvedList);
 }
-function pickerHtml(list, groupClass, statLabelFn){
-  if (list.length === 0) return '<span style="font-size:13px; color:var(--text-muted, #999);">no one credited yet — type a number below</span>';
-  return list.map(p => '<button type="button" class="' + groupClass + '" data-num="' + p.num + '"' + (p.resolvedName ? ' data-resolved="' + p.resolvedName.replace(/"/g,'') + '"' : '') + ' style="margin:0 6px 6px 0;">#' + p.num + ' ' + (p.name||'') + (statLabelFn ? ' <span style="color:#999; font-size:11px;">(' + statLabelFn(p.num) + ')</span>' : '') + '</button>').join('');
+// A returner is almost never a "discovered defender". Dedicated kick and
+// punt returners are rostered on special teams (KR/PR), so
+// defenseEligible() -- which lists only players already credited with a
+// defensive play -- left this picker completely empty on the opening
+// kickoff of every game. That pushed the coach onto manual entry, which
+// is exactly where returner names used to be lost.
+//
+// Order: the special-teams roster first (the designated returners), then
+// anyone already discovered on defense, deduped by jersey number. A
+// returner typed in by hand becomes discovered after their first return,
+// so the list fills itself in as the game goes on. Someone rostered on
+// offense only still has to be typed -- rosterName() resolves their name
+// correctly either way, and dumping the whole offense roster in here
+// would make the grid unusable.
+// How likely a position is to be back deep receiving a kick. Designated
+// returners first, then anyone with the speed to be used there, and
+// specialists last -- a kicker or long snapper is on the special-teams
+// roster but is never the returner. They stay in the list rather than
+// being filtered out, because a team short on bodies really might send
+// its punter back, and hiding a player the coach needs mid-game is a
+// worse failure than showing one they don't.
+const RETURNER_POS_RANK = (() => {
+  const rank = {};
+  ['KR','PR','RS','RET'].forEach(p => rank[p] = 0);
+  ['WR','RB','HB','TB','ATH','SLOT','DB','CB','S','FS','SS','TE'].forEach(p => rank[p] = 1);
+  ['K','PK','P','LS','H','KO'].forEach(p => rank[p] = 3);
+  return rank;
+})();
+function returnerRank(pos){
+  const r = RETURNER_POS_RANK[(pos || '').toUpperCase()];
+  return r === undefined ? 2 : r;
+}
+function returnerEligible(team){
+  const t = TEAMS[team];
+  const { stats, discovered } = computePlayerStats();
+  const ambiguousST = t.ambiguousSpecialTeams || {};
+  const ambiguousDef = t.ambiguousDefense || {};
+  const ambiguousList = [];
+  Object.keys(ambiguousST).forEach(num => {
+    ambiguousST[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', unit: 'special', resolvedName: name }));
+  });
+  Object.keys(ambiguousDef).forEach(num => {
+    if (ambiguousST[num]) return;
+    ambiguousDef[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', unit: 'defense', resolvedName: name }));
+  });
+  const seen = {};
+  Object.keys(ambiguousST).forEach(num => { seen[num] = true; });
+  Object.keys(ambiguousDef).forEach(num => { seen[num] = true; });
+  const list = [];
+  const add = (num, name, unit, pos) => {
+    if (seen[num]) return;
+    seen[num] = true;
+    list.push({ num, name: name || '', unit, pos: pos || '' });
+  };
+  const posST = t.posSpecialTeams || {};
+  Object.keys(t.rosterSpecialTeams || {})
+    .sort((a, b) => {
+      const ra = returnerRank(posST[a]), rb = returnerRank(posST[b]);
+      if (ra !== rb) return ra - rb;
+      return (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0);
+    })
+    .forEach(num => add(num, t.rosterSpecialTeams[num], 'special', posST[num]));
+  const posDef = t.posDefense || {};
+  (discovered[team] || []).slice()
+    .sort((a, b) => (stats[team].credits[b] || 0) - (stats[team].credits[a] || 0))
+    .forEach(num => add(num, t.rosterDefense[num] || '', 'defense', posDef[num]));
+  return ambiguousList.concat(list);
+}
+function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
+  if (list.length === 0) return '<span style="font-size:13px; color:var(--text-muted, #999);">' + (emptyMsg || 'no one credited yet — type a number below') + '</span>';
+  return list.map(p => '<button type="button" class="' + groupClass + '" data-num="' + p.num + '"' + (p.resolvedName ? ' data-resolved="' + p.resolvedName.replace(/"/g,'') + '"' : '') + (p.unit ? ' data-unit="' + p.unit + '"' : '') + ' style="margin:0 6px 6px 0;">#' + p.num + ' ' + (p.name||'') + (statLabelFn && statLabelFn(p.num, p) ? ' <span style="color:#999; font-size:11px;">(' + statLabelFn(p.num, p) + ')</span>' : '') + '</button>').join('');
 }
 function wirePickerButtons(container, groupClass, manualInputId, onPick){
   container.querySelectorAll('.' + groupClass).forEach(b => {
@@ -808,7 +894,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       container.querySelectorAll('.' + groupClass).forEach(x => x.style.background = '');
       b.style.background = 'var(--bg-accent, #e6f1fb)';
       document.getElementById(manualInputId).value = b.dataset.num;
-      onPick(b.dataset.num, b.dataset.resolved || null);
+      onPick(b.dataset.num, b.dataset.resolved || null, b.dataset.unit || null);
     });
   });
 }
@@ -1254,6 +1340,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, n => (stats[def].credits[n]||0)+' credits') + '</div>' +
         '<input type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px; margin-top:4px;">';
     }
+    // Dedicated returner picker for kickoffs and punts. It deliberately
+    // reuses the credit field's ids and classes (pp_credit_grid /
+    // pp_credit_pick / pp_credit_manual) so buildAndReview and every
+    // existing wiring path keep working untouched -- the only difference
+    // is who gets offered. No stat label either: a returner's defensive
+    // credit count is meaningless here, and "0 credits" next to every
+    // special-teams player was pure noise.
+    function retBlock(label, suffix){
+      suffix = suffix || '';
+      const list = returnerEligible(def);
+      return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
+        '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, (num, p) => (p && p.pos) || '', 'no returners on the roster — type a number below') + '</div>' +
+        '<input type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px; margin-top:4px;">';
+    }
     const yardsBlock = (label, id) => '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label||'Yards') + '</p><input type="text" id="' + (id||'pp_yards') + '" style="width:80px;">';
     const yardsBlockRet = () => '<div id="pp_retyds_container"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Return yards (optional)</p><input type="text" id="pp_retyds" style="width:80px;"></div>';
     const tdBlock = '<div style="margin-top:10px;">' +
@@ -1328,14 +1428,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<p class="hint" style="margin:0 0 10px;">Offense tackled, or committed a foul, in their own end zone. Always 2 points for the defense, and ends the drive — the scoring team kicks off next, logged as its own play afterward.</p>' +
         defBlock('Credited to (optional)');
     else if (type === 'kickoff') html = offBlock('kicker','Kicker') + yardsBlock('Kick distance') +
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_ko_ret_wrap">' + defBlock('Returned by (optional)') + '</div>' +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_ko_ret_wrap">' + retBlock('Returned by (optional)') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_touchback', 'Touchback') + '</div></div>' +
         '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' + tdBlock + startingSpotFieldsHtml('pp_spot', null, def);
     else if (type === 'punt') html =
         offBlock('punter','Punter') +
         '<div style="display:flex; align-items:flex-end; gap:14px;"><div>' + yardsBlock('Punt distance') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_blocked') + '</div></div>' +
-        '<div id="pp_punt_normal">' + defBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div></div>' +
+        '<div id="pp_punt_normal">' + retBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div></div>' +
         '<div id="pp_punt_blocked" style="display:none;">' +
           '<label class="inline" style="display:block;"><input type="radio" name="pp_punt_blockrec" value="opp" checked> Recovered by opponent</label>' +
           '<label class="inline" style="display:block;"><input type="radio" name="pp_punt_blockrec" value="own"> Recovered by own team</label>' +
@@ -1476,8 +1576,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     });
     ['', '_pb', '_fgb', '_2ptRush', '_2ptPass', '_rushfum', '_passfum', '_sackfum'].forEach(suffix => {
       const creditGrid = document.getElementById('pp_credit_grid' + suffix);
-      if (creditGrid) wirePickerButtons(panel, 'pp_credit_pick' + suffix, 'pp_credit_manual' + suffix, (num, resolvedName) => {
-        if (resolvedName) TEAMS[def].rosterDefense[num] = resolvedName;
+      if (creditGrid) wirePickerButtons(panel, 'pp_credit_pick' + suffix, 'pp_credit_manual' + suffix, (num, resolvedName, unit) => {
+        // Writing a resolved ambiguous name back has to target the roster
+        // the player actually came from -- a special-teams returner does
+        // not belong in rosterDefense.
+        if (resolvedName){
+          const t = TEAMS[def];
+          if (unit === 'special'){
+            t.rosterSpecialTeams = t.rosterSpecialTeams || {};
+            t.rosterSpecialTeams[num] = resolvedName;
+          } else {
+            t.rosterDefense[num] = resolvedName;
+          }
+        }
         sel.credit = num;
       });
       const creditManual = document.getElementById('pp_credit_manual' + suffix);
