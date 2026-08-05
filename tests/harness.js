@@ -1,0 +1,224 @@
+// StatChat test harness
+// ----------------------
+// Boots the REAL game.html inside jsdom against a mock Supabase backend,
+// so tests can drive genuine UI elements (click real buttons, type into
+// real <input> fields) instead of calling parseInput() directly.
+//
+// WHY THIS EXISTS: the sack-yardage bug (Aug 3 2026) lived in the HTML
+// input path itself and was invisible to parseInput()-level fuzzing.
+// Anything that claims to verify the app must go through the real DOM.
+//
+// The mock DB also records every row the app *persists*, which is what
+// makes it possible to cross-check three independent representations of
+// the same play: what was typed -> what got saved -> what is displayed.
+
+const fs = require('fs');
+const path = require('path');
+const { JSDOM } = require('jsdom');
+
+const REPO = path.resolve(__dirname, '..');
+
+function makeMockSupabase(db) {
+  // Minimal chainable query builder. Every chain method returns `this`;
+  // awaiting the builder resolves to {data, error}. Writes are recorded
+  // into `db.inserted` / `db.updated` so tests can inspect them.
+  function builder(table, op, payload) {
+    const b = {
+      _table: table,
+      _op: op,
+      _payload: payload,
+      _filters: {},
+      select() { if (this._op === null) this._op = 'select'; return this; },
+      insert(rows) {
+        this._op = 'insert';
+        const arr = Array.isArray(rows) ? rows : [rows];
+        arr.forEach(r => db.inserted.push({ table, row: r }));
+        if (table === 'plays') arr.forEach(r => db.plays.push(r));
+        return this;
+      },
+      update(fields) {
+        this._op = 'update';
+        db.updated.push({ table, fields });
+        Object.assign(db.gameFields, fields);
+        return this;
+      },
+      delete() { this._op = 'delete'; return this; },
+      eq(col, val) { this._filters[col] = val; return this; },
+      order() { return this; },
+      limit() { return this; },
+      then(resolve, reject) {
+        let data = [];
+        if (this._op === 'select') {
+          if (table === 'profiles') data = [{ role: 'admin' }];
+          else if (table === 'games') data = [db.game];
+          else if (table === 'game_rosters') data = db.roster;
+          else if (table === 'teams') data = [db.branding];
+          else if (table === 'plays') data = db.existingPlays;
+        }
+        return Promise.resolve({ data, error: null }).then(resolve, reject);
+      }
+    };
+    return b;
+  }
+
+  return {
+    from(table) { return builder(table, null, null); },
+    auth: {
+      onAuthStateChange(cb) {
+        // Fire INITIAL_SESSION exactly the way the real client does --
+        // this is the documented pattern every StatChat page relies on.
+        setTimeout(() => cb('INITIAL_SESSION', { user: { id: 'test-user-id' } }), 0);
+        return { data: { subscription: { unsubscribe() {} } } };
+      },
+      getUser() { return Promise.resolve({ data: { user: { id: 'test-user-id' } }, error: null }); },
+      signOut() { return Promise.resolve({ error: null }); }
+    },
+    channel() {
+      return { on() { return this; }, subscribe() { return this; } };
+    },
+    removeChannel() {}
+  };
+}
+
+const DEFAULT_GAME = {
+  id: 'test-game-1',
+  designator: 'Game 1',
+  home_team_name: 'Neville',
+  away_team_name: 'TEST OPP',
+  our_team_is_home: true,
+  opponent_primary_color: '#8B0000',
+  opponent_secondary_color: '#ffffff',
+  opponent_logo_url: null,
+  quarter_length_seconds: 720,
+  status: 'in_progress',
+  game_phase: 'firstHalf',
+  guided_state: null,
+  seed_starters: {}
+};
+
+const DEFAULT_BRANDING = {
+  primary_color: '#ffc72c',
+  secondary_color: '#000000',
+  logo_url: null
+};
+
+// A roster big enough to cover every panel's player picker, on both
+// sides, across offense / defense / special teams.
+function defaultRoster() {
+  const rows = [];
+  const add = (side, unit, num, name, pos) =>
+    rows.push({ team_side: side, unit, jersey_number: String(num), player_name: name, position: pos });
+
+  ['teamA', 'teamB'].forEach(side => {
+    const tag = side === 'teamA' ? 'N' : 'O';
+    add(side, 'offense', 7, tag + ' Quarterback', 'QB');
+    add(side, 'offense', 22, tag + ' Runningback', 'RB');
+    add(side, 'offense', 28, tag + ' Halfback', 'HB');
+    add(side, 'offense', 80, tag + ' Receiver', 'WR');
+    add(side, 'offense', 84, tag + ' Receiver Two', 'WR');
+    add(side, 'offense', 88, tag + ' Tightend', 'TE');
+    add(side, 'defense', 55, tag + ' Linebacker', 'LB');
+    add(side, 'defense', 21, tag + ' Cornerback', 'CB');
+    add(side, 'defense', 99, tag + ' Defensiveend', 'DE');
+    add(side, 'special', 3, tag + ' Kicker', 'K');
+    add(side, 'special', 15, tag + ' Punter', 'P');
+    add(side, 'special', 25, tag + ' Returner', 'KR');
+  });
+  return rows;
+}
+
+/**
+ * Boot any StatChat page against the mock backend.
+ * @param {string} file    e.g. 'game.html', 'view.html'
+ * @param {object} opts    { game, branding, roster, existingPlays, query, readyWhen }
+ */
+async function bootPage(file, opts = {}) {
+  const html = fs.readFileSync(path.join(REPO, file), 'utf8');
+
+  const db = {
+    game: Object.assign({}, DEFAULT_GAME, opts.game || {}),
+    branding: Object.assign({}, DEFAULT_BRANDING, opts.branding || {}),
+    roster: opts.roster || defaultRoster(),
+    existingPlays: opts.existingPlays || [],
+    plays: [],
+    inserted: [],
+    updated: [],
+    gameFields: {}
+  };
+
+  const alerts = [];
+  const query = opts.query || '?id=test-game-1';
+  const dom = new JSDOM(html, {
+    url: 'https://nevillestatchat.vercel.app/' + file + query,
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    beforeParse(window) {
+      // Stub the CDN Supabase SDK before any page script runs. The real
+      // CDN script tag is never fetched by jsdom, so this global IS the
+      // library as far as the page is concerned.
+      window.supabase = { createClient: () => makeMockSupabase(db) };
+      window.alert = msg => { alerts.push(String(msg)); };
+      window.confirm = () => (opts.confirmAnswer === undefined ? true : opts.confirmAnswer);
+      window.scrollTo = () => {};
+      // season_report.html renders its charts with Chart.js from a CDN,
+      // which jsdom never fetches, and jsdom has no canvas backend
+      // either. Stub both: the charts are presentation, but the page's
+      // NUMBERS are exactly what these tests need to reach.
+      window.Chart = function Chart() {
+        return { destroy() {}, update() {}, resize() {}, data: {}, options: {} };
+      };
+      window.Chart.register = () => {};
+      window.Chart.defaults = { font: {}, plugins: { legend: {} } };
+      window.HTMLCanvasElement.prototype.getContext = function () {
+        return {
+          canvas: this, save() {}, restore() {}, beginPath() {}, closePath() {},
+          moveTo() {}, lineTo() {}, arc() {}, fill() {}, stroke() {}, clearRect() {},
+          fillRect() {}, strokeRect() {}, fillText() {}, strokeText() {},
+          measureText: () => ({ width: 0 }), setTransform() {}, translate() {},
+          scale() {}, rotate() {}, drawImage() {},
+          createLinearGradient: () => ({ addColorStop() {} }),
+          getImageData: () => ({ data: [] }), putImageData() {}
+        };
+      };
+      if (!window.Element.prototype.scrollIntoView) {
+        window.Element.prototype.scrollIntoView = function () {};
+      }
+    }
+  });
+
+  const { window } = dom;
+  window.__alerts = alerts;
+
+  // Wait for init() to finish -- it's async and driven by the
+  // INITIAL_SESSION callback, so poll until the page says it's ready.
+  const readyWhen = opts.readyWhen || (win => {
+    const mv = win.document.getElementById('mainView');
+    return mv && !mv.classList.contains('hidden');
+  });
+  await new Promise((resolve, reject) => {
+    const started = Date.now();
+    const tick = () => {
+      let ok = false;
+      try { ok = !!readyWhen(window); } catch (e) { ok = false; }
+      if (ok) return resolve();
+      if (Date.now() - started > 8000) {
+        const err = window.document.getElementById('errorMsg');
+        return reject(new Error(file + ' never became ready. errorMsg=' +
+          (err ? err.textContent : '(none)')));
+      }
+      setTimeout(tick, 5);
+    };
+    tick();
+  });
+
+  // `let` declarations at the top level of a classic script live in the
+  // global lexical environment, NOT on `window` -- so window.TEAMS is
+  // undefined but window.eval('TEAMS') works.
+  const evalIn = code => window.eval(code);
+
+  return { dom, window, document: window.document, db, evalIn, alerts, close: () => dom.window.close() };
+}
+
+const bootGamePage = (opts = {}) => bootPage('game.html', opts);
+
+module.exports = { bootPage, bootGamePage, defaultRoster, DEFAULT_GAME, DEFAULT_BRANDING };
