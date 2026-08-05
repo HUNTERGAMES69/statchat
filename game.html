@@ -69,7 +69,7 @@
 
     <div id="clockPromptCard" style="display:none; background:#fff3cd; border-radius:8px; padding:12px 14px; margin-bottom:10px;">
       <div id="clockPromptLabel" style="font-size:15px; font-weight:600; margin-bottom:8px;"></div>
-      <input type="text" id="clockPromptInput" placeholder="M:SS" style="width:100px; display:inline-block;">
+      <input type="text" id="clockPromptInput" placeholder="M:SS or MSS" style="width:100px; display:inline-block;">
       <button class="primary" id="clockPromptSave">Save clock</button>
       <button class="secondary" id="clockPromptSkip">Skip</button>
     </div>
@@ -137,7 +137,7 @@
         <div id="fieldPosWarning" style="display:none; background:#fff3cd; border:1px solid #e0b400; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:13px; color:#7a5c00;"></div>
         <label id="flipRow" style="display:none;"><input type="checkbox" id="flipCheck" checked> <span id="flipLabel"></span></label>
         <div id="confirmClockRow" style="display:none; margin-bottom:8px;">
-          <span id="confirmClockLabel">Clock</span>&nbsp;<input type="text" id="confirmClockInput" placeholder="M:SS" style="width:90px; display:inline-block;">
+          <span id="confirmClockLabel">Clock</span>&nbsp;<input type="text" id="confirmClockInput" placeholder="M:SS or MSS" style="width:90px; display:inline-block;">
         </div>
         <div class="row" style="margin-top:8px;">
           <button class="primary" id="saveBtn">Save</button>
@@ -314,9 +314,21 @@ function nameInSpecialTeams(teamKey, num){
 }
 function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':n===4?'4th':(n+'th'); }
 function clockToAbsSeconds(quarter, clockStr){
-  const m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return null;
-  const remaining = parseInt(m[1]) * 60 + parseInt(m[2]);
+  let m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
+  let mins, secs;
+  if (m){
+    mins = parseInt(m[1]); secs = parseInt(m[2]);
+  } else {
+    // Colon-less entry: last two digits are seconds, everything
+    // before that is minutes -- e.g. "1156" reads the same as
+    // "11:56" would, "56" alone reads as "0:56". Requires at least
+    // two digits so this split is never ambiguous.
+    m = clockStr.match(/^(\d*)(\d{2})$/);
+    if (!m) return null;
+    mins = m[1] ? parseInt(m[1]) : 0; secs = parseInt(m[2]);
+  }
+  if (secs > 59) return null;
+  const remaining = mins * 60 + secs;
   // A clock value can never show more time than the quarter itself
   // holds -- e.g. "15:00" is meaningless in a 12-minute quarter.
   if (remaining > quarterLengthSec) return null;
@@ -1126,7 +1138,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<input type="text" id="gr_returner_manual" placeholder="type #" style="width:100px; margin:4px 0 8px;"><br>' +
         '<label class="inline">Return yards <input type="text" id="gr_yards" style="width:70px; margin-left:6px; display:inline-block;"></label>' +
         '<label class="inline" style="margin-left:12px; display:inline-block;"><input type="checkbox" id="gr_td"> Touchdown</label>' +
-        '<label class="inline" style="margin-left:12px; display:inline-block;">Clock <input type="text" id="guidedReturnClock" placeholder="M:SS" style="width:80px; margin-left:6px; display:inline-block;"></label>' +
+        '<label class="inline" style="margin-left:12px; display:inline-block;">Clock <input type="text" id="guidedReturnClock" placeholder="M:SS or MSS" style="width:80px; margin-left:6px; display:inline-block;"></label>' +
         startingSpotFieldsHtml('gr_spot', 'Ball spot after the return (sets 1st down for ' + TEAMS[guided.receivingTeam].name + ')', guided.receivingTeam) +
         '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedReturnSave">Save return</button></div>';
       let returnerNum = null;
