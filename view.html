@@ -287,23 +287,56 @@
 
   // --- Proven read-only engine core, extracted verbatim from game.html ---
 function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+// Jersey numbers resolve across ALL THREE roster units, not just the one
+// the play type implies. High-school rosters routinely list a player
+// under a single unit even though they play several, and a dedicated
+// kick/punt returner is normally rostered on special teams only -- which
+// is why returners used to render in the log as a bare "#25".
+//
+// A fallback can only ever turn "#25" into a name; it can never change a
+// name that already resolved, because the expected unit is always
+// searched first. This mirrors playerName() in the report pages.
+function rosterName(teamKey, num, order){
+  const t = TEAMS[teamKey];
+  const buckets = { offense: t.rosterOffense, defense: t.rosterDefense, special: t.rosterSpecialTeams };
+  for (const unit of order){
+    const roster = buckets[unit];
+    if (roster && roster[num]) return roster[num];
+  }
+  return null;
+}
 function nameInOffense(teamKey, num){
-  const n = TEAMS[teamKey].rosterOffense[num] || (TEAMS[teamKey].rosterSpecialTeams && TEAMS[teamKey].rosterSpecialTeams[num]);
+  const n = rosterName(teamKey, num, ['offense','special','defense']);
   return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
 }
 function nameInDefense(teamKey, num){
-  const n = TEAMS[teamKey].rosterDefense[num];
+  const n = rosterName(teamKey, num, ['defense','special','offense']);
   return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
 }
 function nameInSpecialTeams(teamKey, num){
-  const n = (TEAMS[teamKey].rosterSpecialTeams && TEAMS[teamKey].rosterSpecialTeams[num]) || TEAMS[teamKey].rosterOffense[num];
+  const n = rosterName(teamKey, num, ['special','offense','defense']);
   return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
 }
 function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':n===4?'4th':(n+'th'); }
 function clockToAbsSeconds(quarter, clockStr){
-  const m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return null;
-  const remaining = parseInt(m[1]) * 60 + parseInt(m[2]);
+  let m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
+  let mins, secs;
+  if (m){
+    mins = parseInt(m[1]); secs = parseInt(m[2]);
+  } else {
+    // Colon-less entry: last two digits are seconds, everything
+    // before that is minutes -- e.g. "1156" reads the same as
+    // "11:56" would, "56" alone reads as "0:56". Requires at least
+    // two digits so this split is never ambiguous.
+    m = clockStr.match(/^(\d*)(\d{2})$/);
+    if (!m) return null;
+    mins = m[1] ? parseInt(m[1]) : 0; secs = parseInt(m[2]);
+  }
+  if (secs > 59) return null;
+  const remaining = mins * 60 + secs;
+  // A clock value can never show more time than the quarter itself
+  // holds -- e.g. "15:00" is meaningless in a 12-minute quarter.
+  if (remaining > quarterLengthSec) return null;
   return (quarter - 1) * quarterLengthSec + (quarterLengthSec - remaining);
 }
 function formatDuration(sec){

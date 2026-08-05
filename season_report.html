@@ -138,16 +138,34 @@
 
   // --- Proven read-only engine core, extracted verbatim from game.html / view.html ---
   function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+  // Jersey numbers resolve across ALL THREE roster units, not just the one
+  // the play type implies. High-school rosters routinely list a player
+  // under a single unit even though they play several, and a dedicated
+  // kick/punt returner is normally rostered on special teams only -- which
+  // is why returners used to render in the log as a bare "#25".
+  //
+  // A fallback can only ever turn "#25" into a name; it can never change a
+  // name that already resolved, because the expected unit is always
+  // searched first. This mirrors playerName() in the report pages.
+  function rosterName(teamKey, num, order){
+    const t = TEAMS[teamKey];
+    const buckets = { offense: t.rosterOffense, defense: t.rosterDefense, special: t.rosterSpecialTeams };
+    for (const unit of order){
+      const roster = buckets[unit];
+      if (roster && roster[num]) return roster[num];
+    }
+    return null;
+  }
   function nameInOffense(teamKey, num){
-    const n = TEAMS[teamKey].rosterOffense[num] || (TEAMS[teamKey].rosterSpecialTeams && TEAMS[teamKey].rosterSpecialTeams[num]);
+    const n = rosterName(teamKey, num, ['offense','special','defense']);
     return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
   }
   function nameInDefense(teamKey, num){
-    const n = TEAMS[teamKey].rosterDefense[num];
+    const n = rosterName(teamKey, num, ['defense','special','offense']);
     return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
   }
   function nameInSpecialTeams(teamKey, num){
-    const n = (TEAMS[teamKey].rosterSpecialTeams && TEAMS[teamKey].rosterSpecialTeams[num]) || TEAMS[teamKey].rosterOffense[num];
+    const n = rosterName(teamKey, num, ['special','offense','defense']);
     return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
   }
 
