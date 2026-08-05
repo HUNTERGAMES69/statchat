@@ -194,8 +194,18 @@
       document.querySelector('.wrap').style.transform = '';
       return;
     }
-    const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
-    document.querySelector('.wrap').style.transform = 'scale(' + scale + ')';
+    // Scale X and Y independently -- rather than one uniform scale
+    // (which forces the fixed 1920x1080 (16:9) aspect ratio and always
+    // leaves wasted space on whichever axis doesn't match the actual
+    // screen), this stretches the whole canvas to exactly fill
+    // whatever viewport is actually available, since every real screen
+    // has a different ratio. The very slight non-uniform distortion
+    // this can introduce is far less noticeable than the wasted-space
+    // gaps it replaces, since almost everything on this page is text,
+    // tables, and tiles rather than shapes where aspect ratio matters.
+    const scaleX = window.innerWidth / 1920;
+    const scaleY = window.innerHeight / 1080;
+    document.querySelector('.wrap').style.transform = 'scale(' + scaleX + ', ' + scaleY + ')';
   }
   window.addEventListener('resize', applyDisplayScale);
   applyDisplayScale();
