@@ -286,19 +286,93 @@ doesn't re-investigate or re-fix any of these from scratch.
   is actually deployed, it's worth a fresh, careful look** — don't
   assume it's the same stale-file explanation twice.
 
-## 5. NFL UI-driven testing infrastructure — status carried over, unchanged this session
+## 5. UI-driven test suite — BUILT AND COMMITTED (Aug 5, 2026)
 
-No new work happened on this thread during the stretch covered by
-section 4 above. Everything below is exactly as it stood before — see
-section 2 for the full detail. Restating only the single most important
-fact so it isn't lost: **the test scripts (`ui_code_driver.js`,
-`full_ui_audit.js`, `full_ui_batch_runner.js`, `full_audit_runner.js`,
-`summarize_results.js`) still only exist in the sandbox
-(`/home/claude/stat_tracker/`) and have never been packaged as files
-for Andy to commit to the repo.** A fresh session starting this work
-would need to rebuild all of it from scratch unless that packaging
-happens first.
+The previously sandbox-only scripts were lost when the sandbox reset, as
+section 5 warned they would be. They have been **rebuilt from scratch and
+now live in `tests/` in the repo**, so this cannot happen again. See
+`tests/README.md` for how to run them.
 
+- `harness.js` — boots any real page in jsdom against a mock Supabase
+- `ui_driver.js` — clicks real buttons, types into real inputs
+- `scripted_game.js` / `run_scripted.js` — 19-step game, expectations
+  written from the rules of football (not copied from app output)
+- `cross_surface.js` — game.html -> DB -> all four report pages must agree
+- `coverage_probe.js` — all 47 play types/sub-flows
+- `engine_parity.js` — compares every duplicated engine function
+- `mutation_check.js` — proves the suite actually catches real bugs
+
+**Current status: all green, and the suite has teeth.** The mutation
+check re-introduces five known bugs (including the original sack sign
+error) and all five are caught. This matters because the previous
+audit's pass/fail signal was demonstrably blind to real errors.
+
+Verified through the real UI this session: the sack fix (ball moves
+backward, distance-to-go grows), penalty distance adjustment in both
+directions including automatic first downs, possession changes on
+punt/interception/fumble, and returners correctly NOT receiving a
+defensive stat bucket. All four report pages produce byte-identical box
+scores from the same saved rows.
+
+### Still not covered by any test
+- [ ] Anything depending on real layout measurement — `view.html`'s
+  `--stat-scale` tile fitting and the `scale(scaleX, scaleY)` canvas
+  transform. jsdom has no layout engine; these need a human on a real
+  screen.
+- [ ] RLS policies. Missing policies fail *silently* in production and
+  nothing in this suite would notice.
+- [ ] Multi-game season aggregation (only tested with one game).
+- [ ] `season_report.html` chart rendering (Chart.js is stubbed; numbers
+  are checked, visuals are not).
+
+## 6. Name resolution in the play log — REAL BUG FOUND (Aug 5, 2026)
+
+Found by the coverage probe. **A kick or punt returner shows in the play
+log as "#25" instead of their name**, and always will, for any returner
+rostered as KR/PR on special teams rather than on defense.
+
+Three separate contributing faults, all in `game.html`:
+
+- [ ] **`nameInDefense()` has no cross-roster fallback** — in any of the
+  five files. Returners are resolved with `D(ret)`, which only reads
+  `rosterDefense`. A dedicated returner is never on that roster, so the
+  name never resolves. This is the same `roles.defense` overload already
+  documented in `PROJECT_NOTES.md` — it costs a name here, not just a
+  phantom stat tile.
+- [ ] **`nameInOffense()` and `nameInSpecialTeams()` are the WORSE
+  version in `game.html`** than in the other four files. The display
+  pages fall back across rosters; `game.html` does not. This is
+  backwards from where it needs to be: **`game.html` is the only file
+  whose version actually matters**, because it generates the log text
+  once at save time and stores the string. The other four just display
+  it, so their better fallback never runs for a log line. Someone fixed
+  the fallback in four places and missed the only one that counts.
+  (`engine_parity.js` now reports both as known open bugs.)
+- [ ] **The "Returned by" picker is empty at kickoff time** —
+  `defenseEligible()` lists only players already *discovered* with a
+  defensive credit, so on the first kickoff of a game it shows "no one
+  credited yet — type a number below". There is no roster-backed
+  suggestion for returners at all, which is what pushes the coach onto
+  the manual-entry path where the name is then lost.
+
+**Important consequence: the stored text never re-resolves.** Fixing the
+code will NOT repair already-saved plays — every return logged in games
+played before the fix keeps showing "#25" permanently. Worth deciding
+whether a backfill is wanted.
+
+Suggested fix: give the returner field its own resolver that searches
+special teams -> defense -> offense (`playerName()` in the report files
+already does exactly this), and populate the picker from the
+special-teams roster in addition to discovered defenders.
+
+## 7. `view.html` has a stale `clockToAbsSeconds` — cleanup (Aug 5, 2026)
+
+- [ ] `view.html` still carries the pre-Aug-4 version: no colon-less
+  entry ("1156"), no `secs > 59` rejection, no quarter-length bound.
+  It is currently **dead code** — defined, never called — so this is not
+  a live bug, but it is a live trap. Either delete it from `view.html`
+  or sync it with `game.html`. Recorded as an accepted variant in
+  `engine_parity.js` so it stays visible.
 
 ## Other known-outstanding items (from earlier sessions, may be stale)
 
