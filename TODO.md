@@ -325,54 +325,56 @@ scores from the same saved rows.
 - [ ] `season_report.html` chart rendering (Chart.js is stubbed; numbers
   are checked, visuals are not).
 
-## 6. Name resolution in the play log — REAL BUG FOUND (Aug 5, 2026)
+## 6. Name resolution in the play log — FIXED (Aug 5, 2026)
 
-Found by the coverage probe. **A kick or punt returner shows in the play
-log as "#25" instead of their name**, and always will, for any returner
-rostered as KR/PR on special teams rather than on defense.
+Found by the coverage probe: a kick or punt returner rendered in the
+play log as "#25" instead of their name, for any returner rostered as
+KR/PR on special teams rather than on defense.
 
-Three separate contributing faults, all in `game.html`:
+- [x] **Root cause.** Returners are resolved with `D(ret)` ->
+  `nameInDefense()`, which read `rosterDefense` only. A dedicated
+  returner is never on that roster, so the name never resolved. Same
+  `roles.defense` overload already documented in `PROJECT_NOTES.md` — it
+  cost a name here, not just a phantom stat tile.
+- [x] **Also fixed: the asymmetry that made this worse.**
+  `nameInOffense()` and `nameInSpecialTeams()` were the *weaker* version
+  in `game.html` than in the four display pages. That was backwards:
+  `game.html` is the only file whose version matters, because it
+  generates the log text once at save time and stores the string.
+- [x] **The fix.** All five files now share one `rosterName(teamKey,
+  num, order)` helper that searches all three roster units, with the
+  expected unit first. A fallback can only ever turn "#25" into a name;
+  it can never change a name that already resolved. Verified: `#25`
+  (special teams) now resolves, and defense/offense lookups are
+  unchanged. `engine_parity.js` confirms all five copies identical, and
+  `mutation_check.js` has a mutant guarding it.
 
-- [ ] **`nameInDefense()` has no cross-roster fallback** — in any of the
-  five files. Returners are resolved with `D(ret)`, which only reads
-  `rosterDefense`. A dedicated returner is never on that roster, so the
-  name never resolves. This is the same `roles.defense` overload already
-  documented in `PROJECT_NOTES.md` — it costs a name here, not just a
-  phantom stat tile.
-- [ ] **`nameInOffense()` and `nameInSpecialTeams()` are the WORSE
-  version in `game.html`** than in the other four files. The display
-  pages fall back across rosters; `game.html` does not. This is
-  backwards from where it needs to be: **`game.html` is the only file
-  whose version actually matters**, because it generates the log text
-  once at save time and stores the string. The other four just display
-  it, so their better fallback never runs for a log line. Someone fixed
-  the fallback in four places and missed the only one that counts.
-  (`engine_parity.js` now reports both as known open bugs.)
-- [ ] **The "Returned by" picker is empty at kickoff time** —
+### Still outstanding from this bug
+- [ ] **The "Returned by" picker is still empty at kickoff time.**
   `defenseEligible()` lists only players already *discovered* with a
-  defensive credit, so on the first kickoff of a game it shows "no one
-  credited yet — type a number below". There is no roster-backed
-  suggestion for returners at all, which is what pushes the coach onto
-  the manual-entry path where the name is then lost.
+  defensive credit, so the first kickoff of a game shows "no one
+  credited yet — type a number below". Manual entry now resolves names
+  correctly, so this is a UX annoyance rather than a correctness bug.
+  Deliberately NOT fixed here: `defBlock()` is shared by the sack,
+  interception and fumble-recovery credit pickers too, so widening
+  `defenseEligible()` would clutter all of them with kickers and
+  punters. The right fix is a dedicated returner picker for
+  kickoff/punt that unions the defensive and special-teams rosters —
+  a small, self-contained change, but a UI change rather than a
+  one-line fix, so it wants its own pass.
+- [ ] **Decide whether to backfill.** Stored log text never
+  re-resolves, so every return logged before this fix still reads
+  "#25" permanently. Fixing the code does not repair history.
 
-**Important consequence: the stored text never re-resolves.** Fixing the
-code will NOT repair already-saved plays — every return logged in games
-played before the fix keeps showing "#25" permanently. Worth deciding
-whether a backfill is wanted.
+## 7. `view.html`'s stale `clockToAbsSeconds` — FIXED (Aug 5, 2026)
 
-Suggested fix: give the returner field its own resolver that searches
-special teams -> defense -> offense (`playerName()` in the report files
-already does exactly this), and populate the picker from the
-special-teams roster in addition to discovered defenders.
-
-## 7. `view.html` has a stale `clockToAbsSeconds` — cleanup (Aug 5, 2026)
-
-- [ ] `view.html` still carries the pre-Aug-4 version: no colon-less
-  entry ("1156"), no `secs > 59` rejection, no quarter-length bound.
-  It is currently **dead code** — defined, never called — so this is not
-  a live bug, but it is a live trap. Either delete it from `view.html`
-  or sync it with `game.html`. Recorded as an accepted variant in
-  `engine_parity.js` so it stays visible.
+- [x] `view.html` carried the pre-Aug-4 version (no colon-less entry, no
+  `secs > 59` rejection, no quarter-length bound). It was dead code, so
+  not a live bug, but a live trap. Now synced with `game.html` rather
+  than deleted, so the invariant "every copy of the engine core is
+  identical" holds — that is the property the eventual shared-engine
+  file will formalise, and a function missing from one copy would make
+  that consolidation more confusing, not less.
 
 ## Other known-outstanding items (from earlier sessions, may be stale)
 

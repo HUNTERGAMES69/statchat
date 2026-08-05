@@ -306,6 +306,88 @@ credited on defense" from "credited as a special-teams returner" for
 some other purpose, remember this overload exists rather than assuming
 `roles.defense` always means defense.
 
+## Name resolution: one shared `rosterName()` across all three units (fixed August 5, 2026)
+
+`game.html` generates each play's log text **once, at save time**, and
+stores that finished string. Every other page -- `view.html`,
+`recap.html`, `stat_package.html`, `season_report.html` -- displays the
+stored string verbatim and never re-resolves it. Two consequences worth
+keeping in mind:
+
+1. **Only `game.html`'s name resolution affects log text.** If a name
+   renders wrong in the log, look in `game.html`, not in the page you
+   happen to be looking at. This bit once already: the four display
+   pages had a cross-roster fallback that `game.html` lacked, so the
+   *better* versions were the ones that never ran.
+2. **Fixing the code does not fix history.** Plays already saved keep
+   their original text forever. Any future name-resolution change needs
+   a deliberate decision about backfilling existing rows.
+
+All five files now share one helper:
+
+```js
+rosterName(teamKey, num, order)   // order e.g. ['defense','special','offense']
+```
+
+It searches all three roster units with the play's expected unit first,
+so `nameInOffense` / `nameInDefense` / `nameInSpecialTeams` differ only
+in search order. The safety property that makes this a low-risk change:
+**a fallback can only ever turn "#25" into a name -- it can never change
+a name that already resolved**, because the expected unit is always
+searched first. Behaviour is therefore monotonic; no previously-correct
+output moves.
+
+The bug that prompted it: kick and punt returners are credited via
+`roles.defense` (the overload documented above) and resolved with
+`D(ret)`, which read `rosterDefense` only -- a roster a dedicated KR/PR
+is never on. So the `roles.defense` overload costs a *name* in the log,
+not just the phantom "Defense" stat tile. Worth remembering that this
+overload has now caused two distinct, unrelated-looking defects.
+
+Note the picker side of this is deliberately **not** fixed:
+`defenseEligible()` still lists only already-discovered defenders, so
+the "Returned by" grid is empty on the first kickoff of a game and the
+coach must type the number. That path now resolves names correctly, so
+it is cosmetic. It was left alone because `defBlock()` is shared with
+the sack, interception and fumble-recovery credit pickers, and widening
+`defenseEligible()` would clutter all of them with kickers and punters.
+A dedicated returner picker is the right fix when it is worth doing.
+
+## Testing must go through the real DOM (established August 5, 2026)
+
+`tests/` now drives the actual pages: real button clicks, real `<input>`
+typing, real `input` events. Nothing calls `parseInput()` or
+`buildAndReview()` directly.
+
+The reason is specific, not stylistic. The sack-yardage bug lived in the
+HTML input path, and the earlier fuzz-testing fed `parseInput()`
+pre-built strings, so it could never have found it. A test that bypasses
+the UI is testing a different program than the one a coach uses.
+
+Two rules that follow, both learned the hard way:
+
+- **If a path cannot be reached by clicking and typing, do not fake it.**
+  An earlier harness simulated a bare safety by writing to the hidden
+  `#code` field. A coach has no way to do that, so the test verified
+  nothing. `ui_driver.js` throws `UnreachableByUI` instead.
+- **Write expectations from the rules of football, not from current
+  output.** Copying what the app prints today produces a test that
+  certifies today's bugs.
+
+And the meta-rule, from the combined-score failure: **a passing test is
+worthless until you have watched it fail.** `mutation_check.js` exists
+to re-introduce known bugs and confirm the suite goes red. Run it after
+adding any assertion; a surviving mutant is a blind spot in the tests,
+not a curiosity.
+
+Note also that `game.html` uses two *different* checkbox patterns: most
+toggles are a hidden `<input type=checkbox>` plus a styled button
+(`#pp_td` + `#pp_td_toggle`), but the 2-point "returned all the way" box
+is a plain visible checkbox with no toggle button. Clicking a checkbox
+toggles it, so setting `.checked = true` and then clicking silently
+turns it back off -- which is exactly what made the defensive 2-point
+return appear to score zero during this session's testing.
+
 ## `view.html`'s fixed-1920x1080-plus-transform-scale architecture
 
 The entire live-view page is built at a fixed 1920x1080 reference
