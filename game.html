@@ -847,10 +847,34 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // Every play with effect.isReset marks the start of a new drive --
     // current and previous drive are just the last two segments between
     // those markers.
-    const resetIdxs = [];
-    for (let i = 0; i < plays.length; i++){
-      if (plays[i].effect && plays[i].effect.isReset) resetIdxs.push(i);
+    //
+    // Not every drive boundary is marked by an explicit isReset play --
+    // a turnover on downs changes possession but never sets isReset,
+    // relying entirely on the next scrimmage play's own down/distance
+    // fallback. Detect any possession change directly. For an explicit
+    // isReset marker, that play itself IS the first play of the new
+    // drive (a dedicated announcement) -- include it. For a detected-
+    // but-unmarked possession change, the play that caused it still
+    // belongs to the PREVIOUS possessor's drive, so the new drive
+    // starts at the next play instead.
+    function findDriveStarts(playsList){
+      const starts = [];
+      let priorPoss = startingPossession;
+      for (let i = 0; i < playsList.length; i++){
+        if (playsList[i].effect && playsList[i].effect.isReset){
+          starts.push(i);
+          priorPoss = computeState(playsList.slice(0, i + 1)).possession;
+          continue;
+        }
+        const possAfter = computeState(playsList.slice(0, i + 1)).possession;
+        if (possAfter !== priorPoss && i + 1 < playsList.length){
+          starts.push(i + 1);
+        }
+        priorPoss = possAfter;
+      }
+      return starts;
     }
+    const resetIdxs = findDriveStarts(plays);
     const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
     const previousDrivePlays = resetIdxs.length >= 2 ? plays.slice(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1]) : [];
     document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
