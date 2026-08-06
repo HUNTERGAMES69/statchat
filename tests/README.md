@@ -9,6 +9,7 @@ node tests/run_scripted.js        # ~2s   does a realistic game produce correct 
 node tests/cross_surface.js       # ~4s   does one play look the same on every page?
 node tests/picker_check.js        # ~1s   is the returner picker populated and isolated?
 node tests/clock_display_check.js # ~1s   does a colon-less clock entry always DISPLAY with a colon?
+node tests/drive_boundary_check.js # ~4s   do drives start on real plays, not clock markers?
 node tests/coverage_probe.js      # ~25s  can every UI path be reached and saved?
 node tests/mutation_check.js      # ~4min do these tests actually catch real bugs?
 ```
@@ -16,7 +17,7 @@ node tests/mutation_check.js      # ~4min do these tests actually catch real bug
 Every suite exits non-zero on failure, so they can be chained:
 
 ```bash
-for t in engine_parity run_scripted cross_surface picker_check clock_display_check coverage_probe; do
+for t in engine_parity run_scripted cross_surface picker_check clock_display_check drive_boundary_check coverage_probe; do
   node tests/$t.js || echo "FAILED: $t"
 done
 ```
@@ -49,7 +50,8 @@ which tested nothing at all.
 | `engine_parity.js` | Extracts every duplicated engine function from all five files and compares them. |
 | `picker_check.js` | Checks the kickoff/punt returner picker is populated and correctly ranked, and that the other credit pickers stay defense-only. |
 | `clock_display_check.js` | Checks that a colon-less clock entry ("1156") is normalized to "M:SS" before being stored, across all seven places `game.html` embeds a clock value into play text. |
-| `mutation_check.js` | Re-introduces nine known bugs and confirms the suite goes red for each. |
+| `drive_boundary_check.js` | Checks that a drive never starts on an administrative marker (clock line, divider, manual flip), and that a drive's summary line reports a real play rather than the trailing clock marker. |
+| `mutation_check.js` | Re-introduces twelve known bugs and confirms the suite goes red for each. |
 
 ## Writing expectations
 

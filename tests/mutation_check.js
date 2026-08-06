@@ -73,6 +73,27 @@ const MUTANTS = [
     expectCaughtBy: ['clock_display_check.js']
   },
   {
+    name: 'drive-boundary: let a drive start on an administrative marker (the Aug 6 bug)',
+    file: 'view.html',
+    from: '        if (possAfter !== priorPoss) pushStart(firstRealPlayFrom(i + 1));',
+    to: '        if (possAfter !== priorPoss && i + 1 < playsList.length) pushStart(i + 1);',
+    expectCaughtBy: ['drive_boundary_check.js']
+  },
+  {
+    name: 'drive-summary: let a trailing clock marker be the drive summary line',
+    file: 'view.html',
+    from: '        if (segment[i].text && !isAdminMarker(segment[i])){ lastPlayText = segment[i].text; break; }',
+    to: '        if (segment[i].text && !segment[i].isDivider){ lastPlayText = segment[i].text; break; }',
+    expectCaughtBy: ['drive_boundary_check.js']
+  },
+  {
+    name: 'admin-marker: stop treating clock events as administrative',
+    file: 'view.html',
+    from: "  return !!(e.clockEvent || e.setQuarter || e.forcePossession || p.isDivider);",
+    to: "  return !!(e.setQuarter || e.forcePossession || p.isDivider);",
+    expectCaughtBy: ['drive_boundary_check.js']
+  },
+  {
     name: 'stat-drop: stop counting rushing attempts',
     file: 'view.html',
     from: '          s.att = (s.att||0) + 1;\n          s.yds = (s.yds||0) + (r.carrier.yards||0);',
@@ -81,7 +102,7 @@ const MUTANTS = [
   }
 ];
 
-const SUITES = ['engine_parity.js', 'run_scripted.js', 'cross_surface.js', 'picker_check.js', 'clock_display_check.js'];
+const SUITES = ['engine_parity.js', 'run_scripted.js', 'cross_surface.js', 'picker_check.js', 'clock_display_check.js', 'drive_boundary_check.js'];
 
 function runSuite(file) {
   try {
