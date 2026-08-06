@@ -331,6 +331,36 @@ function nameInSpecialTeams(teamKey, num){
   return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
 }
 function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':n===4?'4th':(n+'th'); }
+// Coaches are allowed to type a clock without the colon ("1156" for
+// "11:56"), because that's faster to enter mid-game. But every DISPLAY
+// -- the play log, view.html, recap, every report -- must always show
+// the colon. Storing the coach's raw input verbatim baked "1156" into
+// the saved text forever, so any clock line typed without a colon
+// showed up colon-less everywhere the play was ever displayed.
+//
+// The fix is at the source: normalize to "M:SS" once, here, before the
+// text is ever assembled and persisted. Every display page just renders
+// the stored string verbatim (there is no separate formatting step
+// downstream), so a page can only ever show what game.html wrote.
+//
+// Uses the exact same parsing rules as clockToAbsSeconds -- colon-less
+// entry, seconds always two digits, quarter-length bound -- so anything
+// accepted by one is formatted by the other. Returns null for the same
+// inputs clockToAbsSeconds rejects.
+function normalizeClockStr(quarter, clockStr){
+  let m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
+  let mins, secs;
+  if (m){
+    mins = parseInt(m[1]); secs = parseInt(m[2]);
+  } else {
+    m = clockStr.match(/^(\d*)(\d{2})$/);
+    if (!m) return null;
+    mins = m[1] ? parseInt(m[1]) : 0; secs = parseInt(m[2]);
+  }
+  if (secs > 59) return null;
+  if (mins * 60 + secs > quarterLengthSec) return null;
+  return mins + ':' + String(secs).padStart(2, '0');
+}
 function clockToAbsSeconds(quarter, clockStr){
   let m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
   let mins, secs;
@@ -1071,13 +1101,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       let effect, text;
       if (clockPrompt.mode === 'transition'){
         effect = { clockEvent: { type: 'transition', outgoingTeam: clockPrompt.outgoingTeam, incomingTeam: clockPrompt.incomingTeam, absSec } };
-        text = 'Clock — ' + val + ' at change of possession (' + TEAMS[clockPrompt.outgoingTeam].name + ' \u2192 ' + TEAMS[clockPrompt.incomingTeam].name + ')';
+        text = 'Clock — ' + normalizeClockStr(q, val) + ' at change of possession (' + TEAMS[clockPrompt.outgoingTeam].name + ' \u2192 ' + TEAMS[clockPrompt.incomingTeam].name + ')';
       } else if (clockPrompt.mode === 'start'){
         effect = { clockEvent: { type: 'start', team: clockPrompt.team, absSec } };
-        text = 'Clock — ' + val + ' start of possession (' + TEAMS[clockPrompt.team].name + ')';
+        text = 'Clock — ' + normalizeClockStr(q, val) + ' start of possession (' + TEAMS[clockPrompt.team].name + ')';
       } else {
         effect = { clockEvent: { type: 'end', team: clockPrompt.team, absSec } };
-        text = 'Clock — ' + val + ' end of possession (' + TEAMS[clockPrompt.team].name + ')';
+        text = 'Clock — ' + normalizeClockStr(q, val) + ' end of possession (' + TEAMS[clockPrompt.team].name + ')';
       }
       pushAndPersist({ id: nextId++, text, effect, quarter: q });
     }
@@ -1264,7 +1294,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const receivingName = TEAMS[guided.receivingTeam].name;
         const receivingTeamKey = guided.receivingTeam;
         if (clockVal && clockAbsSec !== null){
-          pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' start of possession (' + receivingName + ')', effect: { clockEvent: { type: 'start', team: receivingTeamKey, absSec: clockAbsSec } }, quarter: q });
+          pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' start of possession (' + receivingName + ')', effect: { clockEvent: { type: 'start', team: receivingTeamKey, absSec: clockAbsSec } }, quarter: q });
         }
         const reset = getReturnReset();
         if (reset && !td){
@@ -2155,13 +2185,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const q = computeState().quarter;
       const absSec = clockAbsSec;
       if (flipHappened){
-        pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' at change of possession (' + TEAMS[outgoingTeam].name + ' \u2192 ' + TEAMS[incomingTeam].name + ')', effect: { clockEvent: { type: 'transition', outgoingTeam, incomingTeam, absSec } }, quarter: q });
+        pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' at change of possession (' + TEAMS[outgoingTeam].name + ' \u2192 ' + TEAMS[incomingTeam].name + ')', effect: { clockEvent: { type: 'transition', outgoingTeam, incomingTeam, absSec } }, quarter: q });
       }
       if (effect.endsDrive){
         const scoringTeam = effect.score ? effect.score.team : preState.possession;
-        pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' end of possession (' + TEAMS[scoringTeam].name + ')', effect: { clockEvent: { type: 'end', team: scoringTeam, absSec } }, quarter: q });
+        pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' end of possession (' + TEAMS[scoringTeam].name + ')', effect: { clockEvent: { type: 'end', team: scoringTeam, absSec } }, quarter: q });
       } else if (flipHappened && effect.score && effect.score.points === 6){
-        pushAndPersist({ id: nextId++, text: 'Clock — ' + clockVal + ' end of possession (' + TEAMS[effect.score.team].name + ')', effect: { clockEvent: { type: 'end', team: effect.score.team, absSec } }, quarter: q });
+        pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' end of possession (' + TEAMS[effect.score.team].name + ')', effect: { clockEvent: { type: 'end', team: effect.score.team, absSec } }, quarter: q });
       }
     }
     if (pending.reset && flipHappened){
