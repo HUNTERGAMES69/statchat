@@ -4,17 +4,19 @@ Automated checks that drive the **real** app, not a reimplementation of it.
 
 ```bash
 npm install jsdom      # one-time, from the repo root
-node tests/engine_parity.js     # ~1s   are the duplicated engine copies still in sync?
-node tests/run_scripted.js      # ~2s   does a realistic game produce correct state?
-node tests/cross_surface.js     # ~4s   does one play look the same on every page?
-node tests/coverage_probe.js    # ~25s  can every UI path be reached and saved?
-node tests/mutation_check.js    # ~4min do these tests actually catch real bugs?
+node tests/engine_parity.js       # ~1s   are the duplicated engine copies still in sync?
+node tests/run_scripted.js        # ~2s   does a realistic game produce correct state?
+node tests/cross_surface.js       # ~4s   does one play look the same on every page?
+node tests/picker_check.js        # ~1s   is the returner picker populated and isolated?
+node tests/clock_display_check.js # ~1s   does a colon-less clock entry always DISPLAY with a colon?
+node tests/coverage_probe.js      # ~25s  can every UI path be reached and saved?
+node tests/mutation_check.js      # ~4min do these tests actually catch real bugs?
 ```
 
 Every suite exits non-zero on failure, so they can be chained:
 
 ```bash
-for t in engine_parity run_scripted cross_surface coverage_probe; do
+for t in engine_parity run_scripted cross_surface picker_check clock_display_check coverage_probe; do
   node tests/$t.js || echo "FAILED: $t"
 done
 ```
@@ -45,7 +47,9 @@ which tested nothing at all.
 | `cross_surface.js` | Enters plays in `game.html`, then re-opens all four report pages against the saved rows and demands they agree — with each other and with what was typed. |
 | `coverage_probe.js` | Drives all 47 play types and sub-flows in isolation and reports what each one did. |
 | `engine_parity.js` | Extracts every duplicated engine function from all five files and compares them. |
-| `mutation_check.js` | Re-introduces five known bugs and confirms the suite goes red for each. |
+| `picker_check.js` | Checks the kickoff/punt returner picker is populated and correctly ranked, and that the other credit pickers stay defense-only. |
+| `clock_display_check.js` | Checks that a colon-less clock entry ("1156") is normalized to "M:SS" before being stored, across all seven places `game.html` embeds a clock value into play text. |
+| `mutation_check.js` | Re-introduces nine known bugs and confirms the suite goes red for each. |
 
 ## Writing expectations
 
@@ -69,6 +73,14 @@ combined-score check passed on a game where *both* teams' scores were
 wrong, because it only compared the sum. Run `mutation_check.js` after
 adding any new assertion, and treat a surviving mutant as a blind spot
 in the tests rather than a curiosity.
+
+**"SURVIVED" can also mean a test file failed to upload, not that the
+fix is broken.** This happened once already: `picker_check.js` silently
+uploaded as a 404 page, and its two mutants reported "SURVIVED" for a
+run where the actual fix in `game.html` was fine. Before trusting a
+survivor, confirm the file it should have been caught by is actually
+present and correct-sized in `tests/` — `wc -l tests/*.js` against what
+this README lists is a fast sanity check.
 
 ## Known limitations
 

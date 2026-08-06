@@ -45,6 +45,34 @@ const MUTANTS = [
     expectCaughtBy: ['cross_surface.js', 'engine_parity.js']
   },
   {
+    name: 'returner-name: drop the cross-roster fallback (the Aug 5 bug)',
+    file: 'game.html',
+    from: "  const n = rosterName(teamKey, num, ['defense','special','offense']);",
+    to: '  const n = TEAMS[teamKey].rosterDefense[num];',
+    expectCaughtBy: ['run_scripted.js', 'engine_parity.js']
+  },
+  {
+    name: 'returner-picker: fall back to the defence-only eligible list',
+    file: 'game.html',
+    from: '      const list = returnerEligible(def);',
+    to: '      const list = defenseEligible(def);',
+    expectCaughtBy: ['picker_check.js']
+  },
+  {
+    name: 'returner-rank: stop demoting kickers below real returners',
+    file: 'game.html',
+    from: "  ['K','PK','P','LS','H','KO'].forEach(p => rank[p] = 3);",
+    to: "  ['K','PK','P','LS','H','KO'].forEach(p => rank[p] = 0);",
+    expectCaughtBy: ['picker_check.js']
+  },
+  {
+    name: 'clock-display: store the raw colon-less clock text again',
+    file: 'game.html',
+    from: "text: 'Clock \u2014 ' + normalizeClockStr(q, clockVal) + ' at change of possession",
+    to: "text: 'Clock \u2014 ' + clockVal + ' at change of possession",
+    expectCaughtBy: ['clock_display_check.js']
+  },
+  {
     name: 'stat-drop: stop counting rushing attempts',
     file: 'view.html',
     from: '          s.att = (s.att||0) + 1;\n          s.yds = (s.yds||0) + (r.carrier.yards||0);',
@@ -53,7 +81,7 @@ const MUTANTS = [
   }
 ];
 
-const SUITES = ['engine_parity.js', 'run_scripted.js', 'cross_surface.js'];
+const SUITES = ['engine_parity.js', 'run_scripted.js', 'cross_surface.js', 'picker_check.js', 'clock_display_check.js'];
 
 function runSuite(file) {
   try {
