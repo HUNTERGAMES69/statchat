@@ -376,6 +376,57 @@ KR/PR on special teams rather than on defense.
   file will formalise, and a function missing from one copy would make
   that consolidation more confusing, not less.
 
+## 8. Colon-less clock display bug — FIXED (Aug 6, 2026)
+
+Reported directly: on `view.html`, some clock mentions in the play log
+were missing the colon (e.g. "1156" instead of "11:56"). This looked
+like a `view.html` display bug but wasn't -- there is no reformatting
+step anywhere downstream of `game.html`. Every page (`view.html`,
+`recap.html`, `stat_package.html`, `season_report.html`) just renders
+whatever string is stored, verbatim.
+
+- [x] **Root cause.** `clockToAbsSeconds()` was correctly built to accept
+  colon-less entry ("1156" reads as "11:56"), but the coach's RAW typed
+  text was then embedded directly into the stored play text at **seven**
+  separate call sites, across two different flows: the main play-confirm
+  card's clock field, and a second, entirely separate `showClockPrompt`
+  standalone card that hadn't been touched by the earlier clock-parsing
+  fix. Once a colon-less value was saved, it stayed colon-less on every
+  surface, forever -- fixing display logic later could not have helped,
+  because there was no display logic to fix.
+- [x] **The fix.** A new `normalizeClockStr(quarter, clockStr)` in
+  `game.html`, using the identical parsing rules as `clockToAbsSeconds`
+  (colon-less entry, two-digit seconds, quarter-length bound), always
+  returns `M:SS`. All seven embed sites now call it instead of
+  interpolating the raw input. Input is unrestricted (colon or not);
+  every display now always shows the colon.
+- [x] Verified directly through the real UI: typing `1156` now stores
+  `Clock — 11:56 ...`; typing `3:07` stores `3:07` unchanged (confirms
+  round-tripping through the normalizer doesn't corrupt already-correct
+  input).
+- [x] Guarded by `tests/clock_display_check.js` (4 cases: the
+  change-of-possession embed, the drive-ending-score embed, the separate
+  `showClockPrompt` flow, and an already-colon-formatted input that must
+  survive unchanged) and a mutation-check entry.
+- [ ] **No backfill.** Exactly like the returner-name bug in section 6,
+  any clock line already saved without a colon stays that way
+  permanently. Fixing the code does not repair history. Worth deciding
+  once, alongside that backfill question, rather than separately.
+
+### Process note: a test file silently failed to upload last session
+
+While re-verifying this fix against the live repo, `tests/picker_check.js`
+was discovered to be a 404 error page on GitHub instead of the real file
+-- a previous upload silently failed. This disabled 2 of the 9
+mutation-check mutants without any visible error (they reported
+"SURVIVED" rather than a hard failure, which is easy to misread as a
+real regression instead of a missing test file). A working copy was
+recovered and confirmed still passing against current `game.html`.
+**When uploading `tests/`, spot-check at least one file's size on GitHub
+against the local copy** -- a silent partial upload is worse than an
+error, because everything downstream (this TODO, the mutation-check
+output) assumes the file is actually there.
+
 ## Other known-outstanding items (from earlier sessions, may be stale)
 
 - [ ] Offline-durable sync queue for failed saves
