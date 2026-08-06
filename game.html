@@ -300,6 +300,23 @@
 
   // --- Proven engine core, ported verbatim from the tested entry app ---
 function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+// Administrative entries -- clock markers, quarter/half dividers, manual
+// possession flips -- are announcements, not football plays. They carry
+// no roles and no yardage, so anything reasoning about "what actually
+// happened on this drive" has to skip them.
+//
+// isReset markers are deliberately NOT administrative: they are explicit
+// "new drive" announcements and are valid drive starts.
+//
+// Lives in the engine core (top level) rather than inside
+// findDriveStarts because computeDriveSummary needs it too, from a
+// different scope.
+function isAdminMarker(p){
+  if (!p) return true;
+  const e = p.effect || {};
+  if (e.isReset) return false;
+  return !!(e.clockEvent || e.setQuarter || e.forcePossession || p.isDivider);
+}
 // Jersey numbers resolve across ALL THREE roster units, not just the one
 // the play type implies. High-school rosters routinely list a player
 // under a single unit even though they play several, and a dedicated
@@ -1004,18 +1021,38 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // belongs to the PREVIOUS possessor's drive, so the new drive
     // starts at the next play instead.
     function findDriveStarts(playsList){
+      // A drive must never START on an administrative marker. Doing so
+      // produces a one-play "drive" whose every counter is zero, and
+      // because only the last two drives are ever shown, it silently
+      // pushes the real drive out of the "previous drive" slot. That is
+      // what made a completed scoring drive display as
+      // "Clock - 5:00 at change of possession" with 0/0 tiles: the
+      // kickoff flipped possession, so the drive began on the clock
+      // line that happened to follow it.
+      const firstRealPlayFrom = from => {
+        for (let j = from; j < playsList.length; j++){
+          if (!isAdminMarker(playsList[j])) return j;
+        }
+        return -1;
+      };
       const starts = [];
+      // Start indices are produced in non-decreasing order, so checking
+      // only the last entry is enough to stop a detected possession
+      // change and an explicit reset marker from both claiming the same
+      // play (which they now often do, since skipping markers lands the
+      // possession change exactly on the reset marker that follows it).
+      const pushStart = idx => {
+        if (idx !== -1 && starts[starts.length - 1] !== idx) starts.push(idx);
+      };
       let priorPoss = startingPossession;
       for (let i = 0; i < playsList.length; i++){
         if (playsList[i].effect && playsList[i].effect.isReset){
-          starts.push(i);
+          pushStart(i);
           priorPoss = computeState(playsList.slice(0, i + 1)).possession;
           continue;
         }
         const possAfter = computeState(playsList.slice(0, i + 1)).possession;
-        if (possAfter !== priorPoss && i + 1 < playsList.length){
-          starts.push(i + 1);
-        }
+        if (possAfter !== priorPoss) pushStart(firstRealPlayFrom(i + 1));
         priorPoss = possAfter;
       }
       return starts;

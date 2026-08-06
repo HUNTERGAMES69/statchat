@@ -353,6 +353,75 @@ the sack, interception and fumble-recovery credit pickers, and widening
 `defenseEligible()` would clutter all of them with kickers and punters.
 A dedicated returner picker is the right fix when it is worth doing.
 
+## Every display page just renders the stored string -- there is no formatting layer (established August 6, 2026)
+
+Worth stating plainly because it looks wrong the first time you see it:
+`view.html`, `recap.html`, `stat_package.html` and `season_report.html`
+do not reformat, re-derive, or reinterpret a play's text in any way.
+Whatever string `game.html` wrote into `plays.text` at save time is
+exactly what shows up everywhere, forever.
+
+This means a "display bug" reported on any of those four pages is almost
+never a bug in that page. It's a bug in whatever `game.html` code path
+generated the stored string. The colon-less-clock bug is the second time
+this exact misdirection has happened (the first was the returner-name
+bug) -- both looked like display issues and both were actually
+generation issues, entirely inside `game.html`, that happened to only
+become visible on the other pages. The tell, in both cases:
+`game.html`'s own on-screen log showed the same problem once looked at
+directly, instead of a page-specific glitch.
+
+The corollary that matters more the second time: **fixing the parsing
+function is not the same as fixing every place that calls it.**
+`clockToAbsSeconds()` was fixed (Aug 4) to accept colon-less clock entry
+correctly. That fix was necessary but not sufficient -- it validates and
+converts, it doesn't format for storage. Seven separate lines of code
+took the coach's raw typed string and interpolated it directly into
+`text: 'Clock - ' + clockVal + ...`, in two different UI flows (the main
+confirm card, and a second, easy-to-miss `showClockPrompt` card). A grep
+for the literal pattern is what found all seven; fixing the ones noticed
+first and moving on would have left some live.
+
+Input is deliberately permissive (colon optional, because it's faster to
+type mid-game); display is deliberately strict (always `M:SS`).
+`normalizeClockStr()` is what bridges the two, and it must be applied at
+every point where a clock value becomes stored text.
+
+## Administrative markers are not plays (established August 6, 2026)
+
+The play log is a single flat list, but not everything in it is a
+football play. Clock lines, quarter/half dividers, "New drive"
+announcements and manual possession flips all live in `plays` alongside
+real snaps. They carry no `roles` and no yardage.
+
+Anything that reasons about "what happened on this drive" therefore has
+to filter them out, and forgetting to do so fails in a characteristic
+way: a marker becomes a one-play drive whose every counter is zero.
+`isAdminMarker(p)` in the engine core is the single definition — clock
+events, `setQuarter`, `forcePossession`, and dividers are
+administrative; `isReset` is deliberately NOT, because a "New drive"
+line is an explicit, legitimate drive start.
+
+Two consequences worth remembering, both of which bit at once:
+
+1. **Only the last two drives are ever displayed.** A phantom drive
+   doesn't just render badly, it *evicts* a real drive from the visible
+   window. The reported symptom was an empty "Previous Drive"; the
+   actual damage was that a completed scoring drive vanished from the
+   page entirely. When a panel looks empty, check whether something
+   upstream silently consumed the slot.
+2. **Time of possession is a boundary check in disguise.** TOP is
+   derived from the clock events bracketing a drive, so it reads 0:00
+   whenever the drive split is wrong. A TOP of 0:00 on a drive that
+   obviously took time is a symptom of bad boundaries, not of a clock
+   bug.
+
+Note also that `flipBtn` is followed by a clock prompt rather than a
+"New drive" marker, so the manual-flip path produces a different play
+shape than a kickoff or punt does. It had the same bug and nothing else
+would have caught it — worth exercising explicitly whenever drive
+detection changes.
+
 ## Testing must go through the real DOM (established August 5, 2026)
 
 `tests/` now drives the actual pages: real button clicks, real `<input>`

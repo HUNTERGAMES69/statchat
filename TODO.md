@@ -427,6 +427,48 @@ against the local copy** -- a silent partial upload is worse than an
 error, because everything downstream (this TODO, the mutation-check
 output) assumes the file is actually there.
 
+## 9. Drive boundaries broken by administrative markers — FIXED (Aug 6, 2026)
+
+Reported from screenshots: on `view.html`, "Previous Drive" showed 0/0
+in every tile and listed "Clock — 5:00 at change of possession" instead
+of a drive summary. `game.html`'s "Previous drive" panel had the same
+problem.
+
+- [x] **Root cause.** `findDriveStarts()` begins a new drive at the play
+  immediately after a detected possession change. When a kickoff flipped
+  possession, the very next entry was the `Clock — ... at change of
+  possession` line — an administrative marker, not a football play. That
+  created a phantom one-play "drive" containing only the clock marker.
+  Its tiles were all zero (markers carry no `roles`), and because only
+  the last two drives are ever displayed, the real 99-yard touchdown
+  drive was pushed out of the "previous drive" slot entirely.
+- [x] **The fix.** New top-level `isAdminMarker(p)` in the engine core of
+  both `game.html` and `view.html`: clock events, quarter/half dividers
+  and manual possession flips are announcements, not plays. A detected
+  possession change now starts the drive at the next REAL play.
+  `isReset` markers are deliberately excluded from the definition —
+  they are explicit "new drive" announcements and remain valid starts.
+  Start indices are deduped, because skipping markers now often lands a
+  possession change exactly on the reset marker that follows it.
+- [x] **Second symptom, same root cause.** `computeDriveSummary()` chose
+  its summary line by walking backwards and skipping only dividers, so a
+  drive ending in a punt summarized as the trailing clock line rather
+  than the punt. It now skips all administrative markers. This was
+  literally the other half of the report ("lists the change of
+  possession, not a drive summary").
+- [x] **Manual flip had the identical bug**, not reported but found while
+  verifying: `flipBtn` is followed by a clock prompt rather than a "New
+  drive" marker, so it produced the same phantom drive. Fixed by the
+  same change.
+- [x] Verified: the reported sequence now shows PASS 1/99, YARDS 99 with
+  the touchdown as the summary. A punt drive with clock events at both
+  ends shows RUSH 1/12, PASS 1/20, YARDS 32, TOP 3:30 and summarizes as
+  the punt. Time of possession only computes correctly once the drive
+  boundaries are right, so TOP doubles as a boundary check.
+- [x] Guarded by `tests/drive_boundary_check.js` (4 scenarios) and three
+  mutants. Both copies of `findDriveStarts` and `isAdminMarker` verified
+  byte-identical.
+
 ## Other known-outstanding items (from earlier sessions, may be stale)
 
 - [ ] Offline-durable sync queue for failed saves
