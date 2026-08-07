@@ -469,6 +469,162 @@ problem.
   mutants. Both copies of `findDriveStarts` and `isAdminMarker` verified
   byte-identical.
 
+## 10. Live-entry fixes and features — Aug 6, 2026 (second session)
+
+All verified through the real UI and covered by
+`tests/possession_and_drive_check.js`, `tests/optional_players_check.js`
+and `tests/entry_integrity_check.js`, with a mutant each.
+
+### Bugs
+- [x] **Possessions were double-counted.** `countPossessions` had its own
+  copy of drive-boundary logic and counted both the detected possession
+  change AND the explicit reset marker that follows it. A new game where
+  each side had had the ball once reported 2 apiece. It now derives from
+  `findDriveStarts`, so possessions and drives agree by construction
+  rather than by keeping two implementations in step.
+- [x] **Incomplete passes were not counted as 3rd/4th-down attempts.**
+  The conversion loop's play-type list omitted `'incomplete'` -- and only
+  that one list; every other definition in the codebase included it. An
+  incomplete pass is the most common 3rd-down outcome in football, so
+  every conversion rate ever recorded was inflated (denominator too
+  small). Fixed in all four report files. Because reports recompute from
+  play data, **re-opening an old game now shows corrected numbers** -- no
+  backfill needed.
+- [x] **Safety credited the clock to the wrong team.** The
+  end-of-possession clock event used `effect.score.team`, which is the
+  same as the possessing team for a touchdown or field goal but is the
+  DEFENSE on a safety. The real possessor's clock was left running and
+  its time of possession stuck at 0:00. Now always uses
+  `preState.possession`.
+- [x] **Stale confirm text (the significant one).** The confirm card is
+  built on Review but nothing is written until Save. Any state change in
+  between -- Undo being the easy one, and the new Redo button makes it
+  easier to reach -- left the stored text describing a down & distance
+  that no longer existed, while the effect was applied to the current
+  state. The log then showed an impossible jump (2nd & 10 straight to
+  4th & 11) and the third-down attempt inside it stopped counting.
+  Invisible until someone read the log back. The play is now re-parsed
+  against the current state at Save; `parseInput` is deterministic, so
+  this is a no-op when nothing changed.
+
+### Features
+- [x] Time of possession tile added to Current Drive. Reads 0:00 until
+  the drive's closing clock event is entered -- possession time only
+  accumulates on an `end` or `transition` event and there is no live
+  game clock to measure against mid-drive.
+- [x] Penalty "no down change" checkbox, for a dead-ball foul or one
+  assessed after a kick or change of possession. Moves the ball, keeps
+  down AND distance (keeping only the down would still turn 1st & 10
+  into 1st & 20). Caps for goal-to-go.
+- [x] "New drive / correct down" renamed **"Adjust Down/Distance"** and
+  no longer registers a possession. A reset marker now only opens the
+  game's FIRST drive; every later drive begins at a real possession
+  change. (The first-drive case is kept deliberately -- without it a game
+  that opens with an adjustment would show no active drive.)
+- [x] Passer picker pre-selects the last quarterback to throw for that
+  team, on Pass / Sack / Interception / 2PT pass. Note
+  `offenseEligible` filters the passer grid by QB position, so a non-QB
+  who throws gets the number pre-filled into the manual field instead of
+  a highlighted button.
+- [x] **Redo last** button. Restores the play with its original id,
+  roles, effect and sequence number. Entering any new play clears the
+  redo stack, since redoing after that would splice a play in behind
+  ones that already followed it.
+- [x] **Kick/punt returner optional.** It was already skippable, but the
+  return YARDAGE was silently discarded along with the unknown returner.
+  Also fixed the blocked-punt recoverer and the guided-kickoff returner,
+  both of which hard-blocked Review with no message.
+- [x] **Interceptor and fumble recoverer optional** (standalone plus the
+  rush/pass/sack sub-flows) -- all previously hard-blocked. Lost fumbles
+  now carry `roles.lost`, because `roles.defense` used to be the only
+  signal distinguishing a lost fumble from one recovered by the offense;
+  without it, unnamed recoveries would have silently stopped counting as
+  turnovers. `countTurnovers` checks `(r.lost || r.defense)` so games
+  already recorded keep counting.
+
+### Known-imperfect, deliberately left
+- [ ] The `?` sentinel for an unknown player is a positional token in the
+  code string. It works, but a structured field would be cleaner if the
+  code format is ever revisited.
+- [ ] Corrupted plays already saved cannot be repaired by any of the
+  above. In the Aug 6 game one West Monroe third down is permanently
+  uncounted (they should read 1 of 7, not 1 of 6).
+
+## 11. Offline-durable sync queue — BUILT (Aug 6, 2026)
+
+Triggered by a real failure during live entry:
+`TypeError: Failed to fetch`. The old handler announced the problem once
+and then forgot about it. The play lived on in that tab's memory, so
+every later play still computed correctly on that screen, but the server
+never received it — reloading dropped it silently, and the spectator
+view and every report were quietly missing a snap. **This is the most
+likely cause of the corrupted West Monroe drive** (a down sequence no
+single play could produce), and of any past game whose stats looked
+slightly off.
+
+- [x] Failed inserts go into a queue persisted to `localStorage`, keyed
+  per game, so **a reload no longer loses the play**. On load, queued
+  plays are merged back into `plays` before anything reads them.
+- [x] Merge dedupes against what the server already has — an insert can
+  succeed while the response is lost, and that row must not be re-added.
+- [x] Queue drains FIFO and **stops on the first failure**: uploading out
+  of order would place a play on the server ahead of ones that happened
+  before it.
+- [x] Once anything is queued, later plays queue behind it rather than
+  going straight through, for the same ordering reason.
+- [x] Before draining, the queue asks the server which sequence numbers
+  it already has and drops those. A duplicate-key error on retry is also
+  treated as success, but that only fires if the table actually has a
+  unique constraint on `(game_id, sequence_number)` — the pre-check does
+  not depend on one.
+- [ ] **Verify that unique constraint exists** on `plays`
+  `(game_id, sequence_number)`. Without it nothing at the database level
+  stops a duplicate row; the app-side pre-check is currently the only
+  guard.
+- [x] Undo of a still-queued play removes it from the queue instead of
+  trying to delete a row the server has never seen.
+- [x] Retries every 5s while anything is outstanding, immediately on the
+  browser's `online` event, and on demand via a "Retry now" button.
+- [x] Persistent banner shows how many plays are unsaved. `localStorage`
+  failures (private browsing, quota) are swallowed — the queue still
+  works in memory for the session.
+- [x] `TypeError: Failed to fetch` is a thrown exception, not a returned
+  error, so every insert path is wrapped in try/catch. The old code only
+  checked the returned `error` and would have propagated the throw.
+
+### Still outstanding
+- [ ] The queue only covers play inserts. Game-status updates, roster
+  writes and the guided-state save still fail silently offline.
+- [ ] No test coverage yet — verified ad hoc this session (offline
+  entry, reload recovery, drain, undo-while-queued, duplicate handling).
+  `tests/harness.js` gained a `seedStorage` option to make the reload
+  case testable; the suite itself is still to be written.
+
+## 12. Passing/rushing picker changes — Aug 6, 2026
+
+- [x] **Receiver optional** on Pass, incomplete and 2PT pass. Records as
+  `pass for 14` / `incomplete` / `2PT pass — GOOD` with no name. No
+  receiver role is created, so nobody gets phantom receiving yards; the
+  passer's attempt, completion and yardage all still count.
+- [x] **The auto-selected quarterback can now be cleared.** Tapping a
+  committed pick de-selects it, and typing in the "or type #" field
+  clears a stale highlight.
+- [x] **The pre-selected QB is shown as a SUGGESTION, not a committed
+  pick.** This mattered: with the naive toggle, the coach's first tap on
+  the auto-selected quarterback read as "tap the selected player" and
+  de-selected him — the opposite of confirming. The suite caught this
+  as a hard failure (sacks and incompletes stopped saving entirely).
+  Tap now confirms; a second tap clears.
+- [x] **Offense pickers order by most recently used**, not by season
+  yardage. Football is streaky — the back who just carried is far more
+  likely to carry again than the one with the most yards an hour ago.
+  Applies to carrier, passer and receiver, since they share
+  `offenseEligible`.
+- [x] **A player who has performed a role is always offered in it**,
+  regardless of the position filter. A tight end who carried used to
+  never appear in the carrier list, so recency ordering could never
+  surface him and the number had to be typed every time.
+
 ## Other known-outstanding items (from earlier sessions, may be stale)
 
 - [ ] Offline-durable sync queue for failed saves

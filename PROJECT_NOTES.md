@@ -422,6 +422,107 @@ shape than a kickoff or punt does. It had the same bug and nothing else
 would have caught it — worth exercising explicitly whenever drive
 detection changes.
 
+## Stored text is a snapshot; state is recomputed. They must be built at the same moment (August 6, 2026)
+
+Every play carries two things: a `text` string frozen at save time, and
+an `effect` that gets replayed by `computeState` forever after. The
+whole log depends on those two describing the *same* situation.
+
+They can come apart, and when they do nothing surfaces it. The confirm
+card is built when Review is pressed but nothing is written until Save,
+so a state change in between -- Undo is the easy one -- left the text
+describing a down & distance that no longer existed while the effect
+applied to the new state. The stored log then contained an impossible
+jump (2nd & 10 straight to 4th & 11), and the third-down attempt hidden
+inside that jump stopped being counted. It surfaced only when a coach
+questioned a season stat days later.
+
+The fix is to re-parse at Save rather than reuse the Review-time result.
+`parseInput` is deterministic given `(code, state)`, so re-parsing costs
+nothing when nothing changed. **Any future "review then commit" flow
+needs the same treatment** -- building the artifact early and writing it
+late is the bug, not Undo specifically.
+
+A useful diagnostic that fell out of this: walk the log and compare each
+line's stated down & distance against `computeState` replayed to that
+point. Any disagreement is a corrupted play, and the down sequence
+around it will show a jump no single play could produce. That check
+found the bug in a real game log in seconds after manual counting had
+gone nowhere.
+
+## When the scorer is not the possessor (August 6, 2026)
+
+Clock and drive attribution repeatedly assumed the team that scored is
+the team that had the ball. That holds for a touchdown or a field goal
+and fails for a **safety**, where the defense scores. Keying the
+end-of-possession clock off `effect.score.team` credited a team that
+never had possession, left the real possessor's clock running, and stuck
+its time of possession at 0:00.
+
+The rule: the possession that just ended always belongs to
+`preState.possession`. Reach for the pre-play state, not the scoreboard,
+whenever the question is "whose possession was this".
+
+Related, and worth remembering as a category: `roles.defense` was also
+being used as the only signal that a fumble was LOST rather than
+recovered by the offense. That is an inference, not a fact, and it broke
+the moment naming the recoverer became optional. Lost fumbles now carry
+an explicit `roles.lost`. **When a field is doing double duty as an
+implicit flag, making that field optional silently changes behaviour
+somewhere else.**
+
+## Possessions and drives are the same thing (August 6, 2026)
+
+`countPossessions` used to reimplement drive-boundary detection instead
+of deriving from `findDriveStarts`. The two drifted, and the copy in
+`countPossessions` counted both the detected possession change AND the
+explicit "New drive" marker that follows it -- so an ordinary kickoff ->
+clock line -> new drive credited the receiving team twice. A brand-new
+game where each side had had the ball once read 2 possessions apiece.
+
+It now derives from `findDriveStarts`, which required hoisting that
+function to the top level of all five files. Possessions and drives now
+agree by construction rather than by keeping two implementations in
+step, and a test asserts that the possession total equals the drive
+count.
+
+A reset marker also no longer opens a drive by itself; it only opens the
+game's FIRST one. Every later drive begins at a real possession change,
+which is detected independently. That is what makes "Adjust
+Down/Distance" free to use mid-drive -- correcting the chains twice in a
+row used to register two possessions.
+
+## A failed write is not a failed play (August 6, 2026)
+
+`persistPlay` used to report a sync failure and move on. That is the
+worst possible handling, because everything on the entering screen keeps
+working: the play is in `plays`, so every later play's down and distance
+computes correctly *in that tab*. Nothing looks wrong until someone
+reloads, opens the spectator view, or reads a report — by which point
+the log has a gap and the down sequence around it is unreconstructable.
+
+Two things make this class of bug nasty. The failure is silent to the
+one person who could fix it immediately, and the damage is invisible
+where it happens and only visible somewhere else, later.
+
+The queue is built around ordering. Plays must reach the server in
+sequence order, so: draining stops at the first failure rather than
+skipping ahead, and once anything is queued, later plays queue behind it
+instead of going straight through. A queue that "catches up" out of
+order would interleave plays and produce exactly the corruption it
+exists to prevent.
+
+Two details that are easy to get wrong:
+
+- **`TypeError: Failed to fetch` is thrown, not returned.** The Supabase
+  client returns `{ error }` for server-side errors but throws on a
+  network failure. Code that only checks the returned `error` will
+  propagate the throw. Every insert path needs try/catch as well.
+- **A duplicate key on retry means success.** An insert can land while
+  the response is lost, so a blind retry sees a unique-constraint
+  violation. Treating that as a failure would wedge the queue forever on
+  a row that is already saved.
+
 ## Testing must go through the real DOM (established August 5, 2026)
 
 `tests/` now drives the actual pages: real button clicks, real `<input>`
