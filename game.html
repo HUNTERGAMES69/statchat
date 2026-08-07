@@ -88,6 +88,11 @@
         </div>
       </div>
       <div id="gameMsg"></div>
+      <div id="finalLockBanner" class="hidden" style="background:#fff3cd; border:1px solid #e0b400; border-radius:8px; padding:12px 14px; margin-bottom:16px;">
+        <div style="font-weight:600; color:#7a5c00; margin-bottom:4px;">This game is finalized</div>
+        <div style="font-size:13px; color:#7a5c00; margin-bottom:10px;">Play entry is locked to prevent accidental changes to a completed game's record. Unlock only if something genuinely needs correcting.</div>
+        <button type="button" id="unlockFinalBtn" class="secondary" style="background:#fff;">Unlock to edit</button>
+      </div>
       <div id="syncStatus" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:#fff4d6; border:1px solid #e0b84c; font-size:13px;"></div>
       <input type="text" id="code" style="display:none;">
 
@@ -195,6 +200,7 @@
   let TEAMS = { teamA: {}, teamB: {} };
   let plays = [], nextId = 1, startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
   let pending = null;
+  let currentUserRole = 'view';
   let guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
   let gamePhase = 'notStarted';
   let clockPrompt = null, clockPromptCallback = null;
@@ -205,6 +211,7 @@
     const { data, error } = await supabaseClient
       .from('profiles').select('role').eq('id', userId).limit(1);
     const role = (!error && data && data.length > 0 && data[0].role) || 'view';
+    currentUserRole = role;
     const ok = (ROLE_RANK[role] || 0) >= (ROLE_RANK[minRole] || 0);
     if (!ok) window.location.href = 'dashboard.html';
     return ok;
@@ -1483,12 +1490,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // to restore.
     document.getElementById('redoBtn').disabled = !redoStack.length;
     document.getElementById('quarterUtilBtn').disabled = disable;
+    // Flip possession and Timeout were never gated. Both write straight
+    // to the log, so on a finalized game they would append plays after
+    // the final score -- and neither is meaningful once the game is
+    // over, at halftime, or mid-guided-flow.
+    document.getElementById('flipBtn').disabled = disable;
+    document.getElementById('timeoutUtilBtn').disabled = disable;
     if (disable) document.getElementById('playPanel').style.display = 'none';
     document.getElementById('startGameBtn').style.display = (gamePhase === 'notStarted' && !guided.active) ? 'inline-block' : 'none';
     document.getElementById('endFirstHalfBtn').style.display = (gamePhase === 'firstHalf' && !guided.active) ? 'inline-block' : 'none';
     document.getElementById('startHalfBtn').style.display = (gamePhase === 'halftime' && !guided.active) ? 'inline-block' : 'none';
     document.getElementById('endGameBtn').style.display = (gamePhase === 'secondHalf' && !guided.active) ? 'inline-block' : 'none';
     document.getElementById('otUtilBtn').style.display = (gamePhase === 'secondHalf' && !guided.active && computeState().quarter < 5) ? 'inline-block' : 'none';
+    // Admin only: everyone else sees a finalized game exactly as before.
+    const lockBanner = document.getElementById('finalLockBanner');
+    if (lockBanner){
+      lockBanner.classList.toggle('hidden', !(gamePhase === 'ended' && currentUserRole === 'admin'));
+    }
     const recapLink = document.getElementById('recapLink');
     if (gamePhase === 'ended'){
       recapLink.href = 'recap.html?id=' + currentGameId;
@@ -1594,6 +1612,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     renderAll();
     updatePhaseUI();
   });
+  document.getElementById('unlockFinalBtn').addEventListener('click', async () => {
+    if (currentUserRole !== 'admin') return;
+    if (!confirm('This game is finalized. Reopen it for editing?\n\nOnly do this if something genuinely needs correcting. The game will go back to in progress until you end it again.')) return;
+    // Reopen to the second half rather than to the exact phase it ended
+    // in: that restores normal play entry and leaves "End game"
+    // available to re-finalize once the correction is made.
+    gamePhase = 'secondHalf';
+    await setGameStatus('in_progress');
+    persistUiState();
+    renderAll();
+    // renderAll() does not touch the phase gating -- without this the
+    // banner stays up and every control stays disabled.
+    updatePhaseUI();
+    showMsg('gameMsg', 'Game reopened for editing. Remember to end the game again when you are done.', 'success');
+  });
+
   document.getElementById('endGameBtn').addEventListener('click', () => {
     const state = computeState();
     if (state.scores.teamA === state.scores.teamB){

@@ -747,6 +747,55 @@ appeared in the log, by which point the text is frozen.
 - [ ] No automated test yet — verified ad hoc (countdown, disabled at
   zero, halftime reset, replay on view.html).
 
+## 16. Flip possession / Timeout were usable on a finalized game — FIXED (Aug 6, 2026)
+
+- [x] `updatePhaseUI` gated the play buttons, Penalty, Adjust
+  Down/Distance and Quarter marker, but **not** Flip possession — a
+  pre-existing gap that the new Timeout button then joined. Both write
+  straight to the log, so on a finalized game they appended plays after
+  the final score.
+- [x] Both now follow the same `disable` flag: off during a guided flow,
+  a clock prompt, before kickoff, at halftime, and once the game has
+  ended. Verified across all three phases.
+
+Worth remembering when adding any new control that writes to the log:
+`updatePhaseUI` is an explicit allow-list, not a default. A button that
+is not named there is live in every phase, including after the final
+whistle.
+
+## 17. Unlock to edit on the game page — ADDED (Aug 6, 2026)
+
+Mirrors the existing unlock on the game setup tab, same wording and same
+confirm-before-acting flow.
+
+- [x] Amber "This game is finalized" banner with an **Unlock to edit**
+  button, shown only when `gamePhase === 'ended'` AND the signed-in
+  user's role is `admin`. Everyone else sees a finalized game exactly as
+  before.
+- [x] Unlocking sets the game back to `in_progress`, returns the phase to
+  `secondHalf`, and persists both. That restores normal play entry and
+  leaves **End game** available to re-finalize once the correction is
+  made.
+- [x] Confirms first, and says plainly that the game goes back to in
+  progress until it is ended again.
+- [x] `currentUserRole` is now captured from the profile lookup in
+  `guardMinRoleOrRedirect`, which computed the role but discarded it.
+
+**Gotcha worth remembering:** `renderAll()` does not touch phase gating.
+The first version called only `renderAll()`, so the banner stayed up and
+every control stayed disabled after unlocking. `updatePhaseUI()` has to
+be called explicitly.
+
+### Known limits
+- [ ] The admin check is client-side only, exactly like the setup-tab
+  unlock it mirrors. A non-admin who bypassed the UI could still send
+  the update; enforcing this properly needs an RLS policy on `games`.
+- [ ] `setGameStatus` is not covered by the offline sync queue, so
+  unlocking with no connection reports a failure and is not retried.
+- [ ] No automated test yet — verified ad hoc (admin sees it, non-admin
+  does not, in-progress games do not show it, and unlocking re-enables
+  every control).
+
 ## Other known-outstanding items (from earlier sessions, may be stale)
 
 - [ ] Offline-durable sync queue for failed saves

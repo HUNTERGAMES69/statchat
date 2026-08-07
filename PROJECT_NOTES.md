@@ -523,6 +523,22 @@ Two details that are easy to get wrong:
   violation. Treating that as a failure would wedge the queue forever on
   a row that is already saved.
 
+## `updatePhaseUI` is an allow-list, not a default (August 6, 2026)
+
+Controls are only disabled between phases if they are named explicitly
+in `updatePhaseUI`. Anything not listed stays live in every phase --
+before kickoff, at halftime, during a guided flow, and after the game is
+finalized.
+
+That is how Flip possession stayed clickable on a completed game for as
+long as it existed, and the Timeout button inherited the same gap the
+day it was added. Both write straight to the log, so using them on a
+final game appends plays after the final score.
+
+**Any new control that writes a play needs a line in `updatePhaseUI`.**
+Undo and Redo are the deliberate exceptions: a coach has to be able to
+correct a mistake at halftime or after the whistle.
+
 ## Testing must go through the real DOM (established August 5, 2026)
 
 `tests/` now drives the actual pages: real button clicks, real `<input>`
