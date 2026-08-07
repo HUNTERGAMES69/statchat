@@ -796,6 +796,41 @@ function parseInput(raw, state){
     if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
   }
+  if (type === 'pm'){
+    // Muffed / fumbled punt. The receiving team failed to secure the
+    // catch. If the KICKING team recovers, possession never changes
+    // hands -- which is exactly why this cannot be recorded as a punt
+    // plus a fumble: a punt always flips possession and this one must
+    // not.
+    const yds = rest[0];
+    const kickingRecovers = (rest[1] || 'k').toLowerCase() !== 'r';
+    const recNum = rest[2];
+    const retyds = rest[3];
+    const recTeam = kickingRecovers ? off : def;
+    const named = recNum && recNum !== '?';
+    const recName = named
+      ? (kickingRecovers ? ST(recNum) : D(recNum))
+      : TEAMS[recTeam].name;
+    let t = ST(p1) + ' punts ' + yds + ' — MUFFED, recovered by ' + recName;
+    if (retyds && parseInt(retyds)) t += ' for ' + retyds;
+    let score = null;
+    // A touchdown ends the drive whichever side recovered. Without this
+    // a kicking-team recovery returned for a score left the old down and
+    // distance sitting on screen, because nothing else clears them when
+    // possession has not changed.
+    if (td){ t += ' — TOUCHDOWN'; score = { team: recTeam, points: 6 }; }
+    return {
+      text: t,
+      // When the kicking team recovers they keep the ball but start a
+      // fresh set of downs at the spot of recovery, so the save handler
+      // still has to lay down a new-drive marker even though nothing
+      // changed hands.
+      effect: Object.assign(score ? { score, endsDrive: true } : {}, (kickingRecovers && !score) ? { newDownsSameTeam: true } : {}),
+      // Only a receiving-team recovery is a change of possession.
+      flipEligible: !kickingRecovers,
+      flipTo: def, team: off, quarter: state.quarter
+    };
+  }
   if (type === 'pb'){
     const rec = rest[0], retyds = rest[1];
     let t = ST(p1) + ' punt BLOCKED';
@@ -819,6 +854,36 @@ function parseInput(raw, state){
     let score = null;
     if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
+  }
+  if (type === 'km'){
+    // Muffed / fumbled kickoff. Same shape as a muffed punt: if the
+    // KICKING team recovers, the ball never changes hands, so this
+    // cannot be a kickoff plus a fumble -- a kickoff always flips.
+    const yds = rest[0];
+    const kickingRecovers = (rest[1] || 'k').toLowerCase() !== 'r';
+    const recNum = rest[2];
+    const retyds = rest[3];
+    const recTeam = kickingRecovers ? off : def;
+    const named = recNum && recNum !== '?';
+    const recName = named
+      ? (kickingRecovers ? ST(recNum) : D(recNum))
+      : TEAMS[recTeam].name;
+    let t = ST(p1) + ' kicks off ' + yds + ' — MUFFED, recovered by ' + recName;
+    if (retyds && parseInt(retyds)) t += ' for ' + retyds;
+    let score = null;
+    // A touchdown ends the drive whichever side recovered. Without this
+    // a kicking-team recovery returned for a score left the old down and
+    // distance sitting on screen, because nothing else clears them when
+    // possession has not changed.
+    if (td){ t += ' — TOUCHDOWN'; score = { team: recTeam, points: 6 }; }
+    return {
+      text: t,
+      // The kicking team keeps the ball but starts a fresh set of downs
+      // at the spot of recovery, so a new-drive marker is still needed.
+      effect: Object.assign(score ? { score, endsDrive: true } : {}, (kickingRecovers && !score) ? { newDownsSameTeam: true } : {}),
+      flipEligible: !kickingRecovers,
+      flipTo: def, team: off, quarter: state.quarter
+    };
   }
   if (type === 'fg'){
     if (rest[0] === 'b' || rest[0] === 'B'){
@@ -1754,13 +1819,32 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         defBlock('Credited to (optional)');
     else if (type === 'kickoff') html = offBlock('kicker','Kicker') + yardsBlock('Kick distance') +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_ko_ret_wrap">' + retBlock('Returned by (optional)') + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_touchback', 'Touchback') + '</div></div>' +
-        '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' + tdBlock + startingSpotFieldsHtml('pp_spot', null, def);
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_touchback', 'Touchback') + '</div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_muffed', 'Muffed / fumbled catch') + '</div></div>' +
+        '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' +
+        '<div id="pp_ko_muff" style="display:none;">' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_ko_muffrec" value="k" checked> Recovered by the kicking team (they keep the ball)</label>' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_ko_muffrec" value="r"> Recovered by the receiving team</label>' +
+          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
+          '<input type="text" id="pp_ko_muff_rec" placeholder="type #" style="width:100px;">' +
+          yardsBlock('Return yards after recovery (optional)', 'pp_ko_muff_retyds') +
+          '<div id="pp_ko_muff_spot_wrap">' + startingSpotFieldsHtml('pp_komuffspot', 'Spot where the kicking team took over (optional)', off) + '</div>' +
+        '</div>' +
+        tdBlock + startingSpotFieldsHtml('pp_spot', null, def);
     else if (type === 'punt') html =
         offBlock('punter','Punter') +
         '<div style="display:flex; align-items:flex-end; gap:14px;"><div>' + yardsBlock('Punt distance') + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_blocked') + '</div></div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_blocked') + '</div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_muffed', 'Muffed / fumbled catch') + '</div></div>' +
         '<div id="pp_punt_normal">' + retBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div></div>' +
+        '<div id="pp_punt_muffed" style="display:none;">' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_punt_muffrec" value="k" checked> Recovered by the kicking team (they keep the ball)</label>' +
+          '<label class="inline" style="display:block;"><input type="radio" name="pp_punt_muffrec" value="r"> Recovered by the receiving team</label>' +
+          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
+          '<input type="text" id="pp_muff_rec" placeholder="type #" style="width:100px;">' +
+          yardsBlock('Return yards after recovery (optional)', 'pp_muff_retyds') +
+          '<div id="pp_muff_spot_wrap">' + startingSpotFieldsHtml('pp_muffspot', 'Spot where the kicking team took over (optional)', off) + '</div>' +
+        '</div>' +
         '<div id="pp_punt_blocked" style="display:none;">' +
           '<label class="inline" style="display:block;"><input type="radio" name="pp_punt_blockrec" value="opp" checked> Recovered by opponent</label>' +
           '<label class="inline" style="display:block;"><input type="radio" name="pp_punt_blockrec" value="own"> Recovered by own team</label>' +
@@ -2121,13 +2205,46 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
     }
     if (type === 'kickoff'){
+      // Mirrors the punt panel: a muffed kickoff recovered by the
+      // KICKING team is the one kickoff outcome that does not hand the
+      // ball over, so it needs its own play type and its own spot
+      // widget labelled for the kicking team.
+      const koMuffSpotGetter = wireStartingSpot(panel, 'pp_komuffspot');
+      const koSpotGetter = currentSpotGetter;
+      const refreshKoMode = () => {
+        const tb = document.getElementById('pp_ko_touchback').checked;
+        const muffed = document.getElementById('pp_ko_muffed').checked;
+        document.getElementById('pp_ko_ret_wrap').style.display = (tb || muffed) ? 'none' : 'block';
+        document.getElementById('pp_ret_yds_wrap').style.display = (tb || muffed) ? 'none' : 'block';
+        document.getElementById('pp_ko_muff').style.display = muffed ? 'block' : 'none';
+        const kickingRecovers = muffed &&
+          document.querySelector('input[name=pp_ko_muffrec]:checked').value === 'k';
+        document.getElementById('pp_ko_muff_spot_wrap').style.display = kickingRecovers ? 'block' : 'none';
+        currentSpotGetter = kickingRecovers ? koMuffSpotGetter : koSpotGetter;
+      };
       const koTouchbackCb = document.getElementById('pp_ko_touchback');
       if (koTouchbackCb){
         koTouchbackCb.addEventListener('change', (e) => {
-          document.getElementById('pp_ko_ret_wrap').style.display = e.target.checked ? 'none' : 'block';
-          document.getElementById('pp_ret_yds_wrap').style.display = e.target.checked ? 'none' : 'block';
+          // A touchback and a muff are different plays.
+          if (e.target.checked){
+            const m = document.getElementById('pp_ko_muffed');
+            if (m.checked){ m.checked = false; m.dispatchEvent(new Event('change')); }
+          }
+          refreshKoMode();
         });
       }
+      const koMuffCb = document.getElementById('pp_ko_muffed');
+      if (koMuffCb){
+        koMuffCb.addEventListener('change', (e) => {
+          if (e.target.checked){
+            const t = document.getElementById('pp_ko_touchback');
+            if (t.checked){ t.checked = false; t.dispatchEvent(new Event('change')); }
+          }
+          refreshKoMode();
+        });
+      }
+      panel.querySelectorAll('input[name=pp_ko_muffrec]').forEach(r =>
+        r.addEventListener('change', refreshKoMode));
     }
     if (type === 'punt'){
       const updatePuntTdVisibility = () => {
@@ -2135,11 +2252,43 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const ownRec = blocked && document.querySelector('input[name=pp_punt_blockrec]:checked').value === 'own';
         document.getElementById('pp_punt_td_wrap').style.display = ownRec ? 'none' : 'block';
       };
-      document.getElementById('pp_blocked').addEventListener('change', (e) => {
-        document.getElementById('pp_punt_normal').style.display = e.target.checked ? 'none' : 'block';
-        document.getElementById('pp_punt_blocked').style.display = e.target.checked ? 'block' : 'none';
+      // A muffed punt where the KICKING team recovers is the one punt
+      // outcome that does not change possession, so it cannot be logged
+      // as a punt plus a fumble -- a punt always flips. It needs its own
+      // spot widget too, labelled for the kicking team, because they are
+      // the ones taking over.
+      const muffSpotGetter = wireStartingSpot(panel, 'pp_muffspot');
+      const puntSpotGetter = currentSpotGetter;
+      const refreshPuntMode = () => {
+        const blocked = document.getElementById('pp_blocked').checked;
+        const muffed = document.getElementById('pp_muffed').checked;
+        document.getElementById('pp_punt_normal').style.display = (blocked || muffed) ? 'none' : 'block';
+        document.getElementById('pp_punt_blocked').style.display = blocked ? 'block' : 'none';
+        document.getElementById('pp_punt_muffed').style.display = muffed ? 'block' : 'none';
+        const kickingRecovers = muffed &&
+          document.querySelector('input[name=pp_punt_muffrec]:checked').value === 'k';
+        document.getElementById('pp_muff_spot_wrap').style.display = kickingRecovers ? 'block' : 'none';
+        currentSpotGetter = kickingRecovers ? muffSpotGetter : puntSpotGetter;
         updatePuntTdVisibility();
+      };
+      document.getElementById('pp_blocked').addEventListener('change', (e) => {
+        // Blocked and muffed are different plays; turning one on clears
+        // the other rather than leaving both claiming the panel.
+        if (e.target.checked){
+          const m = document.getElementById('pp_muffed');
+          if (m.checked){ m.checked = false; m.dispatchEvent(new Event('change')); }
+        }
+        refreshPuntMode();
       });
+      document.getElementById('pp_muffed').addEventListener('change', (e) => {
+        if (e.target.checked){
+          const b = document.getElementById('pp_blocked');
+          if (b.checked){ b.checked = false; b.dispatchEvent(new Event('change')); }
+        }
+        refreshPuntMode();
+      });
+      panel.querySelectorAll('input[name=pp_punt_muffrec]').forEach(r =>
+        r.addEventListener('change', refreshPuntMode));
       panel.querySelectorAll('input[name=pp_punt_blockrec]').forEach(r => r.addEventListener('change', () => {
         const isOwn = document.querySelector('input[name=pp_punt_blockrec]:checked').value === 'own';
         document.getElementById('pp_punt_block_opp').style.display = isOwn ? 'none' : 'block';
@@ -2351,9 +2500,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (!sel.kicker) return;
       const yds = yards('pp_yards') || '0';
       const isTouchback = document.getElementById('pp_ko_touchback').checked;
+      const koMuffed = document.getElementById('pp_ko_muffed') && document.getElementById('pp_ko_muffed').checked;
       if (isTouchback){
         code = sel.kicker + 'ko ' + yds + ' tb';
         roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0, touchback: true } };
+      } else if (koMuffed){
+        const recTeamTok = document.querySelector('input[name=pp_ko_muffrec]:checked').value;
+        const recRaw = (document.getElementById('pp_ko_muff_rec') || {}).value;
+        const recNum = (recRaw || '').trim() || '?';
+        const muffRet = yards('pp_ko_muff_retyds') || '0';
+        code = sel.kicker + 'km ' + yds + ' ' + recTeamTok + ' ' + recNum + ' ' + muffRet + (td ? ' td' : '');
+        roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds) || 0 } };
+        if (recNum !== '?'){
+          // Recovering a muff is neither a defensive nor a receiving
+          // stat, so it is recorded for the log only.
+          roles.recovery = { team: recTeamTok === 'k' ? off : def, num: recNum };
+        }
       } else {
         const retyds = yards('pp_retyds');
         // The returner is optional: a coach often can't read the number
@@ -2385,6 +2547,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
       } else {
         const yds = yards('pp_yards') || '0';
+        const muffed = document.getElementById('pp_muffed') && document.getElementById('pp_muffed').checked;
+        if (muffed){
+          const recTeamTok = document.querySelector('input[name=pp_punt_muffrec]:checked').value;
+          const muffRec = (document.getElementById('pp_muff_rec') || {}).value;
+          const recNum = (muffRec || '').trim() || '?';
+          const muffRet = yards('pp_muff_retyds') || '0';
+          code = sel.punter + 'pm ' + yds + ' ' + recTeamTok + ' ' + recNum + ' ' + muffRet + (td ? ' td' : '');
+          roles = { punter: { team: off, num: sel.punter, yards: parseInt(yds) || 0 }, playType: 'punt' };
+          if (recNum !== '?'){
+            // Recovering a muff is not a defensive stat and not a
+            // receiving one, so it is recorded for the log only.
+            roles.recovery = { team: recTeamTok === 'k' ? off : def, num: recNum };
+          }
+        } else {
         const retyds = yards('pp_retyds');
         // The returner is optional: a coach often can't read the number
         // on a return, and forcing one meant the return YARDAGE they did
@@ -2395,6 +2571,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         code = sel.punter + 'pt ' + yds + (retTok ? ' ' + retTok + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
         roles = { punter: { team: off, num: sel.punter, yards: parseInt(yds)||0, blocked: false } };
         if (sel.credit) roles.defense = { team: def, num: sel.credit };
+        }
       }
     } else if (type === 'fg'){
       if (!sel.kicker) return;
@@ -2584,9 +2761,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' end of possession (' + TEAMS[effect.score.team].name + ')', effect: { clockEvent: { type: 'end', team: effect.score.team, absSec } }, quarter: q });
       }
     }
-    if (pending.reset && flipHappened){
+    // A new set of downs normally follows a change of possession, but a
+    // muffed punt recovered by the kicking team gives one to the team
+    // that already had the ball.
+    if (pending.reset && (flipHappened || effect.newDownsSameTeam)){
       const q2 = computeState().quarter;
-      pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(pending.reset.down) + ' & ' + pending.reset.distance + ' at ' + markerLabel(pending.reset.fieldPos) + ' (' + TEAMS[incomingTeam].name + ')', effect: { isReset: true, down: pending.reset.down, distance: pending.reset.distance, fieldPos: pending.reset.fieldPos }, quarter: q2 });
+      const driveTeam = flipHappened ? incomingTeam : computeState().possession;
+      pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(pending.reset.down) + ' & ' + pending.reset.distance + ' at ' + markerLabel(pending.reset.fieldPos) + ' (' + TEAMS[driveTeam].name + ')', effect: { isReset: true, down: pending.reset.down, distance: pending.reset.distance, fieldPos: pending.reset.fieldPos }, quarter: q2 });
     }
     renderAll();
     document.getElementById('confirmCard').style.display = 'none';
