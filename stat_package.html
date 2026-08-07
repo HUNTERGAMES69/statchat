@@ -150,7 +150,14 @@
     let priorPoss = startingPossession;
     for (let i = 0; i < playsList.length; i++){
       if (playsList[i].effect && playsList[i].effect.isReset){
-        pushStart(i);
+        // A reset marker only OPENS the game's first drive. Every later
+        // drive begins at a real possession change, which is detected
+        // below and already lands on the reset marker that follows it.
+        // "Adjust down / distance" writes a reset marker purely to
+        // correct the chains, so using it mid-drive -- or twice in a row
+        // -- must not register another drive, and therefore another
+        // possession, for a team that never gave the ball up.
+        if (!starts.length) pushStart(i);
         priorPoss = computeState(playsList.slice(0, i + 1)).possession;
         continue;
       }
@@ -242,10 +249,25 @@
           state.fieldPos = Math.max(0, Math.min(100, state.fieldPos));
         }
         if (state.distance !== null){
-          state.distance -= e.fieldDelta;
-          if (state.distance <= 0){
-            state.down = 1;
-            state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+          if (e.noDownChange){
+            // Dead-ball foul, or one assessed after a kick or change of
+            // possession: it is walked off before the series begins, so
+            // the ball moves but the down and distance-to-go stay put.
+            // Adjusting distance here would measure against a
+            // line-to-gain that no longer exists -- which is how a
+            // 10-yard foul against a team that had just taken over at
+            // 1st & 10 used to become "1st & 20".
+            if (state.fieldPos !== null){
+              state.distance = Math.max(1, Math.min(state.distance, 100 - state.fieldPos));
+            }
+          } else {
+            state.distance -= e.fieldDelta;
+            if (state.distance <= 0){
+              // Penalty yardage alone reached or passed the marker --
+              // an automatic first down, regardless of what down it was.
+              state.down = 1;
+              state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+            }
           }
         }
       }

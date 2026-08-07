@@ -118,7 +118,7 @@
         <button id="penUtilBtn" style="background:#ffc72c; color:#1a1a1a;">Penalty</button>
         <button class="ptypeBtn" data-type="fumble">Fumble</button>
         <button class="ptypeBtn" data-type="safety">Safety</button>
-        <button id="driveUtilBtn">New drive / correct down</button>
+        <button id="driveUtilBtn">Adjust Down/Distance</button>
         <button id="flipBtn">Flip possession</button>
       </div>
 
@@ -344,7 +344,14 @@ function findDriveStarts(playsList){
   let priorPoss = startingPossession;
   for (let i = 0; i < playsList.length; i++){
     if (playsList[i].effect && playsList[i].effect.isReset){
-      pushStart(i);
+      // A reset marker only OPENS the game's first drive. Every later
+      // drive begins at a real possession change, which is detected
+      // below and already lands on the reset marker that follows it.
+      // "Adjust down / distance" writes a reset marker purely to
+      // correct the chains, so using it mid-drive -- or twice in a row
+      // -- must not register another drive, and therefore another
+      // possession, for a team that never gave the ball up.
+      if (!starts.length) pushStart(i);
       priorPoss = computeState(playsList.slice(0, i + 1)).possession;
       continue;
     }
@@ -542,12 +549,25 @@ function computeState(playsList){
         state.fieldPos = Math.max(0, Math.min(100, state.fieldPos));
       }
       if (state.distance !== null){
-        state.distance -= e.fieldDelta;
-        if (state.distance <= 0){
-          // Penalty yardage alone reached or passed the marker --
-          // an automatic first down, regardless of what down it was.
-          state.down = 1;
-          state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+        if (e.noDownChange){
+          // Dead-ball foul, or one assessed after a kick or change of
+          // possession: it is walked off before the series begins, so
+          // the ball moves but the down and distance-to-go stay put.
+          // Adjusting distance here would measure against a
+          // line-to-gain that no longer exists -- which is how a
+          // 10-yard foul against a team that had just taken over at
+          // 1st & 10 used to become "1st & 20".
+          if (state.fieldPos !== null){
+            state.distance = Math.max(1, Math.min(state.distance, 100 - state.fieldPos));
+          }
+        } else {
+          state.distance -= e.fieldDelta;
+          if (state.distance <= 0){
+            // Penalty yardage alone reached or passed the marker --
+            // an automatic first down, regardless of what down it was.
+            state.down = 1;
+            state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+          }
         }
       }
     }
@@ -606,7 +626,7 @@ function parseInput(raw, state){
     const d = parseInt(tokens[0]), togo = parseInt(tokens[1]), marker = parseInt(tokens[2]);
     const fp = marker < 0 ? Math.abs(marker) : (100 - marker);
     return {
-      text: 'New drive / down correction — ' + ordinal(d) + ' & ' + togo + ' at ' + markerLabel(fp) + ' (' + TEAMS[off].name + ')',
+      text: 'Down & distance adjusted — ' + ordinal(d) + ' & ' + togo + ' at ' + markerLabel(fp) + ' (' + TEAMS[off].name + ')',
       effect: { isReset: true, down: d, distance: togo, fieldPos: fp },
       flipEligible: false, team: off, quarter: state.quarter
     };
@@ -618,20 +638,27 @@ function parseInput(raw, state){
     const yds = parseInt(tokens[1]) || 0;
     const team = which === 'po' ? off : def;
     const fieldDelta = which === 'po' ? -yds : yds;
-    // Mirrors computeState's own penalty handling exactly, so the text
-    // always states the resulting down & distance -- not just when it
-    // happens to be a first down -- rather than leaving the reader to
-    // do that math themselves from the yardage alone.
+    // 'nd' = no down change. A dead-ball foul, or one assessed after a
+    // kick or a change of possession, is walked off before the series
+    // begins: the ball moves but the down and the distance-to-go do
+    // not. Without this, a 10-yard foul on a team that had just taken
+    // over at 1st & 10 turned into "1st & 20", because the normal path
+    // adjusts distance against a line-to-gain that no longer applies.
+    const noDownChange = tokens.slice(2).some(t => /^nd$/i.test(t));
     const newFieldPos = state.fieldPos !== null ? Math.max(0, Math.min(100, state.fieldPos + fieldDelta)) : null;
     let newDown = state.down, newDistance = state.distance !== null ? (state.distance - fieldDelta) : null;
-    if (newDistance !== null && newDistance <= 0){
+    if (noDownChange){
+      newDistance = state.distance;
+      // Still cap for goal-to-go: the marker can never sit in the end zone.
+      if (newDistance !== null && newFieldPos !== null) newDistance = Math.max(1, Math.min(newDistance, 100 - newFieldPos));
+    } else if (newDistance !== null && newDistance <= 0){
       newDown = 1;
       newDistance = newFieldPos !== null ? Math.max(1, Math.min(10, 100 - newFieldPos)) : 10;
     }
     const downDistanceText = (newDown !== null && newDistance !== null) ? (' — ' + ordinal(newDown) + ' & ' + newDistance) : '';
     return {
-      text: 'Penalty on ' + TEAMS[team].name + ' — ' + yds + ' yds' + downDistanceText,
-      effect: { penaltyTeam: team, penaltyYds: yds, fieldDelta },
+      text: 'Penalty on ' + TEAMS[team].name + ' — ' + yds + ' yds' + (noDownChange ? ' (no down change)' : '') + downDistanceText,
+      effect: Object.assign({ penaltyTeam: team, penaltyYds: yds, fieldDelta }, noDownChange ? { noDownChange: true } : {}),
       flipEligible: false, team
     };
   }
@@ -1641,6 +1668,39 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const manual = document.getElementById('pp_' + role + '_manual');
       if (manual) manual.addEventListener('input', e => { sel[role] = e.target.value.trim(); });
     });
+
+    // Pre-select the quarterback. A team throws with the same passer
+    // snap after snap, so defaulting to whoever last threw for this
+    // team saves a tap on nearly every passing play. This is only a
+    // default -- clicking another player, or typing a number, overrides
+    // it exactly as before, and nothing is pre-selected until that team
+    // has actually thrown once.
+    //
+    // Applies to every panel with a Passer field (Pass, Sack,
+    // Interception, 2PT pass), because it is the same player and the
+    // same question; prefilling on one but not the others would just be
+    // confusing.
+    const passerGrid = document.getElementById('pp_passer_grid');
+    if (passerGrid){
+      let lastPasser = null;
+      for (let i = plays.length - 1; i >= 0; i--){
+        const r = plays[i].roles;
+        if (r && r.passer && r.passer.team === off && r.passer.num){ lastPasser = r.passer.num; break; }
+      }
+      if (lastPasser){
+        const btn = panel.querySelector('.pp_passer_pick[data-num="' + lastPasser + '"]');
+        if (btn){
+          // Go through the real click handler so highlighting, the
+          // manual field and sel.passer all stay in sync.
+          btn.click();
+        } else {
+          const manual = document.getElementById('pp_passer_manual');
+          if (manual) manual.value = lastPasser;
+          sel.passer = lastPasser;
+        }
+      }
+    }
+
     ['', '_pb', '_fgb', '_2ptRush', '_2ptPass', '_rushfum', '_passfum', '_sackfum'].forEach(suffix => {
       const creditGrid = document.getElementById('pp_credit_grid' + suffix);
       if (creditGrid) wirePickerButtons(panel, 'pp_credit_pick' + suffix, 'pp_credit_manual' + suffix, (num, resolvedName, unit) => {
@@ -2252,7 +2312,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const driveTeamLabel = TEAMS[driveTeam].name + "'s side";
     const otherTeamLabel = TEAMS[otherTeam(driveTeam)].name + "'s side";
     panel.innerHTML =
-      '<p style="font-size:13px; color:#888; margin:0 0 6px;">New drive / correct down</p>' +
+      '<p style="font-size:13px; color:#888; margin:0 0 6px;">Adjust down / distance</p>' +
       '<div style="margin-bottom:8px;"><span style="font-size:13px; margin-right:6px;">Down</span>' +
       ['1','2','3','4'].map(d => '<button type="button" class="driveDownBtn" data-d="' + d + '">' + (d==='1'?'1st':d==='2'?'2nd':d==='3'?'3rd':'4th') + '</button>').join(' ') + '</div>' +
       '<label class="inline">Distance <input type="text" id="drive_dist" style="width:60px; display:inline-block;"></label>' +
@@ -2320,6 +2380,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<button type="button" class="penTeamBtn" data-team="off">On offense</button> ' +
       '<button type="button" class="penTeamBtn" data-team="def">On defense</button>' +
       '<div style="margin-top:8px;"><label class="inline">Yards <input type="text" id="pen_yds" style="width:70px; display:inline-block; margin-left:6px;"></label></div>' +
+      '<label class="inline" style="margin-top:8px; display:block;"><input type="checkbox" id="pen_no_down"> Dead-ball / after a kick or change of possession (move the ball, keep the down &amp; distance)</label>' +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="pen_review">Review</button><button class="secondary" id="pen_clear">Clear</button></div>';
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
     let penTeam = null;
@@ -2332,7 +2393,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('pen_review').addEventListener('click', () => {
       const yds = document.getElementById('pen_yds').value.trim();
       if (!penTeam || !yds) return;
-      const code = (penTeam === 'off' ? 'po' : 'pd') + ' ' + yds;
+      const noDown = document.getElementById('pen_no_down').checked;
+      const code = (penTeam === 'off' ? 'po' : 'pd') + ' ' + yds + (noDown ? ' nd' : '');
       document.getElementById('code').value = code;
       showConfirm();
     });
