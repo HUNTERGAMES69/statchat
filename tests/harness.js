@@ -53,7 +53,13 @@ function makeMockSupabase(db) {
           else if (table === 'games') data = [db.game];
           else if (table === 'game_rosters') data = db.roster;
           else if (table === 'teams') data = [db.branding];
-          else if (table === 'plays') data = db.existingPlays;
+          else if (table === 'plays') {
+            // The server holds what was preloaded PLUS anything inserted
+            // during this session. Returning only the preloaded rows made
+            // the mock lie to any code that inserts and then re-reads --
+            // which is exactly what offline-recovery logic does.
+            data = db.existingPlays.concat(db.plays);
+          }
         }
         return Promise.resolve({ data, error: null }).then(resolve, reject);
       }
@@ -160,6 +166,14 @@ async function bootPage(file, opts = {}) {
       window.alert = msg => { alerts.push(String(msg)); };
       window.confirm = () => (opts.confirmAnswer === undefined ? true : opts.confirmAnswer);
       window.scrollTo = () => {};
+      // Lets a test simulate a reload with plays still sitting in the
+      // offline sync queue, which is the case that matters most: a play
+      // that never reached the server must survive the page reload.
+      if (opts.seedStorage){
+        try {
+          Object.keys(opts.seedStorage).forEach(k => window.localStorage.setItem(k, opts.seedStorage[k]));
+        } catch (e) {}
+      }
       // season_report.html renders its charts with Chart.js from a CDN,
       // which jsdom never fetches, and jsdom has no canvas backend
       // either. Stub both: the charts are presentation, but the page's
