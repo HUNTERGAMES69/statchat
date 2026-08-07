@@ -997,7 +997,12 @@ function computeState(playsList){
       const r = p.roles;
       if (!r) return;
       if (r.playType === 'int' && r.passer) counts[r.passer.team] = (counts[r.passer.team] || 0) + 1;
-      if (r.playType === 'fumble' && r.carrier && r.defense) counts[r.carrier.team] = (counts[r.carrier.team] || 0) + 1;
+      // r.defense used to be the only signal that a fumble was LOST
+      // rather than recovered by the offense. Now that naming the
+      // recoverer is optional, r.lost carries that meaning explicitly.
+      // r.defense is still honoured so plays saved before this change
+      // keep counting.
+      if (r.playType === 'fumble' && r.carrier && (r.lost || r.defense)) counts[r.carrier.team] = (counts[r.carrier.team] || 0) + 1;
     });
     return counts;
   }

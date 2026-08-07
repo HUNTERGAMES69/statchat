@@ -149,7 +149,10 @@
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:baseline;">
         <h2 style="margin:0;">Current drive</h2>
-        <button class="secondary" id="undoBtn" style="padding:6px 12px; font-size:12px;">Undo last</button>
+        <div style="display:flex; gap:6px;">
+          <button class="secondary" id="undoBtn" style="padding:6px 12px; font-size:12px;">Undo last</button>
+          <button class="secondary" id="redoBtn" style="padding:6px 12px; font-size:12px;" disabled>Redo last</button>
+        </div>
       </div>
       <div id="driveLogScroll"></div>
     </div>
@@ -738,7 +741,7 @@ function parseInput(raw, state){
 
   if (type === 'x'){
     const defn = rest[0], ret = rest[1];
-    let t = O(p1) + ' intercepted by ' + D(defn);
+    let t = O(p1) + ' intercepted' + (defn === '?' ? '' : ' by ' + D(defn));
     if (ret) t += ', returned ' + ret;
     let score = null;
     if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
@@ -747,7 +750,7 @@ function parseInput(raw, state){
   if (type === 'f'){
     const rec = rest[0], retyds = rest[1];
     if (rec){
-      let t = O(p1) + ' fumble — recovered by ' + D(rec) + ' (turnover)';
+      let t = O(p1) + ' fumble — ' + (rec === '?' ? 'recovered by the defense' : 'recovered by ' + D(rec)) + ' (turnover)';
       if (retyds) t += ', returned ' + retyds;
       let score = null;
       if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
@@ -760,7 +763,7 @@ function parseInput(raw, state){
   if (type === 'pt'){
     const yds = rest[0], ret = rest[1], retyds = rest[2];
     let t = ST(p1) + ' punts ' + yds;
-    if (ret) t += ', returned by ' + D(ret) + (retyds ? ' for ' + retyds : '');
+    if (ret) t += ', returned' + (ret === '?' ? '' : ' by ' + D(ret)) + (retyds ? ' for ' + retyds : '');
     let score = null;
     if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
@@ -768,7 +771,7 @@ function parseInput(raw, state){
   if (type === 'pb'){
     const rec = rest[0], retyds = rest[1];
     let t = ST(p1) + ' punt BLOCKED';
-    if (rec) t += ', recovered by ' + D(rec);
+    if (rec && rec !== '?') t += ', recovered by ' + D(rec);
     if (retyds) t += ', returned ' + retyds;
     let score = null;
     if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
@@ -784,7 +787,7 @@ function parseInput(raw, state){
     const yds = rest[0], ret = rest[1], retyds = rest[2];
     let t = ST(p1) + ' kicks off ' + yds;
     if (isTouchback) t += ' — TOUCHBACK';
-    else if (ret) t += ', returned by ' + D(ret) + (retyds ? ' for ' + retyds : '');
+    else if (ret) t += ', returned' + (ret === '?' ? '' : ' by ' + D(ret)) + (retyds ? ' for ' + retyds : '');
     let score = null;
     if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
@@ -1012,8 +1015,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   // --- End engine core ---
 
-  async function persistPlay(playObj){
-    const seq = nextSequenceNumber++;
+  // reuseSeq lets "Redo last" re-insert a play at the sequence number it
+  // originally had. Nothing can have been added after it (entering a play
+  // clears the redo stack), so the slot is guaranteed free and ordering
+  // is preserved exactly as it was before the undo.
+  async function persistPlay(playObj, reuseSeq){
+    const seq = (reuseSeq === undefined || reuseSeq === null) ? nextSequenceNumber++ : reuseSeq;
     playObj._seq = seq;
     const { error } = await supabaseClient.from('plays').insert({
       game_id: currentGameId,
@@ -1032,8 +1039,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
   }
 
+  // Plays removed by "Undo last", newest last. Entering any new play
+  // clears this: a redo after that would splice an old play in behind
+  // plays that already followed it, which is never what the coach means.
+  let redoStack = [];
+  function updateRedoBtn(){
+    const btn = document.getElementById('redoBtn');
+    if (!btn) return;
+    btn.disabled = !redoStack.length;
+    btn.title = redoStack.length
+      ? 'Restore: ' + redoStack[redoStack.length - 1].text
+      : 'Nothing to redo';
+  }
+
   function pushAndPersist(playObj){
     plays.push(playObj);
+    redoStack = [];
+    updateRedoBtn();
     persistPlay(playObj);
   }
 
@@ -1096,6 +1118,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.querySelectorAll('.ptypeBtn').forEach(b => { b.disabled = disable; });
     document.getElementById('penUtilBtn').disabled = disable;
     document.getElementById('driveUtilBtn').disabled = disable;
+    // Undo is deliberately NOT gated on `disable` -- it never has been,
+    // and a coach needs to be able to correct a mistake during halftime
+    // or a guided flow. Redo mirrors it, gated only on having something
+    // to restore.
+    document.getElementById('redoBtn').disabled = !redoStack.length;
     document.getElementById('quarterUtilBtn').disabled = disable;
     if (disable) document.getElementById('playPanel').style.display = 'none';
     document.getElementById('startGameBtn').style.display = (gamePhase === 'notStarted' && !guided.active) ? 'inline-block' : 'none';
@@ -1334,7 +1361,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       document.getElementById('guidedReturnSave').addEventListener('click', () => {
         const yds = document.getElementById('gr_yards').value.trim();
         const td = document.getElementById('gr_td').checked;
-        if (!returnerNum || !yds) return;
+        // The returner is optional here too -- on the opening kickoff the
+        // picker is usually empty anyway, and a coach frequently can't
+        // read the number. Return yardage is still required because it
+        // is what the rest of the flow needs.
+        if (!yds) return;
         const q = guided.quarter;
 
         // Validate the clock before anything gets saved, same reasoning
@@ -1351,10 +1382,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           if (!confirmClockAdvances(clockAbsSec, clockVal)) return;
         }
 
-        let text = nameInDefense(guided.receivingTeam, returnerNum) + ' returns ' + yds;
+        let text = (returnerNum ? nameInDefense(guided.receivingTeam, returnerNum) : TEAMS[guided.receivingTeam].name) + ' returns ' + yds;
         const effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
         if (td){ text += ' — TOUCHDOWN'; effect.score = { team: guided.receivingTeam, points: 6 }; }
-        pushAndPersist({ id: nextId++, text, effect, team: guided.receivingTeam, quarter: guided.quarter, roles: { defense: { team: guided.receivingTeam, num: returnerNum }, playType: 'kickoff_return' } });
+        pushAndPersist({ id: nextId++, text, effect, team: guided.receivingTeam, quarter: guided.quarter, roles: Object.assign({ playType: 'kickoff_return' }, returnerNum ? { defense: { team: guided.receivingTeam, num: returnerNum } } : {}) });
         const receivingName = TEAMS[guided.receivingTeam].name;
         const receivingTeamKey = guided.receivingTeam;
         if (clockVal && clockAbsSec !== null){
@@ -1994,11 +2025,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           roles = { carrier: { team: off, num: sel.carrier }, playType: 'fumble' };
         } else {
           const fumCredit = sel.credit;
-          if (!fumCredit) return;
+          // Optional -- see the standalone fumble branch.
           const retyds = yards('pp_rushfum_retyds');
           const returnTd = document.getElementById('pp_rushfum_td').checked;
-          code = sel.carrier + 'f ' + fumCredit + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
-          roles = { carrier: { team: off, num: sel.carrier }, defense: { team: def, num: fumCredit }, playType: 'fumble' };
+          code = sel.carrier + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
+          roles = { carrier: { team: off, num: sel.carrier }, playType: 'fumble', lost: true };
+          if (fumCredit) roles.defense = { team: def, num: fumCredit };
         }
       } else {
         const isRushSafety = document.getElementById('pp_rush_safety').checked;
@@ -2030,11 +2062,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             roles = { carrier: { team: off, num: sel.receiver }, playType: 'fumble' };
           } else {
             const fumCredit = sel.credit;
-            if (!fumCredit) return;
+            // Optional -- see the standalone fumble branch.
             const retyds = yards('pp_passfum_retyds');
             const returnTd = document.getElementById('pp_passfum_td').checked;
-            code = sel.receiver + 'f ' + fumCredit + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
-            roles = { carrier: { team: off, num: sel.receiver }, defense: { team: def, num: fumCredit }, playType: 'fumble' };
+            code = sel.receiver + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
+            roles = { carrier: { team: off, num: sel.receiver }, playType: 'fumble', lost: true };
+            if (fumCredit) roles.defense = { team: def, num: fumCredit };
           }
         } else {
           const isPassSafety = document.getElementById('pp_pass_safety').checked;
@@ -2061,11 +2094,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           roles = { carrier: { team: off, num: sel.passer }, playType: 'fumble' };
         } else {
           const fumCredit = sel.credit;
-          if (!fumCredit) return;
+          // Optional -- see the standalone fumble branch.
           const retyds = yards('pp_sackfum_retyds');
           const returnTd = document.getElementById('pp_sackfum_td').checked;
-          code = sel.passer + 'f ' + fumCredit + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
-          roles = { carrier: { team: off, num: sel.passer }, defense: { team: def, num: fumCredit }, playType: 'fumble' };
+          code = sel.passer + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
+          roles = { carrier: { team: off, num: sel.passer }, playType: 'fumble', lost: true };
+          if (fumCredit) roles.defense = { team: def, num: fumCredit };
         }
       } else {
         const isSackSafety = document.getElementById('pp_sack_safety').checked;
@@ -2074,10 +2108,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
     } else if (type === 'int'){
-      if (!sel.passer || !sel.credit) return;
+      if (!sel.passer) return;
       const yds = yards('pp_yards');
-      code = sel.passer + 'x ' + sel.credit + (yds ? ' ' + yds : '') + (td ? ' td' : '');
-      roles = { passer: { team: off, num: sel.passer }, defense: { team: def, num: sel.credit } };
+      // Who intercepted it is optional -- the interception itself, and
+      // the return yardage, are what matter and are always visible.
+      code = sel.passer + 'x ' + (sel.credit || '?') + (yds ? ' ' + yds : '') + (td ? ' td' : '');
+      roles = { passer: { team: off, num: sel.passer }, playType: 'int' };
+      if (sel.credit) roles.defense = { team: def, num: sel.credit };
     } else if (type === 'fumble'){
       if (!sel.carrier) return;
       const rec = document.querySelector('input[name=pp_fumrec]:checked').value;
@@ -2087,10 +2124,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         roles = { carrier: { team: off, num: sel.carrier } };
       }
       else {
-        if (!sel.credit) return;
+        // Optional, same reasoning as the kick/punt returner: a pile
+        // rarely gives up a jersey number. '?' records "turned over,
+        // recovered by the defense, player unknown" so the turnover and
+        // any return yardage still count. roles.lost marks it as a
+        // turnover without needing a named recoverer.
         const yds = yards('pp_yards');
-        code = sel.carrier + 'f ' + sel.credit + (yds ? ' ' + yds : '') + (td ? ' td' : '');
-        roles = { carrier: { team: off, num: sel.carrier }, defense: { team: def, num: sel.credit } };
+        code = sel.carrier + 'f ' + (sel.credit || '?') + (yds ? ' ' + yds : '') + (td ? ' td' : '');
+        roles = { carrier: { team: off, num: sel.carrier }, playType: 'fumble', lost: true };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
     } else if (type === 'safety'){
       code = 'sf' + (sel.credit ? ' ' + sel.credit : '');
@@ -2104,7 +2146,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0, touchback: true } };
       } else {
         const retyds = yards('pp_retyds');
-        code = sel.kicker + 'ko ' + yds + (sel.credit ? ' ' + sel.credit + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
+        // The returner is optional: a coach often can't read the number
+        // on a return, and forcing one meant the return YARDAGE they did
+        // see was silently dropped along with it. '?' records "returned,
+        // returner unknown" so the yards still count; no roles.defense is
+        // created, so no phantom player appears in stats or pickers.
+        const retTok = sel.credit || ((retyds || td) ? '?' : null);
+        code = sel.kicker + 'ko ' + yds + (retTok ? ' ' + retTok + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
         roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0 } };
         if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
@@ -2118,16 +2166,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           code = sel.punter + 'pbo' + (isPuntSafety ? ' sf' : '');
           roles = { punter: { team: off, num: sel.punter, yards: 0, blocked: true } };
         } else {
-          if (!sel.credit) return;
+          // Who recovered a blocked punt is often a pile -- this used to
+          // hard-block Review with no explanation when left empty.
           const retyds = yards('pp_blockretyds');
-          code = sel.punter + 'pb ' + sel.credit + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
+          code = sel.punter + 'pb ' + (sel.credit || '?') + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
           roles = { punter: { team: off, num: sel.punter, yards: 0, blocked: true } };
-          roles.defense = { team: def, num: sel.credit };
+          if (sel.credit) roles.defense = { team: def, num: sel.credit };
         }
       } else {
         const yds = yards('pp_yards') || '0';
         const retyds = yards('pp_retyds');
-        code = sel.punter + 'pt ' + yds + (sel.credit ? ' ' + sel.credit + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
+        // The returner is optional: a coach often can't read the number
+        // on a return, and forcing one meant the return YARDAGE they did
+        // see was silently dropped along with it. '?' records "returned,
+        // returner unknown" so the yards still count; no roles.defense is
+        // created, so no phantom player appears in stats or pickers.
+        const retTok = sel.credit || ((retyds || td) ? '?' : null);
+        code = sel.punter + 'pt ' + yds + (retTok ? ' ' + retTok + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
         roles = { punter: { team: off, num: sel.punter, yards: parseInt(yds)||0, blocked: false } };
         if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
@@ -2358,6 +2413,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   document.getElementById('undoBtn').addEventListener('click', async () => {
     if (!plays.length) return;
     const removed = plays.pop();
+    // Keep it so "Redo last" can put it back exactly as it was, with the
+    // same id, roles, effect and sequence number.
+    redoStack.push(removed);
+    updateRedoBtn();
     renderAll();
     // The game isn't finalized, so the database allows this delete -- but
     // only bother if this play actually made it to the server in the
@@ -2369,6 +2428,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         showMsg('gameMsg', 'Removed here, but failed to remove from the server: ' + error.message, 'error');
       }
     }
+  });
+
+  document.getElementById('redoBtn').addEventListener('click', async () => {
+    if (!redoStack.length) return;
+    const restored = redoStack.pop();
+    plays.push(restored);
+    updateRedoBtn();
+    renderAll();
+    // Re-insert at its original sequence number so the play lands back in
+    // the same position. Undo deleted the row, so this is an insert, not
+    // an update. A play that never reached the server has no _seq and
+    // simply gets the next one.
+    await persistPlay(restored, restored._seq);
   });
 
   document.getElementById('penUtilBtn').addEventListener('click', () => {
