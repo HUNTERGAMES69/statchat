@@ -1376,6 +1376,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           savePendingQueue();
           continue;
         }
+        // Some failures are permanent, not "try again later". The
+        // database refuses play changes on a finalized game, so a row
+        // rejected for that reason would otherwise retry every five
+        // seconds forever and the banner would never clear.
+        if (/is final|cannot be modified/i.test(msg)){
+          const dropped = pendingQueue.length;
+          pendingQueue = [];
+          savePendingQueue();
+          renderSyncStatus();
+          showMsg('gameMsg', dropped + ' play' + (dropped === 1 ? '' : 's') +
+            ' could not be saved because the game is already final, and ' +
+            (dropped === 1 ? 'it has' : 'they have') + ' been discarded. ' +
+            'Unlock the game first if these were needed.', 'error');
+          return;
+        }
         // Stop on anything else: draining out of order would interleave
         // this play behind ones that came after it.
         if (manual) showMsg('gameMsg', 'Still cannot reach the server: ' + msg, 'error');
@@ -1452,14 +1467,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       insertMode.index++;
       redoStack = [];
       updateRedoBtn();
-      persistPlay(playObj, seq);
+      const p = persistPlay(playObj, seq);
       renderInsertBanner();
-      return;
+      return p;
     }
     plays.push(playObj);
     redoStack = [];
     updateRedoBtn();
-    persistPlay(playObj);
+    return persistPlay(playObj);
   }
 
   function renderAll(){
@@ -1503,6 +1518,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     function renderLogLines(list, withControls){
       return list.map(p => {
         if (p.isDivider) return '<div style="text-align:center; font-size:14px; font-weight:600; color:#888; margin:8px 0; border-top:1px dashed #ccc; padding-top:6px;">' + p.text + '</div>';
+        // The checks report problems by play number, so the log has to
+        // show them or the message is not actionable.
+        const pnum = plays.indexOf(p) + 1;
+        const ntag = pnum > 0 ? '<span style="color:#bbb; font-size:11px; margin-right:6px;">#' + pnum + '</span>' : '';
         const qtag = p.quarter ? '<span style="color:#999; font-size:12px; margin-right:6px;">Q' + p.quarter + '</span>' : '';
         // Controls only on the full log. The drive panels are a summary
         // view and putting destructive buttons there invites a mis-tap.
@@ -1512,7 +1531,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '<button class="logRedoBtn" data-pid="' + p.id + '" style="padding:2px 8px; font-size:11px; margin-left:4px;">Delete &amp; re-enter</button>' +
             '</span>'
           : '';
-        return '<div class="logline">' + ctrls + qtag + p.text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
+        return '<div class="logline">' + ctrls + ntag + qtag + p.text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
       }).join('');
     }
     document.getElementById('logScroll').innerHTML = renderLogLines(plays.slice().reverse(), correctionMode) || '<div style="color:#999;">no plays logged yet</div>';
@@ -1775,7 +1794,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     return issues;
   }
 
-  document.getElementById('endGameBtn').addEventListener('click', () => {
+  document.getElementById('endGameBtn').addEventListener('click', async () => {
     const state = computeState();
     if (state.scores.teamA === state.scores.teamB){
       alert('Score is tied ' + state.scores.teamA + '-' + state.scores.teamB + ' — the game can\'t end on a tie. Use "Start overtime" instead.');
@@ -1799,14 +1818,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (!ok) return;
     const absSec = clockToAbsSeconds(state.quarter, '0:00');
     if (!confirmClockAdvances(absSec, '0:00')) return;
-    pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
-    pushAndPersist({ id: nextId++, text: 'Final', effect: {}, isDivider: true });
+    // Re-finalizing after an unlock must not stack a second set of
+    // closing plays on top of the first. If the log still ends with the
+    // Final divider, nothing has been added since it was finalized.
+    const last = plays[plays.length - 1];
+    const alreadyClosed = last && last.isDivider && last.text === 'Final';
+    if (!alreadyClosed){
+      // AWAIT these. setGameStatus('final') makes the database refuse
+      // any further play changes, so firing it while these inserts are
+      // still in flight loses the race: both rows are rejected, land in
+      // the offline queue, and retry forever against a game that will
+      // never accept them.
+      await pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
+      await pushAndPersist({ id: nextId++, text: 'Final', effect: {}, isDivider: true });
+    }
     gamePhase = 'ended';
     correctionMode = false;
     insertMode = null;
     renderInsertBanner();
     persistUiState();
-    setGameStatus('final', { us: state.scores.teamA, opp: state.scores.teamB });
+    await setGameStatus('final', { us: state.scores.teamA, opp: state.scores.teamB });
     renderAll();
     updatePhaseUI();
   });
