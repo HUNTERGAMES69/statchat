@@ -93,8 +93,10 @@
       <div id="finalLockBanner" class="hidden" style="background:#fff3cd; border:1px solid #e0b400; border-radius:8px; padding:12px 14px; margin-bottom:16px;">
         <div style="font-weight:600; color:#7a5c00; margin-bottom:4px;">This game is finalized</div>
         <div style="font-size:13px; color:#7a5c00; margin-bottom:10px;">Play entry is locked to prevent accidental changes to a completed game's record. Unlock only if something genuinely needs correcting.</div>
+        <button type="button" id="recheckBtn" class="secondary" style="background:#fff;">Run checks again</button>
         <button type="button" id="unlockFinalBtn" class="secondary" style="background:#fff;">Unlock to edit</button>
       </div>
+      <div id="insertModeBanner" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:#e6f1fb; border:1px solid #6ba3d6; font-size:13px;"></div>
       <div id="syncStatus" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:#fff4d6; border:1px solid #e0b84c; font-size:13px;"></div>
       <input type="text" id="code" style="display:none;">
 
@@ -203,6 +205,29 @@
   let plays = [], nextId = 1, startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
   let pending = null;
   let currentUserRole = 'view';
+  // When set, the next play entered is spliced back into a deleted
+  // play's slot instead of being appended. Everything the engine
+  // derives comes from sequence order, so a play re-entered at the end
+  // of the log would compute in the wrong place entirely.
+  let insertMode = null;
+  // Correcting plays is an after-the-fact job, never something done
+  // between snaps -- there is no time for it during a game. So the
+  // per-play Delete controls only appear once an admin has explicitly
+  // unlocked a finalized game. During live entry they are not merely
+  // hidden but absent, which removes any chance of a mis-tap wiping a
+  // play while the coach is entering at speed.
+  let correctionMode = false;
+  function renderInsertBanner(){
+    const el = document.getElementById('insertModeBanner');
+    if (!el) return;
+    if (!insertMode){ el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = 'block';
+    el.innerHTML = '<b>Re-entering the deleted play</b> — enter it now and it will drop back into ' +
+      'position ' + (insertMode.index + 1) + ' of ' + (plays.length + 1) + ', not at the end of the log. ' +
+      '<button id="cancelInsertBtn" style="margin-left:8px; padding:4px 10px; font-size:12px;">Cancel</button>';
+    const b = document.getElementById('cancelInsertBtn');
+    if (b) b.addEventListener('click', () => { insertMode = null; renderInsertBanner(); });
+  }
   let guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
   let gamePhase = 'notStarted';
   let clockPrompt = null, clockPromptCallback = null;
@@ -1417,6 +1442,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   }
 
   function pushAndPersist(playObj){
+    if (insertMode){
+      // Halve the remaining gap each time, so a play that writes several
+      // entries (the play itself plus a new-drive marker, say) keeps them
+      // in order and all still below whatever follows the slot.
+      const seq = (insertMode.cursor + insertMode.hi) / 2;
+      insertMode.cursor = seq;
+      plays.splice(insertMode.index, 0, playObj);
+      insertMode.index++;
+      redoStack = [];
+      updateRedoBtn();
+      persistPlay(playObj, seq);
+      renderInsertBanner();
+      return;
+    }
     plays.push(playObj);
     redoStack = [];
     updateRedoBtn();
@@ -1461,14 +1500,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (TEAMS.teamA.logo){ logoA.src = TEAMS.teamA.logo; logoA.style.display = 'inline-block'; } else { logoA.style.display = 'none'; }
     if (TEAMS.teamB.logo){ logoB.src = TEAMS.teamB.logo; logoB.style.display = 'inline-block'; } else { logoB.style.display = 'none'; }
 
-    function renderLogLines(list){
+    function renderLogLines(list, withControls){
       return list.map(p => {
         if (p.isDivider) return '<div style="text-align:center; font-size:14px; font-weight:600; color:#888; margin:8px 0; border-top:1px dashed #ccc; padding-top:6px;">' + p.text + '</div>';
         const qtag = p.quarter ? '<span style="color:#999; font-size:12px; margin-right:6px;">Q' + p.quarter + '</span>' : '';
-        return '<div class="logline">' + qtag + p.text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
+        // Controls only on the full log. The drive panels are a summary
+        // view and putting destructive buttons there invites a mis-tap.
+        const ctrls = withControls
+          ? '<span style="float:right; white-space:nowrap;">' +
+            '<button class="logDelBtn" data-pid="' + p.id + '" style="padding:2px 8px; font-size:11px; margin-left:6px;">Delete</button>' +
+            '<button class="logRedoBtn" data-pid="' + p.id + '" style="padding:2px 8px; font-size:11px; margin-left:4px;">Delete &amp; re-enter</button>' +
+            '</span>'
+          : '';
+        return '<div class="logline">' + ctrls + qtag + p.text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
       }).join('');
     }
-    document.getElementById('logScroll').innerHTML = renderLogLines(plays.slice().reverse()) || '<div style="color:#999;">no plays logged yet</div>';
+    document.getElementById('logScroll').innerHTML = renderLogLines(plays.slice().reverse(), correctionMode) || '<div style="color:#999;">no plays logged yet</div>';
+    document.querySelectorAll('#logScroll .logDelBtn').forEach(b =>
+      b.addEventListener('click', () => deletePlayById(parseInt(b.dataset.pid), false)));
+    document.querySelectorAll('#logScroll .logRedoBtn').forEach(b =>
+      b.addEventListener('click', () => deletePlayById(parseInt(b.dataset.pid), true)));
 
     // Every play with effect.isReset marks the start of a new drive --
     // current and previous drive are just the last two segments between
@@ -1513,11 +1564,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('startHalfBtn').style.display = (gamePhase === 'halftime' && !guided.active) ? 'inline-block' : 'none';
     document.getElementById('endGameBtn').style.display = (gamePhase === 'secondHalf' && !guided.active) ? 'inline-block' : 'none';
     document.getElementById('otUtilBtn').style.display = (gamePhase === 'secondHalf' && !guided.active && computeState().quarter < 5) ? 'inline-block' : 'none';
-    // Admin only: everyone else sees a finalized game exactly as before.
+    // The banner itself is for everyone on a finalized game -- anyone can
+    // re-run the checks, since reading them changes nothing. Only the
+    // unlock button is admin-gated.
     const lockBanner = document.getElementById('finalLockBanner');
-    if (lockBanner){
-      lockBanner.classList.toggle('hidden', !(gamePhase === 'ended' && currentUserRole === 'admin'));
-    }
+    if (lockBanner) lockBanner.classList.toggle('hidden', gamePhase !== 'ended');
+    const unlockBtn = document.getElementById('unlockFinalBtn');
+    if (unlockBtn) unlockBtn.style.display = (currentUserRole === 'admin') ? 'inline-block' : 'none';
     const recapLink = document.getElementById('recapLink');
     if (gamePhase === 'ended'){
       recapLink.href = 'recap.html?id=' + currentGameId;
@@ -1623,6 +1676,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     renderAll();
     updatePhaseUI();
   });
+  document.getElementById('recheckBtn').addEventListener('click', () => {
+    const issues = validateGame();
+    if (!issues.length){
+      showMsg('gameMsg', 'Checks passed — nothing in this game looks inconsistent.', 'success');
+      return;
+    }
+    alert(issues.length + ' thing' + (issues.length === 1 ? '' : 's') + ' in this game look' +
+      (issues.length === 1 ? 's' : '') + ' wrong:\n\n' +
+      issues.map(x => '  • ' + x).join('\n') +
+      '\n\nTo correct anything, an admin can Unlock to edit.');
+  });
+
   document.getElementById('unlockFinalBtn').addEventListener('click', async () => {
     if (currentUserRole !== 'admin') return;
     if (!confirm('This game is finalized. Reopen it for editing?\n\nOnly do this if something genuinely needs correcting. The game will go back to in progress until you end it again.')) return;
@@ -1630,20 +1695,105 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // in: that restores normal play entry and leaves "End game"
     // available to re-finalize once the correction is made.
     gamePhase = 'secondHalf';
+    correctionMode = true;
     await setGameStatus('in_progress');
     persistUiState();
     renderAll();
     // renderAll() does not touch the phase gating -- without this the
     // banner stays up and every control stays disabled.
     updatePhaseUI();
-    showMsg('gameMsg', 'Game reopened for editing. Remember to end the game again when you are done.', 'success');
+    showMsg('gameMsg', 'Game reopened for editing. Each play in the full log now has Delete and ' +
+      'Delete & re-enter. Remember to end the game again when you are done.', 'success');
   });
+
+  // Consistency checks run once, when the game is finalized. Every check
+  // here is an IMPOSSIBILITY check -- something football does not allow --
+  // never a judgement call about whether a play looks unusual. That is
+  // deliberate: a rare-but-real play must never be flagged, because a
+  // check the coach learns to click past is worse than no check.
+  //
+  // It warns, it never blocks. "Finalize anyway" is always available.
+  function validateGame(){
+    const issues = [];
+
+    // 1. Plays that never reached the server. The most urgent one at
+    //    finalize time: the record is about to be locked in incomplete.
+    if (pendingQueue.length){
+      issues.push(pendingQueue.length + ' play' + (pendingQueue.length === 1 ? ' has' : 's have') +
+        ' not been saved to the server yet. Finalizing now locks in a game the server is missing.');
+    }
+
+    const SCRIMMAGE = ['rush', 'pass', 'incomplete', 'sack', 'int', 'fumble'];
+    const isScrimmage = p => p.roles && SCRIMMAGE.indexOf(p.roles.playType) !== -1;
+
+    // 2. The down must advance by exactly one, or reset. Anything else
+    //    means a play is missing or a stored line is stale -- this is
+    //    what found the corrupted West Monroe drive.
+    // 3. And every stored line's stated down & distance must match what
+    //    the engine recomputes at that point.
+    let prevDown = null;
+    for (let i = 0; i < plays.length; i++){
+      const p = plays[i];
+      const st = computeState(plays.slice(0, i + 1));
+      const m = (p.text || '').match(/— (\d)(?:st|nd|rd|th) & (\d+)/);
+      if (m && st.down !== null){
+        const stated = m[1] + ' & ' + m[2];
+        const actual = st.down + ' & ' + st.distance;
+        if (stated !== actual){
+          issues.push('Play ' + (i + 1) + ' reads "' + stated + '" but recomputes to "' + actual +
+            '" — ' + (p.text || '').slice(0, 60));
+        }
+      }
+      if (!isScrimmage(p)) continue;
+      const before = computeState(plays.slice(0, i));
+      if (before.down !== null && prevDown !== null && before.down !== 1 && before.down !== prevDown + 1){
+        issues.push('Down jumped from ' + prevDown + ' to ' + before.down + ' at play ' + (i + 1) +
+          ' — a play is missing: ' + (p.text || '').slice(0, 60));
+      }
+      prevDown = before.down;
+      if (st.down === 1) prevDown = null;
+    }
+
+    // 4. Every punt implies a failed third down on that drive. If the
+    //    counts do not line up, a third-down snap is missing.
+    const box = { teamA: 0, teamB: 0 }, punts = { teamA: 0, teamB: 0 };
+    plays.forEach((p, i) => {
+      if (p.roles && p.roles.punter) punts[p.roles.punter.team]++;
+      if (!isScrimmage(p)) return;
+      const before = computeState(plays.slice(0, i));
+      const after = computeState(plays.slice(0, i + 1));
+      if (before.down === 3 && before.possession && after.down !== 1) box[before.possession]++;
+    });
+    ['teamA', 'teamB'].forEach(t => {
+      if (punts[t] > box[t]){
+        issues.push(TEAMS[t].name + ' punted ' + punts[t] + ' time' + (punts[t] === 1 ? '' : 's') +
+          ' but only ' + box[t] + ' failed third down' + (box[t] === 1 ? ' was' : 's were') +
+          ' recorded — every punt needs one.');
+      }
+    });
+
+    return issues;
+  }
 
   document.getElementById('endGameBtn').addEventListener('click', () => {
     const state = computeState();
     if (state.scores.teamA === state.scores.teamB){
       alert('Score is tied ' + state.scores.teamA + '-' + state.scores.teamB + ' — the game can\'t end on a tie. Use "Start overtime" instead.');
       return;
+    }
+    const issues = validateGame();
+    if (issues.length){
+      // Warn, never block: "OK" finalizes regardless. The checks catch
+      // real problems but cannot know about every legitimate oddity, so
+      // the coach always has the last word.
+      const proceed = confirm(
+        'Before finalizing — ' + issues.length + ' thing' + (issues.length === 1 ? '' : 's') +
+        ' in this game look' + (issues.length === 1 ? 's' : '') + ' wrong:\n\n' +
+        issues.slice(0, 8).map(x => '  • ' + x).join('\n') +
+        (issues.length > 8 ? '\n  • ...and ' + (issues.length - 8) + ' more' : '') +
+        '\n\nOK — finalize anyway.\nCancel — go back and correct them first.'
+      );
+      if (!proceed) return;
     }
     const ok = confirm('End the game now? Final score: ' + TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' + TEAMS.teamB.name + ' ' + state.scores.teamB + '.\n\nThis locks in the game as final.');
     if (!ok) return;
@@ -1652,6 +1802,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
     pushAndPersist({ id: nextId++, text: 'Final', effect: {}, isDivider: true });
     gamePhase = 'ended';
+    correctionMode = false;
+    insertMode = null;
+    renderInsertBanner();
     persistUiState();
     setGameStatus('final', { us: state.scores.teamA, opp: state.scores.teamB });
     renderAll();
@@ -2930,6 +3083,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('playPanel').innerHTML = '';
     document.getElementById('code').value = '';
     pending = null;
+    if (insertMode){ insertMode = null; renderInsertBanner(); }
     if (window.scrollTo) try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch(e){}
   });
 
@@ -3016,6 +3170,62 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
     }
   });
+
+  // Delete any single play, not just the most recent. Everything the
+  // engine reports -- down, distance, score, possession, drives, every
+  // stat -- is derived from the play log, so removing a row is enough:
+  // the whole game re-derives with no cascade to fix by hand.
+  async function deletePlayById(pid, reenter){
+    const idx = plays.findIndex(p => p.id === pid);
+    if (idx === -1) return;
+    const play = plays[idx];
+    const verb = reenter ? 'Delete this play and re-enter it?' : 'Delete this play?';
+    if (!confirm(verb + '\n\n' + play.text +
+      '\n\nEverything after it will be recalculated from the remaining plays.')) return;
+
+    const seq = play._seq;
+    const prevSeq = idx > 0 ? (plays[idx - 1]._seq || 0) : 0;
+    const nextSeq = idx + 1 < plays.length ? plays[idx + 1]._seq : (nextSequenceNumber + 1);
+    plays.splice(idx, 1);
+
+    // If it never reached the server, dropping it from the queue is the
+    // whole job -- deleting a row that was never inserted would report a
+    // spurious failure.
+    const queued = pendingQueue.findIndex(r => r.sequence_number === seq);
+    if (queued !== -1){
+      pendingQueue.splice(queued, 1);
+      savePendingQueue();
+      renderSyncStatus();
+    } else if (seq !== undefined && seq !== null){
+      try {
+        const { error } = await supabaseClient.from('plays').delete()
+          .eq('game_id', currentGameId).eq('sequence_number', seq);
+        if (error) showMsg('gameMsg', 'Removed here, but failed to remove from the server: ' + error.message, 'error');
+      } catch (e) {
+        showMsg('gameMsg', 'Removed here, but could not reach the server: ' + e.message, 'error');
+      }
+    }
+
+    // Undo/redo history no longer lines up with the log once an
+    // arbitrary play has been pulled out of the middle.
+    redoStack = [];
+    updateRedoBtn();
+
+    insertMode = reenter ? { index: idx, cursor: prevSeq, hi: nextSeq } : null;
+    renderInsertBanner();
+    renderAll();
+
+    if (!reenter){
+      // Deleting mid-log can leave later plays' frozen text describing a
+      // situation that no longer exists, which is exactly the corruption
+      // the checks look for. Say so straight away rather than let it sit.
+      const issues = validateGame();
+      showMsg('gameMsg', issues.length
+        ? 'Play deleted. ' + issues.length + ' thing' + (issues.length === 1 ? '' : 's') +
+          ' now look' + (issues.length === 1 ? 's' : '') + ' inconsistent — run the checks to see them.'
+        : 'Play deleted. The rest of the game still checks out.', issues.length ? 'error' : 'success');
+    }
+  }
 
   document.getElementById('redoBtn').addEventListener('click', async () => {
     if (!redoStack.length) return;
