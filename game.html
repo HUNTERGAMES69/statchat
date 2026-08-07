@@ -2304,6 +2304,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   document.getElementById('saveBtn').addEventListener('click', () => {
     if (!pending) return;
+    // The confirm card is built when Review is pressed, but nothing is
+    // written until Save. If the game state changed in between -- Undo
+    // is the easiest way to do it -- the frozen text describes a down &
+    // distance that no longer exists, while the effect still gets
+    // applied to the CURRENT state. The stored log then shows an
+    // impossible jump (2nd & 10 straight to 4th & 11) and nothing
+    // surfaces it until someone reads the log back afterwards, by which
+    // point the down sequence is unreconstructable.
+    //
+    // parseInput is deterministic given (code, state), so re-parsing
+    // here is a no-op when nothing changed and a correction when it did.
+    const codeVal = document.getElementById('code').value;
+    if (codeVal){
+      const fresh = parseInput(codeVal, computeState());
+      // roles and reset are attached by buildAndReview AFTER showConfirm
+      // and describe the coach's selections rather than game state, so
+      // they carry across unchanged.
+      if (fresh) pending = Object.assign(fresh, { roles: pending.roles, reset: pending.reset });
+    }
     const preState = computeState();
     const effect = Object.assign({}, pending.effect);
     let flipHappened = false, outgoingTeam = null, incomingTeam = null;
@@ -2340,8 +2359,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' at change of possession (' + TEAMS[outgoingTeam].name + ' \u2192 ' + TEAMS[incomingTeam].name + ')', effect: { clockEvent: { type: 'transition', outgoingTeam, incomingTeam, absSec } }, quarter: q });
       }
       if (effect.endsDrive){
-        const scoringTeam = effect.score ? effect.score.team : preState.possession;
-        pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' end of possession (' + TEAMS[scoringTeam].name + ')', effect: { clockEvent: { type: 'end', team: scoringTeam, absSec } }, quarter: q });
+        // The possession that just ended always belongs to whoever HAD
+        // the ball, which is not always whoever scored. On a safety the
+        // defense scores while the offense's possession is the one
+        // ending, so keying this off effect.score.team credited the
+        // clock to a team that never had the ball -- leaving the real
+        // possessor's clock still running and its time of possession
+        // stuck at 0:00.
+        const endingTeam = preState.possession;
+        pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' end of possession (' + TEAMS[endingTeam].name + ')', effect: { clockEvent: { type: 'end', team: endingTeam, absSec } }, quarter: q });
       } else if (flipHappened && effect.score && effect.score.points === 6){
         pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' end of possession (' + TEAMS[effect.score.team].name + ')', effect: { clockEvent: { type: 'end', team: effect.score.team, absSec } }, quarter: q });
       }
