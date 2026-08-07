@@ -88,6 +88,7 @@
         </div>
       </div>
       <div id="gameMsg"></div>
+      <div id="syncStatus" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:#fff4d6; border:1px solid #e0b84c; font-size:13px;"></div>
       <input type="text" id="code" style="display:none;">
 
       <div class="row" style="margin-bottom:8px;">
@@ -264,7 +265,32 @@
       roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override,
       _seq: p.sequence_number
     }));
+    // Plays that never reached the server last session are held on this
+    // device. Merge them back in BEFORE anything reads `plays`, or a
+    // reload silently drops them and every later play's down & distance
+    // is recomputed against a game that is missing a snap.
+    loadPendingQueue();
+    if (pendingQueue.length){
+      const onServer = new Set(plays.map(p => p._seq));
+      // Some may have landed after all -- an insert can succeed while
+      // the response is lost. Anything the server already has is done.
+      pendingQueue = pendingQueue.filter(r => !onServer.has(r.sequence_number));
+      savePendingQueue();
+      pendingQueue.forEach(r => {
+        plays.push({
+          id: nextId++, text: r.text, effect: r.effect || {}, team: r.team_side,
+          quarter: r.quarter, roles: r.roles, unresolved: r.unresolved,
+          isDivider: r.is_divider, isOverride: r.is_override, _seq: r.sequence_number
+        });
+      });
+      plays.sort((a, b) => (a._seq || 0) - (b._seq || 0));
+    }
     nextSequenceNumber = plays.length ? Math.max(...plays.map(p => p._seq || 0)) + 1 : 1;
+    renderSyncStatus();
+    if (pendingQueue.length){ scheduleSync(); drainPendingQueue(); }
+    // Retry the moment the device says it is back online, rather than
+    // waiting out the polling interval.
+    window.addEventListener('online', () => { if (pendingQueue.length) drainPendingQueue(); });
 
     // Resume exactly where we left off -- read the persisted phase and
     // any in-progress guided step directly, rather than guessing from
@@ -704,13 +730,15 @@ function parseInput(raw, state){
     else if (type === 'p'){
       netYards = parseInt(rest[1]) || 0; tackler = rest[2];
       if (isSafety){
-        return { text: O(p1) + ' pass to ' + O(rest[0]) + ' for ' + netYards + ' — tackled in own end zone — SAFETY',
+        return { text: O(p1) + ' pass' + (rest[0] === '?' ? '' : ' to ' + O(rest[0])) + ' for ' + netYards + ' — tackled in own end zone — SAFETY',
           effect: { score: { team: def, points: 2 }, endsDrive: true },
           flipEligible: false, team: off, quarter: state.quarter };
       }
-      text = O(p1) + ' pass to ' + O(rest[0]) + ' for ' + netYards;
+      // The receiver is optional -- a completion downfield is often
+      // clearly a completion for N yards before the number is readable.
+      text = O(p1) + ' pass' + (rest[0] === '?' ? '' : ' to ' + O(rest[0])) + ' for ' + netYards;
     }
-    else if (type === 'i'){ netYards = 0; text = O(p1) + ' incomplete, intended for ' + O(rest[0]); }
+    else if (type === 'i'){ netYards = 0; text = O(p1) + ' incomplete' + (rest[0] === '?' ? '' : ', intended for ' + O(rest[0])); }
     else if (type === 's'){
       const sackLossYards = parseInt(rest[0]) || 0; tackler = rest[1];
       netYards = -sackLossYards;
@@ -848,10 +876,10 @@ function parseInput(raw, state){
       return { text: t, effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: off, quarter: state.quarter };
     }
     if (res === 'x'){
-      return { text: O(p1) + ' 2PT pass to ' + O(receiverNum) + ' — INCOMPLETE', effect: { endsDrive: true }, flipEligible: false, team: off, quarter: state.quarter };
+      return { text: O(p1) + ' 2PT pass' + (receiverNum === '?' ? '' : ' to ' + O(receiverNum)) + ' — INCOMPLETE', effect: { endsDrive: true }, flipEligible: false, team: off, quarter: state.quarter };
     }
     const score = { team: off, points: 2 };
-    return { text: O(p1) + ' 2PT pass to ' + O(receiverNum) + ' — GOOD', effect: { endsDrive: true, score }, flipEligible: false, team: off, quarter: state.quarter };
+    return { text: O(p1) + ' 2PT pass' + (receiverNum === '?' ? '' : ' to ' + O(receiverNum)) + ' — GOOD', effect: { endsDrive: true, score }, flipEligible: false, team: off, quarter: state.quarter };
   }
   return null;
 }
@@ -895,8 +923,35 @@ function offenseEligible(team, role){
   const visible = {};
   seed.forEach(n => { visible[n] = true; });
   (discoveredOffense[team] || []).forEach(n => { visible[n] = true; });
-  const nums = Object.keys(visible).filter(num => roster[num] && (!allowedPos || allowedPos.indexOf((posOffense[num]||'').toUpperCase()) !== -1));
+  // How recently each player was used in THIS role. Football is
+  // streaky -- the back who just carried is far more likely to carry
+  // again than the one with the most yards an hour ago -- so recency
+  // beats season totals for a picker being tapped between snaps.
+  const roleKey = role === 'carrier' ? 'carrier' : role === 'passer' ? 'passer' : role === 'receiver' ? 'receiver' : null;
+  const usedInRole = {};
+  if (roleKey){
+    plays.forEach((p, i) => {
+      const r = p.roles && p.roles[roleKey];
+      if (r && r.team === team && r.num) usedInRole[r.num] = i;
+    });
+  }
+  // Positions filter who is OFFERED, but a player who has actually done
+  // the thing this game is a player who does it -- a tight end who has
+  // already carried must appear in the carrier list, or the recency
+  // ordering below can never surface him and the coach has to type the
+  // number every single time.
+  const nums = Object.keys(visible).filter(num => roster[num] && (
+    usedInRole[num] !== undefined ||
+    !allowedPos ||
+    allowedPos.indexOf((posOffense[num]||'').toUpperCase()) !== -1));
   const resolved = nums.slice().sort((a, b) => {
+    const ar = usedInRole[a], br = usedInRole[b];
+    // Anyone used this game sorts ahead of anyone who has not been.
+    if (ar !== undefined || br !== undefined){
+      if (ar === undefined) return 1;
+      if (br === undefined) return -1;
+      if (ar !== br) return br - ar;
+    }
     const av = statKey ? (stats[team][statKey][a]||0) : 0, bv = statKey ? (stats[team][statKey][b]||0) : 0;
     if (av !== bv) return bv - av;
     const aSeed = seed.indexOf(a), bSeed = seed.indexOf(b);
@@ -1002,15 +1057,38 @@ function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
   if (list.length === 0) return '<span style="font-size:13px; color:var(--text-muted, #999);">' + (emptyMsg || 'no one credited yet — type a number below') + '</span>';
   return list.map(p => '<button type="button" class="' + groupClass + '" data-num="' + p.num + '"' + (p.resolvedName ? ' data-resolved="' + p.resolvedName.replace(/"/g,'') + '"' : '') + (p.unit ? ' data-unit="' + p.unit + '"' : '') + ' style="margin:0 6px 6px 0;">#' + p.num + ' ' + (p.name||'') + (statLabelFn && statLabelFn(p.num, p) ? ' <span style="color:#999; font-size:11px;">(' + statLabelFn(p.num, p) + ')</span>' : '') + '</button>').join('');
 }
+const PICKED_BG = 'var(--bg-accent, #e6f1fb)';
 function wirePickerButtons(container, groupClass, manualInputId, onPick){
+  const all = () => container.querySelectorAll('.' + groupClass);
   container.querySelectorAll('.' + groupClass).forEach(b => {
     b.addEventListener('click', () => {
-      container.querySelectorAll('.' + groupClass).forEach(x => x.style.background = '');
-      b.style.background = 'var(--bg-accent, #e6f1fb)';
-      document.getElementById(manualInputId).value = b.dataset.num;
+      // Clicking the player who is already selected clears the field.
+      // Without this the auto-selected quarterback could be changed but
+      // never simply removed, which is the one thing a coach needs when
+      // the pre-selection is wrong and nobody else on the grid is right.
+      const alreadyPicked = b.style.background === PICKED_BG;
+      all().forEach(x => x.style.background = '');
+      const manual = document.getElementById(manualInputId);
+      if (alreadyPicked){
+        if (manual) manual.value = '';
+        onPick('', null, null);
+        return;
+      }
+      b.style.background = PICKED_BG;
+      if (manual) manual.value = b.dataset.num;
       onPick(b.dataset.num, b.dataset.resolved || null, b.dataset.unit || null);
     });
   });
+  // Typing overrides the grid, so the highlight must not linger on a
+  // player who is no longer the one entered.
+  const manual = document.getElementById(manualInputId);
+  if (manual){
+    manual.addEventListener('input', () => {
+      all().forEach(x => {
+        x.style.background = (x.dataset.num === manual.value.trim()) ? PICKED_BG : '';
+      });
+    });
+  }
 }
 
   // --- End engine core ---
@@ -1019,10 +1097,111 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // originally had. Nothing can have been added after it (entering a play
   // clears the redo stack), so the slot is guaranteed free and ordering
   // is preserved exactly as it was before the undo.
-  async function persistPlay(playObj, reuseSeq){
-    const seq = (reuseSeq === undefined || reuseSeq === null) ? nextSequenceNumber++ : reuseSeq;
-    playObj._seq = seq;
-    const { error } = await supabaseClient.from('plays').insert({
+  // ---- offline-durable sync queue -----------------------------------
+  // A failed insert used to be announced once and then forgotten: the
+  // play lived on in this tab's memory, so every later play still
+  // computed correctly here, but the server never got it. Reloading
+  // silently dropped it, and the spectator view and every report were
+  // quietly missing a play -- which is exactly how a log ends up with a
+  // down sequence no single play could produce.
+  //
+  // Plays now go into a queue that survives a reload, drain in order,
+  // and are visible while they are outstanding.
+  let pendingQueue = [];
+  let syncTimer = null;
+
+  const pendingKey = () => 'statchat_pending_' + currentGameId;
+
+  function loadPendingQueue(){
+    try {
+      const raw = window.localStorage.getItem(pendingKey());
+      pendingQueue = raw ? JSON.parse(raw) : [];
+    } catch (e) { pendingQueue = []; }
+  }
+  function savePendingQueue(){
+    // Private browsing and full storage both throw. The queue still
+    // works in memory for this session, so never let this be fatal.
+    try {
+      if (pendingQueue.length) window.localStorage.setItem(pendingKey(), JSON.stringify(pendingQueue));
+      else window.localStorage.removeItem(pendingKey());
+    } catch (e) {}
+  }
+  function renderSyncStatus(){
+    const el = document.getElementById('syncStatus');
+    if (!el) return;
+    if (!pendingQueue.length){ el.style.display = 'none'; el.innerHTML = ''; return; }
+    const n = pendingQueue.length;
+    el.style.display = 'block';
+    el.innerHTML = '<b>' + n + ' play' + (n === 1 ? '' : 's') + ' not yet saved to the server.</b> ' +
+      'They are safe on this device and will upload automatically — you can keep entering plays. ' +
+      '<button id="syncNowBtn" style="margin-left:8px; padding:4px 10px; font-size:12px;">Retry now</button>';
+    const btn = document.getElementById('syncNowBtn');
+    if (btn) btn.addEventListener('click', () => drainPendingQueue(true));
+  }
+  function enqueuePlay(row){
+    pendingQueue.push(row);
+    savePendingQueue();
+    renderSyncStatus();
+    scheduleSync();
+  }
+  function scheduleSync(){
+    if (syncTimer) return;
+    syncTimer = setInterval(() => {
+      if (pendingQueue.length) drainPendingQueue();
+      else { clearInterval(syncTimer); syncTimer = null; }
+    }, 5000);
+  }
+  async function drainPendingQueue(manual){
+    if (!pendingQueue.length) return;
+    // Ask the server what it already has before pushing anything. An
+    // insert can succeed while the response is lost, so a blind retry
+    // can duplicate the row -- and duplicates are only *caught* below if
+    // the table actually has a unique constraint on
+    // (game_id, sequence_number). This check does not depend on that.
+    try {
+      const { data, error } = await supabaseClient
+        .from('plays').select('sequence_number').eq('game_id', currentGameId);
+      if (!error && data){
+        const onServer = new Set(data.map(r => r.sequence_number));
+        const before = pendingQueue.length;
+        pendingQueue = pendingQueue.filter(r => !onServer.has(r.sequence_number));
+        if (pendingQueue.length !== before) savePendingQueue();
+        if (!pendingQueue.length){ renderSyncStatus(); return; }
+      }
+    } catch (e) { /* still offline -- fall through and let the insert fail */ }
+    while (pendingQueue.length){
+      const row = pendingQueue[0];
+      let error = null;
+      try {
+        const res = await supabaseClient.from('plays').insert(row);
+        error = res.error;
+      } catch (e) {
+        error = e;
+      }
+      if (error){
+        // A duplicate means an earlier attempt actually landed and only
+        // the response was lost -- that row is done, not stuck.
+        const msg = String(error.message || error.code || error);
+        if (/duplicate|already exists|23505/i.test(msg)){
+          pendingQueue.shift();
+          savePendingQueue();
+          continue;
+        }
+        // Stop on anything else: draining out of order would interleave
+        // this play behind ones that came after it.
+        if (manual) showMsg('gameMsg', 'Still cannot reach the server: ' + msg, 'error');
+        renderSyncStatus();
+        return;
+      }
+      pendingQueue.shift();
+      savePendingQueue();
+    }
+    renderSyncStatus();
+    showMsg('gameMsg', 'All plays are now saved to the server.', 'success');
+  }
+
+  function playRow(playObj, seq){
+    return {
       game_id: currentGameId,
       quarter: playObj.quarter || 1,
       sequence_number: seq,
@@ -1033,9 +1212,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       unresolved: !!playObj.unresolved,
       is_divider: !!playObj.isDivider,
       is_override: !!playObj.isOverride
-    });
+    };
+  }
+
+  async function persistPlay(playObj, reuseSeq){
+    const seq = (reuseSeq === undefined || reuseSeq === null) ? nextSequenceNumber++ : reuseSeq;
+    playObj._seq = seq;
+    const row = playRow(playObj, seq);
+
+    // If anything is already waiting, this play has to queue behind it.
+    // Sending it straight through would put it on the server ahead of
+    // plays that happened before it.
+    if (pendingQueue.length){ enqueuePlay(row); return; }
+
+    let error = null;
+    try {
+      const res = await supabaseClient.from('plays').insert(row);
+      error = res.error;
+    } catch (e) {
+      error = e;   // a thrown TypeError: Failed to fetch lands here
+    }
     if (error){
-      showMsg('gameMsg', 'Saved on this screen, but failed to sync to the server: ' + error.message + '. (Offline-safe retry queue is planned but not built yet — for now, check your connection and re-enter this play if it never appears after reloading.)', 'error');
+      enqueuePlay(row);
+      showMsg('gameMsg', 'No connection to the server — this play is saved on this device and ' +
+        'will upload automatically when the connection comes back. Keep entering plays as normal.', 'error');
     }
   }
 
@@ -1719,15 +1919,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (r && r.passer && r.passer.team === off && r.passer.num){ lastPasser = r.passer.num; break; }
       }
       if (lastPasser){
+        // Set as a SUGGESTION, not a committed pick. If it were marked
+        // picked, the coach's first tap on that quarterback would read
+        // as "tap the selected player" and de-select him -- the exact
+        // opposite of confirming. Tapping now commits; only a second tap
+        // on a committed pick clears it.
+        const manual = document.getElementById('pp_passer_manual');
+        if (manual) manual.value = lastPasser;
+        sel.passer = lastPasser;
         const btn = panel.querySelector('.pp_passer_pick[data-num="' + lastPasser + '"]');
         if (btn){
-          // Go through the real click handler so highlighting, the
-          // manual field and sel.passer all stay in sync.
-          btn.click();
-        } else {
-          const manual = document.getElementById('pp_passer_manual');
-          if (manual) manual.value = lastPasser;
-          sel.passer = lastPasser;
+          btn.style.background = 'var(--bg-subtle, #eef2f6)';
+          btn.title = 'Last quarterback to throw — tap to confirm, or pick/type someone else';
         }
       }
     }
@@ -2039,11 +2242,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
     } else if (type === 'pass'){
-      if (!sel.passer || !sel.receiver) return;
+      if (!sel.passer) return;
+      // Receiver optional, same reasoning as the kick returner. '?' keeps
+      // the completion and its yardage on the books; no receiver role is
+      // created, so nobody gets phantom receiving stats.
+      const recTok = sel.receiver || '?';
       const isIncomplete = document.getElementById('pp_incomplete') && document.getElementById('pp_incomplete').checked;
       if (isIncomplete){
-        code = sel.passer + 'i ' + sel.receiver;
-        roles = { passer: { team: off, num: sel.passer, yards: 0 }, receiver: { team: off, num: sel.receiver, yards: 0 }, playType: 'incomplete' };
+        code = sel.passer + 'i ' + recTok;
+        roles = { passer: { team: off, num: sel.passer, yards: 0 }, playType: 'incomplete' };
+        if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: 0 };
       } else {
         const yds = yards('pp_yards') || '0';
         const fumbled = document.getElementById('pp_pass_fumbled').checked;
@@ -2052,9 +2260,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // save the completion as its own play first, silently, then
           // let the rest of this branch build a Fumble-type play for
           // the receiver, same as the Rush panel's equivalent.
-          const passParsed = parseInput(sel.passer + 'p ' + sel.receiver + ' ' + yds, computeState());
+          const passParsed = parseInput(sel.passer + 'p ' + recTok + ' ' + yds, computeState());
           pushAndPersist({ id: nextId++, text: passParsed.text, effect: passParsed.effect, team: off, quarter: computeState().quarter,
-            roles: { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0 }, playType: 'pass' } });
+            roles: Object.assign({ passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, playType: 'pass' },
+              sel.receiver ? { receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0 } } : {}) });
           const rec = document.querySelector('input[name=pp_pass_fumrec]:checked').value;
           if (rec === 'own'){
             const isPassFumSafety = document.getElementById('pp_passfum_safety').checked;
@@ -2071,8 +2280,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           }
         } else {
           const isPassSafety = document.getElementById('pp_pass_safety').checked;
-          code = sel.passer + 'p ' + sel.receiver + ' ' + yds + (sel.credit ? ' ' + sel.credit : '') + (isPassSafety ? ' sf' : (td ? ' td' : ''));
-          roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0 } };
+          code = sel.passer + 'p ' + recTok + ' ' + yds + (sel.credit ? ' ' + sel.credit : '') + (isPassSafety ? ' sf' : (td ? ' td' : ''));
+          roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 } };
+          if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: parseInt(yds)||0 };
           if (sel.credit) roles.defense = { team: def, num: sel.credit };
         }
       }
@@ -2226,15 +2436,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         roles = { carrier: { team: off, num: sel.carrier, result: res } };
         if (sel.credit) roles.defense = { team: def, num: sel.credit };
       } else {
-        if (!sel.passer || !sel.receiver) return;
+        if (!sel.passer) return;
+        const recTok2 = sel.receiver || '?';
         const res = document.querySelector('input[name=pp_2pt_pass_res]:checked').value;
         if (res === 'b'){
           const defTd = document.getElementById('pp_2pt_pass_defTd').checked;
-          code = sel.passer + 'tpp ' + sel.receiver + ' b' + (sel.credit ? ' ' + sel.credit : '') + (defTd ? ' td' : '');
+          code = sel.passer + 'tpp ' + recTok2 + ' b' + (sel.credit ? ' ' + sel.credit : '') + (defTd ? ' td' : '');
         } else {
-          code = sel.passer + 'tpp ' + sel.receiver + ' ' + res;
+          code = sel.passer + 'tpp ' + recTok2 + ' ' + res;
         }
-        roles = { passer: { team: off, num: sel.passer, result: res }, receiver: { team: off, num: sel.receiver, result: res } };
+        roles = { passer: { team: off, num: sel.passer, result: res } };
+        if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, result: res };
         if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
     }
@@ -2447,11 +2659,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // The game isn't finalized, so the database allows this delete -- but
     // only bother if this play actually made it to the server in the
     // first place (it has a real sequence number).
-    if (removed._seq){
-      const { error } = await supabaseClient.from('plays').delete()
-        .eq('game_id', currentGameId).eq('sequence_number', removed._seq);
-      if (error){
-        showMsg('gameMsg', 'Removed here, but failed to remove from the server: ' + error.message, 'error');
+    // If it never made it off this device, just drop it from the queue.
+    // Deleting a row the server has never seen would report a spurious
+    // failure and leave the queue trying to upload a play the coach has
+    // already taken back.
+    const queued = pendingQueue.findIndex(r => r.sequence_number === removed._seq);
+    if (queued !== -1){
+      pendingQueue.splice(queued, 1);
+      savePendingQueue();
+      renderSyncStatus();
+    } else if (removed._seq){
+      try {
+        const { error } = await supabaseClient.from('plays').delete()
+          .eq('game_id', currentGameId).eq('sequence_number', removed._seq);
+        if (error){
+          showMsg('gameMsg', 'Removed here, but failed to remove from the server: ' + error.message, 'error');
+        }
+      } catch (e) {
+        showMsg('gameMsg', 'Removed here, but could not reach the server to remove it: ' + e.message, 'error');
       }
     }
   });
