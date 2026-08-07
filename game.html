@@ -121,6 +121,7 @@
         <button class="ptypeBtn" data-type="safety">Safety</button>
         <button id="driveUtilBtn">Adjust Down/Distance</button>
         <button id="flipBtn">Flip possession</button>
+        <button id="timeoutUtilBtn">Timeout</button>
       </div>
 
       <div id="playPanel" style="display:none;"></div>
@@ -329,6 +330,8 @@
 
   // --- Proven engine core, ported verbatim from the tested entry app ---
 function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+const TIMEOUTS_PER_HALF = 3;
+const TIMEOUTS_PER_OT = 1;
 // Administrative entries -- clock markers, quarter/half dividers, manual
 // possession flips -- are announcements, not football plays. They carry
 // no roles and no yardage, so anything reasoning about "what actually
@@ -407,6 +410,20 @@ function rosterName(teamKey, num, order){
     if (roster && roster[num]) return roster[num];
   }
   return null;
+}
+// Every distinct player wearing this number for this team, across all
+// three units. Two units listing the same name is one player who plays
+// both ways; two DIFFERENT names is a genuine shared number, and the
+// coach has to say which one they mean.
+function playerCandidates(teamKey, num){
+  const t = TEAMS[teamKey] || {};
+  const buckets = [['offense', t.rosterOffense], ['defense', t.rosterDefense], ['special', t.rosterSpecialTeams]];
+  const seen = {}, out = [];
+  buckets.forEach(([unit, roster]) => {
+    const n = roster && roster[num];
+    if (n && !seen[n]){ seen[n] = true; out.push({ unit, name: n }); }
+  });
+  return out;
 }
 function nameInOffense(teamKey, num){
   const n = rosterName(teamKey, num, ['offense','special','defense']);
@@ -535,7 +552,11 @@ function computeState(playsList){
     scores: { teamA: 0, teamB: 0 },
     possessionTime: { teamA: 0, teamB: 0 },
     down: null, distance: null, fieldPos: null, startSpot: null, statYards: 0,
-    penalties: { teamA: { count: 0, yds: 0 }, teamB: { count: 0, yds: 0 } }
+    penalties: { teamA: { count: 0, yds: 0 }, teamB: { count: 0, yds: 0 } },
+    // NFHS: three timeouts per team per half, and they do NOT carry
+    // over -- both teams get a fresh three at the start of the second
+    // half regardless of what was left.
+    timeouts: { teamA: TIMEOUTS_PER_HALF, teamB: TIMEOUTS_PER_HALF }
   };
   const pendingClockStart = { teamA: null, teamB: null };
   for (const p of list){
@@ -607,7 +628,19 @@ function computeState(playsList){
       state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
     }
     if (e.forcePossession){ state.possession = e.forcePossession; }
-    if (e.setQuarter){ state.quarter = e.setQuarter; }
+    if (e.setQuarter){
+      // Crossing into the second half (or into overtime) resets the
+      // allowance. Guarded on the quarter actually changing so that
+      // re-entering a Q3 marker cannot hand out a second fresh set.
+      if (e.setQuarter >= 3 && state.quarter < 3) state.timeouts = { teamA: TIMEOUTS_PER_HALF, teamB: TIMEOUTS_PER_HALF };
+      if (e.setQuarter >= 5 && state.quarter < 5) state.timeouts = { teamA: TIMEOUTS_PER_OT, teamB: TIMEOUTS_PER_OT };
+      state.quarter = e.setQuarter;
+    }
+    if (e.timeout && state.timeouts[e.timeout.team] !== undefined){
+      // Floored at zero: the log is a record of what the coach called,
+      // and a fourth timeout should not read as -1 remaining.
+      state.timeouts[e.timeout.team] = Math.max(0, state.timeouts[e.timeout.team] - 1);
+    }
     if (e.clockEvent){
       const ce = e.clockEvent;
       if (ce.type === 'start'){ pendingClockStart[ce.team] = ce.absSec; }
@@ -1123,6 +1156,63 @@ function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
   return list.map(p => '<button type="button" class="' + groupClass + '" data-num="' + p.num + '"' + (p.resolvedName ? ' data-resolved="' + p.resolvedName.replace(/"/g,'') + '"' : '') + (p.unit ? ' data-unit="' + p.unit + '"' : '') + ' style="margin:0 6px 6px 0;">#' + p.num + ' ' + (p.name||'') + (statLabelFn && statLabelFn(p.num, p) ? ' <span style="color:#999; font-size:11px;">(' + statLabelFn(p.num, p) + ')</span>' : '') + '</button>').join('');
 }
 const PICKED_BG = 'var(--bg-accent, #e6f1fb)';
+// After typing a jersey number, show who that number resolves to before
+// the play is saved. A number typed by hand is the one entry path with
+// no feedback at all -- the coach finds out who they credited only when
+// the play appears in the log, by which point the text is frozen.
+//
+// `order` is the same unit search order the LOG will use for this field,
+// so the name shown here is exactly the name that will be recorded.
+function attachNameConfirm(inputId, getTeam, getOrder){
+  const input = document.getElementById(inputId);
+  if (!input || input.dataset.nameConfirm) return;
+  input.dataset.nameConfirm = '1';
+  const box = document.createElement('div');
+  box.style.cssText = 'margin-top:5px; font-size:13px; line-height:1.7;';
+  input.parentNode.insertBefore(box, input.nextSibling);
+
+  const render = () => {
+    const num = (input.value || '').trim();
+    box.innerHTML = '';
+    if (!num) return;
+    const teamKey = typeof getTeam === 'function' ? getTeam() : getTeam;
+    if (!teamKey || !TEAMS[teamKey]) return;
+    const order = (typeof getOrder === 'function' ? getOrder() : getOrder) || ['offense', 'special', 'defense'];
+    const resolved = rosterName(teamKey, num, order);
+    if (!resolved){
+      box.innerHTML = '<span style="color:#a05a00;">#' + num + ' is not on ' +
+        TEAMS[teamKey].name + "'s roster — it will be recorded as #" + num + '</span>';
+      return;
+    }
+    const others = playerCandidates(teamKey, num).filter(c => c.name !== resolved);
+    box.innerHTML =
+      '<button type="button" disabled style="padding:5px 10px; border-radius:6px; border:2px solid #2e7d32; ' +
+      'background:#eaf5ea; color:#1b4d1f; font-weight:700; cursor:default;">#' + num + ' ' + resolved + '</button>' +
+      (others.length
+        ? '<div style="color:#a05a00; margin-top:5px;">#' + num + ' is shared — tap the right player:</div>' +
+          others.map((c, i) => '<button type="button" class="nameConfirmAlt" data-i="' + i +
+            '" style="margin:4px 6px 0 0; padding:5px 10px; border-radius:6px; border:2px solid #ccc; background:#fff; cursor:pointer;">' +
+            c.name + ' <span style="color:#888;">(' + c.unit + ')</span></button>').join('')
+        : '');
+    box.querySelectorAll('.nameConfirmAlt').forEach(b => b.addEventListener('click', () => {
+      const chosen = others[+b.dataset.i];
+      // Record the choice in the bucket this field's resolver checks
+      // FIRST, so the stored log text uses the player the coach picked.
+      // Only that bucket is touched -- the other unit keeps its own
+      // player on that number, because they really are different people.
+      const t = TEAMS[teamKey];
+      const bucket = order[0] === 'defense' ? 'rosterDefense'
+        : order[0] === 'special' ? 'rosterSpecialTeams' : 'rosterOffense';
+      t[bucket] = t[bucket] || {};
+      t[bucket][num] = chosen.name;
+      render();
+    }));
+  };
+  input.addEventListener('blur', render);
+  input.addEventListener('change', render);
+  if ((input.value || '').trim()) render();
+}
+
 function wirePickerButtons(container, groupClass, manualInputId, onPick){
   const all = () => container.querySelectorAll('.' + groupClass);
   container.querySelectorAll('.' + groupClass).forEach(b => {
@@ -1339,7 +1429,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
     document.getElementById('downText').textContent = downMsg;
     document.getElementById('quarterText').textContent = 'Q' + state.quarter + ' (' + (state.quarter <= 2 ? '1st half' : state.quarter <= 4 ? '2nd half' : 'OT') + ')';
-    document.getElementById('topText').textContent = 'Time of possession — ' + TEAMS.teamA.name + ' ' + formatDuration(state.possessionTime.teamA) + ' · ' + TEAMS.teamB.name + ' ' + formatDuration(state.possessionTime.teamB);
+    document.getElementById('topText').textContent =
+      'Time of possession — ' + TEAMS.teamA.name + ' ' + formatDuration(state.possessionTime.teamA) +
+      ' · ' + TEAMS.teamB.name + ' ' + formatDuration(state.possessionTime.teamB) +
+      '   |   Timeouts — ' + TEAMS.teamA.name + ' ' + state.timeouts.teamA +
+      ' · ' + TEAMS.teamB.name + ' ' + state.timeouts.teamB;
     const banner = document.getElementById('banner');
     const c = TEAMS[state.possession];
     banner.style.background = c.bg;
@@ -1590,6 +1684,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('gk_kicker_manual').value = kickerNum;
       }));
       document.getElementById('gk_kicker_manual').addEventListener('input', e => { kickerNum = e.target.value.trim(); });
+      attachNameConfirm('gk_kicker_manual', guided.kickingTeam, ['special','offense','defense']);
       document.getElementById('guidedKickoffSave').addEventListener('click', () => {
         const yds = document.getElementById('gk_yards').value.trim();
         if (!kickerNum || !yds) return;
@@ -1623,6 +1718,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('gr_returner_manual').value = returnerNum;
       }));
       document.getElementById('gr_returner_manual').addEventListener('input', e => { returnerNum = e.target.value.trim(); });
+      attachNameConfirm('gr_returner_manual', guided.receivingTeam, ['defense','special','offense']);
       document.getElementById('guidedReturnSave').addEventListener('click', () => {
         const yds = document.getElementById('gr_yards').value.trim();
         const td = document.getElementById('gr_td').checked;
@@ -1982,6 +2078,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       });
       const manual = document.getElementById('pp_' + role + '_manual');
       if (manual) manual.addEventListener('input', e => { sel[role] = e.target.value.trim(); });
+      // Kickers and punters are named from the special-teams roster
+      // first; everyone else from offense. Mirroring that here means the
+      // name shown on blur is the name that ends up in the log.
+      attachNameConfirm('pp_' + role + '_manual', off,
+        (role === 'kicker' || role === 'punter') ? ['special','offense','defense'] : ['offense','special','defense']);
     });
 
     // Pre-select the quarterback. A team throws with the same passer
@@ -2036,6 +2137,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
         sel.credit = num;
       });
+      attachNameConfirm('pp_credit_manual' + suffix, def, ['defense','special','offense']);
       const creditManual = document.getElementById('pp_credit_manual' + suffix);
       if (creditManual) creditManual.addEventListener('input', e => { sel.credit = e.target.value.trim(); });
     });
@@ -2245,6 +2347,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
       panel.querySelectorAll('input[name=pp_ko_muffrec]').forEach(r =>
         r.addEventListener('change', refreshKoMode));
+      attachNameConfirm('pp_ko_muff_rec',
+        () => document.querySelector('input[name=pp_ko_muffrec]:checked').value === 'k' ? off : def,
+        () => document.querySelector('input[name=pp_ko_muffrec]:checked').value === 'k' ? ['special','offense','defense'] : ['defense','special','offense']);
     }
     if (type === 'punt'){
       const updatePuntTdVisibility = () => {
@@ -2289,6 +2394,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       });
       panel.querySelectorAll('input[name=pp_punt_muffrec]').forEach(r =>
         r.addEventListener('change', refreshPuntMode));
+      // Which team the recoverer belongs to depends on the radio, so the
+      // team and search order are both resolved at blur time.
+      attachNameConfirm('pp_muff_rec',
+        () => document.querySelector('input[name=pp_punt_muffrec]:checked').value === 'k' ? off : def,
+        () => document.querySelector('input[name=pp_punt_muffrec]:checked').value === 'k' ? ['special','offense','defense'] : ['defense','special','offense']);
       panel.querySelectorAll('input[name=pp_punt_blockrec]').forEach(r => r.addEventListener('change', () => {
         const isOwn = document.querySelector('input[name=pp_punt_blockrec]:checked').value === 'own';
         document.getElementById('pp_punt_block_opp').style.display = isOwn ? 'none' : 'block';
@@ -2901,6 +3011,39 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const code = (penTeam === 'off' ? 'po' : 'pd') + ' ' + yds + (noDown ? ' nd' : '');
       document.getElementById('code').value = code;
       showConfirm();
+    });
+  });
+
+  document.getElementById('timeoutUtilBtn').addEventListener('click', () => {
+    const state = computeState();
+    const panel = document.getElementById('playPanel');
+    panel.style.display = 'block';
+    panel.innerHTML =
+      '<p style="font-size:13px; color:#888; margin:0 0 6px;">Timeout</p>' +
+      ['teamA', 'teamB'].map(k =>
+        '<button type="button" class="toTeamBtn" data-team="' + k + '"' +
+        (state.timeouts[k] <= 0 ? ' disabled' : '') + '>' + TEAMS[k].name +
+        ' <span style="color:#888;">(' + state.timeouts[k] + ' left)</span></button> ').join('') +
+      '<div class="row" style="margin-top:12px;"><button class="primary" id="to_clear">Cancel</button></div>';
+    panel.querySelectorAll('.toTeamBtn').forEach(b => b.addEventListener('click', () => {
+      const team = b.dataset.team;
+      const st = computeState();
+      // Written straight to the log rather than through the confirm
+      // card: there is nothing to review and nothing to get wrong, and
+      // a timeout is called under time pressure.
+      pushAndPersist({
+        id: nextId++,
+        text: 'Timeout — ' + TEAMS[team].name + ' (' + Math.max(0, st.timeouts[team] - 1) + ' left)',
+        effect: { timeout: { team } },
+        quarter: st.quarter
+      });
+      panel.style.display = 'none';
+      panel.innerHTML = '';
+      renderAll();
+    }));
+    document.getElementById('to_clear').addEventListener('click', () => {
+      panel.style.display = 'none';
+      panel.innerHTML = '';
     });
   });
 

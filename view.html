@@ -287,6 +287,8 @@
 
   // --- Proven read-only engine core, extracted verbatim from game.html ---
 function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+const TIMEOUTS_PER_HALF = 3;
+const TIMEOUTS_PER_OT = 1;
 // Administrative entries -- clock markers, quarter/half dividers, manual
 // possession flips -- are announcements, not football plays. They carry
 // no roles and no yardage, so anything reasoning about "what actually
@@ -443,7 +445,11 @@ function computeState(playsList){
     scores: { teamA: 0, teamB: 0 },
     possessionTime: { teamA: 0, teamB: 0 },
     down: null, distance: null, fieldPos: null, startSpot: null, statYards: 0,
-    penalties: { teamA: { count: 0, yds: 0 }, teamB: { count: 0, yds: 0 } }
+    penalties: { teamA: { count: 0, yds: 0 }, teamB: { count: 0, yds: 0 } },
+    // NFHS: three timeouts per team per half, and they do NOT carry
+    // over -- both teams get a fresh three at the start of the second
+    // half regardless of what was left.
+    timeouts: { teamA: TIMEOUTS_PER_HALF, teamB: TIMEOUTS_PER_HALF }
   };
   const pendingClockStart = { teamA: null, teamB: null };
   for (const p of list){
@@ -515,7 +521,19 @@ function computeState(playsList){
       state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
     }
     if (e.forcePossession){ state.possession = e.forcePossession; }
-    if (e.setQuarter){ state.quarter = e.setQuarter; }
+    if (e.setQuarter){
+      // Crossing into the second half (or into overtime) resets the
+      // allowance. Guarded on the quarter actually changing so that
+      // re-entering a Q3 marker cannot hand out a second fresh set.
+      if (e.setQuarter >= 3 && state.quarter < 3) state.timeouts = { teamA: TIMEOUTS_PER_HALF, teamB: TIMEOUTS_PER_HALF };
+      if (e.setQuarter >= 5 && state.quarter < 5) state.timeouts = { teamA: TIMEOUTS_PER_OT, teamB: TIMEOUTS_PER_OT };
+      state.quarter = e.setQuarter;
+    }
+    if (e.timeout && state.timeouts[e.timeout.team] !== undefined){
+      // Floored at zero: the log is a record of what the coach called,
+      // and a fourth timeout should not read as -1 remaining.
+      state.timeouts[e.timeout.team] = Math.max(0, state.timeouts[e.timeout.team] - 1);
+    }
     if (e.clockEvent){
       const ce = e.clockEvent;
       if (ce.type === 'start'){ pendingClockStart[ce.team] = ce.absSec; }
@@ -1050,6 +1068,11 @@ function computeState(playsList){
         '<div class="team-summary-header" style="background:' + team.bg + '; color:' + safeTextColor(team.bg, team.text) + ';">' +
         (team.logo ? '<img class="team-summary-logo" src="' + team.logo + '">' : '') +
         '<span>' + team.name + '</span>' +
+        // Right-justified via margin-left:auto so it sits hard against
+        // the end of the coloured bar regardless of how long the team
+        // name or logo is.
+        '<span style="margin-left:auto; font-size:16px; font-weight:700; letter-spacing:0.02em;">TOL=' +
+          computeState(plays).timeouts[teamKey] + '</span>' +
         '</div>' +
         '<div class="stat-tile-grid">' +
         tiles.map(([val, label]) => '<div class="stat-tile"><div class="stat-tile-value">' + val + '</div><div class="stat-tile-label">' + label + '</div></div>').join('') +

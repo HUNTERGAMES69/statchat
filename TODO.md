@@ -625,6 +625,128 @@ slightly off.
   never appear in the carrier list, so recency ordering could never
   surface him and the number had to be typed every time.
 
+## 13. Muffed / fumbled punt AND kickoff — ADDED (Aug 6, 2026)
+
+The punt tree had no way to log a muffed catch, which meant the most
+consequential punt outcome in high-school football could not be recorded
+at all.
+
+- [x] "Muffed / fumbled catch" toggle on the punt panel, mutually
+  exclusive with "Blocked" (turning one on clears the other).
+- [x] Radio for who recovered: **kicking team** (default) or receiving
+  team. Recoverer number optional, resolved against whichever team
+  recovered. Return yards and TD supported; a TD scores for the
+  recovering team, not automatically the receiving team.
+- [x] **A kicking-team recovery does not change possession.** This is why
+  it could not be logged as a punt plus a fumble — a punt always sets
+  `flipEligible`, and this one must not.
+- [x] It does however start a **fresh set of downs for the team that
+  already had the ball**. The save handler previously only laid down a
+  new-drive marker when possession changed, so the play left down and
+  distance untouched. New `effect.newDownsSameTeam` covers that case.
+- [x] Its own starting-spot widget, labelled for the **kicking** team,
+  since they are the ones taking over. `currentSpotGetter` swaps between
+  the two widgets as the recovery radio changes.
+
+The kickoff panel gained the identical control (`km` play type), mutually
+exclusive with **Touchback** rather than Blocked. Same recovery radio,
+same optional recoverer, same kicking-team-labelled spot widget, same
+possession rule.
+
+- [x] A muff-recovery touchdown now sets `endsDrive`. Without it a
+  kicking-team recovery returned for a score left the previous down and
+  distance on screen, because nothing else clears them when possession
+  has not changed.
+
+### Known limits
+- [ ] The recoverer is a plain number field, not a picker. It resolves
+  correctly and is optional, but does not get the roster-backed grid the
+  other fields have.
+- [ ] No stat is recorded for the muff itself or the recovery — the play
+  is captured for the log, possession and scoring, but the muffing
+  player gets no fumble and the recovering player gets no credit.
+- [ ] No automated test yet; verified ad hoc on BOTH punt and kickoff
+  across all variants (kicking recovery with spot, receiving recovery,
+  recovery returned for a TD, nobody named, and mutual exclusion with
+  Blocked / Touchback).
+
+## 14. Manual number entry now confirms the player — ADDED (Aug 6, 2026)
+
+Typing a jersey number by hand was the one entry path with no feedback
+at all: the coach found out who they had credited only when the play
+appeared in the log, by which point the text is frozen.
+
+- [x] On blur (tab or tap away), every manual "type #" field shows a
+  green button with the resolved player, e.g. `#80 N Receiver`. That is
+  literally the name that will be written to the log — the widget uses
+  the same unit search order the log will use for that field, so the two
+  cannot disagree.
+- [x] **Shared numbers are detected and resolvable.** `playerCandidates`
+  gathers every distinct name wearing that number across offense,
+  defense and special teams. Where there is more than one, the extras
+  are shown as tappable alternatives under a "#22 is shared" warning,
+  and tapping one changes what gets logged. (The `ambiguousOffense` /
+  `ambiguousDefense` maps the code already read were never populated by
+  anything — conflicts were simply invisible.)
+- [x] A number not on the roster says so plainly and still records as
+  `#NN`, rather than silently resolving to nothing.
+- [x] Wired into every manual player field: all offense role pickers
+  (carrier / passer / receiver / kicker / punter), the defensive credit
+  and returner fields on every panel and suffix, both muff recoverer
+  fields, and both guided-kickoff fields. Search order is per-field —
+  kickers and punters resolve special-teams-first, defensive credits
+  defense-first, everyone else offense-first.
+
+### Known limit
+- [ ] **Choosing an alternative sticks for the session**, not just for
+  that play: it writes the chosen name into the roster bucket that
+  field's resolver reads first. So if #22 is a running back on offense
+  and a safety on defense, and the coach says a rush by #22 was the
+  safety, later rushes by #22 resolve to the safety too. It is visible
+  (the confirmation shows the current resolution every time, and the
+  alternative is always one tap away) but it is not per-play. A true
+  per-play override needs the resolution carried on the play itself
+  rather than looked up from the roster at save time.
+
+## 15. Timeout tracker — ADDED (Aug 6, 2026)
+
+- [x] **Timeout** button in the Utilities row. Opens a two-button panel
+  (one per team) showing how many each side has left; the button is
+  disabled once a team is out. Writes straight to the log rather than
+  through the confirm card — there is nothing to review, and a timeout
+  gets called under time pressure.
+- [x] Logs as `Timeout — Neville (2 left)`.
+- [x] Tracked in `computeState` as `state.timeouts`, so it replays from
+  the play log and is correct on every page rather than being UI-only
+  state that a reload would lose.
+- [x] **NFHS rules:** three per team per half, not carried over. Both
+  teams get a fresh three when the game crosses into Q3, and one each in
+  overtime (`TIMEOUTS_PER_OT`). The reset is guarded on the quarter
+  actually changing, so re-entering a Q3 marker cannot hand out a second
+  set.
+- [x] Floored at zero — a fourth timeout would otherwise read as
+  "-1 left" in the log.
+- [x] Shown in the `game.html` header next to time of possession, and on
+  `view.html` as **TOL=x** right-justified inside each team's coloured
+  name bar (`margin-left:auto`, so it sits hard against the end of the
+  bar whatever the team name length or logo). It is NOT a stat tile:
+  `.stat-tile-grid` is an explicit 4x2, so a ninth tile overflowed the
+  fixed-height 1920x1080 layout.
+- [x] `computeState` verified still identical across all five files.
+
+### Known limits
+- [ ] No way to give a timeout back if one is logged by mistake, other
+  than Undo (which only removes the most recent play). A charged-timeout
+  correction would need its own effect.
+- [ ] Timeouts are not surfaced in `recap.html` / `stat_package.html` /
+  `season_report.html`. The state is computed there (the engine is
+  shared) but nothing displays it. Note those pages are post-game, where
+  timeouts remaining is of limited interest.
+- [ ] The three-per-half figure is hardcoded as `TIMEOUTS_PER_HALF`.
+  Fine for NFHS, but not configurable per league.
+- [ ] No automated test yet — verified ad hoc (countdown, disabled at
+  zero, halftime reset, replay on view.html).
+
 ## Other known-outstanding items (from earlier sessions, may be stale)
 
 - [ ] Offline-durable sync queue for failed saves
