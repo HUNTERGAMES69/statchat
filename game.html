@@ -22,6 +22,12 @@
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
   button.danger { background:#fff; color:#a32d2d; border:1px solid #a32d2d; }
   button:disabled { opacity:0.5; cursor:default; }
+  /* Selection used to set background only. Buttons are dark navy with
+     WHITE text, so a pale fill left white-on-pale and read as a washed
+     out grey. Gold with dark text is the app's existing "active" cue
+     and is unmistakable against the default. */
+  button.suggested { background:#4a4a68; color:#fff; box-shadow:inset 0 0 0 2px #7b7b96; }
+  button.picked { background:#ffc72c; color:#1a1a2e; box-shadow:inset 0 0 0 2px #8a6a00; }
   .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .hidden { display:none; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
@@ -1236,6 +1242,13 @@ function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
   return list.map(p => '<button type="button" class="' + groupClass + '" data-num="' + p.num + '"' + (p.resolvedName ? ' data-resolved="' + p.resolvedName.replace(/"/g,'') + '"' : '') + (p.unit ? ' data-unit="' + p.unit + '"' : '') + ' style="margin:0 6px 6px 0;">#' + p.num + ' ' + (p.name||'') + (statLabelFn && statLabelFn(p.num, p) ? ' <span style="color:#999; font-size:11px;">(' + statLabelFn(p.num, p) + ')</span>' : '') + '</button>').join('');
 }
 const PICKED_BG = 'var(--bg-accent, #e6f1fb)';
+function markPicked(el, on){
+  if (!el) return;
+  // Any deliberate pick supersedes the pre-selected suggestion, so the
+  // button never carries both states at once.
+  el.classList.remove('suggested');
+  el.classList.toggle('picked', !!on);
+}
 // After typing a jersey number, show who that number resolves to before
 // the play is saved. A number typed by hand is the one entry path with
 // no feedback at all -- the coach finds out who they credited only when
@@ -1301,15 +1314,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // Without this the auto-selected quarterback could be changed but
       // never simply removed, which is the one thing a coach needs when
       // the pre-selection is wrong and nobody else on the grid is right.
-      const alreadyPicked = b.style.background === PICKED_BG;
-      all().forEach(x => x.style.background = '');
+      const alreadyPicked = b.classList.contains('picked');
+      all().forEach(x => markPicked(x, false));
       const manual = document.getElementById(manualInputId);
       if (alreadyPicked){
         if (manual) manual.value = '';
         onPick('', null, null);
         return;
       }
-      b.style.background = PICKED_BG;
+      markPicked(b, true);
       if (manual) manual.value = b.dataset.num;
       onPick(b.dataset.num, b.dataset.resolved || null, b.dataset.unit || null);
     });
@@ -1320,7 +1333,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   if (manual){
     manual.addEventListener('input', () => {
       all().forEach(x => {
-        x.style.background = (x.dataset.num === manual.value.trim()) ? PICKED_BG : '';
+        markPicked(x, x.dataset.num === manual.value.trim());
       });
     });
   }
@@ -2085,14 +2098,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       let kickDir = null;
       content.querySelectorAll('.gk_dir_btn').forEach(b => b.addEventListener('click', () => {
         kickDir = b.dataset.dir;
-        content.querySelectorAll('.gk_dir_btn').forEach(x => x.style.background = '');
-        b.style.background = '#e6f1fb';
+        content.querySelectorAll('.gk_dir_btn').forEach(x => x.classList.remove('picked'));
+        b.classList.add('picked');
       }));
       content.querySelectorAll('.gk_kicker_pick').forEach(b => b.addEventListener('click', () => {
         kickerNum = b.dataset.num;
         if (b.dataset.resolved) TEAMS[guided.kickingTeam].rosterSpecialTeams[kickerNum] = b.dataset.resolved;
-        content.querySelectorAll('.gk_kicker_pick').forEach(x => x.style.background = '');
-        b.style.background = '#e6f1fb';
+        content.querySelectorAll('.gk_kicker_pick').forEach(x => x.classList.remove('picked'));
+        b.classList.add('picked');
         document.getElementById('gk_kicker_manual').value = kickerNum;
       }));
       document.getElementById('gk_kicker_manual').addEventListener('input', e => { kickerNum = e.target.value.trim(); });
@@ -2132,8 +2145,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       content.querySelectorAll('.gr_returner_pick').forEach(b => b.addEventListener('click', () => {
         returnerNum = b.dataset.num;
         if (b.dataset.resolved) TEAMS[guided.receivingTeam].rosterDefense[returnerNum] = b.dataset.resolved;
-        content.querySelectorAll('.gr_returner_pick').forEach(x => x.style.background = '');
-        b.style.background = '#e6f1fb';
+        content.querySelectorAll('.gr_returner_pick').forEach(x => x.classList.remove('picked'));
+        b.classList.add('picked');
         document.getElementById('gr_returner_manual').value = returnerNum;
       }));
       document.getElementById('gr_returner_manual').addEventListener('input', e => { returnerNum = e.target.value.trim(); });
@@ -2210,8 +2223,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     let side = null;
     container.querySelectorAll('.' + idPrefix + '_side').forEach(b => b.addEventListener('click', () => {
       side = b.dataset.side;
-      container.querySelectorAll('.' + idPrefix + '_side').forEach(x => x.style.background = '');
-      b.style.background = '#e6f1fb';
+      container.querySelectorAll('.' + idPrefix + '_side').forEach(x => x.classList.remove('picked'));
+      b.classList.add('picked');
     }));
     return function getReset(){
       const yardlineEl = document.getElementById(idPrefix + '_yardline');
@@ -2544,7 +2557,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         sel.passer = lastPasser;
         const btn = panel.querySelector('.pp_passer_pick[data-num="' + lastPasser + '"]');
         if (btn){
-          btn.style.background = 'var(--bg-subtle, #eef2f6)';
+          btn.classList.add('suggested');
           btn.title = 'Last quarterback to throw — tap to confirm, or pick/type someone else';
         }
       }
@@ -2751,10 +2764,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             : (koState.driveDir === 'right' ? 'left' : 'right'))
         : null;
       panel.querySelectorAll('.koDirBtn').forEach(b => {
-        if (b.dataset.dir === koDerived) b.style.background = '#eef2f6';
+        if (b.dataset.dir === koDerived) b.classList.add('suggested');
         b.addEventListener('click', () => {
-          panel.querySelectorAll('.koDirBtn').forEach(x => x.style.background = '');
-          b.style.background = '#e6f1fb';
+          panel.querySelectorAll('.koDirBtn').forEach(x => x.classList.remove('picked'));
+          b.classList.add('picked');
           sel.direction = b.dataset.dir;
         });
       });
@@ -3398,18 +3411,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     let down = null, side = null, dir = null;
     panel.querySelectorAll('.driveDownBtn').forEach(b => b.addEventListener('click', () => {
       down = b.dataset.d;
-      panel.querySelectorAll('.driveDownBtn').forEach(x => x.style.background = '');
-      b.style.background = '#e6f1fb';
+      panel.querySelectorAll('.driveDownBtn').forEach(x => x.classList.remove('picked'));
+      b.classList.add('picked');
     }));
     panel.querySelectorAll('.driveSideBtn').forEach(b => b.addEventListener('click', () => {
       side = b.dataset.side;
-      panel.querySelectorAll('.driveSideBtn').forEach(x => x.style.background = '');
-      b.style.background = '#e6f1fb';
+      panel.querySelectorAll('.driveSideBtn').forEach(x => x.classList.remove('picked'));
+      b.classList.add('picked');
     }));
     panel.querySelectorAll('.driveDirBtn').forEach(b => b.addEventListener('click', () => {
       dir = b.dataset.dir;
-      panel.querySelectorAll('.driveDirBtn').forEach(x => x.style.background = '');
-      b.style.background = '#e6f1fb';
+      panel.querySelectorAll('.driveDirBtn').forEach(x => x.classList.remove('picked'));
+      b.classList.add('picked');
     }));
     document.getElementById('drive_clear').addEventListener('click', () => document.getElementById('driveUtilBtn').click());
     document.getElementById('drive_review').addEventListener('click', () => {
@@ -3582,8 +3595,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     let penTeam = null;
     panel.querySelectorAll('.penTeamBtn').forEach(b => b.addEventListener('click', () => {
       penTeam = b.dataset.team;
-      panel.querySelectorAll('.penTeamBtn').forEach(x => x.style.background = '');
-      b.style.background = '#e6f1fb';
+      panel.querySelectorAll('.penTeamBtn').forEach(x => x.classList.remove('picked'));
+      b.classList.add('picked');
     }));
     document.getElementById('pen_clear').addEventListener('click', () => document.getElementById('penUtilBtn').click());
     document.getElementById('pen_review').addEventListener('click', () => {
