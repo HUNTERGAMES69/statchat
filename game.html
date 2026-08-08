@@ -66,6 +66,7 @@
       <span class="downdist" id="downText"></span>
       <span class="downdist" id="quarterText"></span>
       <span class="finalTag" id="finalTag" style="display:none;">FINAL</span>
+      <span class="finalTag" id="notStartedTag" style="display:none;">NOT STARTED</span>
     </div>
     <div class="hint" id="topText" style="text-align:right;"></div>
 
@@ -96,6 +97,14 @@
         <button type="button" id="recheckBtn" class="secondary" style="background:#fff;">Run checks again</button>
         <button type="button" id="unlockFinalBtn" class="secondary" style="background:#fff;">Unlock to edit</button>
       </div>
+      <div id="fieldStrip" style="display:none; background:var(--surface-2,#fff); border:1px solid #ddd; border-radius:12px; padding:10px 12px; margin:8px 0;">
+        <div style="display:flex; align-items:center; margin-bottom:6px;">
+          <span style="font-size:13px; color:#888;">Field position</span>
+          <button type="button" id="fieldStripToggle" style="margin-left:auto; padding:3px 10px; font-size:12px;">Hide</button>
+        </div>
+        <div id="fieldStripBody"></div>
+      </div>
+      <button type="button" id="fieldStripShow" style="display:none; margin:8px 0; padding:3px 10px; font-size:12px;">Show field position</button>
       <div id="insertModeBanner" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:#e6f1fb; border:1px solid #6ba3d6; font-size:13px;"></div>
       <div id="syncStatus" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:#fff4d6; border:1px solid #e0b84c; font-size:13px;"></div>
       <input type="text" id="code" style="display:none;">
@@ -590,7 +599,12 @@ function computeState(playsList){
     // NFHS: three timeouts per team per half, and they do NOT carry
     // over -- both teams get a fresh three at the start of the second
     // half regardless of what was left.
-    timeouts: { teamA: TIMEOUTS_PER_HALF, teamB: TIMEOUTS_PER_HALF }
+    timeouts: { teamA: TIMEOUTS_PER_HALF, teamB: TIMEOUTS_PER_HALF },
+    // Which physical end of the field a team attacks. Recorded once and
+    // alternated by quarter, because teams change ends after Q1, Q2 and
+    // Q3. Everything else in this engine is possession-relative, so this
+    // is the only place the app knows anything about actual direction.
+    dirTeam: null, dirValue: null, dirQuarter: 1
   };
   const pendingClockStart = { teamA: null, teamB: null };
   for (const p of list){
@@ -615,7 +629,17 @@ function computeState(playsList){
         }
         else if (e.turnoverOnDowns && e.flipApplied){
           state.possession = otherTeam(state.possession);
-          state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+          // The ball does not move on a turnover on downs -- it is spotted
+          // exactly where the play ended, and the team taking over starts
+          // 1st & 10 from there. fieldPos is possession-RELATIVE (0 is the
+          // possessing team's own goal line), so keeping the same physical
+          // spot means mirroring it to 100 - fieldPos for the new offense.
+          // Clearing it instead used to force the coach to re-enter a spot
+          // the app already knew.
+          state.fieldPos = state.fieldPos !== null ? 100 - state.fieldPos : null;
+          state.down = 1;
+          state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+          state.startSpot = state.fieldPos; state.statYards = 0;
         } else if (!e.turnoverOnDowns){
           state.down = (state.down || 1) + 1;
           state.distance = Math.max((state.distance || 10) - e.statYds, 1);
@@ -670,6 +694,11 @@ function computeState(playsList){
       if (e.setQuarter >= 5 && state.quarter < 5) state.timeouts = { teamA: TIMEOUTS_PER_OT, teamB: TIMEOUTS_PER_OT };
       state.quarter = e.setQuarter;
     }
+    if (e.setDirection){
+      state.dirTeam = e.setDirection.team;
+      state.dirValue = e.setDirection.dir;
+      state.dirQuarter = state.quarter;
+    }
     if (e.timeout && state.timeouts[e.timeout.team] !== undefined){
       // Floored at zero: the log is a record of what the coach called,
       // and a fourth timeout should not read as -1 remaining.
@@ -691,6 +720,17 @@ function computeState(playsList){
       }
     }
     if (e.setScores){ state.scores.teamA = e.setScores.teamA; state.scores.teamB = e.setScores.teamB; }
+  }
+  // Direction the team WITH THE BALL is currently driving. Derived, not
+  // stored: ends alternate every quarter, so one recorded answer covers
+  // the whole game, and re-recording it mid-game just re-bases the
+  // alternation from that quarter.
+  state.driveDir = null;
+  if (state.dirValue && state.possession){
+    const flipped = Math.abs((state.quarter || 1) - state.dirQuarter) % 2 === 1;
+    let d = flipped ? (state.dirValue === 'right' ? 'left' : 'right') : state.dirValue;
+    if (state.possession !== state.dirTeam) d = (d === 'right' ? 'left' : 'right');
+    state.driveDir = d;
   }
   return state;
 }
@@ -1507,12 +1547,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // still being played, and on a completed record they are noise at
     // best and misleading at worst (the last entered down is not where
     // the game "ended").
+    renderFieldStrip(state);
     const isFinal = gamePhase === 'ended';
+    const notStarted = gamePhase === 'notStarted';
     document.getElementById('finalTag').style.display = isFinal ? 'inline' : 'none';
-    document.getElementById('downText').style.display = isFinal ? 'none' : '';
-    document.getElementById('quarterText').style.display = isFinal ? 'none' : '';
+    document.getElementById('notStartedTag').style.display = notStarted ? 'inline' : 'none';
+    // Down, distance and quarter describe a game in progress. Before
+    // kickoff there is nothing to describe.
+    document.getElementById('downText').style.display = (isFinal || notStarted) ? 'none' : '';
+    document.getElementById('quarterText').style.display = (isFinal || notStarted) ? 'none' : '';
     document.getElementById('downText').textContent = downMsg;
-    document.getElementById('quarterText').textContent = 'Q' + state.quarter + ' (' + (state.quarter <= 2 ? '1st half' : state.quarter <= 4 ? '2nd half' : 'OT') + ')';
+    // Just the quarter. Which half it belongs to is obvious from the
+    // number and only crowded the banner.
+    document.getElementById('quarterText').textContent =
+      state.quarter <= 4 ? 'Q' + state.quarter : 'OT';
     document.getElementById('topText').textContent =
       'Time of possession — ' + TEAMS.teamA.name + ' ' + formatDuration(state.possessionTime.teamA) +
       ' · ' + TEAMS.teamB.name + ' ' + formatDuration(state.possessionTime.teamB) +
@@ -1570,6 +1618,82 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const previousDrivePlays = resetIdxs.length >= 2 ? plays.slice(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1]) : [];
     document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
     document.getElementById('prevDriveLogScroll').innerHTML = renderLogLines(previousDrivePlays.slice().reverse()) || '<div style="color:#999;">no previous drive yet</div>';
+  }
+
+  // Field position strip. The app is otherwise entirely
+  // possession-relative, so this is the one place a physical left/right
+  // has to be resolved: the possessing team's driveDir decides which way
+  // fieldPos maps onto the drawing. With no direction recorded it falls
+  // back to "the team with the ball drives right", which is always
+  // internally consistent but flips the picture on every change of
+  // possession -- so the strip says so rather than pretending.
+  let fieldStripHidden = false;
+  try { fieldStripHidden = window.localStorage.getItem('statchat_fieldstrip') === 'hidden'; } catch (e) {}
+
+  function renderFieldStrip(state){
+    const wrap = document.getElementById('fieldStrip');
+    const showBtn = document.getElementById('fieldStripShow');
+    if (!wrap) return;
+    const live = gamePhase !== 'notStarted';
+    wrap.style.display = (live && !fieldStripHidden) ? 'block' : 'none';
+    showBtn.style.display = (live && fieldStripHidden) ? 'inline-block' : 'none';
+    if (!live || fieldStripHidden) return;
+
+    const fp = state.fieldPos;
+    const drivingRight = state.driveDir !== 'left';
+    const toX = pos => 40 + (drivingRight ? pos : 100 - pos) * 5.6;
+    const px = v => Math.round(v * 10) / 10;
+
+    let marks = '';
+    for (let y = 10; y <= 90; y += 10){
+      const x = px(40 + y * 5.6);
+      marks += '<line x1="' + x + '" y1="20" x2="' + x + '" y2="64" stroke="' +
+        (y === 50 ? '#639922' : '#97C459') + '" stroke-width="' + (y === 50 ? 2 : 1) + '"/>' +
+        '<text x="' + x + '" y="79" text-anchor="middle" font-size="11" fill="#3B6D11">' +
+        (y > 50 ? 100 - y : y) + '</text>';
+    }
+
+    let ball = '';
+    if (fp !== null){
+      const bx = px(toX(fp));
+      ball = '<circle cx="' + bx + '" cy="42" r="9" fill="#4A1B0C"/>' +
+        '<line x1="' + bx + '" y1="14" x2="' + bx + '" y2="30" stroke="#4A1B0C" stroke-width="2"/>' +
+        '<text x="' + bx + '" y="10" text-anchor="middle" font-size="11" fill="#4A1B0C">' +
+        markerLabel(fp) + '</text>';
+      if (state.distance !== null && state.down !== null){
+        const gain = Math.min(100, fp + state.distance);
+        const gx = px(toX(gain));
+        ball += '<line x1="' + gx + '" y1="14" x2="' + gx + '" y2="70" stroke="#BA7517" stroke-width="3"/>' +
+          '<text x="' + gx + '" y="10" text-anchor="middle" font-size="11" fill="#854F0B">1st</text>';
+      }
+    }
+
+    const leftTeam = drivingRight ? state.possession : otherTeam(state.possession);
+    // Logo where there is one, rotated name where there isn't -- an
+    // opponent added without a crest must still be identifiable.
+    const endZone = (teamKey, cx) => {
+      const t = TEAMS[teamKey];
+      if (t.logo){
+        return '<image href="' + t.logo + '" x="' + (cx - 14) + '" y="28" width="28" height="28" ' +
+          'preserveAspectRatio="xMidYMid meet"><title>' + t.name + '</title></image>';
+      }
+      return '<text x="' + cx + '" y="46" text-anchor="middle" font-size="9" fill="#173404" ' +
+        'transform="rotate(-90 ' + cx + ' 46)">' + t.name.slice(0, 9).toUpperCase() + '</text>';
+    };
+    const note = state.driveDir
+      ? TEAMS[state.possession].name + ' driving ' + (drivingRight ? '\u2192' : '\u2190')
+      : 'direction not set — showing the team with the ball driving right';
+
+    document.getElementById('fieldStripBody').innerHTML =
+      '<svg viewBox="0 0 640 96" style="width:100%; height:auto;">' +
+      '<rect x="40" y="20" width="560" height="44" fill="#EAF3DE" stroke="#639922"/>' +
+      '<rect x="0" y="20" width="40" height="44" fill="#C0DD97" stroke="#639922"/>' +
+      '<rect x="600" y="20" width="40" height="44" fill="#C0DD97" stroke="#639922"/>' +
+      marks + ball +
+      endZone(leftTeam, 20) + endZone(otherTeam(leftTeam), 620) +
+      '</svg>' +
+      '<div style="font-size:12px; color:#888; margin-top:4px;">' +
+      (fp === null ? 'spot not set' : note) + '</div>';
   }
 
   function updatePhaseUI(){
@@ -2193,6 +2317,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_ko_ret_wrap">' + retBlock('Returned by (optional)') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_touchback', 'Touchback') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_muffed', 'Muffed / fumbled catch') + '</div></div>' +
+        // The kickoff is where a half starts, so it is the natural place
+        // to state which way the receiving team is driving. Pre-selected
+        // with whatever is already known, so a normal kickoff needs no
+        // extra tap -- only a correction does.
+        '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Which way is ' + TEAMS[def].name + ' driving?</p>' +
+        '<button type="button" class="koDirBtn" data-dir="left">&#8592; left</button> ' +
+        '<button type="button" class="koDirBtn" data-dir="right">right &#8594;</button>' +
         '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' +
         '<div id="pp_ko_muff" style="display:none;">' +
           '<label class="inline" style="display:block;"><input type="radio" name="pp_ko_muffrec" value="k" checked> Recovered by the kicking team (they keep the ball)</label>' +
@@ -2587,6 +2718,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // KICKING team is the one kickoff outcome that does not hand the
       // ball over, so it needs its own play type and its own spot
       // widget labelled for the kicking team.
+      // Pre-select from what the engine already derives for the
+      // receiving team, so the common case is "looks right, carry on".
+      const koState = computeState();
+      const koDerived = koState.driveDir
+        ? (koState.possession === def ? koState.driveDir
+            : (koState.driveDir === 'right' ? 'left' : 'right'))
+        : null;
+      panel.querySelectorAll('.koDirBtn').forEach(b => {
+        if (b.dataset.dir === koDerived) b.style.background = '#eef2f6';
+        b.addEventListener('click', () => {
+          panel.querySelectorAll('.koDirBtn').forEach(x => x.style.background = '');
+          b.style.background = '#e6f1fb';
+          sel.direction = b.dataset.dir;
+        });
+      });
       const koMuffSpotGetter = wireStartingSpot(panel, 'pp_komuffspot');
       const koSpotGetter = currentSpotGetter;
       const refreshKoMode = () => {
@@ -3020,6 +3166,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     showConfirm();
     if (pending){
       pending.roles = roles;
+      // Only set when the coach actually tapped an arrow -- a kickoff
+      // left alone must not rewrite a direction that is already right.
+      pending.setDirection = sel.direction ? { team: def, dir: sel.direction } : null;
       pending.reset = (currentSpotGetter && !td) ? currentSpotGetter() : null;
     }
   }
@@ -3031,6 +3180,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     pending = parseInput(val, state);
     const warningEl = document.getElementById('fieldPosWarning');
     warningEl.style.display = 'none';
+
+    // A play from scrimmage needs a known spot. Without one the ball
+    // cannot move, and -- worse -- the impossible-gain check is guarded
+    // on field position too, so it silently stops verifying yardage for
+    // the rest of the game. Refuse rather than warn.
+    //
+    // isStat is exactly rush / pass / incomplete / sack: the four plays
+    // that advance the ball from a known spot. Interceptions, fumbles,
+    // kickoffs, punts, field goals and PATs are all excluded, because
+    // those are the plays that ESTABLISH a spot after a change of
+    // possession -- blocking them would deadlock entry.
+    if (pending && pending.effect && pending.effect.isStat && state.fieldPos === null){
+      pending = null;
+      document.getElementById('confirmCard').style.display = 'none';
+      document.getElementById('code').value = '';
+      showMsg('gameMsg', 'The ball\u2019s spot is not set, so this play cannot be recorded — ' +
+        'yardage would not track and could not be checked. Use "Adjust Down/Distance" to set ' +
+        'the spot, then enter the play again.', 'error');
+      return;
+    }
+
     if (!pending){
       document.getElementById('parsedText').textContent = 'Unrecognized entry.';
       document.getElementById('flipRow').style.display = 'none';
@@ -3050,14 +3220,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // the play is marked, so it must warn regardless of TD status.
       const gain = pending.effect && typeof pending.effect.statYds === 'number' ? pending.effect.statYds : 0;
       const distToGoal = state.fieldPos !== null ? 100 - state.fieldPos : null;
-      if (gain > 0 && distToGoal === null && pending.effect && pending.effect.isStat){
-        // Silently skipping the check was the real damage: once field
-        // position is lost the app stops verifying yardage entirely and
-        // never says so, so impossible gains sail through unflagged.
-        warningEl.textContent = '⚠️ The ball\u2019s spot is not set, so this play\u2019s yardage cannot be checked ' +
-          'and field position will not track. Use "Adjust Down/Distance" to set the spot first.';
-        warningEl.style.display = 'block';
-      } else if (gain > 0 && distToGoal !== null && gain > distToGoal){
+      if (gain > 0 && distToGoal !== null && gain > distToGoal){
         warningEl.textContent = '⚠️ This gain (' + gain + ' yds) is more than possible here -- only ' + distToGoal + ' yds to the goal line. The maximum this play could have gained is ' + distToGoal + ' yds.';
         warningEl.style.display = 'block';
       } else if (gain > 0 && distToGoal !== null && gain === distToGoal && !pending.effect.td){
@@ -3103,7 +3266,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // roles and reset are attached by buildAndReview AFTER showConfirm
       // and describe the coach's selections rather than game state, so
       // they carry across unchanged.
-      if (fresh) pending = Object.assign(fresh, { roles: pending.roles, reset: pending.reset });
+      if (fresh) pending = Object.assign(fresh, {
+        roles: pending.roles, reset: pending.reset,
+        // Carried across the re-parse for the same reason as roles and
+        // reset: it describes the coach's selections, not game state.
+        setDirection: pending.setDirection
+      });
     }
     const preState = computeState();
     const effect = Object.assign({}, pending.effect);
@@ -3132,7 +3300,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (!confirmClockAdvances(clockAbsSec, clockVal)) return;
     }
 
+    const savedDirection = pending.setDirection;
     pushAndPersist({ id: nextId++, text: pending.text, effect, unresolved: !!pending.unresolved, team: pending.team || null, quarter: pending.quarter || computeState().quarter, roles: pending.roles || null });
+    if (savedDirection){
+      // After the kickoff, so the log reads in the order things happened.
+      pushAndPersist({
+        id: nextId++,
+        text: TEAMS[savedDirection.team].name + ' driving ' + (savedDirection.dir === 'right' ? '\u2192' : '\u2190'),
+        effect: { setDirection: savedDirection },
+        quarter: computeState().quarter
+      });
+    }
 
     if (clockVal && clockAbsSec !== null){
       const q = computeState().quarter;
@@ -3187,9 +3365,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<label class="inline">Distance <input type="text" id="drive_dist" style="width:60px; display:inline-block;"></label>' +
       '<div style="margin-top:8px;"><button type="button" class="driveSideBtn" data-side="own">' + driveTeamLabel + '</button> <button type="button" class="driveSideBtn" data-side="opp">' + otherTeamLabel + '</button> ' +
       '<input type="text" id="drive_yardline" style="width:70px; display:inline-block;" placeholder="Yard line"></div>' +
+      '<p style="font-size:13px; color:#888; margin:10px 0 4px;">Which way is ' + TEAMS[computeState().possession].name + ' driving? (optional)</p>' +
+      '<button type="button" class="driveDirBtn" data-dir="left">&#8592; left</button> ' +
+      '<button type="button" class="driveDirBtn" data-dir="right">right &#8594;</button>' +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="drive_review">Review</button><button class="secondary" id="drive_clear">Clear</button></div>';
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
-    let down = null, side = null;
+    let down = null, side = null, dir = null;
     panel.querySelectorAll('.driveDownBtn').forEach(b => b.addEventListener('click', () => {
       down = b.dataset.d;
       panel.querySelectorAll('.driveDownBtn').forEach(x => x.style.background = '');
@@ -3198,6 +3379,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     panel.querySelectorAll('.driveSideBtn').forEach(b => b.addEventListener('click', () => {
       side = b.dataset.side;
       panel.querySelectorAll('.driveSideBtn').forEach(x => x.style.background = '');
+      b.style.background = '#e6f1fb';
+    }));
+    panel.querySelectorAll('.driveDirBtn').forEach(b => b.addEventListener('click', () => {
+      dir = b.dataset.dir;
+      panel.querySelectorAll('.driveDirBtn').forEach(x => x.style.background = '');
       b.style.background = '#e6f1fb';
     }));
     document.getElementById('drive_clear').addEventListener('click', () => document.getElementById('driveUtilBtn').click());
@@ -3224,6 +3410,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (!marker){
         showMsg('gameMsg', 'Pick a side and yard line — there is no current spot to keep.', 'error');
         return;
+      }
+      if (dir){
+        // Its own log entry rather than part of the adjust code, so the
+        // positional play format stays untouched and direction can be
+        // re-stated at any time without also restating the spot.
+        pushAndPersist({
+          id: nextId++,
+          text: TEAMS[st.possession].name + ' driving ' + (dir === 'right' ? '\u2192' : '\u2190'),
+          effect: { setDirection: { team: st.possession, dir } },
+          quarter: st.quarter
+        });
       }
       document.getElementById('code').value = d + ' ' + dst + ' ' + marker;
       showConfirm();
@@ -3373,6 +3570,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       showConfirm();
     });
   });
+
+  const setStripHidden = v => {
+    fieldStripHidden = v;
+    try { window.localStorage.setItem('statchat_fieldstrip', v ? 'hidden' : 'shown'); } catch (e) {}
+    renderAll();
+  };
+  document.getElementById('fieldStripToggle').addEventListener('click', () => setStripHidden(true));
+  document.getElementById('fieldStripShow').addEventListener('click', () => setStripHidden(false));
 
   document.getElementById('timeoutUtilBtn').addEventListener('click', () => {
     const state = computeState();
