@@ -813,7 +813,10 @@ function computeState(playsList){
         }
         if (d.punts){
           const avg = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
-          stPunting.push({ yds: d.puntYds||0, name, values: [d.punts||0, d.puntYds||0, avg] });
+          // Total punt yardage is not a stat anyone reads -- it is just
+          // punts x average. Longest is the one that gets talked about,
+          // and computeBoxScore already tracks it.
+          stPunting.push({ yds: d.puntYds||0, name, values: [d.punts||0, avg, d.puntLong||0] });
         }
       });
       stKicking.sort((a, b) => b.yds - a.yds);
@@ -822,7 +825,7 @@ function computeState(playsList){
       if (stTotalEntries){
         let stInner = '';
         if (stKicking.length) stInner += table(['FG Att','FG Made','XP Att','XP Made'], stKicking.slice(0, 5));
-        if (stPunting.length) stInner += table(['Punts','Yds','Avg'], stPunting.slice(0, 5));
+        if (stPunting.length) stInner += table(['Punts','Avg','Long'], stPunting.slice(0, 5));
         rightHtml += tile('Special Teams', stInner);
       }
       const defNums = Object.keys(s.defense);
