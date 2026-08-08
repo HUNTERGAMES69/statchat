@@ -874,9 +874,14 @@ function computeState(playsList){
       return quad.clientHeight - headerH - 16;
     };
     const contentHeight = (id) => document.getElementById(id).scrollHeight;
+    // A 4% safety margin. The fit is computed from measurements taken
+    // before the browser has finished reflowing at the new scale, so
+    // landing exactly on the available height reliably overshoots by a
+    // pixel or two -- which is all it takes to get a scrollbar.
+    const FIT_MARGIN = 0.96;
     const scaleFor = (avail, content) => {
       if (content <= 0) return 1;
-      return Math.min(2.2, Math.max(0.55, avail / content));
+      return Math.min(2.2, Math.max(0.55, (avail / content) * FIT_MARGIN));
     };
     const availA = availableHeight(quadBL), availB = availableHeight(quadBR);
     let scale = Math.min(scaleFor(availA, contentHeight('boxScoreTeamA')),
@@ -887,12 +892,15 @@ function computeState(playsList){
     // Scaling text does not change height linearly -- lines re-wrap and
     // line heights round to whole pixels -- so one pass can still
     // overshoot. Re-measure and back off until it genuinely fits.
-    for (let i = 0; i < 4; i++){
-      const overA = contentHeight('boxScoreTeamA') - availA;
-      const overB = contentHeight('boxScoreTeamB') - availB;
+    for (let i = 0; i < 8; i++){
+      // Measure against the margin, not the raw height, so the loop
+      // stops slightly short of the edge rather than flush against it.
+      const targetA = availA * FIT_MARGIN, targetB = availB * FIT_MARGIN;
+      const overA = contentHeight('boxScoreTeamA') - targetA;
+      const overB = contentHeight('boxScoreTeamB') - targetB;
       if (overA <= 0 && overB <= 0) break;
-      const worst = Math.max(overA / availA, overB / availB);
-      scale = Math.max(0.55, scale * (1 - Math.min(0.25, worst)));
+      const worst = Math.max(overA / targetA, overB / targetB);
+      scale = Math.max(0.5, scale * (1 - Math.min(0.2, worst)));
       quadBL.style.setProperty('--stat-scale', scale);
       quadBR.style.setProperty('--stat-scale', scale);
     }
