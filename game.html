@@ -2070,12 +2070,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<p style="font-size:13px; color:#888; margin:0 0 4px;">Kicker</p>' +
         '<div id="gk_kicker_grid">' + pickerHtml(kickerList, 'gk_kicker_pick') + '</div>' +
         '<input type="text" id="gk_kicker_manual" placeholder="or type #" style="width:100px; margin:4px 0 8px;"><br>' +
-        // Asked here, on the opening kickoff, because this is the one
-        // moment the coach can see which way the teams are lined up.
-        // Recorded once for the whole game -- ends alternate by quarter
+        // Asked about the KICKING team, because that is what the coach
+        // is watching: the ball leaving the tee. A team kicks toward the
+        // end zone it is attacking, so the answer is also that team's
+        // driving direction -- no mental inversion required.
+        // Recorded once for the whole game; ends alternate by quarter
         // from this answer, so nothing else needs to ask again.
         '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Which way is ' +
-          TEAMS[guided.receivingTeam].name + ' driving?</p>' +
+          TEAMS[guided.kickingTeam].name + ' kicking?</p>' +
         '<button type="button" class="gk_dir_btn" data-dir="left">&#8592; left</button> ' +
         '<button type="button" class="gk_dir_btn" data-dir="right">right &#8594;</button>' +
         '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedKickoffSave">Save kickoff</button></div>';
@@ -2102,8 +2104,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (kickDir){
           pushAndPersist({
             id: nextId++,
-            text: TEAMS[guided.receivingTeam].name + ' driving ' + (kickDir === 'right' ? '\u2192' : '\u2190'),
-            effect: { setDirection: { team: guided.receivingTeam, dir: kickDir } },
+            text: TEAMS[guided.kickingTeam].name + ' driving ' + (kickDir === 'right' ? '\u2192' : '\u2190'),
+            effect: { setDirection: { team: guided.kickingTeam, dir: kickDir } },
             quarter: guided.quarter
           });
         }
@@ -2342,7 +2344,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // to state which way the receiving team is driving. Pre-selected
         // with whatever is already known, so a normal kickoff needs no
         // extra tap -- only a correction does.
-        '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Which way is ' + TEAMS[def].name + ' driving?</p>' +
+        '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Which way is ' + TEAMS[off].name + ' kicking?</p>' +
         '<button type="button" class="koDirBtn" data-dir="left">&#8592; left</button> ' +
         '<button type="button" class="koDirBtn" data-dir="right">right &#8594;</button>' +
         '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' +
@@ -2742,8 +2744,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // Pre-select from what the engine already derives for the
       // receiving team, so the common case is "looks right, carry on".
       const koState = computeState();
+      // Derived for the KICKING team, which is whoever has the ball
+      // going into a kickoff.
       const koDerived = koState.driveDir
-        ? (koState.possession === def ? koState.driveDir
+        ? (koState.possession === off ? koState.driveDir
             : (koState.driveDir === 'right' ? 'left' : 'right'))
         : null;
       panel.querySelectorAll('.koDirBtn').forEach(b => {
@@ -3189,7 +3193,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       pending.roles = roles;
       // Only set when the coach actually tapped an arrow -- a kickoff
       // left alone must not rewrite a direction that is already right.
-      pending.setDirection = sel.direction ? { team: def, dir: sel.direction } : null;
+      pending.setDirection = sel.direction ? { team: off, dir: sel.direction } : null;
       pending.reset = (currentSpotGetter && !td) ? currentSpotGetter() : null;
     }
   }
