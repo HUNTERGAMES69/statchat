@@ -377,6 +377,7 @@
               (g.status === 'final' ? '<a href="view.html?id=' + g.id + '&mode=results" style="display:block; padding:8px 12px; color:#1565c0; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Live results</a>' : '') +
               (g.status === 'final' ? '<a href="recap.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:#1a7a4c; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game recap</a>' : '') +
               (g.status === 'final' ? '<a href="stat_package.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:#0f6e56; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Stat package</a>' : '') +
+              (currentIsAdmin ? '<button class="resetGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a05a00; font-weight:600; font-size:13px; border-bottom:1px solid #eee;">Reset game</button>' : '') +
               (currentIsAdmin ? '<button class="deleteGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a32d2d; font-weight:600; font-size:13px;">Delete game</button>' : '') +
             '</div>' +
             '</div>'
@@ -405,6 +406,12 @@
         if (!isOpen) menu.classList.remove('hidden');
       });
     });
+    body.querySelectorAll('.resetGameBtn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        resetGame(btn.dataset.id);
+      });
+    });
     body.querySelectorAll('.deleteGameBtn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -415,6 +422,69 @@
     document.addEventListener('click', () => {
       body.querySelectorAll('.rowMenu').forEach(m => m.classList.add('hidden'));
     });
+  }
+
+  // Reset clears the play log but keeps the game record -- designator,
+  // teams, roster snapshot, colours, date. Because the engine derives
+  // score, downs, drives and every stat from the plays, emptying that
+  // log IS a complete reset; nothing else has to be recalculated.
+  async function resetGame(gameId){
+    const row = document.querySelector('.game-row[data-id="' + gameId + '"]');
+    const designator = row.dataset.designator;
+    const status = row.dataset.status;
+
+    const { data: existingPlays } = await supabaseClient.from('plays').select('id').eq('game_id', gameId);
+    const playCount = existingPlays ? existingPlays.length : 0;
+    if (!playCount){
+      showMsg('dashboardMsg', designator + ' has no plays to clear.', 'error');
+      return;
+    }
+
+    // Type-to-confirm, not just an OK. This is unrecoverable and there
+    // is no undo for it.
+    const typed = prompt(
+      'Reset game ' + designator + '?\n\n' +
+      'This deletes all ' + playCount + ' play(s) and puts the game back to not started. ' +
+      'The teams, roster and settings are kept.\n\n' +
+      'This cannot be undone. Type the game designator exactly (' + designator + ') to confirm:'
+    );
+    if (typed === null) return;
+    if (typed.trim() !== designator){
+      showMsg('dashboardMsg', 'That didn\'t match "' + designator + '" — reset cancelled, nothing was touched.', 'error');
+      return;
+    }
+
+    // A finalized game refuses play changes at the database level, so it
+    // has to be reopened before the log can be cleared.
+    if (status === 'final'){
+      const { error: unlockError } = await supabaseClient.from('games').update({ status: 'in_progress' }).eq('id', gameId);
+      if (unlockError){
+        showMsg('dashboardMsg', 'Could not reset: ' + unlockError.message, 'error');
+        return;
+      }
+    }
+
+    const { error: playErr } = await supabaseClient.from('plays').delete().eq('game_id', gameId);
+    if (playErr){
+      showMsg('dashboardMsg', 'Could not reset: ' + playErr.message, 'error');
+      return;
+    }
+
+    const { error: gameErr } = await supabaseClient.from('games').update({
+      status: 'in_progress', game_phase: 'notStarted', guided_state: null,
+      final_score_us: null, final_score_opp: null
+    }).eq('id', gameId);
+    if (gameErr){
+      showMsg('dashboardMsg', 'Plays cleared, but the game status could not be reset: ' + gameErr.message, 'error');
+      return;
+    }
+
+    // Anything still queued on this device belongs to the game that was
+    // just cleared -- leaving it would upload old plays into the fresh one.
+    try { window.localStorage.removeItem('statchat_pending_' + gameId); } catch (e) {}
+
+    showMsg('dashboardMsg', designator + ' has been reset — ' + playCount + ' play(s) cleared.', 'success');
+    loadDashboard();
   }
 
   async function deleteGame(gameId){
