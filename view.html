@@ -813,7 +813,10 @@ function computeState(playsList){
         const d = s.specialTeams[n];
         const name = playerName(teamKey, n, 'special');
         if (d.fgAtt || d.patAtt){
-          stKicking.push({ yds: d.fgLong||0, name, values: [d.fgAtt||0, d.fgMade||0, d.patAtt||0, d.patMade||0] });
+          // fgLong is only meaningful once something has gone through
+          // the uprights -- a missed 45 is not a "long" of 45.
+          stKicking.push({ yds: d.fgLong||0, name,
+            values: [d.fgAtt||0, d.fgMade||0, d.fgLong||0, d.patAtt||0, d.patMade||0] });
         }
         if (d.punts){
           const avg = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
@@ -828,7 +831,7 @@ function computeState(playsList){
       const stTotalEntries = stKicking.length + stPunting.length;
       if (stTotalEntries){
         let stInner = '';
-        if (stKicking.length) stInner += table(['FG Att','FG Made','XP Att','XP Made'], stKicking.slice(0, 5));
+        if (stKicking.length) stInner += table(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, 5));
         if (stPunting.length) stInner += table(['Punts','Avg','Long'], stPunting.slice(0, 5));
         rightHtml += tile('Special Teams', stInner);
       }
