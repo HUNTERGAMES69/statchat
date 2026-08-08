@@ -1665,36 +1665,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     let marks = '';
     for (let y = 10; y <= 90; y += 10){
       const x = px(40 + y * 5.6);
-      marks += '<line x1="' + x + '" y1="30" x2="' + x + '" y2="70" stroke="' +
+      marks += '<line x1="' + x + '" y1="25" x2="' + x + '" y2="65" stroke="' +
         (y === 50 ? '#639922' : '#97C459') + '" stroke-width="' + (y === 50 ? 2 : 1) + '"/>' +
-        '<text x="' + x + '" y="82" text-anchor="middle" font-size="11" fill="#3B6D11">' +
+        '<text x="' + x + '" y="78" text-anchor="middle" font-size="11" fill="#3B6D11">' +
         (y > 50 ? 100 - y : y) + '</text>';
     }
 
-    // Direction arrow, parked above the 50 and simply flipped. Fixed
-    // rather than following the ball so it reads as "this way", not as
-    // another marker competing with the ball and the line to gain.
-    let arrow = '';
-    if (state.possession){
-      const ax = 320, dx = drivingRight ? 1 : -1;
-      arrow =
-        '<line x1="' + (ax - dx * 20) + '" y1="8" x2="' + (ax + dx * 10) + '" y2="8" ' +
-          'stroke="#1a1a2e" stroke-width="3" stroke-linecap="round"/>' +
-        '<path d="M' + (ax + dx * 21) + ' 8 L' + (ax + dx * 9) + ' 3 L' + (ax + dx * 9) + ' 13 Z" fill="#1a1a2e"/>';
-    }
 
     let ball = '';
     if (fp !== null){
       const bx = px(toX(fp));
-      ball = '<circle cx="' + bx + '" cy="50" r="8" fill="#4A1B0C"/>' +
-        '<line x1="' + bx + '" y1="18" x2="' + bx + '" y2="40" stroke="#4A1B0C" stroke-width="2"/>' +
-        '<text x="' + bx + '" y="15" text-anchor="middle" font-size="11" fill="#4A1B0C">' +
+      ball = '<circle cx="' + bx + '" cy="45" r="8" fill="#4A1B0C"/>' +
+        '<line x1="' + bx + '" y1="13" x2="' + bx + '" y2="35" stroke="#4A1B0C" stroke-width="2"/>' +
+        '<text x="' + bx + '" y="10" text-anchor="middle" font-size="11" fill="#4A1B0C">' +
         markerLabel(fp) + '</text>';
       if (state.distance !== null && state.down !== null){
         const gain = Math.min(100, fp + state.distance);
         const gx = px(toX(gain));
-        ball += '<line x1="' + gx + '" y1="18" x2="' + gx + '" y2="76" stroke="#BA7517" stroke-width="3"/>' +
-          '<text x="' + gx + '" y="15" text-anchor="middle" font-size="11" fill="#854F0B">1st</text>';
+        ball += '<line x1="' + gx + '" y1="13" x2="' + gx + '" y2="71" stroke="#BA7517" stroke-width="3"/>' +
+          '<text x="' + gx + '" y="10" text-anchor="middle" font-size="11" fill="#854F0B">1st</text>';
       }
     }
 
@@ -1704,28 +1693,39 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const endZone = (teamKey, cx) => {
       const t = TEAMS[teamKey];
       if (t.logo){
-        return '<image href="' + t.logo + '" x="' + (cx - 13) + '" y="37" width="26" height="26" ' +
+        return '<image href="' + t.logo + '" x="' + (cx - 13) + '" y="32" width="26" height="26" ' +
           'preserveAspectRatio="xMidYMid meet"><title>' + t.name + '</title></image>';
       }
-      return '<text x="' + cx + '" y="54" text-anchor="middle" font-size="9" fill="#173404" ' +
-        'transform="rotate(-90 ' + cx + ' 54)">' + t.name.slice(0, 9).toUpperCase() + '</text>';
+      return '<text x="' + cx + '" y="49" text-anchor="middle" font-size="9" fill="#173404" ' +
+        'transform="rotate(-90 ' + cx + ' 49)">' + t.name.slice(0, 9).toUpperCase() + '</text>';
     };
     const note = state.driveDir ? '' :
       '<b>Direction not set</b> — showing the team with the ball driving right. ' +
       'Set it on a kickoff or in Adjust Down/Distance.';
 
     document.getElementById('fieldStripBody').innerHTML =
-      '<svg viewBox="0 0 640 100" style="width:100%; height:auto;">' +
-      '<rect x="40" y="30" width="560" height="40" fill="#EAF3DE" stroke="#639922"/>' +
-      '<rect x="0" y="30" width="40" height="40" fill="#C0DD97" stroke="#639922"/>' +
-      '<rect x="600" y="30" width="40" height="40" fill="#C0DD97" stroke="#639922"/>' +
-      marks + arrow + ball +
+      '<svg viewBox="0 0 640 84" style="width:100%; height:auto;">' +
+      '<rect x="40" y="25" width="560" height="40" fill="#EAF3DE" stroke="#639922"/>' +
+      '<rect x="0" y="25" width="40" height="40" fill="#C0DD97" stroke="#639922"/>' +
+      '<rect x="600" y="25" width="40" height="40" fill="#C0DD97" stroke="#639922"/>' +
+      marks + ball +
       endZone(leftTeam, 20) + endZone(otherTeam(leftTeam), 620) +
-      (state.possession
-        ? '<text x="320" y="97" text-anchor="middle" font-size="13" font-weight="600" fill="#1a1a2e">' +
-          TEAMS[state.possession].name + '</text>'
-        : '') +
       '</svg>' +
+      // Arrow and team together on one centred line under the field.
+      // In the SVG the arrow sat in its own band above the numbers and
+      // collided with the ball label whenever the ball was near
+      // midfield; pairing them also drops a whole row of height.
+      (state.possession
+        ? '<div style="text-align:center; margin-top:-2px; font-size:13px; font-weight:600; color:#1a1a2e;">' +
+          (drivingRight ? '' : '<svg width="26" height="10" style="vertical-align:-1px; margin-right:6px;">' +
+            '<line x1="24" y1="5" x2="8" y2="5" stroke="#1a1a2e" stroke-width="3" stroke-linecap="round"/>' +
+            '<path d="M1 5 L10 1 L10 9 Z" fill="#1a1a2e"/></svg>') +
+          TEAMS[state.possession].name +
+          (drivingRight ? '<svg width="26" height="10" style="vertical-align:-1px; margin-left:6px;">' +
+            '<line x1="2" y1="5" x2="18" y2="5" stroke="#1a1a2e" stroke-width="3" stroke-linecap="round"/>' +
+            '<path d="M25 5 L16 1 L16 9 Z" fill="#1a1a2e"/></svg>' : '') +
+          '</div>'
+        : '') +
       '';
     // Warnings belong at the top, under the panel label -- putting them
     // below the field pushed the whole card taller for a line that is
