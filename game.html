@@ -110,6 +110,7 @@
       <div id="fieldStrip" style="display:none; background:var(--surface-2,#fff); border:1px solid #ddd; border-radius:12px; padding:10px 12px; margin:8px 0;">
         <div style="display:flex; align-items:center; margin-bottom:6px;">
           <span style="font-size:13px; color:#888;">Field position</span>
+          <span id="fieldStripWarn" style="display:none; font-size:12px; color:#a05a00; margin-left:10px;"></span>
           <button type="button" id="fieldStripToggle" style="margin-left:auto; padding:3px 10px; font-size:12px;">Hide</button>
         </div>
         <div id="fieldStripBody"></div>
@@ -1664,9 +1665,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     let marks = '';
     for (let y = 10; y <= 90; y += 10){
       const x = px(40 + y * 5.6);
-      marks += '<line x1="' + x + '" y1="38" x2="' + x + '" y2="82" stroke="' +
+      marks += '<line x1="' + x + '" y1="30" x2="' + x + '" y2="70" stroke="' +
         (y === 50 ? '#639922' : '#97C459') + '" stroke-width="' + (y === 50 ? 2 : 1) + '"/>' +
-        '<text x="' + x + '" y="97" text-anchor="middle" font-size="11" fill="#3B6D11">' +
+        '<text x="' + x + '" y="82" text-anchor="middle" font-size="11" fill="#3B6D11">' +
         (y > 50 ? 100 - y : y) + '</text>';
     }
 
@@ -1677,23 +1678,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (state.possession){
       const ax = 320, dx = drivingRight ? 1 : -1;
       arrow =
-        '<line x1="' + (ax - dx * 34) + '" y1="12" x2="' + (ax + dx * 18) + '" y2="12" ' +
-          'stroke="#1D9E75" stroke-width="4" stroke-linecap="round"/>' +
-        '<path d="M' + (ax + dx * 36) + ' 12 L' + (ax + dx * 16) + ' 4 L' + (ax + dx * 16) + ' 20 Z" fill="#1D9E75"/>';
+        '<line x1="' + (ax - dx * 20) + '" y1="8" x2="' + (ax + dx * 10) + '" y2="8" ' +
+          'stroke="#1a1a2e" stroke-width="3" stroke-linecap="round"/>' +
+        '<path d="M' + (ax + dx * 21) + ' 8 L' + (ax + dx * 9) + ' 3 L' + (ax + dx * 9) + ' 13 Z" fill="#1a1a2e"/>';
     }
 
     let ball = '';
     if (fp !== null){
       const bx = px(toX(fp));
-      ball = '<circle cx="' + bx + '" cy="60" r="9" fill="#4A1B0C"/>' +
-        '<line x1="' + bx + '" y1="32" x2="' + bx + '" y2="48" stroke="#4A1B0C" stroke-width="2"/>' +
-        '<text x="' + bx + '" y="28" text-anchor="middle" font-size="11" fill="#4A1B0C">' +
+      ball = '<circle cx="' + bx + '" cy="50" r="8" fill="#4A1B0C"/>' +
+        '<line x1="' + bx + '" y1="18" x2="' + bx + '" y2="40" stroke="#4A1B0C" stroke-width="2"/>' +
+        '<text x="' + bx + '" y="15" text-anchor="middle" font-size="11" fill="#4A1B0C">' +
         markerLabel(fp) + '</text>';
       if (state.distance !== null && state.down !== null){
         const gain = Math.min(100, fp + state.distance);
         const gx = px(toX(gain));
-        ball += '<line x1="' + gx + '" y1="32" x2="' + gx + '" y2="88" stroke="#BA7517" stroke-width="3"/>' +
-          '<text x="' + gx + '" y="28" text-anchor="middle" font-size="11" fill="#854F0B">1st</text>';
+        ball += '<line x1="' + gx + '" y1="18" x2="' + gx + '" y2="76" stroke="#BA7517" stroke-width="3"/>' +
+          '<text x="' + gx + '" y="15" text-anchor="middle" font-size="11" fill="#854F0B">1st</text>';
       }
     }
 
@@ -1703,32 +1704,37 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const endZone = (teamKey, cx) => {
       const t = TEAMS[teamKey];
       if (t.logo){
-        return '<image href="' + t.logo + '" x="' + (cx - 14) + '" y="46" width="28" height="28" ' +
+        return '<image href="' + t.logo + '" x="' + (cx - 13) + '" y="37" width="26" height="26" ' +
           'preserveAspectRatio="xMidYMid meet"><title>' + t.name + '</title></image>';
       }
-      return '<text x="' + cx + '" y="64" text-anchor="middle" font-size="9" fill="#173404" ' +
-        'transform="rotate(-90 ' + cx + ' 64)">' + t.name.slice(0, 9).toUpperCase() + '</text>';
+      return '<text x="' + cx + '" y="54" text-anchor="middle" font-size="9" fill="#173404" ' +
+        'transform="rotate(-90 ' + cx + ' 54)">' + t.name.slice(0, 9).toUpperCase() + '</text>';
     };
     const note = state.driveDir ? '' :
       '<b>Direction not set</b> — showing the team with the ball driving right. ' +
       'Set it on a kickoff or in Adjust Down/Distance.';
 
     document.getElementById('fieldStripBody').innerHTML =
-      '<svg viewBox="0 0 640 122" style="width:100%; height:auto;">' +
-      '<rect x="40" y="38" width="560" height="44" fill="#EAF3DE" stroke="#639922"/>' +
-      '<rect x="0" y="38" width="40" height="44" fill="#C0DD97" stroke="#639922"/>' +
-      '<rect x="600" y="38" width="40" height="44" fill="#C0DD97" stroke="#639922"/>' +
+      '<svg viewBox="0 0 640 100" style="width:100%; height:auto;">' +
+      '<rect x="40" y="30" width="560" height="40" fill="#EAF3DE" stroke="#639922"/>' +
+      '<rect x="0" y="30" width="40" height="40" fill="#C0DD97" stroke="#639922"/>' +
+      '<rect x="600" y="30" width="40" height="40" fill="#C0DD97" stroke="#639922"/>' +
       marks + arrow + ball +
       endZone(leftTeam, 20) + endZone(otherTeam(leftTeam), 620) +
       (state.possession
-        ? '<text x="320" y="117" text-anchor="middle" font-size="13" font-weight="600" fill="#1a1a2e">' +
+        ? '<text x="320" y="97" text-anchor="middle" font-size="13" font-weight="600" fill="#1a1a2e">' +
           TEAMS[state.possession].name + '</text>'
         : '') +
       '</svg>' +
-      ((fp === null || note)
-        ? '<div style="font-size:13px; color:#a05a00; margin-top:6px;">' +
-          (fp === null ? '<b>Spot not set</b>' : note) + '</div>'
-        : '');
+      '';
+    // Warnings belong at the top, under the panel label -- putting them
+    // below the field pushed the whole card taller for a line that is
+    // usually absent.
+    const warnEl = document.getElementById('fieldStripWarn');
+    if (warnEl){
+      warnEl.innerHTML = (fp === null) ? '<b>Spot not set</b>' : (note || '');
+      warnEl.style.display = warnEl.innerHTML ? 'block' : 'none';
+    }
   }
 
   function updatePhaseUI(){
