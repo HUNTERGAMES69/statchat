@@ -212,7 +212,12 @@ const TIMEOUTS_PER_OT = 1;
     // NFHS: three timeouts per team per half, and they do NOT carry
     // over -- both teams get a fresh three at the start of the second
     // half regardless of what was left.
-    timeouts: { teamA: TIMEOUTS_PER_HALF, teamB: TIMEOUTS_PER_HALF }
+    timeouts: { teamA: TIMEOUTS_PER_HALF, teamB: TIMEOUTS_PER_HALF },
+    // Which physical end of the field a team attacks. Recorded once and
+    // alternated by quarter, because teams change ends after Q1, Q2 and
+    // Q3. Everything else in this engine is possession-relative, so this
+    // is the only place the app knows anything about actual direction.
+    dirTeam: null, dirValue: null, dirQuarter: 1
     };
     const pendingClockStart = { teamA: null, teamB: null };
     for (const p of list){
@@ -237,7 +242,17 @@ const TIMEOUTS_PER_OT = 1;
           }
           else if (e.turnoverOnDowns && e.flipApplied){
             state.possession = otherTeam(state.possession);
-            state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+            // The ball does not move on a turnover on downs -- it is spotted
+            // exactly where the play ended, and the team taking over starts
+            // 1st & 10 from there. fieldPos is possession-RELATIVE (0 is the
+            // possessing team's own goal line), so keeping the same physical
+            // spot means mirroring it to 100 - fieldPos for the new offense.
+            // Clearing it instead used to force the coach to re-enter a spot
+            // the app already knew.
+            state.fieldPos = state.fieldPos !== null ? 100 - state.fieldPos : null;
+            state.down = 1;
+            state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+            state.startSpot = state.fieldPos; state.statYards = 0;
           } else if (!e.turnoverOnDowns){
             state.down = (state.down || 1) + 1;
             state.distance = Math.max((state.distance || 10) - e.statYds, 1);
@@ -292,6 +307,11 @@ const TIMEOUTS_PER_OT = 1;
       if (e.setQuarter >= 5 && state.quarter < 5) state.timeouts = { teamA: TIMEOUTS_PER_OT, teamB: TIMEOUTS_PER_OT };
       state.quarter = e.setQuarter;
     }
+    if (e.setDirection){
+      state.dirTeam = e.setDirection.team;
+      state.dirValue = e.setDirection.dir;
+      state.dirQuarter = state.quarter;
+    }
     if (e.timeout && state.timeouts[e.timeout.team] !== undefined){
       // Floored at zero: the log is a record of what the coach called,
       // and a fourth timeout should not read as -1 remaining.
@@ -313,6 +333,17 @@ const TIMEOUTS_PER_OT = 1;
         }
       }
       if (e.setScores){ state.scores.teamA = e.setScores.teamA; state.scores.teamB = e.setScores.teamB; }
+    }
+    // Direction the team WITH THE BALL is currently driving. Derived, not
+    // stored: ends alternate every quarter, so one recorded answer covers
+    // the whole game, and re-recording it mid-game just re-bases the
+    // alternation from that quarter.
+    state.driveDir = null;
+    if (state.dirValue && state.possession){
+      const flipped = Math.abs((state.quarter || 1) - state.dirQuarter) % 2 === 1;
+      let d = flipped ? (state.dirValue === 'right' ? 'left' : 'right') : state.dirValue;
+      if (state.possession !== state.dirTeam) d = (d === 'right' ? 'left' : 'right');
+      state.driveDir = d;
     }
     return state;
   }

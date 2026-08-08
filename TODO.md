@@ -1,806 +1,223 @@
-# StatChat — engineering TODO
+# StatChat — outstanding work
 
-Living list. Check this at the start of any session touching the game
-engine, stat computation, or reporting. Update it as items get done.
+Open items only. Completed work lives in `PROJECT_NOTES.md` (architecture
+and the reasoning behind decisions) and in the repo's commit history — it
+is deliberately not kept here so this stays readable as a work list.
 
-## 1. Shared engine JS file
+Ordered roughly by how much it would hurt to leave undone.
 
-**Status: not started.**
+---
 
-Right now `view.html`, `recap.html`, `stat_package.html`, and
-`season_report.html` each carry their own copy of the core engine
-functions (`computeState`, `computeBoxScore`, `buildTeams`, etc.),
-copied verbatim from `game.html`. A fix has to be manually, correctly
-repeated in every file that has a copy — this is exactly how the
-sack-yardage inconsistency happened earlier, and how the
-`RECEIVE_POS` omission bug happened too.
+## 1. Correctness — do these first
 
-**The fix:** pull these functions into one shared file (same pattern
-as the existing `team-icon.js`), loaded via `<script src="...">` by
-every page instead of each page carrying its own copy. One bug, one
-fix, everywhere, automatically.
+- [ ] **`converts` is stored on the play instead of derived.** The most
+  consequential open bug. `effect.converts` and `effect.turnoverOnDowns`
+  are decided at entry time and frozen, so deleting or changing a play
+  does not re-derive whether *later* plays converted a first down.
+  Concretely: 1st & 10 at own 25, rush 8, pass 15, rush 3 — delete the
+  pass and the 3-yard rush should now convert 2nd & 2, but the state
+  reads `3rd & 1` because that play was stored with `converts: false`.
+  Field position recomputes correctly; the down does not.
+  **Fix:** derive `converts` in `computeState` from `statYds >= distance`
+  rather than trusting the stored flag. Five-file engine change; the
+  stored flag may be load-bearing for 4th-down and turnover-on-downs
+  cases, so run `mutation_check.js` against it.
+  **This blocks mid-log correction from being trustworthy**, and
+  correction is now confirmed post-game-only — the single workflow that
+  exists is exactly the one that hits this.
 
-Doing this *before* the audit work below would mean testing one engine
-instead of four near-identical copies — worth considering as the
-first step, though not required to start the audit.
+---
 
-## 2. Auditing what's already logged, and ongoing validation
+## 2. Test debt — five features verified only by hand
 
-Trigger: the sack-yardage bug found on August 3, 2026. Sacks entered
-through the *actual UI* were moving the ball forward instead of
-backward — undetected by earlier fuzz-testing because that testing
-called `parseInput()` directly, bypassing the real HTML input fields
-where the bug actually lived.
+All work and were checked manually, but nothing guards them against
+regression. Largest single block of open work.
 
-### Can do without further input from Andy
-- [x] **Internal consistency checks** — DONE (Aug 4, 2026). Extended the
-  NFL fuzz-test harness with a yardage cross-check (box-score sum vs.
-  raw play-log sum) across all 285 available 2024-season games: zero
-  mismatches. Also added a direct down/distance logical check (loss of
-  yardage must increase distance-to-go, gain must decrease it) — this
-  is the check that would have caught the sack bug directly, unlike a
-  yardage-totals check, which wouldn't have (see the sack bug note
-  below for why). 18,358 logic checks run, zero violations.
-- [x] **Sign-convention review** — DONE (Aug 4, 2026). Read through every
-  "yards"-type field across every play panel in `game.html`. Findings:
-  Rush/Pass's generic "Yards" label correctly expects signed input, and
-  the code reads it as signed with no adjustment needed. Sack's "Yards
-  lost" (magnitude-implying) is now correctly negated after the earlier
-  fix. Penalty's "Yards" field is safe by design — direction comes from
-  a separate "On offense/On defense" toggle, not from the sign of the
-  number typed. Every "Return yards (optional)" field on turnovers and
-  special-teams plays is consistently display-only, never fed into
-  field-position math at all — a deliberate pattern, not an omission.
-  No new sign bugs found.
-- [~] **Re-run NFL games through the actual UI** — IN PROGRESS, substantial
-  build done (Aug 4, 2026), but not safe to trust yet -- see the
-  critical finding below before treating any of this as verified.
-  - What's built: a real UI-driving test (`ui_code_driver.js`,
-    `full_ui_audit.js`, `full_ui_batch_runner.js` in `/home/claude/stat_tracker/`,
-    though that's a sandbox path that won't survive to a fresh
-    session -- these need to be committed to the repo, not left there)
-    that actually opens each play panel, types into real `<input>`
-    fields, dispatches real `input` events, and clicks the real Review
-    and Save buttons -- not `parseInput()` shortcuts. Supports rush,
-    pass, incomplete, sack (incl. safety), interception, kickoff (incl.
-    returns), punt (incl. blocked, both recovery cases, incl. returns),
-    field goal (incl. blocked), PAT (incl. blocked), and both 2-point
-    conversion types. Standalone fumbles and bare safety supported.
-    Fumble-during-rush/pass/sack sub-flows and the fumble-recovered-by-
-    own-team sub-case are NOT yet supported (will show up as
-    `standalone-fumble-not-yet-supported` or similar in skip counts if
-    hit -- they weren't hit in the current NFL dataset, but that's
-    coincidence, not coverage).
-  - While building this, found and fixed three genuine bugs in the test
-    driver itself (not the app): punt returns/return-TDs were silently
-    dropped (never wired the returner/return-yards/TD fields at all);
-    FG-blocked and PAT-blocked weren't wired up; and bare "sf" was
-    being faked by writing directly to a hidden internal `#code` field
-    instead of driving the real Safety panel -- which doesn't actually
-    test anything, since a coach has no way to do that.
-  - Found one code pattern the test converter produces that has NO
-    corresponding real UI action at all: direct score-adjustment
-    commands (`score teamA +6` etc.), used for rare edge cases like a
-    fumble-recovery TD with no jersey number on the ball carrier. No
-    button or field produces this in the real app. Now correctly
-    skipped rather than faked -- but it means those specific games will
-    always show a combined-score gap unless/until an alternate real
-    path is found for the underlying event.
-  - **Critical finding, not yet acted on**: the "combined score match"
-    check this whole audit (both the old `parseInput()`-direct version
-    and the new UI-driven version) has been relying on is too weak. It
-    only checks the *sum* of both teams' scores, not which team scored
-    what. Confirmed concretely on `2024_01_DEN_SEA`: even the
-    `parseInput()`-direct method gives 24-22, matching neither team's
-    real score (26-20) -- but 24+22=46 equals the real *combined* total
-    (26+20=46), so the earlier batch run's "combinedMatch: true" passed
-    anyway, completely masking a real per-team attribution error. This
-    means the earlier "only 3 mismatches, all explained by laterals"
-    conclusion (see `PROJECT_NOTES.md`) was based on an incomplete
-    check and should not be trusted as-is.
-  - **Update (Aug 4, 2026)**: the per-team check was built and the full
-    285-game batch re-run with it. Result: 241/285 games (84.6%) have a
-    per-team mismatch, 223 of them masked by the old check. This is one
-    systematic pattern (a home/away score swap, confirmed on
-    `2024_01_ARI_BUF`), not 241 separate bugs -- full root-cause
-    analysis in `PROJECT_NOTES.md`'s "Systematic per-team score
-    mismatch" entry. **Not yet resolved**: whether this is a real
-    engine bug in possession-inference, or an inherent limitation of
-    testing with play codes that never state which team a player is
-    on (team attribution is inferred purely from prior plays' effects,
-    with no explicit possession marker from the converter). Next step
-    is determining which, most likely by having the converter also
-    emit accurate possession/drive-start markers from nflverse's own
-    drive data and checking whether that eliminates the mismatches --
-    if it does, this was a test-data gap, not an app bug.
-- [~] **Re-verify team-level stats against real box scores** — PARTIAL
-  (Aug 4, 2026). Turnovers verified exactly against the same real,
-  published game used for the sack-yardage verification (1-1, matches
-  official box score exactly). **Found a real gap while doing this**:
-  the NFL play-by-play converter never generates penalty codes at all
-  — it explicitly treats "penalty-only plays" as out of scope and skips
-  them. This means penalties have never actually been exercised by any
-  of this NFL-based testing, ever. Possessions also untested this way
-  (no natural nflverse equivalent to check against cheaply). Extending
-  the converter to handle penalties (nflverse has `penalty_team` /
-  `penalty_yards` per play) is a real, moderate-scope follow-up, not
-  done yet — added as its own item below.
-  - [ ] Extend the NFL converter to generate penalty codes (`po`/`pd`)
-    from nflverse's `penalty_team`/`penalty_yards` columns, then
-    re-verify penalty counts/yards against real box scores the same
-    way sack yardage and turnovers were verified.
-  - [ ] Possessions has no cheap real-world check available; falls
-    back to careful logical review rather than data verification.
+- [ ] Offline sync queue (offline entry, reload recovery, drain,
+  undo-while-queued, duplicate handling). `tests/harness.js` already
+  gained a `seedStorage` option to make the reload case testable.
+- [ ] Muffed punt and muffed kickoff, all variants (kicking recovery
+  with spot, receiving recovery, recovery returned for a TD, nobody
+  named, mutual exclusion with Blocked / Touchback).
+- [ ] Manual-entry name confirmation, including shared-number conflicts.
+- [ ] Timeout tracker (countdown, disabled at zero, halftime reset,
+  replay on `view.html`).
+- [ ] Unlock to edit, `validateGame()`, and play deletion — including
+  that Delete controls are absent outside correction mode.
 
-### Need a decision from Andy before building
-
-- [ ] **Golden-scenarios test suite** — a committed file (e.g.
-  `tests/golden_scenarios.js`) covering sack, safety, 2pt, muffed
-  kickoff, etc., re-run before shipping any engine change. Needs to
-  live in the repo, not just my sandbox, to actually be useful across
-  sessions.
-- [ ] **"Validate this game" check** — a real feature, not just a dev
-  test. Needs: where does it live (stat package page? 3-dot menu?),
-  and what does a flagged mismatch actually do (warning only, or
-  blocks something)?
-- [ ] **In-app sanity checks during entry** — needs actual thresholds
-  decided (how many yards on one play is "too many" to flag?) and a
-  strictness call (soft warning you can click past, vs. blocking the
-  save). Too strict risks flagging a real, rare play.
-
-## 3. Reporting module — further work
-
-- [ ] **Rework the season stat package** — graphics, grouping, and
-  visuals. Tonight's work (grouped metric sections, data labels,
-  brand-color charts) is a first pass; revisit for further
-  refinement.
-- [ ] **Potential AI analysis plugin** — explore adding AI-generated
-  analysis/insights on top of the stats (exact scope TBD).
-- [ ] **Multi-game comparison report** — a report that compares and
-  analyzes any 2 games, or an arbitrary subset of games, side by
-  side (distinct from the existing single-game and full-season
-  reports).
-
-## 4. Live-entry (`game.html`) bug fixes and UI changes — this session (Aug 4-5, 2026)
-
-All of the following are DONE and shipped. Listed here so a new session
-doesn't re-investigate or re-fix any of these from scratch.
-
-### Bug fixes
-- [x] **Mobile responsiveness** for `recap.html`, `stat_package.html`,
-  `season_report.html` — media queries below 700px, tables wrapped in
-  horizontally-scrollable containers, `season_report.html`'s 2/3-column
-  chart-rows collapse to one column using CSS `order` to preserve the
-  metric-above-its-chart pairing (the DOM is flat siblings relying on
-  grid column position — naively stacking in DOM order would have
-  grouped all metrics together then all charts together). `view.html`
-  and `game.html` already had their own separate mobile-responsive
-  designs from before this session and were not touched here.
-- [x] **Ambiguous "Our side"/"Their side" field-position labels** — these
-  labels are relative to whoever's drive is being set up, not a fixed
-  Neville perspective, but the wording made the natural (wrong) reading
-  the opposite of what the underlying math needed. Fixed in
-  `startingSpotFieldsHtml()` (used by kickoff/punt/interception/fumble
-  return-spot fields and overtime setup) AND separately in the "New
-  drive / correct down" utility, which had its own independent,
-  hardcoded copy of the same ambiguous labels that the first fix missed
-  entirely. Both now show the actual team names. See PROJECT_NOTES.md's
-  "Possession-relative labeling" entry for the general pattern.
-- [x] **Redundant "the" in field-position text** — "at the own 15"
-  →"at own 15", since `markerLabel()` always returns "own X"/"opp X",
-  never a bare number needing "the". Fixed in `game.html` (6 places,
-  where this text is generated) and separately in `view.html` (1 place
-  — it computes its own live banner independently rather than
-  displaying stored text, so it had its own separate copy of this).
-- [x] **Empty "Defense" stat tile for special-teams returners** — a
-  kickoff/punt returner is credited via the same `roles.defense` field
-  used for actual interception/sack/fumble-recovery credit, so
-  `computeBoxScore` was creating an empty defensive-stat bucket entry
-  for any returner even with zero actual defensive stats. Fixed in all
-  four files that have their own copy of `computeBoxScore`
-  (`view.html`, `recap.html`, `stat_package.html`, `season_report.html`)
-  to only create the entry when the play type is actually int/sack/
-  fumble.
-- [x] **"Current drive"/"Previous drive" never updating past a turnover
-  on downs** — that play type changes possession internally but never
-  sets `effect.isReset`, which drive-boundary detection relied on
-  exclusively. Added `findDriveStarts()` (detects any possession change
-  directly, not just explicit `isReset` markers) in both `game.html`
-  and `view.html`. Subtlety worth remembering: an explicit `isReset`
-  marker IS the first play of its new drive (a dedicated announcement)
-  and is included; a detected-but-unmarked possession change means the
-  play that caused it still belongs to the *previous* possessor, so the
-  new drive starts at the next play instead.
-- [x] **Possessions count not incrementing after a turnover on downs** —
-  identical root cause to the above, different function
-  (`countPossessions`). Fixed with the same detect-any-possession-
-  change approach in all four report/view files.
-- [x] **Penalties never adjusting distance-to-go** — `computeState`'s
-  penalty handling adjusted `fieldPos` but never `distance`, so a
-  penalty could leave a stale down/distance and let a later play
-  incorrectly convert (or fail to convert) a down. Fixed in all five
-  files with a copy of `computeState` (`game.html`, `view.html`,
-  `recap.html`, `stat_package.html`, `season_report.html`), including
-  the real football rule this enables: if penalty yardage alone reaches
-  or passes the marker, it's an automatic first down regardless of down.
-- [x] **Penalty log text now always states the resulting down &
-  distance** — e.g. "Penalty on Neville — 5 yds — 4th & 11", not just
-  the yardage, mirroring the exact math in `computeState`'s (now-fixed)
-  penalty handling. `game.html` only — this text is generated once at
-  save time and stored; other pages just display it.
-- [x] **Colon-less clock entry** — `clockToAbsSeconds()` now accepts
-  "1156" as equivalent to "11:56" (last two digits are seconds,
-  everything before is minutes; requires ≥2 digits so the split is
-  never ambiguous). Colon format still works unchanged. All three clock
-  input placeholders updated to "M:SS or MSS". `game.html` only.
-- [x] **`view.html` wasted space on non-16:9 screens** — the whole page
-  is built at a fixed 1920×1080 reference size and scaled by one
-  `transform` to fit the real screen. The old scale was
-  `Math.min(scaleX, scaleY)`, which preserves the fixed 16:9 shape and
-  always leaves the leftover space empty on whichever axis doesn't
-  match. Changed to independent `scale(scaleX, scaleY)` so the whole
-  canvas — and everything inside it — stretches to exactly fill any
-  screen, on any aspect ratio. Very slightly non-uniform on screens far
-  from 16:9, but unnoticeable for text/tables/tiles, which is nearly
-  everything on this page.
-- [x] **Fumble-recovery default changed to "Recovered by opponent"** —
-  was "Recovered by own team" in all four places this choice appears
-  (standalone Fumble, and the fumble sub-flows within Rush/Pass/Sack).
-  Important subtlety: flipping which radio is `checked` alone was NOT
-  enough — each panel also has a static initial-visibility setting on
-  the two sub-field `<div>`s (which player recovered, return yards,
-  etc.) that doesn't react until a radio is actually clicked. Both the
-  `checked` attribute AND the initial `display:none` placement had to
-  be swapped together, in all four panels.
-
-### UI restructuring (`game.html` only, no engine/logic changes)
-- [x] Sack and Interception removed as top-level Scrimmage buttons;
-  now reached via two new buttons ("Sacked"/"Intercepted") at the top
-  of the Pass panel, which simply re-trigger the existing, unmodified
-  Sack/Interception panels. Deliberately done this way — lowest risk,
-  reuses fully-tested logic rather than rebuilding it.
-- [x] Fumble and Safety moved from Scrimmage into the Utilities row.
-- [x] "Quarter marker" moved out of Utilities into the game-control
-  row, directly between "End 1st half" and "Start 2nd half" (so it
-  always sits adjacent to whichever game-phase button is currently
-  visible, since only one of Start game/End 1st half/Start 2nd half/
-  End game is ever shown at once). Styled green (`.primary`).
-  Utilities row order: Penalty, Fumble, Safety, New drive/correct down,
-  Flip possession.
-- [x] "Flip possession" moved from the floating-actions corner into the
-  Utilities row (last position). Styled black (default button, no
-  class) — was white/outline (`.secondary`) before.
-- [x] "Penalty" moved to first position in the Utilities row, styled
-  penalty-flag yellow (`#ffc72c` background, dark text).
-
-### Investigated, not reproduced, not confirmed as a bug
-- Andy reported "Previous drive" showing no stats after an
-  interception (just the Clock event, attributed to the wrong team).
-  Rebuilt the exact scenario twice, including the full multi-play drive
-  with a penalty, through the real save flow — both times it worked
-  correctly. Most likely explanation: Andy was testing against a
-  `view.html` from before the `findDriveStarts` fix above (an
-  interception without an explicit "New drive" marker is exactly the
-  kind of possession change that fix was built for). Andy said to
-  disregard. **If this recurs after confirming the latest `view.html`
-  is actually deployed, it's worth a fresh, careful look** — don't
-  assume it's the same stale-file explanation twice.
-
-## 5. UI-driven test suite — BUILT AND COMMITTED (Aug 5, 2026)
-
-The previously sandbox-only scripts were lost when the sandbox reset, as
-section 5 warned they would be. They have been **rebuilt from scratch and
-now live in `tests/` in the repo**, so this cannot happen again. See
-`tests/README.md` for how to run them.
-
-- `harness.js` — boots any real page in jsdom against a mock Supabase
-- `ui_driver.js` — clicks real buttons, types into real inputs
-- `scripted_game.js` / `run_scripted.js` — 19-step game, expectations
-  written from the rules of football (not copied from app output)
-- `cross_surface.js` — game.html -> DB -> all four report pages must agree
-- `coverage_probe.js` — all 47 play types/sub-flows
-- `engine_parity.js` — compares every duplicated engine function
-- `mutation_check.js` — proves the suite actually catches real bugs
-
-**Current status: all green, and the suite has teeth.** The mutation
-check re-introduces five known bugs (including the original sack sign
-error) and all five are caught. This matters because the previous
-audit's pass/fail signal was demonstrably blind to real errors.
-
-Verified through the real UI this session: the sack fix (ball moves
-backward, distance-to-go grows), penalty distance adjustment in both
-directions including automatic first downs, possession changes on
-punt/interception/fumble, and returners correctly NOT receiving a
-defensive stat bucket. All four report pages produce byte-identical box
-scores from the same saved rows.
-
-### Still not covered by any test
+### Gaps the suite structurally cannot cover
 - [ ] Anything depending on real layout measurement — `view.html`'s
-  `--stat-scale` tile fitting and the `scale(scaleX, scaleY)` canvas
-  transform. jsdom has no layout engine; these need a human on a real
-  screen.
-- [ ] RLS policies. Missing policies fail *silently* in production and
-  nothing in this suite would notice.
-- [ ] Multi-game season aggregation (only tested with one game).
-- [ ] `season_report.html` chart rendering (Chart.js is stubbed; numbers
-  are checked, visuals are not).
+  `--stat-scale` tile fitting and the `scale(scaleX, scaleY)` transform.
+  jsdom has no layout engine; needs a human on a real screen.
+- [ ] `season_report.html` chart rendering (Chart.js is stubbed —
+  numbers are checked, visuals are not).
+- [ ] Multi-game season aggregation (only ever tested with one game).
 
-## 6. Name resolution in the play log — FIXED (Aug 5, 2026)
+---
 
-Found by the coverage probe: a kick or punt returner rendered in the
-play log as "#25" instead of their name, for any returner rostered as
-KR/PR on special teams rather than on defense.
+## 3. Correction tooling — unfinished
 
-- [x] **Root cause.** Returners are resolved with `D(ret)` ->
-  `nameInDefense()`, which read `rosterDefense` only. A dedicated
-  returner is never on that roster, so the name never resolved. Same
-  `roles.defense` overload already documented in `PROJECT_NOTES.md` — it
-  cost a name here, not just a phantom stat tile.
-- [x] **Also fixed: the asymmetry that made this worse.**
-  `nameInOffense()` and `nameInSpecialTeams()` were the *weaker* version
-  in `game.html` than in the four display pages. That was backwards:
-  `game.html` is the only file whose version matters, because it
-  generates the log text once at save time and stores the string.
-- [x] **The fix.** All five files now share one `rosterName(teamKey,
-  num, order)` helper that searches all three roster units, with the
-  expected unit first. A fallback can only ever turn "#25" into a name;
-  it can never change a name that already resolved. Verified: `#25`
-  (special teams) now resolves, and defense/offense lookups are
-  unchanged. `engine_parity.js` confirms all five copies identical, and
-  `mutation_check.js` has a mutant guarding it.
+- [ ] **Edit a play in place.** Nicer than delete-and-re-enter, but needs
+  a way to reopen the original entry panel with its values prefilled,
+  which the code has no notion of today.
+- [ ] **Make Insert-after carry a real effect and roles.** Today manual
+  insert saves `effect: {}` and `unresolved: true` — a text note that
+  cannot repair a down sequence.
 
-### Still outstanding from this bug
-- [ ] **The "Returned by" picker is still empty at kickoff time.**
-  `defenseEligible()` lists only players already *discovered* with a
-  defensive credit, so the first kickoff of a game shows "no one
-  credited yet — type a number below". Manual entry now resolves names
-  correctly, so this is a UX annoyance rather than a correctness bug.
-  Deliberately NOT fixed here: `defBlock()` is shared by the sack,
-  interception and fumble-recovery credit pickers too, so widening
-  `defenseEligible()` would clutter all of them with kickers and
-  punters. The right fix is a dedicated returner picker for
-  kickoff/punt that unions the defensive and special-teams rosters —
-  a small, self-contained change, but a UI change rather than a
-  one-line fix, so it wants its own pass.
-- [ ] **Decide whether to backfill.** Stored log text never
-  re-resolves, so every return logged before this fix still reads
-  "#25" permanently. Fixing the code does not repair history.
+---
 
-## 7. `view.html`'s stale `clockToAbsSeconds` — FIXED (Aug 5, 2026)
+## 4. Validation — needs a decision before building
 
-- [x] `view.html` carried the pre-Aug-4 version (no colon-less entry, no
-  `secs > 59` rejection, no quarter-length bound). It was dead code, so
-  not a live bug, but a live trap. Now synced with `game.html` rather
-  than deleted, so the invariant "every copy of the engine core is
-  identical" holds — that is the property the eventual shared-engine
-  file will formalise, and a function missing from one copy would make
-  that consolidation more confusing, not less.
+- [ ] **Golden-scenarios test suite** — a committed file covering sack,
+  safety, 2pt, muffed kickoff and so on, re-run before shipping any
+  engine change. Overlaps heavily with section 3; may be better folded
+  into the existing suites than built separately.
 
-## 8. Colon-less clock display bug — FIXED (Aug 6, 2026)
+---
 
-Reported directly: on `view.html`, some clock mentions in the play log
-were missing the colon (e.g. "1156" instead of "11:56"). This looked
-like a `view.html` display bug but wasn't -- there is no reformatting
-step anywhere downstream of `game.html`. Every page (`view.html`,
-`recap.html`, `stat_package.html`, `season_report.html`) just renders
-whatever string is stored, verbatim.
+## 5. Reporting — larger pieces
 
-- [x] **Root cause.** `clockToAbsSeconds()` was correctly built to accept
-  colon-less entry ("1156" reads as "11:56"), but the coach's RAW typed
-  text was then embedded directly into the stored play text at **seven**
-  separate call sites, across two different flows: the main play-confirm
-  card's clock field, and a second, entirely separate `showClockPrompt`
-  standalone card that hadn't been touched by the earlier clock-parsing
-  fix. Once a colon-less value was saved, it stayed colon-less on every
-  surface, forever -- fixing display logic later could not have helped,
-  because there was no display logic to fix.
-- [x] **The fix.** A new `normalizeClockStr(quarter, clockStr)` in
-  `game.html`, using the identical parsing rules as `clockToAbsSeconds`
-  (colon-less entry, two-digit seconds, quarter-length bound), always
-  returns `M:SS`. All seven embed sites now call it instead of
-  interpolating the raw input. Input is unrestricted (colon or not);
-  every display now always shows the colon.
-- [x] Verified directly through the real UI: typing `1156` now stores
-  `Clock — 11:56 ...`; typing `3:07` stores `3:07` unchanged (confirms
-  round-tripping through the normalizer doesn't corrupt already-correct
-  input).
-- [x] Guarded by `tests/clock_display_check.js` (4 cases: the
-  change-of-possession embed, the drive-ending-score embed, the separate
-  `showClockPrompt` flow, and an already-colon-formatted input that must
-  survive unchanged) and a mutation-check entry.
-- [ ] **No backfill.** Exactly like the returner-name bug in section 6,
-  any clock line already saved without a colon stays that way
-  permanently. Fixing the code does not repair history. Worth deciding
-  once, alongside that backfill question, rather than separately.
+- [ ] **Rework the season stat package** — graphics, grouping, visuals.
+  The current grouped metric sections, data labels and brand-colour
+  charts are a first pass.
+- [ ] **Multi-game comparison report** — compare any 2 games, or an
+  arbitrary subset, side by side. Distinct from the existing single-game
+  and full-season reports.
+- [ ] **AI analysis plugin** — AI-generated analysis on top of the stats.
+  Scope undefined.
 
-### Process note: a test file silently failed to upload last session
+---
 
-While re-verifying this fix against the live repo, `tests/picker_check.js`
-was discovered to be a 404 error page on GitHub instead of the real file
--- a previous upload silently failed. This disabled 2 of the 9
-mutation-check mutants without any visible error (they reported
-"SURVIVED" rather than a hard failure, which is easy to misread as a
-real regression instead of a missing test file). A working copy was
-recovered and confirmed still passing against current `game.html`.
-**When uploading `tests/`, spot-check at least one file's size on GitHub
-against the local copy** -- a silent partial upload is worse than an
-error, because everything downstream (this TODO, the mutation-check
-output) assumes the file is actually there.
+## BEFORE GOING TO PRODUCTION
 
-## 9. Drive boundaries broken by administrative markers — FIXED (Aug 6, 2026)
+Everything here is fine for a test app and **not** fine once real users
+have accounts. Nothing in this section should be attempted the week of a
+game — each item wants test accounts for `view`, `game_entry` and
+`admin`, and a full pass through the app afterwards.
 
-Reported from screenshots: on `view.html`, "Previous Drive" showed 0/0
-in every tile and listed "Clock — 5:00 at change of possession" instead
-of a drive summary. `game.html`'s "Previous drive" panel had the same
-problem.
+Audited Aug 6, 2026. RLS is enabled on all five tables, but **every
+policy is just `auth.role() = 'authenticated'`** — "are you signed in."
+There is no role enforcement in the database at all.
 
-- [x] **Root cause.** `findDriveStarts()` begins a new drive at the play
-  immediately after a detected possession change. When a kickoff flipped
-  possession, the very next entry was the `Clock — ... at change of
-  possession` line — an administrative marker, not a football play. That
-  created a phantom one-play "drive" containing only the clock marker.
-  Its tiles were all zero (markers carry no `roles`), and because only
-  the last two drives are ever displayed, the real 99-yard touchdown
-  drive was pushed out of the "previous drive" slot entirely.
-- [x] **The fix.** New top-level `isAdminMarker(p)` in the engine core of
-  both `game.html` and `view.html`: clock events, quarter/half dividers
-  and manual possession flips are announcements, not plays. A detected
-  possession change now starts the drive at the next REAL play.
-  `isReset` markers are deliberately excluded from the definition —
-  they are explicit "new drive" announcements and remain valid starts.
-  Start indices are deduped, because skipping markers now often lands a
-  possession change exactly on the reset marker that follows it.
-- [x] **Second symptom, same root cause.** `computeDriveSummary()` chose
-  its summary line by walking backwards and skipping only dividers, so a
-  drive ending in a punt summarized as the trailing clock line rather
-  than the punt. It now skips all administrative markers. This was
-  literally the other half of the report ("lists the change of
-  possession, not a drive summary").
-- [x] **Manual flip had the identical bug**, not reported but found while
-  verifying: `flipBtn` is followed by a clock prompt rather than a "New
-  drive" marker, so it produced the same phantom drive. Fixed by the
-  same change.
-- [x] Verified: the reported sequence now shows PASS 1/99, YARDS 99 with
-  the touchdown as the summary. A punt drive with clock events at both
-  ends shows RUSH 1/12, PASS 1/20, YARDS 32, TOP 3:30 and summarizes as
-  the punt. Time of possession only computes correctly once the drive
-  boundaries are right, so TOP doubles as a boundary check.
-- [x] Guarded by `tests/drive_boundary_check.js` (4 scenarios) and three
-  mutants. Both copies of `findDriveStarts` and `isAdminMarker` verified
-  byte-identical.
+- [ ] **Any signed-in user can delete any play.** `plays` has
+  authenticated-only INSERT / UPDATE / DELETE / SELECT. A `view` account
+  can wipe a game's log. Replace with role-aware policies.
+- [ ] **Any signed-in user can edit any game.** `games` has
+  authenticated-only UPDATE and DELETE — status, final score, deletion.
+  Includes reopening a finalized game: the admin check on Unlock to edit
+  is browser-side only. A `guard_game_unlock` trigger would close that
+  one path cheaply (see below), but the rest needs real policies.
+- [ ] **Any signed-in user can write rosters, teams and players.**
+  Same authenticated-only pattern on `game_rosters`, `teams`, `players`.
+- [ ] **Write a `current_user_role()` SECURITY DEFINER helper** reading
+  `profiles.role`, and rebuild the policies on top of it. Doing this
+  wrong fails closed and stops the app dead, so it needs a test account
+  per role and a deliberate pass — not a quick edit.
+- [ ] **Game-status and phase writes are not covered by the sync
+  queue.** `games.update` (one call site, reached from `persistUiState`
+  and `setGameStatus`) fails silently offline. Nothing destructive —
+  plays are already protected, so stats and score are never at risk —
+  but the resume position and the final status can be lost, each
+  recoverable by pressing the button again once connected.
+  The work is small in itself (one merged pending-update, last-write-
+  wins, reusing the existing retry timer and banner) but has a real
+  ordering constraint: **it must drain strictly AFTER the play queue.**
+  The `plays_immutable_when_final` trigger rejects play inserts on a
+  final game, so applying `status='final'` while plays are still queued
+  would permanently reject them — the exact failure fixed on Aug 6.
+  Unlock (`status='in_progress'`) wants the opposite ordering, so the
+  clean answer is to exclude it from queueing entirely and refuse it
+  offline with a clear message.
+- [ ] **No service worker.** Reloading while genuinely offline fails —
+  the page itself cannot be fetched, so a coach who refreshes at the
+  wrong moment is locked out until the connection returns. Queued plays
+  survive, but entry stops.
+- [ ] **Optional quick win: `guard_game_unlock` trigger** — mirrors
+  `profiles_role_guard` and makes Unlock to edit admin-only in the
+  database. Two minutes, low risk, but only closes one path; not a
+  substitute for real policies.
+- [ ] **Confirm no other self-write path to `profiles.role`.** The
+  self-promotion hole is closed by a trigger; worth re-checking there is
+  no second route once more policies change.
 
-## 10. Live-entry fixes and features — Aug 6, 2026 (second session)
+---
 
-All verified through the real UI and covered by
-`tests/possession_and_drive_check.js`, `tests/optional_players_check.js`
-and `tests/entry_integrity_check.js`, with a mutant each.
+## Standing decisions (settled — do not re-litigate)
 
-### Bugs
-- [x] **Possessions were double-counted.** `countPossessions` had its own
-  copy of drive-boundary logic and counted both the detected possession
-  change AND the explicit reset marker that follows it. A new game where
-  each side had had the ball once reported 2 apiece. It now derives from
-  `findDriveStarts`, so possessions and drives agree by construction
-  rather than by keeping two implementations in step.
-- [x] **Incomplete passes were not counted as 3rd/4th-down attempts.**
-  The conversion loop's play-type list omitted `'incomplete'` -- and only
-  that one list; every other definition in the codebase included it. An
-  incomplete pass is the most common 3rd-down outcome in football, so
-  every conversion rate ever recorded was inflated (denominator too
-  small). Fixed in all four report files. Because reports recompute from
-  play data, **re-opening an old game now shows corrected numbers** -- no
-  backfill needed.
-- [x] **Safety credited the clock to the wrong team.** The
-  end-of-possession clock event used `effect.score.team`, which is the
-  same as the possessing team for a touchdown or field goal but is the
-  DEFENSE on a safety. The real possessor's clock was left running and
-  its time of possession stuck at 0:00. Now always uses
-  `preState.possession`.
-- [x] **Stale confirm text (the significant one).** The confirm card is
-  built on Review but nothing is written until Save. Any state change in
-  between -- Undo being the easy one, and the new Redo button makes it
-  easier to reach -- left the stored text describing a down & distance
-  that no longer existed, while the effect was applied to the current
-  state. The log then showed an impossible jump (2nd & 10 straight to
-  4th & 11) and the third-down attempt inside it stopped counting.
-  Invisible until someone read the log back. The play is now re-parsed
-  against the current state at Save; `parseInput` is deterministic, so
-  this is a no-op when nothing changed.
-
-### Features
-- [x] Time of possession tile added to Current Drive. Reads 0:00 until
-  the drive's closing clock event is entered -- possession time only
-  accumulates on an `end` or `transition` event and there is no live
-  game clock to measure against mid-drive.
-- [x] Penalty "no down change" checkbox, for a dead-ball foul or one
-  assessed after a kick or change of possession. Moves the ball, keeps
-  down AND distance (keeping only the down would still turn 1st & 10
-  into 1st & 20). Caps for goal-to-go.
-- [x] "New drive / correct down" renamed **"Adjust Down/Distance"** and
-  no longer registers a possession. A reset marker now only opens the
-  game's FIRST drive; every later drive begins at a real possession
-  change. (The first-drive case is kept deliberately -- without it a game
-  that opens with an adjustment would show no active drive.)
-- [x] Passer picker pre-selects the last quarterback to throw for that
-  team, on Pass / Sack / Interception / 2PT pass. Note
-  `offenseEligible` filters the passer grid by QB position, so a non-QB
-  who throws gets the number pre-filled into the manual field instead of
-  a highlighted button.
-- [x] **Redo last** button. Restores the play with its original id,
-  roles, effect and sequence number. Entering any new play clears the
-  redo stack, since redoing after that would splice a play in behind
-  ones that already followed it.
-- [x] **Kick/punt returner optional.** It was already skippable, but the
-  return YARDAGE was silently discarded along with the unknown returner.
-  Also fixed the blocked-punt recoverer and the guided-kickoff returner,
-  both of which hard-blocked Review with no message.
-- [x] **Interceptor and fumble recoverer optional** (standalone plus the
-  rush/pass/sack sub-flows) -- all previously hard-blocked. Lost fumbles
-  now carry `roles.lost`, because `roles.defense` used to be the only
-  signal distinguishing a lost fumble from one recovered by the offense;
-  without it, unnamed recoveries would have silently stopped counting as
-  turnovers. `countTurnovers` checks `(r.lost || r.defense)` so games
-  already recorded keep counting.
-
-### Known-imperfect, deliberately left
-- [ ] The `?` sentinel for an unknown player is a positional token in the
-  code string. It works, but a structured field would be cleaner if the
-  code format is ever revisited.
-- [ ] Corrupted plays already saved cannot be repaired by any of the
-  above. In the Aug 6 game one West Monroe third down is permanently
-  uncounted (they should read 1 of 7, not 1 of 6).
-
-## 11. Offline-durable sync queue — BUILT (Aug 6, 2026)
-
-Triggered by a real failure during live entry:
-`TypeError: Failed to fetch`. The old handler announced the problem once
-and then forgot about it. The play lived on in that tab's memory, so
-every later play still computed correctly on that screen, but the server
-never received it — reloading dropped it silently, and the spectator
-view and every report were quietly missing a snap. **This is the most
-likely cause of the corrupted West Monroe drive** (a down sequence no
-single play could produce), and of any past game whose stats looked
-slightly off.
-
-- [x] Failed inserts go into a queue persisted to `localStorage`, keyed
-  per game, so **a reload no longer loses the play**. On load, queued
-  plays are merged back into `plays` before anything reads them.
-- [x] Merge dedupes against what the server already has — an insert can
-  succeed while the response is lost, and that row must not be re-added.
-- [x] Queue drains FIFO and **stops on the first failure**: uploading out
-  of order would place a play on the server ahead of ones that happened
-  before it.
-- [x] Once anything is queued, later plays queue behind it rather than
-  going straight through, for the same ordering reason.
-- [x] Before draining, the queue asks the server which sequence numbers
-  it already has and drops those. A duplicate-key error on retry is also
-  treated as success, but that only fires if the table actually has a
-  unique constraint on `(game_id, sequence_number)` — the pre-check does
-  not depend on one.
-- [ ] **Verify that unique constraint exists** on `plays`
-  `(game_id, sequence_number)`. Without it nothing at the database level
-  stops a duplicate row; the app-side pre-check is currently the only
-  guard.
-- [x] Undo of a still-queued play removes it from the queue instead of
-  trying to delete a row the server has never seen.
-- [x] Retries every 5s while anything is outstanding, immediately on the
-  browser's `online` event, and on demand via a "Retry now" button.
-- [x] Persistent banner shows how many plays are unsaved. `localStorage`
-  failures (private browsing, quota) are swallowed — the queue still
-  works in memory for the session.
-- [x] `TypeError: Failed to fetch` is a thrown exception, not a returned
-  error, so every insert path is wrapped in try/catch. The old code only
-  checked the returned `error` and would have propagated the throw.
-
-### Still outstanding
-- [ ] The queue only covers play inserts. Game-status updates, roster
-  writes and the guided-state save still fail silently offline.
-- [ ] No test coverage yet — verified ad hoc this session (offline
-  entry, reload recovery, drain, undo-while-queued, duplicate handling).
-  `tests/harness.js` gained a `seedStorage` option to make the reload
-  case testable; the suite itself is still to be written.
-
-## 12. Passing/rushing picker changes — Aug 6, 2026
-
-- [x] **Receiver optional** on Pass, incomplete and 2PT pass. Records as
-  `pass for 14` / `incomplete` / `2PT pass — GOOD` with no name. No
-  receiver role is created, so nobody gets phantom receiving yards; the
-  passer's attempt, completion and yardage all still count.
-- [x] **The auto-selected quarterback can now be cleared.** Tapping a
-  committed pick de-selects it, and typing in the "or type #" field
-  clears a stale highlight.
-- [x] **The pre-selected QB is shown as a SUGGESTION, not a committed
-  pick.** This mattered: with the naive toggle, the coach's first tap on
-  the auto-selected quarterback read as "tap the selected player" and
-  de-selected him — the opposite of confirming. The suite caught this
-  as a hard failure (sacks and incompletes stopped saving entirely).
-  Tap now confirms; a second tap clears.
-- [x] **Offense pickers order by most recently used**, not by season
-  yardage. Football is streaky — the back who just carried is far more
-  likely to carry again than the one with the most yards an hour ago.
-  Applies to carrier, passer and receiver, since they share
-  `offenseEligible`.
-- [x] **A player who has performed a role is always offered in it**,
-  regardless of the position filter. A tight end who carried used to
-  never appear in the carrier list, so recency ordering could never
-  surface him and the number had to be typed every time.
-
-## 13. Muffed / fumbled punt AND kickoff — ADDED (Aug 6, 2026)
-
-The punt tree had no way to log a muffed catch, which meant the most
-consequential punt outcome in high-school football could not be recorded
-at all.
-
-- [x] "Muffed / fumbled catch" toggle on the punt panel, mutually
-  exclusive with "Blocked" (turning one on clears the other).
-- [x] Radio for who recovered: **kicking team** (default) or receiving
-  team. Recoverer number optional, resolved against whichever team
-  recovered. Return yards and TD supported; a TD scores for the
-  recovering team, not automatically the receiving team.
-- [x] **A kicking-team recovery does not change possession.** This is why
-  it could not be logged as a punt plus a fumble — a punt always sets
-  `flipEligible`, and this one must not.
-- [x] It does however start a **fresh set of downs for the team that
-  already had the ball**. The save handler previously only laid down a
-  new-drive marker when possession changed, so the play left down and
-  distance untouched. New `effect.newDownsSameTeam` covers that case.
-- [x] Its own starting-spot widget, labelled for the **kicking** team,
-  since they are the ones taking over. `currentSpotGetter` swaps between
-  the two widgets as the recovery radio changes.
-
-The kickoff panel gained the identical control (`km` play type), mutually
-exclusive with **Touchback** rather than Blocked. Same recovery radio,
-same optional recoverer, same kicking-team-labelled spot widget, same
-possession rule.
-
-- [x] A muff-recovery touchdown now sets `endsDrive`. Without it a
-  kicking-team recovery returned for a score left the previous down and
-  distance on screen, because nothing else clears them when possession
-  has not changed.
-
-### Known limits
-- [ ] The recoverer is a plain number field, not a picker. It resolves
-  correctly and is optional, but does not get the roster-backed grid the
-  other fields have.
-- [ ] No stat is recorded for the muff itself or the recovery — the play
-  is captured for the log, possession and scoring, but the muffing
-  player gets no fumble and the recovering player gets no credit.
-- [ ] No automated test yet; verified ad hoc on BOTH punt and kickoff
-  across all variants (kicking recovery with spot, receiving recovery,
-  recovery returned for a TD, nobody named, and mutual exclusion with
-  Blocked / Touchback).
-
-## 14. Manual number entry now confirms the player — ADDED (Aug 6, 2026)
-
-Typing a jersey number by hand was the one entry path with no feedback
-at all: the coach found out who they had credited only when the play
-appeared in the log, by which point the text is frozen.
-
-- [x] On blur (tab or tap away), every manual "type #" field shows a
-  green button with the resolved player, e.g. `#80 N Receiver`. That is
-  literally the name that will be written to the log — the widget uses
-  the same unit search order the log will use for that field, so the two
-  cannot disagree.
-- [x] **Shared numbers are detected and resolvable.** `playerCandidates`
-  gathers every distinct name wearing that number across offense,
-  defense and special teams. Where there is more than one, the extras
-  are shown as tappable alternatives under a "#22 is shared" warning,
-  and tapping one changes what gets logged. (The `ambiguousOffense` /
-  `ambiguousDefense` maps the code already read were never populated by
-  anything — conflicts were simply invisible.)
-- [x] A number not on the roster says so plainly and still records as
-  `#NN`, rather than silently resolving to nothing.
-- [x] Wired into every manual player field: all offense role pickers
-  (carrier / passer / receiver / kicker / punter), the defensive credit
-  and returner fields on every panel and suffix, both muff recoverer
-  fields, and both guided-kickoff fields. Search order is per-field —
-  kickers and punters resolve special-teams-first, defensive credits
-  defense-first, everyone else offense-first.
-
-### Known limit
-- [ ] **Choosing an alternative sticks for the session**, not just for
-  that play: it writes the chosen name into the roster bucket that
-  field's resolver reads first. So if #22 is a running back on offense
-  and a safety on defense, and the coach says a rush by #22 was the
-  safety, later rushes by #22 resolve to the safety too. It is visible
-  (the confirmation shows the current resolution every time, and the
-  alternative is always one tap away) but it is not per-play. A true
-  per-play override needs the resolution carried on the play itself
-  rather than looked up from the roster at save time.
-
-## 15. Timeout tracker — ADDED (Aug 6, 2026)
-
-- [x] **Timeout** button in the Utilities row. Opens a two-button panel
-  (one per team) showing how many each side has left; the button is
-  disabled once a team is out. Writes straight to the log rather than
-  through the confirm card — there is nothing to review, and a timeout
-  gets called under time pressure.
-- [x] Logs as `Timeout — Neville (2 left)`.
-- [x] Tracked in `computeState` as `state.timeouts`, so it replays from
-  the play log and is correct on every page rather than being UI-only
-  state that a reload would lose.
-- [x] **NFHS rules:** three per team per half, not carried over. Both
-  teams get a fresh three when the game crosses into Q3, and one each in
-  overtime (`TIMEOUTS_PER_OT`). The reset is guarded on the quarter
-  actually changing, so re-entering a Q3 marker cannot hand out a second
-  set.
-- [x] Floored at zero — a fourth timeout would otherwise read as
-  "-1 left" in the log.
-- [x] Shown in the `game.html` header next to time of possession, and on
-  `view.html` as **TOL=x** right-justified inside each team's coloured
-  name bar (`margin-left:auto`, so it sits hard against the end of the
-  bar whatever the team name length or logo). It is NOT a stat tile:
-  `.stat-tile-grid` is an explicit 4x2, so a ninth tile overflowed the
-  fixed-height 1920x1080 layout.
-- [x] `computeState` verified still identical across all five files.
-
-### Known limits
-- [ ] No way to give a timeout back if one is logged by mistake, other
-  than Undo (which only removes the most recent play). A charged-timeout
-  correction would need its own effect.
-- [ ] Timeouts are not surfaced in `recap.html` / `stat_package.html` /
-  `season_report.html`. The state is computed there (the engine is
-  shared) but nothing displays it. Note those pages are post-game, where
-  timeouts remaining is of limited interest.
-- [ ] The three-per-half figure is hardcoded as `TIMEOUTS_PER_HALF`.
-  Fine for NFHS, but not configurable per league.
-- [ ] No automated test yet — verified ad hoc (countdown, disabled at
-  zero, halftime reset, replay on view.html).
-
-## 16. Flip possession / Timeout were usable on a finalized game — FIXED (Aug 6, 2026)
-
-- [x] `updatePhaseUI` gated the play buttons, Penalty, Adjust
-  Down/Distance and Quarter marker, but **not** Flip possession — a
-  pre-existing gap that the new Timeout button then joined. Both write
-  straight to the log, so on a finalized game they appended plays after
-  the final score.
-- [x] Both now follow the same `disable` flag: off during a guided flow,
-  a clock prompt, before kickoff, at halftime, and once the game has
-  ended. Verified across all three phases.
-
-Worth remembering when adding any new control that writes to the log:
-`updatePhaseUI` is an explicit allow-list, not a default. A button that
-is not named there is live in every phase, including after the final
-whistle.
-
-## 17. Unlock to edit on the game page — ADDED (Aug 6, 2026)
-
-Mirrors the existing unlock on the game setup tab, same wording and same
-confirm-before-acting flow.
-
-- [x] Amber "This game is finalized" banner with an **Unlock to edit**
-  button, shown only when `gamePhase === 'ended'` AND the signed-in
-  user's role is `admin`. Everyone else sees a finalized game exactly as
-  before.
-- [x] Unlocking sets the game back to `in_progress`, returns the phase to
-  `secondHalf`, and persists both. That restores normal play entry and
-  leaves **End game** available to re-finalize once the correction is
-  made.
-- [x] Confirms first, and says plainly that the game goes back to in
-  progress until it is ended again.
-- [x] `currentUserRole` is now captured from the profile lookup in
-  `guardMinRoleOrRedirect`, which computed the role but discarded it.
-
-**Gotcha worth remembering:** `renderAll()` does not touch phase gating.
-The first version called only `renderAll()`, so the banner stayed up and
-every control stayed disabled after unlocking. `updatePhaseUI()` has to
-be called explicitly.
-
-### Known limits
-- [ ] The admin check is client-side only, exactly like the setup-tab
-  unlock it mirrors. A non-admin who bypassed the UI could still send
-  the update; enforcing this properly needs an RLS policy on `games`.
-- [ ] `setGameStatus` is not covered by the offline sync queue, so
-  unlocking with no connection reports a failure and is not retried.
-- [ ] No automated test yet — verified ad hoc (admin sees it, non-admin
-  does not, in-progress games do not show it, and unlocking re-enables
-  every control).
-
-## Other known-outstanding items (from earlier sessions, may be stale)
-
-- [ ] Offline-durable sync queue for failed saves
-- [ ] User invitation flow (needs a server-side service-role key)
-
-Worth re-confirming these are still accurate before picking them up —
-this list was carried over from before tonight's reporting-module work
-and may not reflect the current state of the app.
+- **No backfill of historical data.** Every game recorded so far is a
+  test, so stale returner names, colon-less clock text and the one
+  corrupted play from Aug 6 are all being left alone. Revisit only if a
+  real game is ever affected.
+- **`validateGame()` warns, never blocks**, and runs only on End game
+  plus the "Run checks again" button on a finalized game.
+- **Timeouts cannot be given back** except via Undo. Accepted; a
+  dedicated give-back effect is not worth another play type.
+- **NFL-data validation is closed.** The converter will not be extended
+  to generate penalty codes, and possessions will not get a real-world
+  data check. Validation now rests on the UI-driven suites and
+  `validateGame()` instead.
+- **Some sync failures are permanent, not transient.** The database
+  refuses play changes on a finalized game. A row rejected for that
+  reason is discarded from the queue with an explanation rather than
+  retried forever. Only transient failures keep retrying.
+- **Database hardening done Aug 6, 2026:** unique constraint
+  `plays_game_seq_unique (game_id, sequence_number)` added (no duplicates
+  existed); `profiles_role_guard` trigger blocks a non-admin changing any
+  role, closing a confirmed privilege-escalation hole where any signed-in
+  user could promote themselves to admin. Both guard triggers include
+  `auth.uid() is not null` so the SQL editor stays usable as an escape
+  hatch — without it, demoting yourself locks you out of fixing it.
+- **Timeouts are shown on the live view only.** `view.html` (TOL in each
+  team's header) and the `game.html` banner. Deliberately not surfaced on
+  recap, stat package or season report — timeouts remaining is a live
+  coaching number, not a post-game stat.
+- **Entry-UI quirks accepted as-is** (Aug 6, 2026). All reviewed and
+  fine in practice: the "Returned by" picker being empty on the opening
+  kickoff (manual entry resolves names correctly anyway); the muff
+  recoverer being a plain number field rather than a picker; no fumble
+  or recovery stat being recorded for a muff; a shared-number choice
+  persisting for the session rather than per play; and the `?` sentinel
+  for an unknown player being a positional token in the code string.
+  None of these affect correctness of the recorded stats.
+- **The only sanity check wanted is "gain larger than the distance to
+  the goal line"** (Aug 6, 2026), and it is done — warned at Review time
+  on the entry screen, and reported by `validateGame()` at End game for
+  anything saved past that warning. No threshold-based checks are
+  wanted: nothing that guesses whether a play is merely *implausible*,
+  only what is arithmetically impossible.
+- **Kickoffs do not record a kick distance** (Aug 6, 2026). Nothing
+  reported it — the box score counts kickoffs and touchbacks only — so
+  the field was removed from both the kickoff panel and the guided
+  kickoff flow, where it had been required. Punts still record distance.
+- **Play text wording** (Aug 6, 2026): zero yardage reads "for no gain",
+  negative reads "for a loss of N". Generated at save time by one
+  `gainPhrase()` helper, so rush and pass cannot drift apart. Sacks are
+  left as "sacked for N yds" — the loss is implicit in the word.
+- **Adjust Down/Distance takes any subset** (Aug 6, 2026). Down,
+  distance and spot each fall back to the current value, so the spot can
+  be corrected without restating the down. It refuses only when there is
+  no current spot to keep.
+- **A scrimmage play is refused when the ball's spot is unknown**
+  (Aug 6, 2026). rush / pass / incomplete / sack only — the plays that
+  advance the ball from a known spot. Interceptions, fumbles, kickoffs,
+  punts, field goals and PATs are all still allowed, because those are
+  the plays that ESTABLISH a spot after a change of possession; blocking
+  them would deadlock entry. This closes the hole where a play entered
+  with no spot resumed down tracking at 2nd down with no field position,
+  silently switching the impossible-gain check off for the rest of the
+  game.
+- **A turnover on downs keeps the spot** (Aug 6, 2026). The ball does
+  not move — it is spotted where the play ended and the new team starts
+  1st & 10 from there. `fieldPos` is possession-relative, so the same
+  physical spot is mirrored to `100 - fieldPos`. Previously the spot was
+  cleared, which forced an Adjust for a position the app already knew.
+- **Reset game** (Aug 6, 2026) is admin-only, in the dashboard 3-dot
+  menu above Delete game. Clears the play log but keeps the game record,
+  roster and settings; requires typing the designator; reopens a
+  finalized game first (the database refuses play changes otherwise) and
+  clears that game's offline queue so old plays cannot upload into the
+  fresh one. Emptying the log IS a full reset, because score, downs,
+  drives, timeouts and direction are all derived from it.
+- **Play correction is post-game only.** Delete controls appear solely
+  after an admin unlocks a finalized game — never during live entry,
+  where a mis-tap could destroy a play.
