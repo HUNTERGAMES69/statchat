@@ -879,9 +879,17 @@ function computeState(playsList){
     // landing exactly on the available height reliably overshoots by a
     // pixel or two -- which is all it takes to get a scrollbar.
     const FIT_MARGIN = 0.96;
+    // Never scale ABOVE 1. Growing text to fill spare space was the
+    // real source of the overflow: enlarging a table does not increase
+    // its height proportionally -- columns re-wrap and rows gain
+    // padding -- so a scale derived from measurements at 1.0
+    // consistently overshot once applied, and the further it grew the
+    // worse the error. Shrink-only is predictable: at worst the
+    // quadrant has some empty space at the bottom, which is harmless,
+    // where overshooting produces the scrollbars and clipped rows.
     const scaleFor = (avail, content) => {
       if (content <= 0) return 1;
-      return Math.min(2.2, Math.max(0.55, (avail / content) * FIT_MARGIN));
+      return Math.min(1, Math.max(0.5, (avail / content) * FIT_MARGIN));
     };
     const availA = availableHeight(quadBL), availB = availableHeight(quadBR);
     let scale = Math.min(scaleFor(availA, contentHeight('boxScoreTeamA')),
