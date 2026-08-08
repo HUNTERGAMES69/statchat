@@ -782,28 +782,34 @@ function parseInput(raw, state){
   const isTouchback = rest[rest.length - 1] === 'tb';
   if (isTouchback) rest.pop();
   const O = n => nameInOffense(off, n), D = n => nameInDefense(def, n), ST = n => nameInSpecialTeams(off, n);
+  // "rush for 0" reads as though something is missing. Football says
+  // "no gain", so the log should too. One helper for every yardage
+  // phrase, so rush and pass can never drift apart in wording.
+  const gainPhrase = y => y === 0 ? 'for no gain'
+    : y < 0 ? 'for a loss of ' + Math.abs(y)
+    : 'for ' + y;
 
   if (['r', 'p', 'i', 's'].includes(type)){
     let netYards = 0, tackler = null, text;
     if (type === 'r'){
       netYards = parseInt(rest[0]) || 0; tackler = rest[1];
       if (isSafety){
-        return { text: O(p1) + ' rush for ' + netYards + ' — tackled in own end zone — SAFETY',
+        return { text: O(p1) + ' rush ' + gainPhrase(netYards) + ' — tackled in own end zone — SAFETY',
           effect: { score: { team: def, points: 2 }, endsDrive: true },
           flipEligible: false, team: off, quarter: state.quarter };
       }
-      text = O(p1) + ' rush for ' + netYards;
+      text = O(p1) + ' rush ' + gainPhrase(netYards);
     }
     else if (type === 'p'){
       netYards = parseInt(rest[1]) || 0; tackler = rest[2];
       if (isSafety){
-        return { text: O(p1) + ' pass' + (rest[0] === '?' ? '' : ' to ' + O(rest[0])) + ' for ' + netYards + ' — tackled in own end zone — SAFETY',
+        return { text: O(p1) + ' pass' + (rest[0] === '?' ? '' : ' to ' + O(rest[0])) + ' ' + gainPhrase(netYards) + ' — tackled in own end zone — SAFETY',
           effect: { score: { team: def, points: 2 }, endsDrive: true },
           flipEligible: false, team: off, quarter: state.quarter };
       }
       // The receiver is optional -- a completion downfield is often
       // clearly a completion for N yards before the number is readable.
-      text = O(p1) + ' pass' + (rest[0] === '?' ? '' : ' to ' + O(rest[0])) + ' for ' + netYards;
+      text = O(p1) + ' pass' + (rest[0] === '?' ? '' : ' to ' + O(rest[0])) + ' ' + gainPhrase(netYards);
     }
     else if (type === 'i'){ netYards = 0; text = O(p1) + ' incomplete' + (rest[0] === '?' ? '' : ', intended for ' + O(rest[0])); }
     else if (type === 's'){
@@ -915,7 +921,7 @@ function parseInput(raw, state){
   }
   if (type === 'ko'){
     const yds = rest[0], ret = rest[1], retyds = rest[2];
-    let t = ST(p1) + ' kicks off ' + yds;
+    let t = ST(p1) + ' kicks off';
     if (isTouchback) t += ' — TOUCHBACK';
     else if (ret) t += ', returned' + (ret === '?' ? '' : ' by ' + D(ret)) + (retyds ? ' for ' + retyds : '');
     let score = null;
@@ -935,7 +941,7 @@ function parseInput(raw, state){
     const recName = named
       ? (kickingRecovers ? ST(recNum) : D(recNum))
       : TEAMS[recTeam].name;
-    let t = ST(p1) + ' kicks off ' + yds + ' — MUFFED, recovered by ' + recName;
+    let t = ST(p1) + ' kicks off — MUFFED, recovered by ' + recName;
     if (retyds && parseInt(retyds)) t += ' for ' + retyds;
     let score = null;
     // A touchdown ends the drive whichever side recovered. Without this
@@ -1484,7 +1490,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('scoreText').textContent = TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' + TEAMS.teamB.name + ' ' + state.scores.teamB;
     let downMsg;
     if (state.down){
-      downMsg = ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabel(state.fieldPos) + ' — ' + TEAMS[state.possession].name + ' ball';
+      // markerLabel returns '' when the spot is unknown, which used to
+      // render as a dangling "at  —". Say so instead: an unknown spot
+      // silently disables the yardage checks, so it must be visible.
+      const spot = markerLabel(state.fieldPos);
+      downMsg = ordinal(state.down) + ' & ' + distDisplay +
+        (spot ? ' at ' + spot : ' — SPOT NOT SET') +
+        ' — ' + TEAMS[state.possession].name + ' ball';
     } else if (gamePhase === 'firstHalf' || gamePhase === 'secondHalf'){
       downMsg = 'No active drive — ' + TEAMS[state.possession].name + ' needs to kick off next';
     } else {
@@ -1773,7 +1785,39 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (st.down === 1) prevDown = null;
     }
 
-    // 4. Every punt implies a failed third down on that drive. If the
+    // 4. A gain larger than the distance to the goal line. The entry
+    //    screen warns about this at Review time, but the warning can be
+    //    saved past, so anything that got through is still on the books
+    //    inflating a player's yardage and the drive total.
+    plays.forEach((p, i) => {
+      const e = p.effect;
+      if (!e || typeof e.statYds !== 'number' || e.statYds <= 0) return;
+      const before = computeState(plays.slice(0, i));
+      if (before.fieldPos === null) return;
+      const distToGoal = 100 - before.fieldPos;
+      if (e.statYds > distToGoal){
+        issues.push('Play ' + (i + 1) + ' gains ' + e.statYds + ' yds with only ' + distToGoal +
+          ' to the goal line — impossible: ' + (p.text || '').slice(0, 55));
+      }
+    });
+
+    // 5. Scrimmage plays recorded with no field position. These are the
+    //    ones the impossible-gain check could not examine, so they are
+    //    the plays most likely to be carrying bad yardage.
+    let noSpot = 0, firstNoSpot = null;
+    plays.forEach((p, i) => {
+      if (!p.effect || !p.effect.isStat) return;
+      if (computeState(plays.slice(0, i)).fieldPos !== null) return;
+      noSpot++;
+      if (firstNoSpot === null) firstNoSpot = i + 1;
+    });
+    if (noSpot){
+      issues.push(noSpot + ' play' + (noSpot === 1 ? ' was' : 's were') +
+        ' recorded with no field position (from play ' + firstNoSpot + ' on). Their yardage was ' +
+        'never checked against the field, and field position stopped tracking there.');
+    }
+
+    // 6. Every punt implies a failed third down on that drive. If the
     //    counts do not line up, a third-down snap is missing.
     const box = { teamA: 0, teamB: 0 }, punts = { teamA: 0, teamB: 0 };
     plays.forEach((p, i) => {
@@ -1902,7 +1946,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<p style="font-size:13px; color:#888; margin:0 0 4px;">Kicker</p>' +
         '<div id="gk_kicker_grid">' + pickerHtml(kickerList, 'gk_kicker_pick') + '</div>' +
         '<input type="text" id="gk_kicker_manual" placeholder="or type #" style="width:100px; margin:4px 0 8px;"><br>' +
-        '<label class="inline">Distance <input type="text" id="gk_yards" style="width:70px; margin-left:6px; display:inline-block;"></label>' +
+
         '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedKickoffSave">Save kickoff</button></div>';
       let kickerNum = null;
       content.querySelectorAll('.gk_kicker_pick').forEach(b => b.addEventListener('click', () => {
@@ -1915,10 +1959,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       document.getElementById('gk_kicker_manual').addEventListener('input', e => { kickerNum = e.target.value.trim(); });
       attachNameConfirm('gk_kicker_manual', guided.kickingTeam, ['special','offense','defense']);
       document.getElementById('guidedKickoffSave').addEventListener('click', () => {
-        const yds = document.getElementById('gk_yards').value.trim();
-        if (!kickerNum || !yds) return;
-        const text = nameInSpecialTeams(guided.kickingTeam, kickerNum) + ' kicks off ' + yds;
-        pushAndPersist({ id: nextId++, text, effect: {}, team: guided.kickingTeam, quarter: guided.quarter, roles: { kicker: { team: guided.kickingTeam, num: kickerNum, yards: parseInt(yds)||0 }, playType: 'kickoff' } });
+        if (!kickerNum) return;
+        const text = nameInSpecialTeams(guided.kickingTeam, kickerNum) + ' kicks off';
+        pushAndPersist({ id: nextId++, text, effect: {}, team: guided.kickingTeam, quarter: guided.quarter, roles: { kicker: { team: guided.kickingTeam, num: kickerNum, yards: 0 }, playType: 'kickoff' } });
         guided.step = 'return';
         persistUiState();
         renderAll(); renderGuided();
@@ -2142,7 +2185,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     else if (type === 'safety') html =
         '<p class="hint" style="margin:0 0 10px;">Offense tackled, or committed a foul, in their own end zone. Always 2 points for the defense, and ends the drive — the scoring team kicks off next, logged as its own play afterward.</p>' +
         defBlock('Credited to (optional)');
-    else if (type === 'kickoff') html = offBlock('kicker','Kicker') + yardsBlock('Kick distance') +
+    // No kick-distance field on kickoffs. Nothing reports it -- the box
+    // score counts kickoffs and touchbacks only -- so asking for it was
+    // a field to fill in on every kickoff for no downstream use. The
+    // return yardage and the resulting spot are what matter.
+    else if (type === 'kickoff') html = offBlock('kicker','Kicker') +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_ko_ret_wrap">' + retBlock('Returned by (optional)') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_touchback', 'Touchback') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_muffed', 'Muffed / fumbled catch') + '</div></div>' +
@@ -3003,7 +3050,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // the play is marked, so it must warn regardless of TD status.
       const gain = pending.effect && typeof pending.effect.statYds === 'number' ? pending.effect.statYds : 0;
       const distToGoal = state.fieldPos !== null ? 100 - state.fieldPos : null;
-      if (gain > 0 && distToGoal !== null && gain > distToGoal){
+      if (gain > 0 && distToGoal === null && pending.effect && pending.effect.isStat){
+        // Silently skipping the check was the real damage: once field
+        // position is lost the app stops verifying yardage entirely and
+        // never says so, so impossible gains sail through unflagged.
+        warningEl.textContent = '⚠️ The ball\u2019s spot is not set, so this play\u2019s yardage cannot be checked ' +
+          'and field position will not track. Use "Adjust Down/Distance" to set the spot first.';
+        warningEl.style.display = 'block';
+      } else if (gain > 0 && distToGoal !== null && gain > distToGoal){
         warningEl.textContent = '⚠️ This gain (' + gain + ' yds) is more than possible here -- only ' + distToGoal + ' yds to the goal line. The maximum this play could have gained is ' + distToGoal + ' yds.';
         warningEl.style.display = 'block';
       } else if (gain > 0 && distToGoal !== null && gain === distToGoal && !pending.effect.td){
@@ -3126,7 +3180,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const driveTeamLabel = TEAMS[driveTeam].name + "'s side";
     const otherTeamLabel = TEAMS[otherTeam(driveTeam)].name + "'s side";
     panel.innerHTML =
-      '<p style="font-size:13px; color:#888; margin:0 0 6px;">Adjust down / distance</p>' +
+      '<p style="font-size:13px; color:#888; margin:0 0 6px;">Adjust down / distance — ' +
+      'leave anything blank to keep it as it is</p>' +
       '<div style="margin-bottom:8px;"><span style="font-size:13px; margin-right:6px;">Down</span>' +
       ['1','2','3','4'].map(d => '<button type="button" class="driveDownBtn" data-d="' + d + '">' + (d==='1'?'1st':d==='2'?'2nd':d==='3'?'3rd':'4th') + '</button>').join(' ') + '</div>' +
       '<label class="inline">Distance <input type="text" id="drive_dist" style="width:60px; display:inline-block;"></label>' +
@@ -3149,9 +3204,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('drive_review').addEventListener('click', () => {
       const dist = document.getElementById('drive_dist').value.trim();
       const yardline = document.getElementById('drive_yardline').value.trim();
-      if (!down || !side || !dist || !yardline) return;
-      const marker = side === 'own' ? ('-' + yardline) : yardline;
-      document.getElementById('code').value = down + ' ' + dist + ' ' + marker;
+      // Every field is optional and falls back to the current state, so
+      // the spot can be corrected without re-stating the down, or the
+      // down corrected without re-stating the spot. Requiring all four
+      // meant a coach who only knew the ball was mis-spotted had to
+      // re-enter the down and distance too, and get them right.
+      const st = computeState();
+      const d = down || String(st.down || 1);
+      const dst = dist || String(st.distance !== null ? st.distance : 10);
+      let marker = null;
+      if (side && yardline){
+        marker = side === 'own' ? ('-' + yardline) : yardline;
+      } else if (st.fieldPos !== null){
+        marker = st.fieldPos <= 50 ? ('-' + st.fieldPos) : String(100 - st.fieldPos);
+      }
+      // A spot has to come from somewhere: there is no current one to
+      // fall back on, and a drive with no field position is exactly the
+      // state that switches the yardage checks off.
+      if (!marker){
+        showMsg('gameMsg', 'Pick a side and yard line — there is no current spot to keep.', 'error');
+        return;
+      }
+      document.getElementById('code').value = d + ' ' + dst + ' ' + marker;
       showConfirm();
     });
   });
