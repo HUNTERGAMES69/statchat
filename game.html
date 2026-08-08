@@ -1261,6 +1261,21 @@ function markPicked(el, on){
 //
 // `order` is the same unit search order the LOG will use for this field,
 // so the name shown here is exactly the name that will be recorded.
+// A shared-number choice applies to the play being entered and nothing
+// more. It used to be written into the roster and left there, so one
+// mis-tap silently renamed that jersey for the rest of the session --
+// every later play by that number logged the wrong player, and Clear
+// did not undo it. The previous value is now recorded and restored
+// whenever a new play panel opens, so each play asks again.
+let nameOverrides = [];
+function clearNameOverrides(){
+  nameOverrides.forEach(o => {
+    if (o.prev === undefined) delete TEAMS[o.teamKey][o.bucket][o.num];
+    else TEAMS[o.teamKey][o.bucket][o.num] = o.prev;
+  });
+  nameOverrides = [];
+}
+
 function attachNameConfirm(inputId, getTeam, getOrder){
   const input = document.getElementById(inputId);
   if (!input || input.dataset.nameConfirm) return;
@@ -1284,13 +1299,18 @@ function attachNameConfirm(inputId, getTeam, getOrder){
     }
     const others = playerCandidates(teamKey, num).filter(c => c.name !== resolved);
     box.innerHTML =
-      '<button type="button" disabled style="padding:5px 10px; border-radius:6px; border:2px solid #2e7d32; ' +
-      'background:#eaf5ea; color:#1b4d1f; font-weight:700; cursor:default;">#' + num + ' ' + resolved + '</button>' +
+      '<button type="button" disabled style="padding:6px 12px; border-radius:6px; border:2px solid #2e7d32; ' +
+      'background:#eaf5ea; color:#1b4d1f; font-weight:700; cursor:default; opacity:1;">#' + num + ' ' + resolved + '</button>' +
       (others.length
         ? '<div style="color:#a05a00; margin-top:5px;">#' + num + ' is shared — tap the right player:</div>' +
           others.map((c, i) => '<button type="button" class="nameConfirmAlt" data-i="' + i +
-            '" style="margin:4px 6px 0 0; padding:5px 10px; border-radius:6px; border:2px solid #ccc; background:#fff; cursor:pointer;">' +
-            c.name + ' <span style="color:#888;">(' + c.unit + ')</span></button>').join('')
+            // color as well as background. The default button rule is
+            // white text, so setting only a white background rendered
+            // the player's name white-on-white -- invisible, leaving
+            // just the grey "(unit)" hint looking like an empty button.
+            '" style="margin:4px 6px 0 0; padding:6px 12px; border-radius:6px; border:2px solid #a05a00; ' +
+            'background:#fff4d6; color:#1a1a2e; font-weight:600; cursor:pointer;">' +
+            c.name + ' <span style="color:#7a5c00; font-weight:400;">(' + c.unit + ')</span></button>').join('')
         : '');
     box.querySelectorAll('.nameConfirmAlt').forEach(b => b.addEventListener('click', () => {
       const chosen = others[+b.dataset.i];
@@ -1302,6 +1322,10 @@ function attachNameConfirm(inputId, getTeam, getOrder){
       const bucket = order[0] === 'defense' ? 'rosterDefense'
         : order[0] === 'special' ? 'rosterSpecialTeams' : 'rosterOffense';
       t[bucket] = t[bucket] || {};
+      // Remember what was there so it can be put back for the next play.
+      if (!nameOverrides.some(o => o.teamKey === teamKey && o.bucket === bucket && o.num === num)){
+        nameOverrides.push({ teamKey, bucket, num, prev: t[bucket][num] });
+      }
       t[bucket][num] = chosen.name;
       render();
     }));
@@ -2265,6 +2289,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   }
 
   function renderPlayPanel(type){
+    // New play, new question: never carry a shared-number choice over.
+    clearNameOverrides();
     const state = computeState();
     const off = state.possession, def = otherTeam(state.possession);
     const panel = document.getElementById('playPanel');
