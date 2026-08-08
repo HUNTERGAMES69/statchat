@@ -2070,9 +2070,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<p style="font-size:13px; color:#888; margin:0 0 4px;">Kicker</p>' +
         '<div id="gk_kicker_grid">' + pickerHtml(kickerList, 'gk_kicker_pick') + '</div>' +
         '<input type="text" id="gk_kicker_manual" placeholder="or type #" style="width:100px; margin:4px 0 8px;"><br>' +
-
+        // Asked here, on the opening kickoff, because this is the one
+        // moment the coach can see which way the teams are lined up.
+        // Recorded once for the whole game -- ends alternate by quarter
+        // from this answer, so nothing else needs to ask again.
+        '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Which way is ' +
+          TEAMS[guided.receivingTeam].name + ' driving?</p>' +
+        '<button type="button" class="gk_dir_btn" data-dir="left">&#8592; left</button> ' +
+        '<button type="button" class="gk_dir_btn" data-dir="right">right &#8594;</button>' +
         '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedKickoffSave">Save kickoff</button></div>';
       let kickerNum = null;
+      let kickDir = null;
+      content.querySelectorAll('.gk_dir_btn').forEach(b => b.addEventListener('click', () => {
+        kickDir = b.dataset.dir;
+        content.querySelectorAll('.gk_dir_btn').forEach(x => x.style.background = '');
+        b.style.background = '#e6f1fb';
+      }));
       content.querySelectorAll('.gk_kicker_pick').forEach(b => b.addEventListener('click', () => {
         kickerNum = b.dataset.num;
         if (b.dataset.resolved) TEAMS[guided.kickingTeam].rosterSpecialTeams[kickerNum] = b.dataset.resolved;
@@ -2086,6 +2099,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (!kickerNum) return;
         const text = nameInSpecialTeams(guided.kickingTeam, kickerNum) + ' kicks off';
         pushAndPersist({ id: nextId++, text, effect: {}, team: guided.kickingTeam, quarter: guided.quarter, roles: { kicker: { team: guided.kickingTeam, num: kickerNum, yards: 0 }, playType: 'kickoff' } });
+        if (kickDir){
+          pushAndPersist({
+            id: nextId++,
+            text: TEAMS[guided.receivingTeam].name + ' driving ' + (kickDir === 'right' ? '\u2192' : '\u2190'),
+            effect: { setDirection: { team: guided.receivingTeam, dir: kickDir } },
+            quarter: guided.quarter
+          });
+        }
         guided.step = 'return';
         persistUiState();
         renderAll(); renderGuided();
