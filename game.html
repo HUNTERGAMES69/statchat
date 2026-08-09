@@ -1173,13 +1173,21 @@ function offenseEligible(team, role){
     // or worse, showing only the one player who happened to get a
     // position, which reads as broken rather than as filtered.
     if (!pos) return true;
-    // Split on / , or whitespace and match ANY of them. High-school
-    // players go both ways and get entered as "RB/LB" or "WR, DB"; the
-    // whole string was being compared against the allow-list, so a
-    // multi-position player matched nothing and vanished from every
-    // picker. posToUnit already splits this way -- this did not.
-    return pos.split(/[\/,\s]+/).filter(Boolean)
-      .some(part => allowedPos.indexOf(part) !== -1);
+    // Split on any run of non-letters, so RB/LB, RB-LB, "WR, DB" and
+    // "WR | DB" all separate. Rosters get typed by hand and every one of
+    // these turns up.
+    const parts = pos.split(/[^A-Z]+/).filter(Boolean);
+    if (parts.some(part => allowedPos.indexOf(part) !== -1)) return true;
+    // FAIL OPEN on anything we do not recognise. The allow-lists are
+    // deliberately narrow (carrier is RB/QB/WR/FB/HB), so a perfectly
+    // ordinary entry like ATH, SLOT, TB or a spelled-out "Quarterback"
+    // matches nothing and the player silently disappears from every
+    // picker. Excluding someone requires positively knowing their
+    // positions are recognised AND wrong for this role -- otherwise
+    // show them and let the coach decide.
+    const KNOWN = parts.some(part =>
+      OFFENSE_POS.has(part) || DEFENSE_POS.has(part) || SPECIAL_POS.has(part));
+    return !KNOWN;
   });
   const resolved = nums.slice().sort((a, b) => {
     const ar = usedInRole[a], br = usedInRole[b];
