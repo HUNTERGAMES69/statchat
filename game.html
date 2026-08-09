@@ -2266,10 +2266,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   function startingSpotFieldsHtml(idPrefix, label, driveTeamKey){
     const driveTeamLabel = driveTeamKey ? TEAMS[driveTeamKey].name + "'s side" : 'Our side';
     const otherTeamLabel = driveTeamKey ? TEAMS[otherTeam(driveTeamKey)].name + "'s side" : 'Their side';
-    return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label || 'Starting spot for the ensuing drive (optional — leave blank to set later)') + '</p>' +
+    // Wrapped so a panel can hide the whole block. The muff flows supply
+    // their own spot field, and showing both asked for the same yard
+    // line twice.
+    return '<div id="' + idPrefix + '_wrap">' +
+      '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label || 'Starting spot for the ensuing drive (optional — leave blank to set later)') + '</p>' +
       '<button type="button" class="' + idPrefix + '_side" data-side="own">' + driveTeamLabel + '</button> ' +
       '<button type="button" class="' + idPrefix + '_side" data-side="opp">' + otherTeamLabel + '</button> ' +
-      '<input autocomplete="off" type="text" id="' + idPrefix + '_yardline" style="width:70px; display:inline-block;" placeholder="Yard line">';
+      '<input autocomplete="off" type="text" id="' + idPrefix + '_yardline" style="width:70px; display:inline-block;" placeholder="Yard line">' +
+      '</div>';
   }
   function wireStartingSpot(container, idPrefix){
     let side = null;
@@ -2850,6 +2855,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const kickingRecovers = muffed &&
           document.querySelector('input[name=pp_ko_muffrec]:checked').value === 'k';
         document.getElementById('pp_ko_muff_spot_wrap').style.display = kickingRecovers ? 'block' : 'none';
+        // Hidden only when the KICKING team recovers -- that flow has its
+        // own spot field. A receiving-team recovery is an ordinary change
+        // of possession and still needs the general one.
+        const genSpotKo = document.getElementById('pp_spot_wrap');
+        if (genSpotKo) genSpotKo.style.display = kickingRecovers ? 'none' : 'block';
         currentSpotGetter = kickingRecovers ? koMuffSpotGetter : koSpotGetter;
       };
       const koTouchbackCb = document.getElementById('pp_ko_touchback');
@@ -2901,6 +2911,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const kickingRecovers = muffed &&
           document.querySelector('input[name=pp_punt_muffrec]:checked').value === 'k';
         document.getElementById('pp_muff_spot_wrap').style.display = kickingRecovers ? 'block' : 'none';
+        // The muff section carries its own spot field, so the panel's
+        // general one would be a second request for the same yard line.
+        // Hidden only when the KICKING team recovers -- that flow has its
+        // own spot field. A receiving-team recovery is an ordinary change
+        // of possession and still needs the general one.
+        const genSpot = document.getElementById('pp_spot_wrap');
+        if (genSpot) genSpot.style.display = kickingRecovers ? 'none' : 'block';
         currentSpotGetter = kickingRecovers ? muffSpotGetter : puntSpotGetter;
         updatePuntTdVisibility();
       };
@@ -3454,7 +3471,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (pending.reset && (flipHappened || effect.newDownsSameTeam)){
       const q2 = computeState().quarter;
       const driveTeam = flipHappened ? incomingTeam : computeState().possession;
-      pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(pending.reset.down) + ' & ' + pending.reset.distance + ' at ' + markerLabel(pending.reset.fieldPos) + ' (' + TEAMS[driveTeam].name + ')', effect: { isReset: true, down: pending.reset.down, distance: pending.reset.distance, fieldPos: pending.reset.fieldPos }, quarter: q2 });
+      // "New drive" is wrong when nothing changed hands. A muffed kick
+      // recovered by the kicking team gives that team a fresh set of
+      // downs without ever giving up possession, so the log says so.
+      // (findDriveStarts already ignores reset markers after the first,
+      // so this was never counted as an extra drive or possession --
+      // only the wording was misleading.)
+      const seriesLabel = flipHappened ? 'New drive — ' : 'New series — ';
+      pushAndPersist({ id: nextId++, text: seriesLabel + ordinal(pending.reset.down) + ' & ' + pending.reset.distance + ' at ' + markerLabel(pending.reset.fieldPos) + ' (' + TEAMS[driveTeam].name + ')', effect: { isReset: true, down: pending.reset.down, distance: pending.reset.distance, fieldPos: pending.reset.fieldPos }, quarter: q2 });
     }
     renderAll();
     document.getElementById('confirmCard').style.display = 'none';
