@@ -2861,9 +2861,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (!c) return;
     const td = document.getElementById('pp_td');
     const fum = document.getElementById('pp_rush_fumbled') || document.getElementById('pp_pass_fumbled');
-    const scored = !!(td && td.checked);
+    // Punt outcomes that make a landing spot meaningless. A touchback did
+    // not come down in the field of play, and a blocked kick never got
+    // away -- asking where it came down would invite a wrong number for
+    // the punter's average.
+    const puntTb = document.getElementById('pp_punt_touchback');
+    const puntBlocked = document.getElementById('pp_blocked');
+    const puntMuffed = document.getElementById('pp_muffed');
+    const puntVoid = !!((puntTb && puntTb.checked) || (puntBlocked && puntBlocked.checked));
+    const scored = !!(td && td.checked) || puntVoid;
     c.hide(scored);
-    c.setLabel(fum && fum.checked ? 'or ball came loose on' : 'or tackled on');
+    c.setLabel(
+      (fum && fum.checked) ? 'or ball came loose on'
+      : (puntMuffed && puntMuffed.checked) ? 'or muffed on'
+      : (puntTb || puntBlocked) ? 'or came down on'
+      : 'or tackled on');
     // A touchdown IS the distance to the goal line -- there is exactly one
     // possible gain, so asking for it is busywork and getting it wrong is
     // easy from the far end of the field. Filled and locked while ticked,
@@ -2871,6 +2883,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const yardsEl = document.getElementById('pp_yards');
     const lossBtn = panel.querySelector('.lossToggle[data-for="pp_yards"]');
     if (!yardsEl) return;
+    if (puntVoid){
+      // Nothing to compute: a touchback did not come down in the field of
+      // play and a blocked kick never got away. Release the box and clear
+      // the working -- leaving the old sum on screen next to a hidden
+      // calculator states a distance that no longer applies.
+      const yEl = document.getElementById('pp_yards');
+      if (yEl){ yEl.disabled = false; yEl.style.background = ''; yEl.style.borderColor = ''; yEl.style.fontWeight = ''; }
+      c.say((puntBlocked && puntBlocked.checked)
+        ? 'Blocked — the kick never got away, so there is no distance to work out.'
+        : 'Touchback — the ball did not come down in the field of play.');
+      return;
+    }
     if (scored){
       const fp = computeState().fieldPos;
       if (fp !== null){
@@ -2959,11 +2983,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // special case at all: own 20 to opp 20 is 80 - 20 = 60. What it DOES
     // need is the side, because "the 20" is two different places. The
     // current side is pre-selected so a short gain is still one number.
-    const spotCalcHtml = () => {
+    const spotCalcHtml = (label) => {
       const st = computeState();
       const off = st.possession, opp = otherTeam(off);
       return '<div id="pp_calc_wrap" style="margin-bottom:6px;">' +
-        '<p style="font-size:13px; color:#888; margin:8px 0 4px;">or tackled on</p>' +
+        '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label || 'or tackled on') + '</p>' +
         '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
           '<button type="button" class="ptoggle calcSide" data-side="own" ' +
             'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
@@ -3100,10 +3124,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         tdBlock + startingSpotFieldsHtml('pp_spot', null, def);
     else if (type === 'punt') html =
         offBlock('punter','Punter') +
-        '<div style="display:flex; align-items:flex-end; gap:14px;"><div style="margin-bottom:6px;">' + yardsBlock('Punt distance') + '</div>' +
+        // Punt distance is the same subtraction as a rushing gain: where
+        // the ball came down, minus the line of scrimmage. A coach reads
+        // the landing spot off the field, not the distance.
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Punt distance') + '</div>' +
+        spotCalcHtml('or came down on') +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_punt_touchback', 'Touchback') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_blocked') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_muffed', 'Muffed / fumbled catch') + '</div></div>' +
+        spotCalcReadoutHtml() +
         '<div id="pp_punt_normal">' + retBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div></div>' +
         '<div id="pp_punt_muffed" style="display:none;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_punt_muffrec" value="k" checked> Recovered by the kicking team (they keep the ball)</label>' +
@@ -3730,6 +3759,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         updatePuntTdVisibility();
       };
       document.getElementById('pp_punt_touchback').addEventListener('change', (e) => {
+        refreshSpotCalcContext(panel);
         if (e.target.checked){
           ['pp_blocked', 'pp_muffed'].forEach(id => {
             const o = document.getElementById(id);
@@ -3739,6 +3769,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         refreshPuntMode();
       });
       document.getElementById('pp_blocked').addEventListener('change', (e) => {
+        refreshSpotCalcContext(panel);
         // Blocked and muffed are different plays; turning one on clears
         // the other rather than leaving both claiming the panel.
         if (e.target.checked){
@@ -3748,6 +3779,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         refreshPuntMode();
       });
       document.getElementById('pp_muffed').addEventListener('change', (e) => {
+        refreshSpotCalcContext(panel);
         if (e.target.checked){
           const b = document.getElementById('pp_blocked');
           if (b.checked){ b.checked = false; b.dispatchEvent(new Event('change')); }
