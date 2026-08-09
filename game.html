@@ -40,6 +40,11 @@
      separate only for behaviour: the first tap on a suggestion commits
      it rather than clearing it, so tapping the already-correct player
      cannot accidentally deselect him. */
+  /* Unselected look for the inline toggles. It lives in CSS rather than
+     inline styles so that .picked can actually override it -- an inline
+     background beats any class, which is why these buttons never turned
+     gold. Declared before .picked so the selected state wins. */
+  button.ptoggle { background:#fff; color:#555; border:2px solid #ccc; }
   button.picked, button.suggested { background:#ffc72c; color:#1a1a2e; box-shadow:inset 0 0 0 2px #8a6a00; }
   .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .hidden { display:none; }
@@ -2661,16 +2666,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // margin lifts them 6px above a bare button. LOSS sat exactly that
     // much lower until it got the same wrapper.
     const lossToggleHtml = (id) => '<div style="margin-bottom:6px;">' +
-      '<button type="button" class="lossToggle" data-for="' + (id||'pp_yards') + '" ' +
-      'style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; ' +
-      'font-size:14px; font-weight:600; cursor:pointer;">LOSS</button></div>';
+      '<button type="button" class="lossToggle ptoggle" data-for="' + (id||'pp_yards') + '" ' +
+      'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button></div>';
     const yardsBlockRet = () => '<div id="pp_retyds_container"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Return yards (optional)</p><input autocomplete="off" type="text" id="pp_retyds" style="width:80px;"></div>';
     const tdBlock = '<div style="margin-top:10px;">' +
       '<input autocomplete="off" type="checkbox" id="pp_td" style="display:none;">' +
       '<button type="button" id="pp_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button>' +
       '</div>';
     const blockedToggleHtml = (id, label) => '<input autocomplete="off" type="checkbox" id="' + id + '" style="display:none;">' +
-      '<button type="button" id="' + id + '_toggle" data-cb="' + id + '" data-label="' + (label || 'Blocked') + '" class="pp-blocked-toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">' + (label || 'Blocked') + '</button>';
+      '<button type="button" id="' + id + '_toggle" data-cb="' + id + '" data-label="' + (label || 'Blocked') + '" class="pp-blocked-toggle ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">' + (label || 'Blocked') + '</button>';
 
     let html = '';
     if (type === 'rush') html = offBlock('carrier','Ball carrier') +
@@ -2697,7 +2701,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         offBlock('passer','Passer') + offBlock('receiver','Receiver') +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap" style="margin-bottom:6px;">' + yardsBlock('Yards') + '</div>' + lossToggleHtml('pp_yards') +
         '<div style="margin-bottom:6px;"><input autocomplete="off" type="checkbox" id="pp_incomplete" style="display:none;">' +
-        '<button type="button" id="pp_incomplete_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
+        '<button type="button" id="pp_incomplete_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
         '<div id="pp_pass_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_pass_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_safety', 'Safety') + '</div></div>' +
         '<div id="pp_pass_extra">' + defBlock('Tackled by (optional)') + '<div id="pp_pass_td_wrap">' + tdBlock + '</div></div>' +
@@ -2872,9 +2876,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       incToggle.addEventListener('click', () => {
         const cb = document.getElementById('pp_incomplete');
         cb.checked = !cb.checked;
-        incToggle.style.background = cb.checked ? '#a37a00' : '#fff';
-        incToggle.style.color = cb.checked ? '#fff' : '#555';
-        incToggle.style.borderColor = cb.checked ? '#a37a00' : '#ccc';
+        // Gold like the rest of the row. It had its own amber, so three
+        // buttons sitting side by side lit up in three different colours.
+        incToggle.classList.toggle('picked', cb.checked);
         incToggle.textContent = cb.checked ? '✓ Incomplete' : 'Incomplete';
         const fumbledWrap = document.getElementById('pp_pass_fumbled_wrap');
         if (fumbledWrap) fumbledWrap.style.display = cb.checked ? 'none' : 'block';
@@ -2905,9 +2909,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const cb = document.getElementById(btn.dataset.cb);
         cb.checked = !cb.checked;
         const label = btn.dataset.label || 'Blocked';
-        btn.style.background = cb.checked ? '#a32d2d' : '#fff';
-        btn.style.color = cb.checked ? '#fff' : '#555';
-        btn.style.borderColor = cb.checked ? '#a32d2d' : '#ccc';
+        // Gold, the same as every other selected control. These used to
+        // paint themselves red, which reads as an error rather than a
+        // choice and matched nothing else on the page.
+        btn.classList.toggle('picked', cb.checked);
         btn.textContent = cb.checked ? '✓ ' + label : label;
         cb.dispatchEvent(new Event('change'));
       });
