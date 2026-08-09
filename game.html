@@ -92,7 +92,7 @@
       <span class="finalTag" id="finalTag" style="display:none;">FINAL</span>
       <span class="finalTag" id="notStartedTag" style="display:none;">NOT STARTED</span>
     </div>
-    <div class="hint" id="topText" style="text-align:right;"></div>
+    <div id="topText" style="text-align:right; font-size:14px; font-weight:600; color:#333; margin:6px 0;"></div>
 
     <div id="clockPromptCard" style="display:none; background:#fff3cd; border-radius:8px; padding:12px 14px; margin-bottom:10px;">
       <div id="clockPromptLabel" style="font-size:15px; font-weight:600; margin-bottom:8px;"></div>
@@ -1792,11 +1792,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // number and only crowded the banner.
     document.getElementById('quarterText').textContent =
       state.quarter <= 4 ? 'Q' + state.quarter : 'OT';
-    document.getElementById('topText').textContent =
-      'Time of possession — ' + TEAMS.teamA.name + ' ' + formatDuration(state.possessionTime.teamA) +
-      ' · ' + TEAMS.teamB.name + ' ' + formatDuration(state.possessionTime.teamB) +
-      '   |   Timeouts — ' + TEAMS.teamA.name + ' ' + state.timeouts.teamA +
-      ' · ' + TEAMS.teamB.name + ' ' + state.timeouts.teamB;
+    document.getElementById('topText').innerHTML =
+      // Labels greyed, values in full contrast. The whole line used to be
+      // one flat #888 at 12px, so the numbers a coach actually reads --
+      // possession time and timeouts left -- were the same weight as the
+      // words around them and washed out against the page.
+      '<span style="color:#777; font-weight:400;">TOP</span> ' +
+      TEAMS.teamA.name + ' ' + formatDuration(state.possessionTime.teamA) +
+      ' <span style="color:#aaa;">·</span> ' +
+      TEAMS.teamB.name + ' ' + formatDuration(state.possessionTime.teamB) +
+      ' <span style="color:#ccc;">|</span> ' +
+      '<span style="color:#777; font-weight:400;">Timeouts</span> ' +
+      TEAMS.teamA.name + ' ' + state.timeouts.teamA +
+      ' <span style="color:#aaa;">·</span> ' +
+      TEAMS.teamB.name + ' ' + state.timeouts.teamB;
     const banner = document.getElementById('banner');
     const c = TEAMS[state.possession];
     banner.style.background = c.bg;
