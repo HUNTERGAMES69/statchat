@@ -666,18 +666,25 @@ const TIMEOUTS_PER_OT = 1;
 
     const t = seasonAgg.totals;
     const ownDowns = box.teamB.oppDowns, oppDowns = box.teamA.oppDowns;
-    const rushYds = sumStat(box.teamA.rushing,'yds'), rushAtt = sumStat(box.teamA.rushing,'att'), rushTd = sumStat(box.teamA.rushing,'td');
-    // Verified against real NFL box scores: sack yardage lost comes
-    // out of the team's Pass Yards total, not Rushing. Individual
-    // passer season totals in seasonAgg.passing stay unadjusted,
-    // matching each player's own personal statline.
+    let rushYds = sumStat(box.teamA.rushing,'yds');
+    const rushAtt = sumStat(box.teamA.rushing,'att'), rushTd = sumStat(box.teamA.rushing,'td');
+    // NFHS: sack yardage is charged against RUSHING, not passing.
+    // Individual passer season totals in seasonAgg.passing stay
+    // unadjusted, matching each player's own personal statline.
     const sackYardsLostFor = (teamKey) => gamePlays.reduce((tot, p) => {
       const r = p.roles;
       return (r && r.playType === 'sack' && r.passer && r.passer.team === teamKey) ? tot + (r.passer.yards || 0) : tot;
     }, 0);
-    const passYds = sumStat(box.teamA.passing,'yds') - sackYardsLostFor('teamA'), passAtt = sumStat(box.teamA.passing,'att'), passComp = sumStat(box.teamA.passing,'comp'), passTd = sumStat(box.teamA.passing,'td');
-    const oppRushYds = sumStat(box.teamB.rushing,'yds'), oppRushAtt = sumStat(box.teamB.rushing,'att'), oppRushTd = sumStat(box.teamB.rushing,'td');
-    const oppPassYds = sumStat(box.teamB.passing,'yds') - sackYardsLostFor('teamB'), oppPassAtt = sumStat(box.teamB.passing,'att'), oppPassComp = sumStat(box.teamB.passing,'comp'), oppPassTd = sumStat(box.teamB.passing,'td');
+    const passYds = sumStat(box.teamA.passing,'yds'), passAtt = sumStat(box.teamA.passing,'att'), passComp = sumStat(box.teamA.passing,'comp'), passTd = sumStat(box.teamA.passing,'td');
+    let oppRushYds = sumStat(box.teamB.rushing,'yds');
+    const oppRushAtt = sumStat(box.teamB.rushing,'att'), oppRushTd = sumStat(box.teamB.rushing,'td');
+    // NFHS/NCAA convention: sacks are a rushing loss, not a passing one.
+    // Applied AFTER both declarations -- doing it earlier referenced
+    // oppRushYds before its `let`, which is a TDZ error that killed the
+    // whole report.
+    rushYds -= sackYardsLostFor('teamA');
+    oppRushYds -= sackYardsLostFor('teamB');
+    const oppPassYds = sumStat(box.teamB.passing,'yds'), oppPassAtt = sumStat(box.teamB.passing,'att'), oppPassComp = sumStat(box.teamB.passing,'comp'), oppPassTd = sumStat(box.teamB.passing,'td');
     const pen = finalState.penalties.teamA;
     t.rushAtt += rushAtt; t.rushYds += rushYds; t.rushTd += rushTd;
     t.passAtt += passAtt; t.passComp += passComp; t.passYds += passYds; t.passTd += passTd;

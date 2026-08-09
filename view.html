@@ -1122,14 +1122,18 @@ function computeState(playsList){
     ['teamA', 'teamB'].forEach(teamKey => {
       const team = TEAMS[teamKey];
       const s = box[teamKey];
-      const rushYds = Object.keys(s.rushing).reduce((t, n) => t + (s.rushing[n].yds || 0), 0);
-      // Verified against real NFL box scores: sack yardage lost comes
-      // out of the team's Pass Yards total, not Rushing.
+      const rushYdsRaw = Object.keys(s.rushing).reduce((t, n) => t + (s.rushing[n].yds || 0), 0);
+      // NFHS (which follows the NCAA convention, not the NFL one):
+      // sack yardage is charged as RUSHING yardage lost, not deducted
+      // from passing. The quarterback's individual passing line is
+      // untouched either way -- only where the team total absorbs it
+      // changes. Under the NFL rule this came out of Pass Yards.
       const sackYardsLost = plays.reduce((t, p) => {
         const r = p.roles;
         return (r && r.playType === 'sack' && r.passer && r.passer.team === teamKey) ? t + (r.passer.yards || 0) : t;
       }, 0);
-      const passYds = Object.keys(s.passing).reduce((t, n) => t + (s.passing[n].yds || 0), 0) - sackYardsLost;
+      const passYds = Object.keys(s.passing).reduce((t, n) => t + (s.passing[n].yds || 0), 0);
+      const rushYds = rushYdsRaw - sackYardsLost;
       const totalYds = rushYds + passYds;
       // A team's own offensive 3rd/4th down conversion rate is stored on
       // the OTHER team's oppDowns entry (that's "the other team's defense

@@ -704,7 +704,8 @@ const TIMEOUTS_PER_OT = 1;
     const teamHtml = (teamKey) => {
       const team = TEAMS[teamKey];
       const s = box[teamKey];
-      const rushYds = sumStat(s.rushing, 'yds'), rushAtt = sumStat(s.rushing, 'att'), rushTd = sumStat(s.rushing, 'td');
+      let rushYds = sumStat(s.rushing, 'yds');
+      const rushAtt = sumStat(s.rushing, 'att'), rushTd = sumStat(s.rushing, 'td');
       // Verified against real NFL box scores: sack yardage lost comes
       // out of the team's Pass Yards total, not Rushing. Individual
       // passer rows elsewhere stay unadjusted, matching each player's
@@ -713,7 +714,9 @@ const TIMEOUTS_PER_OT = 1;
         const r = p.roles;
         return (r && r.playType === 'sack' && r.passer && r.passer.team === teamKey) ? t + (r.passer.yards || 0) : t;
       }, 0);
-      const passYds = sumStat(s.passing, 'yds') - sackYardsLost, passAtt = sumStat(s.passing, 'att'), passComp = sumStat(s.passing, 'comp');
+      // NFHS: charge the sack yardage against rushing.
+      rushYds -= sackYardsLost;
+      const passYds = sumStat(s.passing, 'yds'), passAtt = sumStat(s.passing, 'att'), passComp = sumStat(s.passing, 'comp');
       const passTd = sumStat(s.passing, 'td'), sacked = sumStat(s.passing, 'sacked');
       const totalYds = rushYds + passYds, totalPlays = playsFor(teamKey);
       const own = box[otherTeam(teamKey)].oppDowns; // this team's own offensive conversion rate
