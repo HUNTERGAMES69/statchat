@@ -2107,10 +2107,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.querySelectorAll('.ptypeBtn').forEach(b => {
       b.disabled = disable || (awaitingKickoff && b.dataset.type !== 'kickoff');
     });
-    ['kneelUtilBtn', 'badSnapUtilBtn'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el && awaitingKickoff && !disable) el.disabled = true;
-    });
+
     document.getElementById('penUtilBtn').disabled = disable;
     document.getElementById('driveUtilBtn').disabled = disable;
     // Undo is deliberately NOT gated on `disable` -- it never has been,
@@ -2127,6 +2124,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('timeoutUtilBtn').disabled = disable;
     document.getElementById('kneelUtilBtn').disabled = disable;
     document.getElementById('badSnapUtilBtn').disabled = disable;
+    // Applied last, after every other .disabled assignment above -- an
+    // earlier pass was being overwritten by those lines and the scrimmage
+    // utilities stayed live between a score and the kickoff.
+    if (awaitingKickoff && !disable){
+      // Everything that puts a ball in play. Penalty, Timeout, Adjust and
+      // Manual entry stay available: dead-ball fouls, timeouts and
+      // corrections are all real in this gap.
+      ['kneelUtilBtn', 'badSnapUtilBtn', 'flipBtn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = true;
+      });
+    }
     if (disable) document.getElementById('playPanel').style.display = 'none';
     document.getElementById('startGameBtn').style.display = (gamePhase === 'notStarted' && !guided.active) ? 'inline-block' : 'none';
     // Self-heal a stranded guided flow. guided_state is stored on the
