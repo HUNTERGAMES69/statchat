@@ -8,23 +8,47 @@ Ordered roughly by how much it would hurt to leave undone.
 
 ---
 
-## 1. Correctness — do these first
+## 1. Correctness
 
-- [ ] **`converts` is stored on the play instead of derived.** The most
-  consequential open bug. `effect.converts` and `effect.turnoverOnDowns`
-  are decided at entry time and frozen, so deleting or changing a play
-  does not re-derive whether *later* plays converted a first down.
-  Concretely: 1st & 10 at own 25, rush 8, pass 15, rush 3 — delete the
-  pass and the 3-yard rush should now convert 2nd & 2, but the state
-  reads `3rd & 1` because that play was stored with `converts: false`.
-  Field position recomputes correctly; the down does not.
-  **Fix:** derive `converts` in `computeState` from `statYds >= distance`
-  rather than trusting the stored flag. Five-file engine change; the
-  stored flag may be load-bearing for 4th-down and turnover-on-downs
-  cases, so run `mutation_check.js` against it.
-  **This blocks mid-log correction from being trustworthy**, and
-  correction is now confirmed post-game-only — the single workflow that
-  exists is exactly the one that hits this.
+### `converts` is stored, not derived — DOWNGRADED Aug 7, 2026
+
+This was listed as "the most consequential open bug" and "do first".
+Re-examined on Aug 7 and that is no longer the right call.
+
+**The bug is real.** `effect.converts` and `effect.turnoverOnDowns` are
+decided at entry and frozen, so deleting a play mid-drive does not
+re-derive whether *later* plays converted. Concretely: 1st & 10 at own
+25, rush 8, pass 15, rush 3 — delete the pass and the 3-yard rush should
+convert to 2nd & 2, but the state reads `3rd & 1`. Field position
+recomputes; the down does not.
+
+**But it is no longer silent.** `validateGame()` catches it exactly,
+verified Aug 7:
+
+> Play 3 reads "2 & 7" but recomputes to "3 & 1" — N Runningback rush for 3
+
+That check did not exist when this entry was written. With it, the cost
+side of the trade looks much worse than the benefit:
+
+| | Fix it | Leave it |
+|---|---|---|
+| Change | ~6 lines × 5 files, in the branch EVERY scrimmage play uses |  none |
+| Failure mode if wrong | downs drift subtly across a drive | none |
+| QA | replay real game logs before and after | none |
+| Exposure | mid-drive delete during post-game correction, and only when the yardage changes | same, but reported |
+
+- [ ] **Cheap mitigation instead:** one line on the correction-mode
+  banner — "after deleting a play mid-drive, run the checks; later downs
+  may need re-entering." Five minutes, closes the practical gap.
+- [ ] **Only do the full fix if this bites repeatedly in real use.** The
+  approach if it does: derive both flags in `computeState` from
+  `statYds >= state.distance` and `state.down >= 4`. Two traps —
+  `turnoverOnDowns` is paired with `flipApplied`, so a newly-derived
+  turnover would reset the down without changing possession (leave
+  possession alone and let `validateGame` flag it, rather than silently
+  moving the ball); and the automatic-first-down penalty path sets
+  `down = 1` separately, so confirm the two do not interact. Write the
+  failing test first, then run `mutation_check.js`.
 
 ---
 
@@ -45,22 +69,30 @@ Ordered roughly by how much it would hurt to leave undone.
 
 ---
 
-## 2. Test debt — five features verified only by hand
+## 2. Test debt
 
-All work and were checked manually, but nothing guards them against
-regression. Largest single block of open work.
+### Confirmed working by hand — closed Aug 7, 2026
 
-- [ ] Offline sync queue (offline entry, reload recovery, drain,
-  undo-while-queued, duplicate handling). `tests/harness.js` already
-  gained a `seedStorage` option to make the reload case testable.
-- [ ] Muffed punt and muffed kickoff — the RETURNED-FOR-A-TD variants and
-  mutual exclusion with Blocked / Touchback. The takeover-spot cases are
-  now covered by `tests/takeover_spot_check.js`.
-- [ ] Manual-entry name confirmation, including shared-number conflicts.
-- [ ] Timeout tracker (countdown, disabled at zero, halftime reset,
+Andy confirmed all five in live use. Closed as features.
+
+- [x] Offline sync queue (offline entry, reload recovery, drain,
+  undo-while-queued, duplicate handling).
+- [x] Muffed punt and muffed kickoff, including the returned-for-a-TD
+  variants and mutual exclusion with Blocked / Touchback. The
+  takeover-spot cases also have automated cover in
+  `tests/takeover_spot_check.js`.
+- [x] Manual-entry name confirmation, including shared-number conflicts.
+- [x] Timeout tracker (countdown, disabled at zero, halftime reset,
   replay on `view.html`).
-- [ ] Unlock to edit, `validateGame()`, and play deletion — including
+- [x] Unlock to edit, `validateGame()`, and play deletion — including
   that Delete controls are absent outside correction mode.
+
+**One thing these ticks do not mean.** They record that the features
+work, not that anything guards them. None has automated cover, so a
+future engine change can break any of them silently — and the offline
+queue in particular fails in a way nobody notices until plays are
+missing after a game. If a regression ever turns up in one of these,
+write the test then rather than re-fixing blind.
 
 ### Gaps the suite structurally cannot cover
 - [ ] Anything depending on real layout measurement — `view.html`'s
@@ -68,18 +100,43 @@ regression. Largest single block of open work.
   jsdom has no layout engine; needs a human on a real screen.
 - [ ] `season_report.html` chart rendering (Chart.js is stubbed —
   numbers are checked, visuals are not).
+  **Deferred by Andy to end of season** — needs several real games
+  before it is worth looking at.
 - [ ] Multi-game season aggregation (only ever tested with one game).
+  **Deferred to end of season**, same reason: the bugs here only appear
+  with real multi-game data, so testing it now would prove little.
 
 ---
 
-## 3. Correction tooling — unfinished
+## 3. Correction tooling
 
-- [ ] **Edit a play in place.** Nicer than delete-and-re-enter, but needs
-  a way to reopen the original entry panel with its values prefilled,
-  which the code has no notion of today.
-- [ ] **Make Insert-after carry a real effect and roles.** Today manual
-  insert saves `effect: {}` and `unresolved: true` — a text note that
-  cannot repair a down sequence.
+The two items here look similar and are not. Reviewed Aug 7, 2026.
+
+### Edit a play in place — DEFERRED, low value
+
+- [ ] Nicer than delete-and-re-enter, but that flow already works and is
+  two taps rather than one. It needs a way to reopen the original entry
+  panel with its values prefilled, which the code has no notion of —
+  every panel builds itself from the current game state, not from a
+  stored play. That is a real piece of work for a convenience.
+  **Do not build this unless correction becomes a frequent workflow.**
+
+### Insert a genuinely missed play — REAL GAP, worth scoping
+
+- [ ] **There is currently no way to add a play that was never entered
+  and have it count.** Manual entry inserts `effect: {}` with
+  `unresolved: true` — a text note carrying no stats, no yardage and no
+  down change. Delete-and-re-enter cannot help, because there is nothing
+  to delete.
+  Mid-game the workaround is fine: enter the play now, then Adjust
+  Down/Distance. Post-game there is no workaround at all — the yardage
+  is simply lost from the box score.
+  **How often this matters is unknown.** It depends entirely on how
+  often a play gets missed during live entry, which real games will
+  answer. Worth watching for during the season rather than building
+  speculatively — but if it happens even a couple of times a game, the
+  stat accuracy the whole app exists for is being quietly eroded, and
+  this jumps the queue.
 
 ---
 
@@ -105,19 +162,24 @@ regression. Largest single block of open work.
 
 ---
 
-## 5b. Track targets for receivers
+## 5b. Receiver targets — DONE Aug 7, 2026
 
-- [ ] **Record a target on every pass attempt**, not just completions.
-  Today an incomplete pass stores the passer and, if named, the
-  intended receiver — but nothing counts it as a target, so the
-  receiving line shows catches only. Targets are the standard
-  companion stat: 4 catches on 5 targets says something 4 catches
-  alone does not, and catch rate falls out of it for free.
-  The data is already being captured on incompletions (`roles.receiver`
-  is set when the intended receiver is named), so this is mostly a
-  matter of counting it in `computeBoxScore` and adding a column.
-  Note the receiver is optional, so targets will undercount whenever
-  nobody was named — same caveat as every other optional-player stat.
+- [x] Intended-receiver field added to the interception panel.
+- [x] `tgt` counted in `computeBoxScore` on completions, incompletions
+  and interceptions; two-point conversions excluded per NFHS.
+- [x] `Tgt` column on all four report pages, with `Catch %` on recap,
+  stat package and season report.
+- [x] `tests/receiver_targets_check.js`.
+
+**Still open, deliberately.** The receiver is optional and on an
+incompletion is often genuinely unknown, so **targets are a floor, not a
+count** — 4 from 4 can really be 4 from 7. Not yet decided whether to
+label that in the reports or make the intended receiver required on
+incompletions, which would slow the fastest-moving entry in the app.
+
+- [ ] Decide how to handle the undercount: label it, or require the
+  field. Worth deciding after a real game shows how often the receiver
+  actually goes unnamed.
 
 ---
 
@@ -244,6 +306,36 @@ There is no role enforcement in the database at all.
 - [ ] **Confirm no other self-write path to `profiles.role`.** The
   self-promotion hole is closed by a trigger; worth re-checking there is
   no second route once more policies change.
+
+### Two-factor authentication for admin accounts
+
+- [ ] **TOTP MFA on admin accounts — do this AFTER the RLS work above,
+  not before.** Supabase Auth has it built in (`auth.mfa.enroll`,
+  `auth.mfa.challengeAndVerify`), authenticator-app based rather than
+  SMS. Once a factor is verified the session carries an assurance
+  level: `aal1` for password-only, `aal2` after the second factor.
+
+  **The ordering is the whole point.** Every policy today is
+  "are you signed in", so any authenticated account can already delete
+  plays or edit games by calling the API directly, without ever loading
+  a page. A second factor on the login screen does not help while that
+  is true — it adds friction for the coaches and changes nothing an
+  attacker would rely on.
+
+  Done in the right order, the assurance level becomes enforceable in
+  the same role-aware policies: require `aal2` for the destructive
+  operations specifically — delete a game, reset a game, change a role
+  — while ordinary play entry stays at `aal1` so a scorer is not
+  challenged mid-drive.
+
+  Also decide before building: what happens when an admin loses their
+  phone. Supabase does not ship a recovery-code flow, so either a
+  second enrolled admin can clear the factor, or you keep a documented
+  SQL escape hatch.
+
+  Verify the API shape against
+  `supabase.com/docs/guides/auth/auth-mfa` first — it has changed
+  before, and these notes predate any check.
 
 ---
 
