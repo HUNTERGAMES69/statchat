@@ -601,6 +601,15 @@ function safeTextColor(bgHex, preferredHex){
   if (Math.abs(luminance(bgHex) - luminance(preferredHex)) > 0.35) return preferredHex;
   return luminance(bgHex) > 0.55 ? '#1a1a1a' : '#ffffff';
 }
+// "2nd & Goal", not "2nd & 3". Once the line to gain IS the goal line
+// there is no distance to state, and the banner already said Goal while
+// the play log still counted yards -- two different answers on screen at
+// the same time.
+function togoLabel(fieldPos, distance){
+  if (fieldPos !== null && fieldPos !== undefined && distance !== null &&
+      fieldPos + distance >= 100) return 'Goal';
+  return distance;
+}
 function markerLabel(fp){
   if (fp === null || fp === undefined) return '';
   return fp <= 50 ? ('own ' + fp) : ('opp ' + (100 - fp));
@@ -807,7 +816,7 @@ function parseInput(raw, state){
     const d = parseInt(tokens[0]), togo = parseInt(tokens[1]), marker = parseInt(tokens[2]);
     const fp = marker < 0 ? Math.abs(marker) : (100 - marker);
     return {
-      text: 'Down & distance adjusted — ' + ordinal(d) + ' & ' + togo + ' at ' + markerLabel(fp) + ' (' + TEAMS[off].name + ')',
+      text: 'Down & distance adjusted — ' + ordinal(d) + ' & ' + togoLabel(fp, togo) + ' at ' + markerLabel(fp) + ' (' + TEAMS[off].name + ')',
       effect: { isReset: true, down: d, distance: togo, fieldPos: fp },
       flipEligible: false, team: off, quarter: state.quarter
     };
@@ -836,7 +845,7 @@ function parseInput(raw, state){
       newDown = 1;
       newDistance = newFieldPos !== null ? Math.max(1, Math.min(10, 100 - newFieldPos)) : 10;
     }
-    const downDistanceText = (newDown !== null && newDistance !== null) ? (' — ' + ordinal(newDown) + ' & ' + newDistance) : '';
+    const downDistanceText = (newDown !== null && newDistance !== null) ? (' — ' + ordinal(newDown) + ' & ' + togoLabel(newFieldPos, newDistance)) : '';
     return {
       text: 'Penalty on ' + TEAMS[team].name + ' — ' + yds + ' yds' + (noDownChange ? ' (no down change)' : '') + downDistanceText,
       effect: Object.assign({ penaltyTeam: team, penaltyYds: yds, fieldDelta }, noDownChange ? { noDownChange: true } : {}),
@@ -926,7 +935,10 @@ function parseInput(raw, state){
     } else {
       if (netYards >= curDist){ converts = true; text += ' — 1st down'; }
       else if (curDown >= 4){ turnoverOnDowns = true; text += ' — turnover on downs'; }
-      else { text += ' — ' + ordinal(curDown + 1) + ' & ' + Math.max(curDist - netYards, 1); }
+      else {
+        const newFp = state.fieldPos !== null ? state.fieldPos + netYards : null;
+        text += ' — ' + ordinal(curDown + 1) + ' & ' + togoLabel(newFp, Math.max(curDist - netYards, 1));
+      }
     }
     if (tackler) text += ', tackled by ' + D(tackler);
 
@@ -2307,7 +2319,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const reset = getReset();
         if (!reset) return;
         pushAndPersist({ id: nextId++, text: 'Overtime — ' + TEAMS[team].name + ' to start at ' + markerLabel(reset.fieldPos), effect: { forcePossession: team }, quarter: 5 });
-        pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(reset.down) + ' & ' + reset.distance + ' at ' + markerLabel(reset.fieldPos) + ' (' + TEAMS[team].name + ')', effect: { isReset: true, down: reset.down, distance: reset.distance, fieldPos: reset.fieldPos }, quarter: 5 });
+        pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(reset.down) + ' & ' + togoLabel(reset.fieldPos, reset.distance) + ' at ' + markerLabel(reset.fieldPos) + ' (' + TEAMS[team].name + ')', effect: { isReset: true, down: reset.down, distance: reset.distance, fieldPos: reset.fieldPos }, quarter: 5 });
         guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
         persistUiState();
         renderAll();
@@ -2557,7 +2569,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
         const reset = kickingRecovers ? grKickSpot() : getReturnReset();
         if (reset && !td){
-          pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(reset.down) + ' & ' + reset.distance + ' at ' + markerLabel(reset.fieldPos) + ' (' + receivingName + ')', effect: { isReset: true, down: reset.down, distance: reset.distance, fieldPos: reset.fieldPos }, quarter: q });
+          pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(reset.down) + ' & ' + togoLabel(reset.fieldPos, reset.distance) + ' at ' + markerLabel(reset.fieldPos) + ' (' + receivingName + ')', effect: { isReset: true, down: reset.down, distance: reset.distance, fieldPos: reset.fieldPos }, quarter: q });
         }
         gamePhase = guided.targetPhase;
         guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
@@ -3832,7 +3844,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // so this was never counted as an extra drive or possession --
       // only the wording was misleading.)
       const seriesLabel = flipHappened ? 'New drive — ' : 'New series — ';
-      pushAndPersist({ id: nextId++, text: seriesLabel + ordinal(pending.reset.down) + ' & ' + pending.reset.distance + ' at ' + markerLabel(pending.reset.fieldPos) + ' (' + TEAMS[driveTeam].name + ')', effect: { isReset: true, down: pending.reset.down, distance: pending.reset.distance, fieldPos: pending.reset.fieldPos }, quarter: q2 });
+      pushAndPersist({ id: nextId++, text: seriesLabel + ordinal(pending.reset.down) + ' & ' + togoLabel(pending.reset.fieldPos, pending.reset.distance) + ' at ' + markerLabel(pending.reset.fieldPos) + ' (' + TEAMS[driveTeam].name + ')', effect: { isReset: true, down: pending.reset.down, distance: pending.reset.distance, fieldPos: pending.reset.fieldPos }, quarter: q2 });
     }
     renderAll();
     document.getElementById('confirmCard').style.display = 'none';
