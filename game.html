@@ -2005,6 +2005,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   function updatePhaseUI(){
     const disable = guided.active || !!clockPrompt || gamePhase === 'notStarted' || gamePhase === 'halftime' || gamePhase === 'ended';
+    // Undo is blocked on a finalized game. The database refuses to delete
+    // a play from a final game, so the button would drop it locally, look
+    // like it worked, and the play would reappear on the next load --
+    // local and server silently disagreeing. Correcting a finished game
+    // goes through Unlock to edit, which reopens it properly and gives
+    // every play its own Delete control.
+    const finalized = gamePhase === 'ended';
+    const undoBtn = document.getElementById('undoBtn');
+    if (undoBtn){
+      undoBtn.disabled = finalized;
+      undoBtn.title = finalized
+        ? 'This game is finalized. Use "Unlock to edit" to correct a play.'
+        : '';
+    }
+    const redoBtnEl = document.getElementById('redoBtn');
+    if (redoBtnEl && finalized) redoBtnEl.disabled = true;
     document.querySelectorAll('.ptypeBtn').forEach(b => { b.disabled = disable; });
     document.getElementById('penUtilBtn').disabled = disable;
     document.getElementById('driveUtilBtn').disabled = disable;
