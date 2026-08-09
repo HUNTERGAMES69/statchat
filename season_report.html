@@ -311,6 +311,13 @@ const TIMEOUTS_PER_OT = 1;
             if (state.fieldPos !== null){
               state.distance = Math.max(1, Math.min(state.distance, 100 - state.fieldPos));
             }
+          } else if (e.autoFirstDown){
+            // Defensive holding, roughing, pass interference and the like
+            // award a first down whatever the yardage -- a 5-yard foul on
+            // 3rd & 20 still moves the chains, so the distance maths below
+            // must not get a say.
+            state.down = 1;
+            state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
           } else {
             state.distance -= e.fieldDelta;
             if (state.distance <= 0){
