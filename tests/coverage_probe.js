@@ -73,10 +73,12 @@ const CASES = [
   // --- Two-point conversions ----------------------------------------
   ['2pt rush good',           { type: 'twopt', sub: 'rush', carrier: '22', result: 'g' }],
   ['2pt rush failed',         { type: 'twopt', sub: 'rush', carrier: '22', result: 'x' }],
-  ['2pt rush returned',       { type: 'twopt', sub: 'rush', carrier: '22', result: 'b', credit: '55', defTd: true }],
+  // NFHS: a try ends when the defense gains possession, so there is no
+  // defensive score to reach. The turnover itself is still recorded.
+  ['2pt rush turned over',    { type: 'twopt', sub: 'rush', carrier: '22', result: 'b', credit: '55' }],
   ['2pt pass good',           { type: 'twopt', sub: 'pass', passer: '7', receiver: '80', result: 'g' }],
   ['2pt pass failed',         { type: 'twopt', sub: 'pass', passer: '7', receiver: '80', result: 'x' }],
-  ['2pt pass intercepted',    { type: 'twopt', sub: 'pass', passer: '7', receiver: '80', result: 'b', credit: '21', defTd: true }],
+  ['2pt pass intercepted',    { type: 'twopt', sub: 'pass', passer: '7', receiver: '80', result: 'b', credit: '21' }],
 
   // --- Utilities ----------------------------------------------------
   ['safety (standalone)',     { type: 'safety', credit: '55' }],

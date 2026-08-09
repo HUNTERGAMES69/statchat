@@ -107,10 +107,10 @@ async function run() {
     const wrap = h.document.getElementById('pp_calc_wrap');
     const labelOf = () => wrap.querySelector('p').textContent;
 
-    if (labelOf() !== 'or tackled on') fail('label', 'default label is "' + labelOf() + '"');
+    if (labelOf() !== 'Or enter tackled on') fail('label', 'default label is "' + labelOf() + '"');
 
     click(h.window, h.document.getElementById('pp_rush_fumbled_toggle'));
-    if (labelOf() !== 'or ball came loose on') {
+    if (labelOf() !== 'Or enter ball came loose on') {
       fail('label', 'a fumble should relabel the calculator, got "' + labelOf() + '"');
     }
     click(h.window, h.document.getElementById('pp_rush_fumbled_toggle'));
@@ -119,9 +119,21 @@ async function run() {
     if (wrap.style.display !== 'none') {
       fail('touchdown', 'the calculator should be hidden on a touchdown — the spot is the goal line');
     }
+    // ...and the one possible gain should be filled in, not left to be
+    // worked out from the far end of the field.
+    const tdYards = h.document.getElementById('pp_yards');
+    if (tdYards.value !== '75') {   // from own 25
+      fail('touchdown', 'a touchdown from own 25 is 75 yards, box reads "' + tdYards.value + '"');
+    }
+    if (!tdYards.disabled) {
+      fail('touchdown', 'the yards box should be locked while the touchdown is ticked');
+    }
     click(h.window, h.document.getElementById('pp_td_toggle'));
     if (wrap.style.display === 'none') {
       fail('touchdown', 'clearing the touchdown should bring the calculator back');
+    }
+    if (h.document.getElementById('pp_yards').disabled) {
+      fail('touchdown', 'clearing the touchdown should release the yards box');
     }
     h.close();
   }
@@ -137,6 +149,40 @@ async function run() {
     }
     if (!h.document.getElementById('pp_calc_yardline').disabled) {
       fail('no spot', 'the yard line input should be disabled with no field position');
+    }
+    h.close();
+  }
+
+  // --- the punt panel ------------------------------------------------
+  // Punt distance is the same subtraction, read from where the ball came
+  // down. Two outcomes make that meaningless and must say so rather than
+  // leaving a stale sum on screen beside a hidden calculator.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 4, distance: 9, side: 'own', yardline: 30 });
+    click(h.window, h.document.querySelector('.ptypeBtn[data-type="punt"]'));
+    const panel = h.document.getElementById('playPanel');
+    click(h.window, panel.querySelector('.pp_punter_pick[data-num="15"]'));
+
+    click(h.window, panel.querySelector('.calcSide[data-side="opp"]'));
+    typeInto(h.window, h.document.getElementById('pp_calc_yardline'), '28');
+    if (h.document.getElementById('pp_yards').value !== '42') {
+      fail('punt', 'own 30 to opp 28 is a 42-yard punt, got "' +
+           h.document.getElementById('pp_yards').value + '"');
+    }
+
+    const readout = h.document.getElementById('pp_calc_readout');
+    click(h.window, h.document.getElementById('pp_punt_touchback_toggle'));
+    if (readout.textContent.indexOf('Touchback') === -1) {
+      fail('punt', 'a touchback should explain why there is nothing to compute, shows "' +
+           readout.textContent + '"');
+    }
+    click(h.window, h.document.getElementById('pp_punt_touchback_toggle'));
+
+    click(h.window, h.document.getElementById('pp_blocked_toggle'));
+    if (readout.textContent.indexOf('Blocked') === -1) {
+      fail('punt', 'a block should explain why there is nothing to compute, shows "' +
+           readout.textContent + '"');
     }
     h.close();
   }

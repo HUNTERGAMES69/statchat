@@ -101,7 +101,7 @@ function openPanel(win, doc, type) {
  * spec: {
  *   type, carrier, passer, receiver, kicker, punter, credit,
  *   yards, retyds, td, incomplete, fumbled, fumrec, safety,
- *   blocked, result, spot:{side,yardline}, clock, sub, defTd,
+ *   blocked, result, spot:{side,yardline}, clock, sub,
  *   preferPicker
  * }
  * @returns {{code:string, parsedText:string, saved:boolean}}
@@ -236,8 +236,9 @@ function enterPlay(h, spec) {
     P('kicker', spec.kicker);
     if (spec.blocked) {
       toggle(win, doc, 'pp_pat_blocked_cb_toggle');
+      // Blocker only. NFHS allows no return on a try, so there is no
+      // return-yards field to fill.
       P('credit', spec.credit);
-      if (spec.retyds !== undefined) typeInto(win, q(doc, 'pp_yards'), spec.retyds);
     } else {
       radio(win, doc, 'pp_patres', spec.result || 'g');
     }
@@ -250,18 +251,13 @@ function enterPlay(h, spec) {
     // clicked directly.
     // Clicking a checkbox TOGGLES it, so setting .checked first and then
     // clicking would silently turn it back off. Click alone, then verify.
-    const checkDefTd = which => {
-      const cb = q(doc, 'pp_2pt_' + which + '_defTd');
-      if (!cb.checked) click(win, cb);
-      if (!cb.checked) throw new UnreachableByUI('could not check pp_2pt_' + which + '_defTd');
-      cb.dispatchEvent(new win.Event('change', { bubbles: true }));
-    };
+    // checkDefTd removed: NFHS gives the defense no score on a try, so
+  // the controls it drove no longer exist.
     if (sub === 'rush') {
       P('carrier', spec.carrier);
       radio(win, doc, 'pp_2pt_rush_res', spec.result || 'g');
       if ((spec.result || 'g') === 'b') {
         P('credit', spec.credit, { suffix: '_2ptRush' });
-        if (spec.defTd) checkDefTd('rush');
       }
     } else {
       P('passer', spec.passer);
@@ -269,7 +265,6 @@ function enterPlay(h, spec) {
       radio(win, doc, 'pp_2pt_pass_res', spec.result || 'g');
       if ((spec.result || 'g') === 'b') {
         P('credit', spec.credit, { suffix: '_2ptPass' });
-        if (spec.defTd) checkDefTd('pass');
       }
     }
   } else if (t === 'safety') {
