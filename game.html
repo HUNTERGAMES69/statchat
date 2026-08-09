@@ -1192,8 +1192,14 @@ function offenseEligible(team, role){
 
   const nums = candidates.filter(num => {
     if (usedInRole[num] !== undefined) return true;   // has played this role
-    if (!roster[num]) return false;
+    // The seed check MUST come before the roster check. A likely starter
+    // who is not in this team's OFFENSIVE roster -- an opponent whose
+    // upload filed him under defense, say -- was being rejected here
+    // before the seed was ever consulted, so naming him RB1 had no
+    // effect at all. Naming someone a starter is the strongest signal
+    // there is; nothing should outrank it.
     if (seedPos[num] && allowedPos && allowedPos.indexOf(seedPos[num]) !== -1) return true;
+    if (!roster[num]) return false;
     if (!allowedPos) return true;                     // no filter for this role
     const pos = (posOffense[num] || '').toUpperCase().trim();
     // No position recorded means there is nothing to filter ON, so the
@@ -1266,7 +1272,22 @@ function specialTeamsEligible(team){
   Object.keys(ambiguous).forEach(num => {
     ambiguous[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', resolvedName: name }));
   });
-  const resolvedList = Object.keys(roster).sort().map(num => ({ num, name: roster[num] }));
+  // Anyone who has actually kicked or punted for this team, whether or
+  // not they are on the special-teams roster. This list was built purely
+  // from the roster, so a kicker typed in by hand -- a backup, or an
+  // opponent whose special teams were never entered -- had to be typed
+  // again on every single kick. Same rule the offensive pickers use.
+  const kicked = {};
+  plays.forEach(p => {
+    const r = p.roles; if (!r) return;
+    ['kicker', 'punter'].forEach(k => {
+      if (r[k] && r[k].team === team && r[k].num) kicked[r[k].num] = true;
+    });
+  });
+  const nums = Object.keys(roster);
+  Object.keys(kicked).forEach(n => { if (nums.indexOf(n) === -1) nums.push(n); });
+  const resolvedList = nums.sort().filter(num => !ambiguous[num])
+    .map(num => ({ num, name: roster[num] || nameInSpecialTeams(team, num) }));
   return ambiguousList.concat(resolvedList);
 }
 // A returner is almost never a "discovered defender". Dedicated kick and
@@ -1331,6 +1352,18 @@ function returnerEligible(team){
       return (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0);
     })
     .forEach(num => add(num, t.rosterSpecialTeams[num], 'special', posST[num]));
+  // Anyone who has actually returned a kick or punt for this team. The
+  // list was built only from rostered special-teamers and discovered
+  // defenders, so a returner typed in by hand -- which is the norm,
+  // since this picker is empty on the opening kickoff -- never joined
+  // it and had to be typed again every time.
+  plays.forEach(p => {
+    const r = p.roles; if (!r || !r.defense || r.defense.team !== team) return;
+    const pt = r.playType;
+    if (pt === 'kickoff_return' || pt === 'kickoff' || pt === 'punt'){
+      add(r.defense.num, nameInDefense(team, r.defense.num), 'defense', '');
+    }
+  });
   const posDef = t.posDefense || {};
   (discovered[team] || []).slice()
     .sort((a, b) => (stats[team].credits[b] || 0) - (stats[team].credits[a] || 0))
