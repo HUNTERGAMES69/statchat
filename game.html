@@ -3011,10 +3011,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // and toggles stayed on the row's baseline -- the whole line looked
     // staggered. It is also the working, so it gets room to be read:
     // full width, always present, never collapsing to nothing.
-    const spotCalcReadoutHtml = () =>
+    // Indented to start where the calculator's rule does (22px margin +
+    // 22px padding), so the working reads as belonging to the calculator
+    // rather than to the row as a whole.
+    const CALC_INDENT = 44;
+    const spotCalcReadoutHtml = (opts) =>
       '<div id="pp_calc_readout" style="font-size:14px; font-weight:600; color:#1a4d2e; ' +
       'background:#eef6f1; border-left:3px solid #1a7a4c; border-radius:4px; ' +
-      'padding:7px 10px; margin-top:10px;"></div>';
+      'padding:7px 10px; margin-top:10px; margin-left:' + CALC_INDENT + 'px;' +
+      // flexBreak makes it a full-width flex item, which forces whatever
+      // follows onto the next line. The punt panel uses that to put the
+      // working ABOVE its Touchback/Blocked/Muffed toggles instead of
+      // stranding it underneath them.
+      ((opts && opts.flexBreak) ? ' flex-basis:100%; margin-top:6px;' : '') +
+      '"></div>';
 
     const yardsBlockRet = () => '<div id="pp_retyds_container"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Return yards (optional)</p><input autocomplete="off" type="text" id="pp_retyds" style="width:80px;"></div>';
     const tdBlock = '<div style="margin-top:10px;">' +
@@ -3136,10 +3146,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // the landing spot off the field, not the distance.
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Enter distance') + '</div>' +
         spotCalcHtml('Or enter downed/received on') +
+        spotCalcReadoutHtml({ flexBreak: true }) +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_punt_touchback', 'Touchback') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_blocked') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_muffed', 'Muffed / fumbled catch') + '</div></div>' +
-        spotCalcReadoutHtml() +
         '<div id="pp_punt_normal">' + retBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div></div>' +
         '<div id="pp_punt_muffed" style="display:none;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_punt_muffrec" value="k" checked> Recovered by the kicking team (they keep the ball)</label>' +
