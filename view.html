@@ -829,10 +829,13 @@ function computeState(playsList){
       const passSorted = sortByYds(Object.keys(s.passing), s.passing, 'yds');
       const passNums = capWithTdException(passSorted, s.passing, 'td');
       if (passNums.length){
-        passHtml += tile('Passing', table(['Att','Comp','%','Yds','TD','Int'], passNums.map((n, i) => {
+        // Sacks belong on the passing line -- recap and stat_package both
+        // show them and view did not, so the live page was the only one
+        // where you could not see a quarterback being got at.
+        passHtml += tile('Passing', table(['Att','Comp','%','Yds','TD','Int','Sack'], passNums.map((n, i) => {
           const d = s.passing[n];
           const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
-          return { name: playerName(teamKey, n), leader: i === 0 && passNums.length > 1, values: [d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0] };
+          return { name: playerName(teamKey, n), leader: i === 0 && passNums.length > 1, values: [d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0, d.sacked||0] };
         })));
       }
       const rushSorted = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
