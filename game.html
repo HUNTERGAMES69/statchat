@@ -1964,6 +1964,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '" — ' + (p.text || '').slice(0, 60));
         }
       }
+      // An Adjust Down/Distance marker deliberately sets the down to
+      // whatever the coach says, so continuity across it means nothing.
+      // Without this the check reported "down jumped from 2 to 2"
+      // every time the chains were corrected mid-drive -- a false
+      // positive, and the fastest way to teach someone to ignore it.
+      if (p.effect && p.effect.isReset){ prevDown = null; continue; }
       if (!isScrimmage(p)) continue;
       const before = computeState(plays.slice(0, i));
       if (before.down !== null && prevDown !== null && before.down !== 1 && before.down !== prevDown + 1){
@@ -1990,7 +1996,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
     });
 
-    // 5. Scrimmage plays recorded with no field position. These are the
+    // 5. A touchdown that never reached the goal line. Same impossibility
+    //    as an over-long gain, from the other direction.
+    plays.forEach((p, i) => {
+      const e = p.effect;
+      if (!e || !e.td || typeof e.statYds !== 'number') return;
+      const before = computeState(plays.slice(0, i));
+      if (before.fieldPos === null) return;
+      const distToGoal = 100 - before.fieldPos;
+      if (e.statYds < distToGoal){
+        issues.push('Play ' + (i + 1) + ' is a touchdown of only ' + e.statYds + ' yds with ' + distToGoal +
+          ' to the goal line — it could not have scored: ' + (p.text || '').slice(0, 50));
+      }
+    });
+
+    // 6. Scrimmage plays recorded with no field position. These are the
     //    ones the impossible-gain check could not examine, so they are
     //    the plays most likely to be carrying bad yardage.
     let noSpot = 0, firstNoSpot = null;
@@ -2006,7 +2026,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         'never checked against the field, and field position stopped tracking there.');
     }
 
-    // 6. Every punt implies a failed third down on that drive. If the
+    // 7. Every punt implies a failed third down on that drive. If the
     //    counts do not line up, a third-down snap is missing.
     const box = { teamA: 0, teamB: 0 }, punts = { teamA: 0, teamB: 0 };
     plays.forEach((p, i) => {
@@ -3358,6 +3378,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         warningEl.style.display = 'block';
       } else if (gain > 0 && distToGoal !== null && gain === distToGoal && !pending.effect.td){
         warningEl.textContent = '⚠️ This gain (' + gain + ' yds) reaches the goal line exactly -- only ' + distToGoal + ' yds away. If this scored, go back and check the touchdown box first.';
+        warningEl.style.display = 'block';
+      } else if (pending.effect.td && distToGoal !== null && gain < distToGoal){
+        // The mirror of the check above, and the one that was missing: a
+        // touchdown has to reach the goal line, so the gain must equal
+        // the distance to it exactly. Marking a 33-yard gain from the
+        // opponent's 49 as a score leaves the ball on their 16 while
+        // still awarding six points -- the score, the player's TD and
+        // the yardage all go in wrong, with nothing to flag it.
+        warningEl.textContent = '⚠️ This is marked a touchdown but only gains ' + gain + ' yds, and the goal line is ' +
+          distToGoal + ' yds away -- the ball would stop on the ' + (100 - (state.fieldPos + gain)) +
+          '. A touchdown from here has to be ' + distToGoal + ' yds.';
         warningEl.style.display = 'block';
       }
       if (pending.flipEligible){
