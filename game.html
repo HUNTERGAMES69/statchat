@@ -2238,7 +2238,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div style="margin-bottom:6px;"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Clock</p>' +
             '<input autocomplete="off" type="text" id="guidedReturnClock" placeholder="M:SS or MSS" style="width:110px;"></div>' +
         '</div>' +
+        // Touchback is the single most common opening kickoff and the
+        // guided flow had no way to record one at all -- the coach had
+        // to invent a 0-yard return and set the spot by hand.
         '<div style="margin-top:10px;">' +
+          '<input autocomplete="off" type="checkbox" id="gr_touchback" style="display:none;">' +
+          '<button type="button" id="gr_touchback_toggle" style="width:100%; padding:10px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Touchback</button>' +
+        '</div>' +
+        '<div id="gr_muff_wrap" style="margin-top:10px;">' +
           '<input autocomplete="off" type="checkbox" id="gr_muffed" style="display:none;">' +
           '<button type="button" id="gr_muffed_toggle" style="width:100%; padding:10px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Muffed / fumbled catch</button>' +
         '</div>' +
@@ -2287,7 +2294,36 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         grMuffBtn.style.color = on ? '#fff' : '#555';
         grMuffBtn.style.borderColor = on ? '#a05a00' : '#ccc';
       };
-      grMuffBtn.addEventListener('click', () => { grMuffCb.checked = !grMuffCb.checked; refreshGrMuff(); });
+      const grTbBtn = document.getElementById('gr_touchback_toggle'), grTbCb = document.getElementById('gr_touchback');
+      const grReturnFields = () => [document.getElementById('gr_returner_grid'),
+        document.getElementById('gr_returner_manual'), document.getElementById('gr_yards').parentElement];
+      const refreshGrTb = () => {
+        const tb = grTbCb.checked;
+        if (tb && grMuffCb.checked){ grMuffCb.checked = false; }
+        document.getElementById('gr_muff_wrap').style.display = tb ? 'none' : 'block';
+        document.getElementById('gr_muff_box').style.display = 'none';
+        grReturnFields().forEach(el => { if (el) el.style.display = tb ? 'none' : ''; });
+        document.getElementById('gr_spot_recv').style.display = tb ? 'block' : (grMuffCb.checked ? '' : 'block');
+        document.getElementById('gr_spot_kick').style.display = 'none';
+        grTbBtn.textContent = tb ? '\u2713 Touchback' : 'Touchback';
+        grTbBtn.style.background = tb ? '#1a7a4c' : '#fff';
+        grTbBtn.style.color = tb ? '#fff' : '#555';
+        grTbBtn.style.borderColor = tb ? '#1a7a4c' : '#ccc';
+        // NFHS spots a touchback at the receiving team's own 20.
+        if (tb){
+          const yl = document.getElementById('gr_spot_yardline');
+          if (yl && !yl.value) yl.value = '20';
+          const own = content.querySelector('.gr_spot_side[data-side="own"]');
+          if (own) own.click();
+        }
+        if (!tb) refreshGrMuff();
+      };
+      grTbBtn.addEventListener('click', () => { grTbCb.checked = !grTbCb.checked; refreshGrTb(); });
+      grMuffBtn.addEventListener('click', () => {
+        grMuffCb.checked = !grMuffCb.checked;
+        if (grMuffCb.checked && grTbCb.checked){ grTbCb.checked = false; refreshGrTb(); }
+        refreshGrMuff();
+      });
       content.querySelectorAll('input[name=gr_muffrec]').forEach(r => r.addEventListener('change', refreshGrMuff));
       const grTdBtn = document.getElementById('gr_td_toggle'), grTdCb = document.getElementById('gr_td');
       grTdBtn.addEventListener('click', () => {
@@ -2305,7 +2341,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // picker is usually empty anyway, and a coach frequently can't
         // read the number. Return yardage is still required because it
         // is what the rest of the flow needs.
-        if (!yds) return;
+        const touchback = document.getElementById('gr_touchback').checked;
+        // A touchback has no return, so requiring yardage would block it.
+        if (!yds && !touchback) return;
         const q = guided.quarter;
 
         // Validate the clock before anything gets saved, same reasoning
@@ -2339,6 +2377,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           text = TEAMS[guided.receivingTeam].name + ' MUFFED the catch, recovered by ' + recName;
           if (parseInt(yds, 10)) text += ' for ' + yds;
           effect = kickingRecovers ? {} : { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
+        } else if (touchback){
+          text = TEAMS[guided.receivingTeam].name + ' — TOUCHBACK';
+          effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
         } else {
           text = (returnerNum ? nameInDefense(guided.receivingTeam, returnerNum) : TEAMS[guided.receivingTeam].name) + ' returns ' + yds;
           effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
