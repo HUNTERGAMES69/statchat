@@ -1253,6 +1253,32 @@ function offenseEligible(team, role){
   });
   return ambiguousList.concat(resolved);
 }
+// Most recent play index at which a player filled any of these roles.
+// Every picker sorts by this: the player who just did the thing is far
+// more likely to do it again than whoever has the biggest season total.
+function lastUsedByRole(team, roleKeys){
+  const out = {};
+  plays.forEach((p, i) => {
+    const r = p.roles; if (!r) return;
+    roleKeys.forEach(k => {
+      if (r[k] && r[k].team === team && r[k].num) out[r[k].num] = i;
+    });
+  });
+  return out;
+}
+// Recency first, then whatever the caller's own tiebreak is.
+function byRecency(recency, tiebreak){
+  return (a, b) => {
+    const ra = recency[a.num !== undefined ? a.num : a], rb = recency[b.num !== undefined ? b.num : b];
+    if (ra !== undefined || rb !== undefined){
+      if (ra === undefined) return 1;
+      if (rb === undefined) return -1;
+      if (ra !== rb) return rb - ra;
+    }
+    return tiebreak ? tiebreak(a, b) : 0;
+  };
+}
+
 function defenseEligible(team){
   const { stats, discovered } = computePlayerStats();
   const ambiguous = TEAMS[team].ambiguousDefense || {};
@@ -1260,7 +1286,9 @@ function defenseEligible(team){
   Object.keys(ambiguous).forEach(num => {
     ambiguous[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', resolvedName: name }));
   });
-  const discoveredList = discovered[team].slice().sort((a, b) => (stats[team].credits[b]||0) - (stats[team].credits[a]||0))
+  const defRecency = lastUsedByRole(team, ['defense']);
+  const discoveredList = discovered[team].slice()
+    .sort(byRecency(defRecency, (a, b) => (stats[team].credits[b]||0) - (stats[team].credits[a]||0)))
     .filter(num => !ambiguous[num])
     .map(num => ({ num, name: TEAMS[team].rosterDefense[num] || '' }));
   return ambiguousList.concat(discoveredList);
@@ -1286,7 +1314,10 @@ function specialTeamsEligible(team){
   });
   const nums = Object.keys(roster);
   Object.keys(kicked).forEach(n => { if (nums.indexOf(n) === -1) nums.push(n); });
-  const resolvedList = nums.sort().filter(num => !ambiguous[num])
+  const stRecency = lastUsedByRole(team, ['kicker', 'punter']);
+  const resolvedList = nums
+    .sort(byRecency(stRecency, (a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0)))
+    .filter(num => !ambiguous[num])
     .map(num => ({ num, name: roster[num] || nameInSpecialTeams(team, num) }));
   return ambiguousList.concat(resolvedList);
 }
@@ -1368,6 +1399,10 @@ function returnerEligible(team){
   (discovered[team] || []).slice()
     .sort((a, b) => (stats[team].credits[b] || 0) - (stats[team].credits[a] || 0))
     .forEach(num => add(num, t.rosterDefense[num] || '', 'defense', posDef[num]));
+  // Anyone who has actually returned one comes first, most recent at the
+  // front; the rostered KR/PR ordering below is only the starting guess.
+  const retRecency = lastUsedByRole(team, ['defense']);
+  list.sort(byRecency(retRecency, () => 0));
   return ambiguousList.concat(list);
 }
 function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
