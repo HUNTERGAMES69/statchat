@@ -2864,6 +2864,36 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const scored = !!(td && td.checked);
     c.hide(scored);
     c.setLabel(fum && fum.checked ? 'or ball came loose on' : 'or tackled on');
+    // A touchdown IS the distance to the goal line -- there is exactly one
+    // possible gain, so asking for it is busywork and getting it wrong is
+    // easy from the far end of the field. Filled and locked while ticked,
+    // released untouched when cleared.
+    const yardsEl = document.getElementById('pp_yards');
+    const lossBtn = panel.querySelector('.lossToggle[data-for="pp_yards"]');
+    if (!yardsEl) return;
+    if (scored){
+      const fp = computeState().fieldPos;
+      if (fp !== null){
+        yardsEl.value = String(100 - fp);
+        yardsEl.disabled = true;
+        yardsEl.style.background = '#eef6f1';
+        yardsEl.style.borderColor = '#1a7a4c';
+        yardsEl.style.fontWeight = '700';
+        c.say('from ' + markerLabel(fp) + ' to the goal line  =  +' + (100 - fp) + '  (touchdown)');
+      }
+      if (lossBtn){
+        lossBtn.classList.remove('picked');   // a score is never a loss
+        lossBtn.disabled = true;
+        lossBtn.style.opacity = '0.45';
+      }
+    } else {
+      yardsEl.disabled = false;
+      yardsEl.style.background = '';
+      yardsEl.style.borderColor = '';
+      yardsEl.style.fontWeight = '';
+      if (lossBtn){ lossBtn.disabled = false; lossBtn.style.opacity = ''; }
+      c.recompute();
+    }
   }
 
   function wireLossToggles(panel){
@@ -2943,9 +2973,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             TEAMS[opp].name + '</button>' +
           '<input autocomplete="off" type="text" id="pp_calc_yardline" placeholder="yard line" style="width:90px;">' +
         '</span>' +
-        '<div id="pp_calc_readout" style="font-size:12px; color:#777; margin-top:4px;"></div>' +
       '</div>';
     };
+    // The readout lives BELOW the flex row, not inside it. Sitting inside,
+    // its height pushed the calculator's controls up while the yards box
+    // and toggles stayed on the row's baseline -- the whole line looked
+    // staggered. It is also the working, so it gets room to be read:
+    // full width, always present, never collapsing to nothing.
+    const spotCalcReadoutHtml = () =>
+      '<div id="pp_calc_readout" style="font-size:14px; font-weight:600; color:#1a4d2e; ' +
+      'background:#eef6f1; border-left:3px solid #1a7a4c; border-radius:4px; ' +
+      'padding:7px 10px; margin-top:10px;"></div>';
 
     const yardsBlockRet = () => '<div id="pp_retyds_container"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Return yards (optional)</p><input autocomplete="off" type="text" id="pp_retyds" style="width:80px;"></div>';
     const tdBlock = '<div style="margin-top:10px;">' +
@@ -2960,6 +2998,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Yards') + '</div>' + lossToggleHtml('pp_yards') + spotCalcHtml() +
         '<div id="pp_rush_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_rush_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_safety', 'Safety') + '</div></div>' +
+        spotCalcReadoutHtml() +
         defBlock('Tackled by (optional)') +
         '<div id="pp_rush_td_wrap">' + tdBlock + '</div>' +
         '<div id="pp_rush_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
@@ -2989,6 +3028,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<button type="button" id="pp_incomplete_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
         '<div id="pp_pass_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_pass_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_safety', 'Safety') + '</div></div>' +
+        spotCalcReadoutHtml() +
         '<div id="pp_pass_extra">' + defBlock('Tackled by (optional)') + '<div id="pp_pass_td_wrap">' + tdBlock + '</div></div>' +
         '<div id="pp_pass_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pass_fumrec" value="own"> Recovered by own team</label>' +
@@ -3256,13 +3296,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           setDisabled(ylEl, true); sideBtns.forEach(b => setDisabled(b, true));
           return;
         }
-        if (!raw || !side){ readout.textContent = ''; releaseYards(); return; }
+        if (!raw || !side){
+          readout.textContent = 'Enter a yard line to work the gain out from the spot.';
+          releaseYards(); return;
+        }
         const n = parseInt(raw, 10);
         if (isNaN(n) || n < 0 || n > 50){ readout.textContent = 'Yard line must be 0–50.'; return; }
         // own N is N from our goal; opp N is N from theirs, so 100 - N.
         const newPos = side === 'own' ? n : (100 - n);
         const gain = newPos - cur;
         yardsEl.value = String(Math.abs(gain));
+        // Tinted so it is obvious the number was worked out rather than
+        // typed -- a locked grey box just looks broken.
+        yardsEl.style.background = '#eef6f1';
+        yardsEl.style.borderColor = '#1a7a4c';
+        yardsEl.style.fontWeight = '700';
         // The sign comes out of the arithmetic, so LOSS is driven from
         // here rather than left for the coach to set as well -- having
         // both would double-negate exactly like a typed "-5" plus LOSS.
@@ -3276,6 +3324,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
       function releaseYards(){
         setDisabled(yardsEl, false);
+        yardsEl.style.background = '';
+        yardsEl.style.borderColor = '';
+        yardsEl.style.fontWeight = '';
         if (lossBtn) setDisabled(lossBtn, false);
       }
 
@@ -3290,7 +3341,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       recompute();
       panel.__spotCalc = { recompute, releaseYards, setLabel: t => {
         wrap.querySelector('p').textContent = t;
-      }, hide: on => { wrap.style.display = on ? 'none' : ''; if (on){ ylEl.value = ''; readout.textContent = ''; releaseYards(); } } };
+      }, hide: on => {
+        wrap.style.display = on ? 'none' : '';
+        if (on){ ylEl.value = ''; releaseYards(); }
+      }, say: t => { readout.textContent = t; } };
     })();
 
     wireLossToggles(panel);
