@@ -935,6 +935,15 @@ function computeState(playsList){
       // Right: defense, then special teams.
       leftHtml = passHtml + recHtml + rushHtml;
       rightHtml = defHtml + stHtml;
+      // Early in a game a team can easily have defensive or special-teams
+      // stats and no offensive ones -- the opening play being a punt or a
+      // sack does it. That left the first column empty and the content
+      // stranded in the right half with a gap beside it. Reading order is
+      // left to right, so a lone column belongs on the left.
+      if (!leftHtml && rightHtml){
+        leftHtml = rightHtml;
+        rightHtml = '';
+      }
       return { html: '<div class="stat-category-grid"><div class="stat-category-col">' + leftHtml + '</div><div class="stat-category-col">' + rightHtml + '</div></div>', totalRows };
   }
 
