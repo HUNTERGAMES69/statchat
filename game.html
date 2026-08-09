@@ -2357,14 +2357,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, (num, p) => (p && p.pos) || '', 'no returners on the roster — type a number below') + '</div>' +
         '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px; margin-top:4px;">';
     }
-    // allowLoss adds a LOSS toggle beside the box, so a negative gain is
-    // a tap rather than reaching for the minus key mid-drive. The typed
-    // number stays positive; the sign is applied when the play is built.
-    const yardsBlock = (label, id, allowLoss) => '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label||'Yards') + '</p>' +
-      '<span style="display:inline-flex; align-items:center; gap:6px;">' +
-      '<input autocomplete="off" type="text" id="' + (id||'pp_yards') + '" style="width:80px;">' +
-      (allowLoss ? '<button type="button" class="lossToggle" data-for="' + (id||'pp_yards') + '">LOSS</button>' : '') +
-      '</span>';
+    const yardsBlock = (label, id) => '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label||'Yards') + '</p>' +
+      '<input autocomplete="off" type="text" id="' + (id||'pp_yards') + '" style="width:80px;">';
+    // LOSS is a sibling of the Incomplete/Fumbled/Safety toggles rather
+    // than something tucked in beside the input, and carries their exact
+    // styling. Nesting it next to the input gave it a different height
+    // and baseline, so it sat lower than the buttons it lines up with.
+    const lossToggleHtml = (id) => '<button type="button" class="lossToggle" data-for="' + (id||'pp_yards') + '" ' +
+      'style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; ' +
+      'font-size:14px; font-weight:600; cursor:pointer;">LOSS</button>';
     const yardsBlockRet = () => '<div id="pp_retyds_container"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Return yards (optional)</p><input autocomplete="off" type="text" id="pp_retyds" style="width:80px;"></div>';
     const tdBlock = '<div style="margin-top:10px;">' +
       '<input autocomplete="off" type="checkbox" id="pp_td" style="display:none;">' +
@@ -2375,7 +2376,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     let html = '';
     if (type === 'rush') html = offBlock('carrier','Ball carrier') +
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div>' + yardsBlock('Yards', null, true) + '</div>' +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div>' + yardsBlock('Yards') + '</div>' + lossToggleHtml('pp_yards') +
         '<div id="pp_rush_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_rush_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_safety', 'Safety') + '</div></div>' +
         defBlock('Tackled by (optional)') +
@@ -2396,7 +2397,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<button type="button" class="pp-outcome-switch" onclick="renderPlayPanel(\'int\')" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Intercepted</button>' +
         '</div>' +
         offBlock('passer','Passer') + offBlock('receiver','Receiver') +
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap">' + yardsBlock('Yards', null, true) + '</div>' +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap">' + yardsBlock('Yards') + '</div>' + lossToggleHtml('pp_yards') +
         '<div style="margin-bottom:6px;"><input autocomplete="off" type="checkbox" id="pp_incomplete" style="display:none;">' +
         '<button type="button" id="pp_incomplete_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
         '<div id="pp_pass_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_fumbled', 'Fumbled') + '</div>' +
