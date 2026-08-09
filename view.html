@@ -885,7 +885,14 @@ function computeState(playsList){
           return { name: playerName(teamKey, n), leader: i === 0 && rushNums.length > 1, values: [d.att||0, d.yds||0, d.td||0] };
         })));
       }
-      const recSorted = sortByYds(Object.keys(s.receiving), s.receiving, 'yds');
+      // A target alone does not earn a row on the live view. Adding targets
+      // meant anyone thrown at once appeared with 0 catches and 0 yards,
+      // padding the tile with players who have not caught anything -- and
+      // this panel auto-shrinks to fit, so every wasted row costs size on
+      // the rows that matter. The full-detail reports still list them.
+      const recSorted = sortByYds(
+        Object.keys(s.receiving).filter(n => (s.receiving[n].rec || 0) > 0),
+        s.receiving, 'yds');
       const recNums = capWithTdException(recSorted, s.receiving, 'td');
       if (recNums.length){
         // Tgt before Rec: the throw comes before the catch, and reading
