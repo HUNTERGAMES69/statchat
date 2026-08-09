@@ -4081,8 +4081,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // Undoing back PAST the divider itself has to return to the first
     // half, or the game sits at halftime with no half-end marker and no
     // way to enter a play.
-    if (!halfEnded && gamePhase === 'halftime'){
+    // Derived from the log, not from whatever the phase happened to be.
+    // Keying off gamePhase === 'halftime' meant undoing the divider while
+    // still in 'secondHalf' left the game there: no End 1st half button,
+    // no Start 2nd half, and every control disabled -- stuck with no way
+    // forward except Reset game.
+    if (!halfEnded && gamePhase !== 'firstHalf' && gamePhase !== 'ended' && gamePhase !== 'notStarted'){
       gamePhase = 'firstHalf';
+      guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
       await persistUiState();
       updatePhaseUI();
       showMsg('gameMsg', 'Back in the first half.', 'info');
