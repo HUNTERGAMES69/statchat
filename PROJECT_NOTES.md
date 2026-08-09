@@ -659,6 +659,128 @@ never assume brand colors are dark enough for white text by default;
 Neville's own brand color is a light gold, which is exactly the case
 that assumption gets wrong.
 
+## NFHS is not NFL, and the difference is load-bearing (established August 7, 2026)
+
+The app was quietly using NFL statistical conventions. High-school football
+is NFHS, which follows NCAA on the points below. Each of these changes
+where a number lands, not merely how it is worded:
+
+- **Sack yardage is charged to RUSHING, not deducted from passing.** Team
+  passing is the sum of completions; the sack yards go into a `TEAM`
+  rushing bucket. The quarterback's individual passing line is untouched
+  under either convention -- only the team total moves.
+- **A QB kneel is a TEAM rush.** The individual is charged with no attempt
+  and no yardage, which is why college quarterbacks do not accumulate
+  ugly rushing lines from victory formation.
+- **A bad snap is likewise a TEAM rush**, for the same reason: nobody
+  carried it, and pinning it on the quarterback or the centre misstates
+  both.
+- **The defense cannot score on a try.** NFHS ends the try the instant the
+  defense gains possession. NCAA and the NFL allow a two-point return;
+  those controls were removed from the blocked-PAT and both 2PT paths.
+- **A missed field goal that reaches the end zone is a touchback**, so the
+  20 is the right DEFAULT spot -- but a short miss is dead where it lies,
+  so it stays editable.
+
+The `TEAM` bucket now carries kneels, bad snaps and sack yardage. It is a
+stat bucket, never a player: it must be excluded from every picker, which
+was missed once and put "#TEAM TEAM" in the ball-carrier list.
+
+---
+
+## Stored phase versus derived phase -- three bugs from one cause (August 7, 2026)
+
+`gamePhase` lives on the game row rather than being derived from the play
+log, so it can disagree with the plays. That disagreement produced three
+separate failures in one session:
+
+1. Undoing back across the interval left the phase at `secondHalf` with no
+   second-half plays -- the banner still read Q3 and the guided kickoff
+   never returned.
+2. Undoing past the half divider itself left the phase at `halftime` with
+   no divider present: no End 1st half button, no Start 2nd half, every
+   control disabled. Reset game was the only way out.
+3. `guided_state` is stored the same way, so a second-half kickoff that
+   was started and then undone stayed "active" -- and an active guided
+   flow disables everything.
+
+All three now self-heal from the log on every render: **no half divider
+means the first half is still on.** The underlying design is still stored
+state, so a fourth variant is plausible. Deriving phase outright is in
+TODO.
+
+---
+
+## A filled-in form can still return null (August 7, 2026)
+
+Three different causes, all of which left a takeover spot silently unset
+while the panel looked correctly filled in:
+
+- **No spot field at all** on the rush / pass / sack fumble paths. Only the
+  dedicated Fumble play type had one, and the toggle on a rush is how a
+  fumble usually gets entered.
+- **A radio that defaults checked but wires on `change`.** "Recovered by
+  opponent" is pre-selected, so opening the fumble fields never ran the
+  handler that installs the spot getter.
+- **A re-render discarding listeners.** Switching the pass panel to
+  "Sacked" rebuilds it, throwing away the click handlers
+  `wireStartingSpot` had attached, so the side button recorded nothing.
+
+The general shape: several panels rely on a change handler to wire
+something up while defaulting to the state that handler would produce.
+Any of them can have this gap. `tests/takeover_spot_check.js` now drives
+all 11 change-of-possession flows and asserts the SAVED RESULT, because
+presence of the fields was never the problem.
+
+**Debugging note.** Three attempts were spent guessing at how the spot was
+produced before a one-line probe showed the getter returning null with the
+form visibly complete. Probe the value, not the plumbing.
+
+---
+
+## The yardage calculator, and why crossing midfield is free (August 7, 2026)
+
+Rush, pass and punt panels accept either a yardage or the spot the play
+ended on. Because `fieldPos` is possession-relative, the gain is simply
+`newFieldPos - currentFieldPos` -- own 20 to opp 20 is `80 - 20 = 60`, with
+no special case for midfield. What it does need is the SIDE, since "the 20"
+names two places; the current side is pre-selected so a short gain stays
+one number.
+
+The interaction rules matter as much as the sum:
+
+- a negative result drives LOSS automatically -- letting both be set
+  double-negates, the same trap as typing `-5` and tapping LOSS
+- typing yards directly clears the calculator, so the two inputs can never
+  describe one play differently
+- a touchdown fills the box with `100 - fieldPos` and locks it; there is
+  exactly one possible gain
+- a fumble relabels it ("ball came loose on"), a punt muff likewise
+- a punt touchback or block voids it and says why, rather than leaving a
+  stale sum beside a hidden calculator
+
+Layout: the yardage question and the calculator own one row; the outcome
+toggles sit on a second. They shared a row originally and wrapped
+unpredictably once the calculator arrived. The working is rendered INSIDE
+the calculator column so it starts at the dividing rule whatever width the
+yards box happens to be -- several attempts to match that with a fixed
+indent were guessing at a measurement the browser already knows.
+
+---
+
+## Inline styles beat classes (August 7, 2026)
+
+Repeatedly: a control sets `background` in a `style` attribute, then code
+toggles a `.picked` class that can never override it. The LOSS button, the
+Incomplete toggle and the 2PT sub-type switcher all looked unselected
+while being selected. The 2PT case was worse -- it toggled `primary` while
+the markup also set `secondary`, same specificity, so the later rule won.
+
+**Rule: the unselected look belongs in a CSS class (`ptoggle`), never in an
+inline style, so `.picked` can win.**
+
+---
+
 ## GameID
 
 There's no dedicated GameID column in the database — it's parsed out

@@ -28,6 +28,23 @@ Ordered roughly by how much it would hurt to leave undone.
 
 ---
 
+## 1b. Derive game phase from the log, not the game row
+
+- [ ] **`gamePhase` and `guided_state` are stored, so they can disagree
+  with the plays.** Three separate bugs came from that in one session
+  (see PROJECT_NOTES): undo stranding the phase at `secondHalf` with no
+  second-half plays, undo past the divider stranding it at `halftime`
+  with no divider, and a guided kickoff staying "active" after the plays
+  it belonged to were undone — which disables every control.
+  All three now self-heal on render, but the heals are patches on a
+  stored-state design and a fourth variant is plausible.
+  Deriving phase outright — no divider means first half, divider with no
+  real play after means halftime, and so on — removes the whole class.
+  Worth doing before the season, since the failure mode is a locked
+  screen mid-game with Reset game as the only exit.
+
+---
+
 ## 2. Test debt — five features verified only by hand
 
 All work and were checked manually, but nothing guards them against
@@ -36,9 +53,9 @@ regression. Largest single block of open work.
 - [ ] Offline sync queue (offline entry, reload recovery, drain,
   undo-while-queued, duplicate handling). `tests/harness.js` already
   gained a `seedStorage` option to make the reload case testable.
-- [ ] Muffed punt and muffed kickoff, all variants (kicking recovery
-  with spot, receiving recovery, recovery returned for a TD, nobody
-  named, mutual exclusion with Blocked / Touchback).
+- [ ] Muffed punt and muffed kickoff — the RETURNED-FOR-A-TD variants and
+  mutual exclusion with Blocked / Touchback. The takeover-spot cases are
+  now covered by `tests/takeover_spot_check.js`.
 - [ ] Manual-entry name confirmation, including shared-number conflicts.
 - [ ] Timeout tracker (countdown, disabled at zero, halftime reset,
   replay on `view.html`).
@@ -227,6 +244,30 @@ There is no role enforcement in the database at all.
 - [ ] **Confirm no other self-write path to `profiles.role`.** The
   self-promotion hole is closed by a trigger; worth re-checking there is
   no second route once more policies change.
+
+---
+
+## Shipped August 7, 2026
+
+Recorded so the reasoning is not re-argued. Details in PROJECT_NOTES.
+
+- **NFHS conventions replace NFL ones.** Sack yardage charged to rushing;
+  QB kneels and bad snaps as TEAM rushes; no defensive score on a try;
+  missed FG defaults to the 20.
+- **Yardage calculator** on rush, pass and punt — enter the spot, get the
+  gain, including across midfield.
+- **Bad snap** utility, with an offense-or-defense recovery.
+- **Muffed hold** on FG and PAT — aborts the attempt without charging the
+  kicker.
+- **Goal-to-go** in the play text, not just the banner.
+- **Half and overtime end a drive**, even when the same team keeps the
+  ball. Overtime possessions excluded from game totals.
+- **Only a kickoff is offerable** after a PAT, 2PT or made FG.
+- **Picker rules**: seeded starters always appear for the roles their slot
+  plays; hand-typed players stick; all four picker families sort by
+  recency; the returner picker starts empty and builds.
+- Two new suites: `takeover_spot_check.js`, `yardage_calculator_check.js`.
+  **13 suites total.**
 
 ---
 
