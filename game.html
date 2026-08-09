@@ -3036,10 +3036,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     let html = '';
     if (type === 'rush') html = offBlock('carrier','Ball carrier') +
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Enter yards') + '</div>' + lossToggleHtml('pp_yards') + spotCalcHtml() +
+        // Two rows on purpose. The yardage question and the calculator are
+        // one decision -- either / or -- so they get a row to themselves
+        // with the working underneath. The outcome toggles are a separate
+        // question and were only ever on the same line because they fit;
+        // as soon as the calculator arrived they wrapped unpredictably and
+        // nothing lined up with anything.
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Enter yards') + '</div>' + spotCalcHtml() + '</div>' +
+        spotCalcReadoutHtml() +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' + lossToggleHtml('pp_yards') +
         '<div id="pp_rush_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_rush_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_safety', 'Safety') + '</div></div>' +
-        spotCalcReadoutHtml() +
         defBlock('Tackled by (optional)') +
         '<div id="pp_rush_td_wrap">' + tdBlock + '</div>' +
         '<div id="pp_rush_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
@@ -3064,12 +3071,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<button type="button" class="pp-outcome-switch" onclick="renderPlayPanel(\'int\')" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Intercepted</button>' +
         '</div>' +
         offBlock('passer','Passer') + offBlock('receiver','Receiver') +
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap" style="margin-bottom:6px;">' + yardsBlock('Enter yards') + '</div>' + lossToggleHtml('pp_yards') + spotCalcHtml() +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap" style="margin-bottom:6px;">' + yardsBlock('Enter yards') + '</div>' + spotCalcHtml() + '</div>' +
+        spotCalcReadoutHtml() +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' + lossToggleHtml('pp_yards') +
         '<div style="margin-bottom:6px;"><input autocomplete="off" type="checkbox" id="pp_incomplete" style="display:none;">' +
         '<button type="button" id="pp_incomplete_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
         '<div id="pp_pass_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_pass_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_safety', 'Safety') + '</div></div>' +
-        spotCalcReadoutHtml() +
         '<div id="pp_pass_extra">' + defBlock('Tackled by (optional)') + '<div id="pp_pass_td_wrap">' + tdBlock + '</div></div>' +
         '<div id="pp_pass_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pass_fumrec" value="own"> Recovered by own team</label>' +
@@ -3145,8 +3153,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // the ball came down, minus the line of scrimmage. A coach reads
         // the landing spot off the field, not the distance.
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Enter distance') + '</div>' +
-        spotCalcHtml('Or enter downed/received on') +
-        spotCalcReadoutHtml({ flexBreak: true }) +
+        spotCalcHtml('Or enter downed/received on') + '</div>' +
+        spotCalcReadoutHtml() +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_punt_touchback', 'Touchback') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_blocked') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_muffed', 'Muffed / fumbled catch') + '</div></div>' +
