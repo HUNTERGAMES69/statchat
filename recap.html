@@ -865,6 +865,30 @@ const TIMEOUTS_PER_OT = 1;
     return html;
   }
 
+
+  // These are load-once pages -- unlike view.html they had no realtime
+  // subscription, so a tab left open kept showing the play data as it
+  // was at load time. Nothing on screen said so, which is exactly how a
+  // stale recap ends up looking like a stats bug in the app.
+  // currentGameId is scoped inside init(), so it has to be passed in
+  // rather than closed over.
+  function subscribeToPlayChanges(gameId, rerender){
+    supabaseClient
+      .channel('report-' + gameId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'plays' }, async (payload) => {
+        const row = payload.new || payload.old;
+        if (!row || row.game_id !== gameId) return;
+        const { data } = await supabaseClient.from('plays').select('*')
+          .eq('game_id', gameId).order('sequence_number', { ascending: true });
+        plays = (data || []).map(p => ({
+          text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+          roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+        }));
+        try { rerender(); } catch (e) { console.error(e); }
+      })
+      .subscribe();
+  }
+
   async function init(){
     const params = new URLSearchParams(window.location.search);
     const currentGameId = params.get('id');
@@ -916,6 +940,9 @@ const TIMEOUTS_PER_OT = 1;
     try {
       document.getElementById('recapContent').innerHTML = renderRecap();
       showView('mainView');
+      subscribeToPlayChanges(currentGameId, () => {
+        document.getElementById('recapContent').innerHTML = renderRecap();
+      });
     } catch (err) {
       showView('errorView');
       document.getElementById('errorMsg').textContent = 'This recap could not be built: ' + err.message;
