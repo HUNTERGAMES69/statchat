@@ -2784,7 +2784,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   });
 
   document.querySelectorAll('.ptypeBtn').forEach(b => b.addEventListener('click', () => renderPlayPanel(b.dataset.type)));
-  let currentSpotGetter = null, rushFumSpotGetter = null, passFumSpotGetter = null;
+  let currentSpotGetter = null, rushFumSpotGetter = null, passFumSpotGetter = null, sackFumSpotGetter = null;
 
   function startingSpotFieldsHtml(idPrefix, label, driveTeamKey){
     const driveTeamLabel = driveTeamKey ? TEAMS[driveTeamKey].name + "'s side" : 'Our side';
@@ -2965,6 +2965,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_sack_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_sackfum_safety" style="display:none;">' +
           '<button type="button" id="pp_sackfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
           '<div id="pp_sack_fum_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_sackfum') + yardsBlock('Return yards (optional)', 'pp_sackfum_retyds') +
+            startingSpotFieldsHtml('pp_sackfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
             '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_sackfum_td" style="display:none;">' +
             '<button type="button" id="pp_sackfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
           '</div>' +
@@ -3188,7 +3189,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // so the getter is swapped in by the fumble toggle rather than set for
     // the whole panel.
     if (type === 'rush') rushFumSpotGetter = wireStartingSpot(panel, 'pp_rushfum_spot');
-    if (type === 'pass') passFumSpotGetter = wireStartingSpot(panel, 'pp_passfum_spot');
+    if (type === 'pass'){
+      passFumSpotGetter = wireStartingSpot(panel, 'pp_passfum_spot');
+      // The sack fields live on the pass panel too.
+      sackFumSpotGetter = wireStartingSpot(panel, 'pp_sackfum_spot');
+    }
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
 
     const sel = { carrier:null, passer:null, receiver:null, kicker:null, punter:null, credit:null };
@@ -3388,6 +3393,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('pp_sack_fumble_fields').style.display = e.target.checked ? 'block' : 'none';
         document.getElementById('pp_sack_credit_wrap').style.display = e.target.checked ? 'none' : 'block';
         if (e.target.checked) resetToggle('pp_sack_safety', 'Safety');
+        // Re-wire before dispatching. Switching the pass panel to "Sacked"
+        // re-renders its contents, which throws away the click listeners
+        // wireStartingSpot attached at first render -- so the side button
+        // recorded nothing and the getter returned null however carefully
+        // the coach filled the fields in.
+        if (e.target.checked) sackFumSpotGetter = wireStartingSpot(panel, 'pp_sackfum_spot');
+        // The recovery radio defaults to "opponent" but only runs on
+        // change, so the getter would otherwise never be installed.
+        const rec = document.querySelector('input[name=pp_sack_fumrec]:checked');
+        if (rec) rec.dispatchEvent(new Event('change', { bubbles: true }));
       });
       const sackSafetyCb = document.getElementById('pp_sack_safety');
       if (sackSafetyCb){
@@ -3402,6 +3417,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       panel.querySelectorAll('input[name=pp_sack_fumrec]').forEach(r => r.addEventListener('change', () => {
         const isOpp = document.querySelector('input[name=pp_sack_fumrec]:checked').value === 'opp';
         document.getElementById('pp_sack_fum_opp').style.display = isOpp ? 'block' : 'none';
+        currentSpotGetter = isOpp ? sackFumSpotGetter : null;
         document.getElementById('pp_sack_fum_own').style.display = isOpp ? 'none' : 'block';
       }));
       const sackFumSafetyToggle = document.getElementById('pp_sackfum_safety_toggle');
@@ -3610,6 +3626,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       document.getElementById('pp_fg_muffhold').addEventListener('change', (e) => {
         if (e.target.checked) clearOther('pp_fg_blocked_cb');
         setKickResultLocked('pp_fgres', e.target.checked || isChecked('pp_fg_blocked_cb'));
+        // A muffed hold hands the ball over just like a miss, so the
+        // panel's spot field has to feed the save path. Ticking the
+        // toggle used to leave currentSpotGetter as whatever the field
+        // goal branch set at render, which was fine -- but prefilling
+        // the 20 here would be wrong, since no kick travelled downfield.
+        // No spot on a muffed hold: the play and the possession are dead
+        // where they stand, and field position gets established by the
+        // ensuing kick. Asking for a yard line here invents a decision
+        // the coach does not have to make.
+        const spotWrap = document.getElementById('pp_spot_wrap');
+        if (spotWrap) spotWrap.style.display = e.target.checked ? 'none' : 'block';
+        if (e.target.checked){
+          const yl = document.getElementById('pp_spot_yardline');
+          if (yl) yl.value = '';
+        }
       });
       // NFHS: a missed field goal that reaches the end zone is a
       // touchback, so the defense takes over at its own 20 -- which is
@@ -3916,6 +3947,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // reach his FG Att / FG Made line.
         document.getElementById('code').value = sel.kicker + 'fg m';
         showConfirm();
+        // Deliberately no pending.reset: a muffed hold needs no takeover
+        // spot, so the early return past buildAndReview's assignment is
+        // exactly right here.
         return;
       }
       const yds = yards('pp_yards') || '0';
@@ -3932,6 +3966,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     } else if (type === 'pat'){
       if (!sel.kicker) return;
       if (document.getElementById('pp_pat_muffhold').checked){
+        // No spot needed: a try ends the drive and a kickoff follows.
         document.getElementById('code').value = sel.kicker + 'pa m';
         showConfirm();
         return;
