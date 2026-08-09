@@ -1181,10 +1181,19 @@ function offenseEligible(team, role){
   // passer one.
   const seedPos = TEAMS[team].seedPos || {};
 
-  const nums = Object.keys(visible).filter(num => {
+  // Anyone who has ALREADY performed this role joins the candidate list
+  // outright. Filtering `visible` alone was not enough: a player typed
+  // in by hand is neither a seeded starter nor "discovered", so he was
+  // never a candidate in the first place and the usedInRole check below
+  // could never reach him. That meant a back who was not on the likely-
+  // starters list had to be typed in on every single carry.
+  const candidates = Object.keys(visible);
+  Object.keys(usedInRole).forEach(n => { if (candidates.indexOf(n) === -1) candidates.push(n); });
+
+  const nums = candidates.filter(num => {
+    if (usedInRole[num] !== undefined) return true;   // has played this role
     if (!roster[num]) return false;
     if (seedPos[num] && allowedPos && allowedPos.indexOf(seedPos[num]) !== -1) return true;
-    if (usedInRole[num] !== undefined) return true;   // already did this role
     if (!allowedPos) return true;                     // no filter for this role
     const pos = (posOffense[num] || '').toUpperCase().trim();
     // No position recorded means there is nothing to filter ON, so the
@@ -1228,7 +1237,10 @@ function offenseEligible(team, role){
     if (av !== bv) return bv - av;
     const aSeed = seed.indexOf(a), bSeed = seed.indexOf(b);
     return (aSeed === -1 ? 999 : aSeed) - (bSeed === -1 ? 999 : bSeed);
-  }).map(num => ({ num, name: roster[num] }));
+  // roster[num] can be blank for someone typed in by hand whose name
+  // lives in another unit's roster, so fall back to the cross-unit
+  // resolver rather than rendering a nameless button.
+  }).map(num => ({ num, name: roster[num] || nameInOffense(team, num) }));
   const ambiguousList = [];
   Object.keys(ambiguous).forEach(num => {
     ambiguous[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', resolvedName: name }));
