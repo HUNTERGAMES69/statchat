@@ -2239,10 +2239,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '<input autocomplete="off" type="text" id="guidedReturnClock" placeholder="M:SS or MSS" style="width:110px;"></div>' +
         '</div>' +
         '<div style="margin-top:10px;">' +
+          '<input autocomplete="off" type="checkbox" id="gr_muffed" style="display:none;">' +
+          '<button type="button" id="gr_muffed_toggle" style="width:100%; padding:10px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Muffed / fumbled catch</button>' +
+        '</div>' +
+        '<div id="gr_muff_box" style="display:none; margin-top:8px;">' +
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="gr_muffrec" value="k" checked> Recovered by ' + TEAMS[guided.kickingTeam].name + ' (the kicking team keeps the ball)</label>' +
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="gr_muffrec" value="r"> Recovered by ' + TEAMS[guided.receivingTeam].name + '</label>' +
+          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
+          '<input autocomplete="off" type="text" id="gr_muff_rec" placeholder="type #" style="width:100px;">' +
+        '</div>' +
+        '<div style="margin-top:10px;">' +
           '<input autocomplete="off" type="checkbox" id="gr_td" style="display:none;">' +
           '<button type="button" id="gr_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button>' +
         '</div>' +
-        startingSpotFieldsHtml('gr_spot', 'Ball spot after the return (sets 1st down for ' + TEAMS[guided.receivingTeam].name + ')', guided.receivingTeam) +
+        // Two spot fields, only one ever shown. Which team takes over
+        // decides which side's yard lines the coach is reading, so a
+        // single field labelled for the receiving team would be wrong
+        // the moment the kicking team recovers.
+        '<div id="gr_spot_recv">' + startingSpotFieldsHtml('gr_spot', 'Ball spot after the return (sets 1st down for ' + TEAMS[guided.receivingTeam].name + ')', guided.receivingTeam) + '</div>' +
+        '<div id="gr_spot_kick" style="display:none;">' + startingSpotFieldsHtml('gr_kickspot', 'Spot where ' + TEAMS[guided.kickingTeam].name + ' took over', guided.kickingTeam) + '</div>' +
         '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedReturnSave">Save return</button></div>';
       let returnerNum = null;
       const getReturnReset = wireStartingSpot(content, 'gr_spot');
@@ -2254,6 +2269,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('gr_returner_manual').value = returnerNum;
       }));
       document.getElementById('gr_returner_manual').addEventListener('input', e => { returnerNum = e.target.value.trim(); });
+      const grKickSpot = wireStartingSpot(content, 'gr_kickspot');
+      const grMuffBtn = document.getElementById('gr_muffed_toggle'), grMuffCb = document.getElementById('gr_muffed');
+      const refreshGrMuff = () => {
+        const on = grMuffCb.checked;
+        const kickingRecovers = on &&
+          content.querySelector('input[name=gr_muffrec]:checked').value === 'k';
+        document.getElementById('gr_muff_box').style.display = on ? 'block' : 'none';
+        // The heading and the returner both describe a clean return, so
+        // they go away once the catch was muffed.
+        document.getElementById('gr_returner_grid').style.display = on ? 'none' : 'block';
+        document.getElementById('gr_returner_manual').style.display = on ? 'none' : 'inline-block';
+        document.getElementById('gr_spot_recv').style.display = kickingRecovers ? 'none' : 'block';
+        document.getElementById('gr_spot_kick').style.display = kickingRecovers ? 'block' : 'none';
+        grMuffBtn.textContent = on ? '\u2713 Muffed / fumbled catch' : 'Muffed / fumbled catch';
+        grMuffBtn.style.background = on ? '#a05a00' : '#fff';
+        grMuffBtn.style.color = on ? '#fff' : '#555';
+        grMuffBtn.style.borderColor = on ? '#a05a00' : '#ccc';
+      };
+      grMuffBtn.addEventListener('click', () => { grMuffCb.checked = !grMuffCb.checked; refreshGrMuff(); });
+      content.querySelectorAll('input[name=gr_muffrec]').forEach(r => r.addEventListener('change', refreshGrMuff));
       const grTdBtn = document.getElementById('gr_td_toggle'), grTdCb = document.getElementById('gr_td');
       grTdBtn.addEventListener('click', () => {
         grTdCb.checked = !grTdCb.checked;
@@ -2287,16 +2322,37 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           if (!confirmClockAdvances(clockAbsSec, clockVal)) return;
         }
 
-        let text = (returnerNum ? nameInDefense(guided.receivingTeam, returnerNum) : TEAMS[guided.receivingTeam].name) + ' returns ' + yds;
-        const effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
-        if (td){ text += ' — TOUCHDOWN'; effect.score = { team: guided.receivingTeam, points: 6 }; }
-        pushAndPersist({ id: nextId++, text, effect, team: guided.receivingTeam, quarter: guided.quarter, roles: Object.assign({ playType: 'kickoff_return' }, returnerNum ? { defense: { team: guided.receivingTeam, num: returnerNum } } : {}) });
-        const receivingName = TEAMS[guided.receivingTeam].name;
-        const receivingTeamKey = guided.receivingTeam;
+        // A muff recovered by the KICKING team is the one outcome here
+        // that does not hand the ball over, so possession, the log text
+        // and which spot field applies all branch on it.
+        const muffed = document.getElementById('gr_muffed').checked;
+        const kickingRecovers = muffed &&
+          document.querySelector('input[name=gr_muffrec]:checked').value === 'k';
+        const takingOver = kickingRecovers ? guided.kickingTeam : guided.receivingTeam;
+
+        let text, effect;
+        if (muffed){
+          const recNum = (document.getElementById('gr_muff_rec').value || '').trim();
+          const recName = recNum
+            ? (kickingRecovers ? nameInSpecialTeams(guided.kickingTeam, recNum) : nameInDefense(guided.receivingTeam, recNum))
+            : TEAMS[takingOver].name;
+          text = TEAMS[guided.receivingTeam].name + ' MUFFED the catch, recovered by ' + recName;
+          if (parseInt(yds, 10)) text += ' for ' + yds;
+          effect = kickingRecovers ? {} : { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
+        } else {
+          text = (returnerNum ? nameInDefense(guided.receivingTeam, returnerNum) : TEAMS[guided.receivingTeam].name) + ' returns ' + yds;
+          effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
+        }
+        if (td){ text += ' — TOUCHDOWN'; effect.score = { team: takingOver, points: 6 }; }
+        pushAndPersist({ id: nextId++, text, effect, team: takingOver, quarter: guided.quarter,
+          roles: Object.assign({ playType: 'kickoff_return' },
+            (!muffed && returnerNum) ? { defense: { team: guided.receivingTeam, num: returnerNum } } : {}) });
+        const receivingName = TEAMS[takingOver].name;
+        const receivingTeamKey = takingOver;
         if (clockVal && clockAbsSec !== null){
           pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' start of possession (' + receivingName + ')', effect: { clockEvent: { type: 'start', team: receivingTeamKey, absSec: clockAbsSec } }, quarter: q });
         }
-        const reset = getReturnReset();
+        const reset = kickingRecovers ? grKickSpot() : getReturnReset();
         if (reset && !td){
           pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(reset.down) + ' & ' + reset.distance + ' at ' + markerLabel(reset.fieldPos) + ' (' + receivingName + ')', effect: { isReset: true, down: reset.down, distance: reset.distance, fieldPos: reset.fieldPos }, quarter: q });
         }
