@@ -1161,19 +1161,26 @@ function offenseEligible(team, role){
   // already carried must appear in the carrier list, or the recency
   // ordering below can never surface him and the coach has to type the
   // number every single time.
-  let nums = Object.keys(visible).filter(num => roster[num] && (
-    usedInRole[num] !== undefined ||
-    !allowedPos ||
-    allowedPos.indexOf((posOffense[num]||'').toUpperCase()) !== -1));
-  // If the position filter matched nobody, show the whole roster rather
-  // than an empty grid. A roster entered without positions -- common for
-  // an opponent, where you often only have a programme with names and
-  // numbers -- would otherwise leave every picker blank and force the
-  // coach to type every number by hand. A slightly over-broad list is
-  // far better than no list.
-  if (!nums.length && allowedPos){
-    nums = Object.keys(visible).filter(num => roster[num]);
-  }
+  const nums = Object.keys(visible).filter(num => {
+    if (!roster[num]) return false;
+    if (usedInRole[num] !== undefined) return true;   // already did this role
+    if (!allowedPos) return true;                     // no filter for this role
+    const pos = (posOffense[num] || '').toUpperCase().trim();
+    // No position recorded means there is nothing to filter ON, so the
+    // player cannot be excluded on position grounds. Opponent rosters
+    // are routinely entered from a programme with only names and
+    // numbers, and a rule that drops them leaves the picker empty --
+    // or worse, showing only the one player who happened to get a
+    // position, which reads as broken rather than as filtered.
+    if (!pos) return true;
+    // Split on / , or whitespace and match ANY of them. High-school
+    // players go both ways and get entered as "RB/LB" or "WR, DB"; the
+    // whole string was being compared against the allow-list, so a
+    // multi-position player matched nothing and vanished from every
+    // picker. posToUnit already splits this way -- this did not.
+    return pos.split(/[\/,\s]+/).filter(Boolean)
+      .some(part => allowedPos.indexOf(part) !== -1);
+  });
   const resolved = nums.slice().sort((a, b) => {
     const ar = usedInRole[a], br = usedInRole[b];
     // Anyone used this game sorts ahead of anyone who has not been.
