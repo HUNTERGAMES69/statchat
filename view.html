@@ -1063,8 +1063,13 @@ function computeState(playsList){
     // said End of 1st half.
     const isDiv = (p, t) => p.isDivider && (p.text || '').trim() === t;
     const halftimeIdx = plays.findIndex(p => isDiv(p, 'End of 1st half'));
-    const secondHalfStarted = plays.some((p, i) =>
-      i > halftimeIdx && halftimeIdx !== -1 && p.effect && p.effect.setQuarter >= 3);
+    // "The second half has started" means a REAL play has been run since
+    // the interval, not merely that a quarter marker exists. Undoing the
+    // opening plays of a half leaves that marker behind, and keying off
+    // it made this page insist on Q3 while game.html had already gone
+    // back to halftime -- the two pages disagreeing about the same log.
+    const secondHalfStarted = halftimeIdx !== -1 &&
+      plays.some((p, i) => i > halftimeIdx && !isAdminMarker(p));
     const phase =
       currentGameStatus === 'final' || plays.some(p => isDiv(p, 'Final')) ? 'FINAL'
       : (halftimeIdx !== -1 && !secondHalfStarted) ? 'HALFTIME'
