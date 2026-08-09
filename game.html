@@ -1373,56 +1373,26 @@ function returnerRank(pos){
   return r === undefined ? 2 : r;
 }
 function returnerEligible(team){
-  const t = TEAMS[team];
-  const { stats, discovered } = computePlayerStats();
-  const ambiguousST = t.ambiguousSpecialTeams || {};
-  const ambiguousDef = t.ambiguousDefense || {};
-  const ambiguousList = [];
-  Object.keys(ambiguousST).forEach(num => {
-    ambiguousST[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', unit: 'special', resolvedName: name }));
-  });
-  Object.keys(ambiguousDef).forEach(num => {
-    if (ambiguousST[num]) return;
-    ambiguousDef[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', unit: 'defense', resolvedName: name }));
-  });
-  const seen = {};
-  Object.keys(ambiguousST).forEach(num => { seen[num] = true; });
-  Object.keys(ambiguousDef).forEach(num => { seen[num] = true; });
-  const list = [];
-  const add = (num, name, unit, pos) => {
-    if (seen[num]) return;
-    seen[num] = true;
-    list.push({ num, name: name || '', unit, pos: pos || '' });
-  };
-  const posST = t.posSpecialTeams || {};
-  Object.keys(t.rosterSpecialTeams || {})
-    .sort((a, b) => {
-      const ra = returnerRank(posST[a]), rb = returnerRank(posST[b]);
-      if (ra !== rb) return ra - rb;
-      return (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0);
-    })
-    .forEach(num => add(num, t.rosterSpecialTeams[num], 'special', posST[num]));
-  // Anyone who has actually returned a kick or punt for this team. The
-  // list was built only from rostered special-teamers and discovered
-  // defenders, so a returner typed in by hand -- which is the norm,
-  // since this picker is empty on the opening kickoff -- never joined
-  // it and had to be typed again every time.
+  // Returners only, and only ones who have ACTUALLY returned a kick or
+  // punt in this game. This list used to be pre-populated from the
+  // special-teams roster (KR/PR) and from every discovered defender,
+  // which meant scrolling past a dozen names that had never returned
+  // anything to reach the one who had. Starting empty and building from
+  // real returns keeps it short and always relevant -- the first return
+  // of the game is typed in, and from then on the picker is right.
+  const recency = lastUsedByRole(team, ['defense']);
+  const seen = {}, list = [];
   plays.forEach(p => {
     const r = p.roles; if (!r || !r.defense || r.defense.team !== team) return;
     const pt = r.playType;
-    if (pt === 'kickoff_return' || pt === 'kickoff' || pt === 'punt'){
-      add(r.defense.num, nameInDefense(team, r.defense.num), 'defense', '');
-    }
+    if (pt !== 'kickoff_return' && pt !== 'kickoff' && pt !== 'punt') return;
+    const num = r.defense.num;
+    if (!num || seen[num]) return;
+    seen[num] = true;
+    list.push({ num, name: nameInDefense(team, num) || '', unit: 'defense', pos: '' });
   });
-  const posDef = t.posDefense || {};
-  (discovered[team] || []).slice()
-    .sort((a, b) => (stats[team].credits[b] || 0) - (stats[team].credits[a] || 0))
-    .forEach(num => add(num, t.rosterDefense[num] || '', 'defense', posDef[num]));
-  // Anyone who has actually returned one comes first, most recent at the
-  // front; the rostered KR/PR ordering below is only the starting guess.
-  const retRecency = lastUsedByRole(team, ['defense']);
-  list.sort(byRecency(retRecency, () => 0));
-  return ambiguousList.concat(list);
+  list.sort(byRecency(recency, () => 0));
+  return list;
 }
 function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
   if (list.length === 0) return '<span style="font-size:13px; color:var(--text-muted, #999);">' + (emptyMsg || 'no one credited yet — type a number below') + '</span>';
@@ -2394,7 +2364,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       return;
     }
     if (guided.step === 'return'){
-      const returnerList = defenseEligible(guided.receivingTeam);
+      const returnerList = returnerEligible(guided.receivingTeam);
       content.innerHTML =
         '<div style="font-size:16px; margin-bottom:8px;">' + TEAMS[guided.receivingTeam].name + ' returns.</div>' +
         '<p style="font-size:13px; color:#888; margin:0 0 4px;">Returner</p>' +
