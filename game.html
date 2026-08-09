@@ -859,7 +859,8 @@ function parseInput(raw, state){
       // charged with no attempt and no yards. Logging it as a normal
       // rush would quietly wreck the quarterback's rushing average every
       // time the offense ran out the clock.
-      netYards = -Math.abs(parseInt(rest[0]) || 1);
+      const kn = parseInt(rest[0], 10);
+      netYards = -Math.abs(isNaN(kn) ? 1 : kn);
       text = TEAMS[off].name + ' — QB kneel, team rush ' + gainPhrase(netYards);
     }
     else if (type === 'p'){
@@ -3794,8 +3795,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       panel.style.display = 'none'; panel.innerHTML = '';
     });
     document.getElementById('kneel_review').addEventListener('click', () => {
-      const y = (document.getElementById('kneel_yds').value || '1').trim();
-      document.getElementById('code').value = '0kn ' + (Math.abs(parseInt(y, 10)) || 1);
+      // Explicit NaN check, not `|| 1`. A typed 0 is falsy, so the
+      // fallback swallowed it and every zero-yard kneel logged as -1.
+      const n = parseInt((document.getElementById('kneel_yds').value || '').trim(), 10);
+      document.getElementById('code').value = '0kn ' + (isNaN(n) ? 1 : Math.abs(n));
       showConfirm();
       // No individual carrier -- that is the whole point of a team rush.
       // The yardage still has to ride on the role, or computeBoxScore
