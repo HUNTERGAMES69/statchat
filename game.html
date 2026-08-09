@@ -2631,6 +2631,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     };
   }
 
+  // Clear should put the screen back where it was before the tree was
+  // opened -- panel gone, confirm card gone, code buffer empty. Some of
+  // these re-rendered the same panel instead, which just wiped the
+  // fields and left the tree sitting open.
+  function collapsePlayPanel(){
+    const panel = document.getElementById('playPanel');
+    if (panel){ panel.style.display = 'none'; panel.innerHTML = ''; }
+    const cc = document.getElementById('confirmCard');
+    if (cc) cc.style.display = 'none';
+    const code = document.getElementById('code');
+    if (code) code.value = '';
+    pending = null;
+    document.querySelectorAll('.ptypeBtn').forEach(b => b.classList.remove('picked'));
+  }
+
   function wireLossToggles(panel){
     panel.querySelectorAll('.lossToggle').forEach(b => b.addEventListener('click', () => {
       b.classList.toggle('picked');
@@ -3372,7 +3387,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       });
     }
 
-    document.getElementById('pp_clear').addEventListener('click', () => renderPlayPanel(type));
+    document.getElementById('pp_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('pp_review').addEventListener('click', () => buildAndReview(type, sel));
   }
 
@@ -3916,7 +3931,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       panel.querySelectorAll('.driveDirBtn').forEach(x => x.classList.remove('picked'));
       b.classList.add('picked');
     }));
-    document.getElementById('drive_clear').addEventListener('click', () => document.getElementById('driveUtilBtn').click());
+    document.getElementById('drive_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('drive_review').addEventListener('click', () => {
       const dist = document.getElementById('drive_dist').value.trim();
       const yardline = document.getElementById('drive_yardline').value.trim();
@@ -4100,7 +4115,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       panel.querySelectorAll('.penTeamBtn').forEach(x => x.classList.remove('picked'));
       b.classList.add('picked');
     }));
-    document.getElementById('pen_clear').addEventListener('click', () => document.getElementById('penUtilBtn').click());
+    document.getElementById('pen_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('pen_review').addEventListener('click', () => {
       const yds = document.getElementById('pen_yds').value.trim();
       if (!penTeam || !yds) return;
@@ -4130,9 +4145,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<input autocomplete="off" type="text" id="kneel_yds" value="1" style="width:80px;">' +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="kneel_review">Review play</button>' +
       '<button class="secondary" id="kneel_clear">Clear</button></div>';
-    document.getElementById('kneel_clear').addEventListener('click', () => {
-      panel.style.display = 'none'; panel.innerHTML = '';
-    });
+    document.getElementById('kneel_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('kneel_review').addEventListener('click', () => {
       // Explicit NaN check, not `|| 1`. A typed 0 is falsy, so the
       // fallback swallowed it and every zero-yard kneel logged as -1.
@@ -4176,10 +4189,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       panel.innerHTML = '';
       renderAll();
     }));
-    document.getElementById('to_clear').addEventListener('click', () => {
-      panel.style.display = 'none';
-      panel.innerHTML = '';
-    });
+    document.getElementById('to_clear').addEventListener('click', collapsePlayPanel);
   });
 
   document.getElementById('flipBtn').addEventListener('click', () => {
