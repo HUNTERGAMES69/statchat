@@ -151,6 +151,7 @@
         <button id="driveUtilBtn">Adjust Down/Distance</button>
         <button id="flipBtn">Flip possession</button>
         <button id="timeoutUtilBtn">Timeout</button>
+        <button id="kneelUtilBtn">QB kneel</button>
       </div>
 
       <div id="playPanel" style="display:none;"></div>
@@ -457,6 +458,7 @@ function findDriveStarts(playsList){
 // name that already resolved, because the expected unit is always
 // searched first. This mirrors playerName() in the report pages.
 function rosterName(teamKey, num, order){
+  if (num === 'TEAM') return 'TEAM';
   const t = TEAMS[teamKey];
   const buckets = { offense: t.rosterOffense, defense: t.rosterDefense, special: t.rosterSpecialTeams };
   for (const unit of order){
@@ -840,7 +842,7 @@ function parseInput(raw, state){
     : y < 0 ? 'for a loss of ' + Math.abs(y)
     : 'for ' + y;
 
-  if (['r', 'p', 'i', 's'].includes(type)){
+  if (['r', 'p', 'i', 's', 'kn'].includes(type)){
     let netYards = 0, tackler = null, text;
     if (type === 'r'){
       netYards = parseInt(rest[0]) || 0; tackler = rest[1];
@@ -850,6 +852,15 @@ function parseInput(raw, state){
           flipEligible: false, team: off, quarter: state.quarter };
       }
       text = O(p1) + ' rush ' + gainPhrase(netYards);
+    }
+    else if (type === 'kn'){
+      // NCAA statistics rules charge a quarterback kneel as a TEAM rush:
+      // the lost yardage counts against the team, and the individual is
+      // charged with no attempt and no yards. Logging it as a normal
+      // rush would quietly wreck the quarterback's rushing average every
+      // time the offense ran out the clock.
+      netYards = -Math.abs(parseInt(rest[0]) || 1);
+      text = TEAMS[off].name + ' — QB kneel, team rush ' + gainPhrase(netYards);
     }
     else if (type === 'p'){
       netYards = parseInt(rest[1]) || 0; tackler = rest[2];
@@ -1778,6 +1789,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // over, at halftime, or mid-guided-flow.
     document.getElementById('flipBtn').disabled = disable;
     document.getElementById('timeoutUtilBtn').disabled = disable;
+    document.getElementById('kneelUtilBtn').disabled = disable;
     if (disable) document.getElementById('playPanel').style.display = 'none';
     document.getElementById('startGameBtn').style.display = (gamePhase === 'notStarted' && !guided.active) ? 'inline-block' : 'none';
     document.getElementById('endFirstHalfBtn').style.display = (gamePhase === 'firstHalf' && !guided.active) ? 'inline-block' : 'none';
@@ -3755,6 +3767,33 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   };
   document.getElementById('fieldStripToggle').addEventListener('click', () => setStripHidden(true));
   document.getElementById('fieldStripShow').addEventListener('click', () => setStripHidden(false));
+
+  document.getElementById('kneelUtilBtn').addEventListener('click', () => {
+    const panel = document.getElementById('playPanel');
+    panel.style.display = 'block';
+    panel.innerHTML =
+      '<p style="font-size:13px; color:#888; margin:0 0 6px;">QB kneel — recorded as a team rush, ' +
+      'so no quarterback is charged with the attempt or the yardage.</p>' +
+      '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Yards lost</p>' +
+      '<input autocomplete="off" type="text" id="kneel_yds" value="1" style="width:80px;">' +
+      '<div class="row" style="margin-top:12px;"><button class="primary" id="kneel_review">Review play</button>' +
+      '<button class="secondary" id="kneel_clear">Clear</button></div>';
+    document.getElementById('kneel_clear').addEventListener('click', () => {
+      panel.style.display = 'none'; panel.innerHTML = '';
+    });
+    document.getElementById('kneel_review').addEventListener('click', () => {
+      const y = (document.getElementById('kneel_yds').value || '1').trim();
+      document.getElementById('code').value = '0kn ' + (Math.abs(parseInt(y, 10)) || 1);
+      showConfirm();
+      // No individual carrier -- that is the whole point of a team rush.
+      // The yardage still has to ride on the role, or computeBoxScore
+      // records the attempts with zero yards against them.
+      if (pending) pending.roles = {
+        carrier: { team: computeState().possession, num: 'TEAM', yards: pending.effect.statYds },
+        playType: 'rush'
+      };
+    });
+  });
 
   document.getElementById('timeoutUtilBtn').addEventListener('click', () => {
     const state = computeState();
