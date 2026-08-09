@@ -1029,6 +1029,16 @@ function computeState(playsList){
     const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
     let rushes = 0, rushYds = 0, passes = 0, passYds = 0, totalPlays = 0, totalYds = 0, scoringPlayText = null;
     segment.forEach(p => {
+      const e0 = p.effect || {};
+      // A penalty is not a play, but its yardage genuinely moves the
+      // drive -- a 15-yard defensive foul advances the offense just as a
+      // 15-yard completion does. Counted in YARDS only, never in plays.
+      // fieldDelta is already signed from the offense's point of view,
+      // so a foul on the offense subtracts.
+      if (e0.penaltyTeam && typeof e0.fieldDelta === 'number'){
+        totalYds += e0.fieldDelta;
+        return;
+      }
       const r = p.roles;
       if (!r || p.team !== driveTeam) return;
       if (scrimmageTypes.includes(r.playType)) totalPlays++;
