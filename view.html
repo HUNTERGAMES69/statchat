@@ -666,6 +666,15 @@ function computeState(playsList){
       if (r.passer && type === 'sack'){
         const s = bucket(r.passer.team, 'passing', r.passer.num);
         if (s) s.sacked = (s.sacked||0) + 1;
+        // NFHS charges sack yardage to the team as a rushing loss. Doing
+        // it here rather than as a subtraction in each page's totals
+        // means the rushing rows actually add up to the rushing tile,
+        // and every surface gets the same numbers from one place.
+        const ts = bucket(r.passer.team, 'rushing', 'TEAM');
+        if (ts){
+          ts.att = (ts.att||0) + 1;
+          ts.yds = (ts.yds||0) - (r.passer.yards||0);
+        }
       }
       if (r.passer && type === 'int'){
         const s = bucket(r.passer.team, 'passing', r.passer.num);
@@ -809,21 +818,6 @@ function computeState(playsList){
           const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
           return { name: playerName(teamKey, n), leader: i === 0 && passNums.length > 1, values: [d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0] };
         })));
-      }
-      // NFHS charges sack yardage to the team, and the team total tile
-      // already subtracts it. Folding it into the TEAM rushing row makes
-      // the individual rows actually add up to that tile -- otherwise
-      // the column visibly disagreed with the total beside it.
-      const sackYds = plays.reduce((t, p) => {
-        const r = p.roles;
-        return (r && r.playType === 'sack' && r.passer && r.passer.team === teamKey) ? t + (r.passer.yards || 0) : t;
-      }, 0);
-      const sackCount = plays.filter(p => p.roles && p.roles.playType === 'sack' &&
-        p.roles.passer && p.roles.passer.team === teamKey).length;
-      if (sackCount){
-        s.rushing.TEAM = s.rushing.TEAM || {};
-        s.rushing.TEAM.att = (s.rushing.TEAM.att || 0) + sackCount;
-        s.rushing.TEAM.yds = (s.rushing.TEAM.yds || 0) - sackYds;
       }
       const rushSorted = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
       const rushNums = capWithTdException(rushSorted, s.rushing, 'td');
@@ -1192,7 +1186,9 @@ function computeState(playsList){
         return (r && r.playType === 'sack' && r.passer && r.passer.team === teamKey) ? t + (r.passer.yards || 0) : t;
       }, 0);
       const passYds = Object.keys(s.passing).reduce((t, n) => t + (s.passing[n].yds || 0), 0);
-      const rushYds = rushYdsRaw - sackYardsLost;
+      // No subtraction here: the sack yardage is already inside the
+      // TEAM rushing line, so taking it off again would double count.
+      const rushYds = rushYdsRaw;
       const totalYds = rushYds + passYds;
       // A team's own offensive 3rd/4th down conversion rate is stored on
       // the OTHER team's oppDowns entry (that's "the other team's defense

@@ -489,6 +489,15 @@ const TIMEOUTS_PER_OT = 1;
       if (r.passer && type === 'sack'){
         const s = bucket(r.passer.team, 'passing', r.passer.num);
         if (s) s.sacked = (s.sacked||0) + 1;
+        // NFHS charges sack yardage to the team as a rushing loss. Doing
+        // it here rather than as a subtraction in each page's totals
+        // means the rushing rows actually add up to the rushing tile,
+        // and every surface gets the same numbers from one place.
+        const ts = bucket(r.passer.team, 'rushing', 'TEAM');
+        if (ts){
+          ts.att = (ts.att||0) + 1;
+          ts.yds = (ts.yds||0) - (r.passer.yards||0);
+        }
       }
       if (r.passer && type === 'int'){
         const s = bucket(r.passer.team, 'passing', r.passer.num);
@@ -701,8 +710,6 @@ const TIMEOUTS_PER_OT = 1;
     // Applied AFTER both declarations -- doing it earlier referenced
     // oppRushYds before its `let`, which is a TDZ error that killed the
     // whole report.
-    rushYds -= sackYardsLostFor('teamA');
-    oppRushYds -= sackYardsLostFor('teamB');
     const oppPassYds = sumStat(box.teamB.passing,'yds'), oppPassAtt = sumStat(box.teamB.passing,'att'), oppPassComp = sumStat(box.teamB.passing,'comp'), oppPassTd = sumStat(box.teamB.passing,'td');
     const pen = finalState.penalties.teamA;
     t.rushAtt += rushAtt; t.rushYds += rushYds; t.rushTd += rushTd;
