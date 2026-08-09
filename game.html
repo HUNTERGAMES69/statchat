@@ -3687,8 +3687,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       function setSubType(sub){
         rushFields.style.display = sub === 'rush' ? 'block' : 'none';
         passFields.style.display = sub === 'pass' ? 'block' : 'none';
-        rushBtn.classList.toggle('primary', sub === 'rush');
-        passBtn.classList.toggle('primary', sub === 'pass');
+        // Gold, like every other selected control. These toggled the
+        // `primary` class while the markup also sets `secondary`; both
+        // rules have the same specificity, so whichever is declared later
+        // won and the selected sub-type looked identical to the other
+        // one. Rush is chosen by default, so the panel opened with a
+        // hidden selection and no way to tell which fields were live.
+        rushBtn.classList.toggle('picked', sub === 'rush');
+        passBtn.classList.toggle('picked', sub === 'pass');
+        rushBtn.classList.toggle('secondary', sub !== 'rush');
+        passBtn.classList.toggle('secondary', sub !== 'pass');
         panel.dataset.twoptSub = sub;
       }
       rushBtn.addEventListener('click', () => setSubType('rush'));
