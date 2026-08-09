@@ -4050,6 +4050,35 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // same id, roles, effect and sequence number.
     redoStack.push(removed);
     updateRedoBtn();
+    // Undoing back across the interval has to restore HALFTIME, not just
+    // delete plays. gamePhase is stored on the game row rather than
+    // derived, so without this the phase stayed 'secondHalf' with no
+    // second-half plays left: the banner still read Q3, the guided
+    // kickoff never came back, and the only way out was Reset game.
+    // Undoing a few bad plays at the start of a half should not cost the
+    // whole first half.
+    const afterHalf = plays.some((p, i) =>
+      i > plays.findIndex(q => q.isDivider && /end of (1st|first) half/i.test(q.text || '')) &&
+      plays.findIndex(q => q.isDivider && /end of (1st|first) half/i.test(q.text || '')) !== -1 &&
+      !isAdminMarker(p));
+    const halfEnded = plays.some(p => p.isDivider && /end of (1st|first) half/i.test(p.text || ''));
+    // Undoing back PAST the divider itself has to return to the first
+    // half, or the game sits at halftime with no half-end marker and no
+    // way to enter a play.
+    if (!halfEnded && gamePhase === 'halftime'){
+      gamePhase = 'firstHalf';
+      await persistUiState();
+      updatePhaseUI();
+      showMsg('gameMsg', 'Back in the first half.', 'info');
+    } else if (halfEnded && !afterHalf && gamePhase !== 'halftime'){
+      gamePhase = 'halftime';
+      // The idle shape, not null -- updatePhaseUI reads guided.active
+      // unguarded and nulling it takes the whole page down.
+      guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
+      await persistUiState();
+      updatePhaseUI();
+      showMsg('gameMsg', 'Back to halftime. Use "Start 2nd half" to run the kickoff again.', 'info');
+    }
     renderAll();
     // The game isn't finalized, so the database allows this delete -- but
     // only bother if this play actually made it to the server in the
