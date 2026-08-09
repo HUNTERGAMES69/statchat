@@ -964,6 +964,27 @@ function parseInput(raw, state){
       // centre would misstate both their lines.
       const bsY = parseInt(rest[0], 10);
       netYards = -Math.abs(isNaN(bsY) ? 0 : bsY);
+      const bsRec = rest[1];
+      if (bsRec){
+        // Recovered by the defense: the yardage is still a TEAM rushing
+        // loss for the offense, but the ball changes hands, so this has
+        // to end the drive and flip rather than just advance the down.
+        const recName = bsRec === '?' ? TEAMS[def].name : D(bsRec);
+        return { text: TEAMS[off].name + ' — bad snap ' + gainPhrase(netYards) +
+            ', recovered by ' + recName,
+          // NOT isStat. The flip in computeState is deliberately skipped
+          // for stat plays -- a rush that gains yardage must not also
+          // change hands -- so marking this as a stat play silently
+          // cancelled the turnover. The TEAM rushing loss is carried by
+          // the roles instead, which is where computeBoxScore reads it.
+          // No endsDrive: that flag means "this drive is over, someone
+          // kicks off next", which is true after a score and wrong after
+          // a turnover. It left the banner asking for a kickoff instead
+          // of handing the ball straight to the recovering team.
+          effect: { fieldDelta: netYards, flip: true, flipApplied: true, flipTo: def },
+          flipEligible: false, team: off, quarter: state.quarter,
+          roles: { carrier: { team: off, num: 'TEAM', yards: netYards }, playType: 'rush' } };
+      }
       text = TEAMS[off].name + ' — bad snap, team rush ' + gainPhrase(netYards);
     }
     else if (type === 'kn'){
@@ -1141,6 +1162,14 @@ function parseInput(raw, state){
     };
   }
   if (type === 'fg'){
+    if (rest[0] === 'm' || rest[0] === 'M'){
+      // The snap or hold was botched and no kick was taken. That is not a
+      // missed field goal and not a blocked one -- charging the kicker
+      // with an attempt he never got to make would misstate his season.
+      // No kicker role is attached at all, so nothing reaches his line.
+      return { text: TEAMS[off].name + ' — muffed hold, no kick attempted',
+        effect: {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
+    }
     if (rest[0] === 'b' || rest[0] === 'B'){
       const rec = rest[1], retyds = rest[2];
       let t = ST(p1) + ' field goal BLOCKED';
@@ -1158,6 +1187,10 @@ function parseInput(raw, state){
   }
   if (type === 'pa'){
     const res = rest[0];
+    if (res === 'm' || res === 'M'){
+      return { text: TEAMS[off].name + ' — muffed hold, no kick attempted',
+        effect: { endsDrive: true }, flipEligible: false, team: off, quarter: state.quarter };
+    }
     if (res === 'b' || res === 'B'){
       const rec = rest[1], retyds = rest[2];
       let t = ST(p1) + ' PAT BLOCKED';
@@ -1821,8 +1854,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       downMsg = ordinal(state.down) + ' & ' + distDisplay +
         (spot ? ' at ' + spot : ' — SPOT NOT SET') +
         ' — ' + TEAMS[state.possession].name + ' ball';
-    } else if (gamePhase === 'firstHalf' || gamePhase === 'secondHalf'){
+    } else if ((gamePhase === 'firstHalf' || gamePhase === 'secondHalf') && state.quarter < 5){
+      // Overtime has no kickoff -- each side is simply handed the ball --
+      // so after a try or a made field goal in OT the banner must not
+      // send the coach looking for a kick that never happens.
       downMsg = 'No active drive — ' + TEAMS[state.possession].name + ' needs to kick off next';
+    } else if (state.quarter >= 5){
+      downMsg = 'No active drive — set the next overtime possession';
     } else {
       downMsg = 'no active drive — ' + TEAMS[state.possession].name + ' ball';
     }
@@ -1921,6 +1959,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const previousDrivePlays = resetIdxs.length >= 2 ? plays.slice(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1]) : [];
     document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
     document.getElementById('prevDriveLogScroll').innerHTML = renderLogLines(previousDrivePlays.slice().reverse()) || '<div style="color:#999;">no previous drive yet</div>';
+    // The kickoff restriction depends on live game state, so the gating
+    // has to be re-evaluated whenever the state changes -- not just at
+    // load. Without this the buttons were locked to whatever the state
+    // was when the page opened.
+    if (typeof updatePhaseUI === 'function') updatePhaseUI();
   }
 
   // Field position strip. The app is otherwise entirely
@@ -2040,7 +2083,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
     const redoBtnEl = document.getElementById('redoBtn');
     if (redoBtnEl && finalized) redoBtnEl.disabled = true;
-    document.querySelectorAll('.ptypeBtn').forEach(b => { b.disabled = disable; });
+    // Between a score and the ensuing kickoff there is no live ball, so
+    // only a kickoff can legally come next. The banner said so but every
+    // other button stayed live, which let a rush be logged into a drive
+    // that does not exist -- it would then attach to whatever possession
+    // the engine inferred afterwards.
+    // Penalty, Timeout, Adjust and Manual entry stay available: dead-ball
+    // fouls and corrections are real between the score and the kick.
+    const st0 = computeState();
+    const awaitingKickoff = st0.down === null && st0.quarter < 5 &&
+      (gamePhase === 'firstHalf' || gamePhase === 'secondHalf');
+    document.querySelectorAll('.ptypeBtn').forEach(b => {
+      b.disabled = disable || (awaitingKickoff && b.dataset.type !== 'kickoff');
+    });
+    ['kneelUtilBtn', 'badSnapUtilBtn'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && awaitingKickoff && !disable) el.disabled = true;
+    });
     document.getElementById('penUtilBtn').disabled = disable;
     document.getElementById('driveUtilBtn').disabled = disable;
     // Undo is deliberately NOT gated on `disable` -- it never has been,
@@ -2959,7 +3018,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     else if (type === 'fg') html =
         offBlock('kicker','Kicker') +
         '<div style="display:flex; align-items:flex-end; gap:14px;"><div style="margin-bottom:6px;">' + yardsBlock('Distance') + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_blocked_cb') + '</div></div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_blocked_cb') + '</div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_muffhold', 'Muffed hold') + '</div></div>' +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="g" checked> Good</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="x"> Missed</label></div>' +
         '<div id="pp_fg_blocked" style="display:none;">' + defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + tdBlock + '</div>' +
@@ -2971,7 +3031,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         startingSpotFieldsHtml('pp_spot', null, def);
     else if (type === 'pat') html =
         offBlock('kicker','Kicker') +
-        '<div style="margin-top:8px;">' + blockedToggleHtml('pp_pat_blocked_cb') + '</div>' +
+        '<div style="margin-top:8px; display:flex; gap:10px;">' +
+          '<div>' + blockedToggleHtml('pp_pat_blocked_cb') + '</div>' +
+          '<div>' + blockedToggleHtml('pp_pat_muffhold', 'Muffed hold') + '</div>' +
+        '</div>' +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_patres" value="g" checked> Good</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_patres" value="x"> Missed</label></div>' +
         // NFHS ends the try the instant the defense gains possession, so a
@@ -3085,6 +3148,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // is block-scoped, so the copy that lived in the field-goal branch
     // was invisible to the PAT branch and threw the moment Blocked was
     // ticked there.
+    const isChecked = id => { const el = document.getElementById(id); return !!(el && el.checked); };
+    // Untick the other toggle AND fire its change handler, so its own
+    // panel bookkeeping (hiding the blocked box, say) runs too.
+    const clearOther = id => {
+      const el = document.getElementById(id);
+      if (el && el.checked){ el.checked = false; el.dispatchEvent(new Event('change')); }
+    };
     function setKickResultLocked(groupName, locked){
       document.querySelectorAll('input[name=' + groupName + ']').forEach(r => {
         if (locked && r.value === 'x') r.checked = true;
@@ -3490,9 +3560,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
     if (type === 'fg'){
       document.getElementById('pp_fg_blocked_cb').addEventListener('change', (e) => {
+        if (e.target.checked) clearOther('pp_fg_muffhold');
         document.getElementById('pp_fg_blocked').style.display = e.target.checked ? 'block' : 'none';
-        setKickResultLocked('pp_fgres', e.target.checked);
+        setKickResultLocked('pp_fgres', e.target.checked || isChecked('pp_fg_muffhold'));
         if (e.target.checked) prefillMissedFgSpot();
+      });
+      // A muffed hold is neither good nor missed -- no kick happened --
+      // so the result pair is locked out entirely, and Blocked cannot be
+      // true at the same time.
+      document.getElementById('pp_fg_muffhold').addEventListener('change', (e) => {
+        if (e.target.checked) clearOther('pp_fg_blocked_cb');
+        setKickResultLocked('pp_fgres', e.target.checked || isChecked('pp_fg_blocked_cb'));
       });
       // NFHS: a missed field goal that reaches the end zone is a
       // touchback, so the defense takes over at its own 20 -- which is
@@ -3509,12 +3587,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         r.addEventListener('change', () => { if (r.value === 'x' && r.checked) prefillMissedFgSpot(); }));
     }
     if (type === 'pat'){
+      document.getElementById('pp_pat_muffhold').addEventListener('change', (e) => {
+        if (e.target.checked) clearOther('pp_pat_blocked_cb');
+        setKickResultLocked('pp_patres', e.target.checked || isChecked('pp_pat_blocked_cb'));
+      });
       document.getElementById('pp_pat_blocked_cb').addEventListener('change', (e) => {
+        if (e.target.checked) clearOther('pp_pat_muffhold');
         document.getElementById('pp_pat_blocked').style.display = e.target.checked ? 'block' : 'none';
         // A blocked kick is never good, so Good/Missed is not a choice any
         // more. Leaving "Good" selected and clickable invited a
         // contradiction the panel would then have to silently resolve.
-        setKickResultLocked('pp_patres', e.target.checked);
+        setKickResultLocked('pp_patres', e.target.checked || isChecked('pp_pat_muffhold'));
       });
     }
     if (type === 'twopt'){
@@ -3789,6 +3872,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
     } else if (type === 'fg'){
       if (!sel.kicker) return;
+      if (document.getElementById('pp_fg_muffhold').checked){
+        // No kicker role: the attempt never happened, so nothing should
+        // reach his FG Att / FG Made line.
+        document.getElementById('code').value = sel.kicker + 'fg m';
+        showConfirm();
+        return;
+      }
       const yds = yards('pp_yards') || '0';
       const blocked = document.getElementById('pp_fg_blocked_cb').checked;
       const res = blocked ? 'b' : document.querySelector('input[name=pp_fgres]:checked').value;
@@ -3802,6 +3892,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
     } else if (type === 'pat'){
       if (!sel.kicker) return;
+      if (document.getElementById('pp_pat_muffhold').checked){
+        document.getElementById('code').value = sel.kicker + 'pa m';
+        showConfirm();
+        return;
+      }
       const blocked = document.getElementById('pp_pat_blocked_cb').checked;
       const res = blocked ? 'b' : document.querySelector('input[name=pp_patres]:checked').value;
       if (res === 'b'){
@@ -4037,7 +4132,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // A new set of downs normally follows a change of possession, but a
     // muffed punt recovered by the kicking team gives one to the team
     // that already had the ball.
-    if (pending.reset && (flipHappened || effect.newDownsSameTeam)){
+    // effectFlipped covers plays that carry an ALREADY-APPLIED flip in
+    // their own effect rather than going through the confirm card's flip
+    // checkbox. flipHappened is only set by that checkbox path, so a play
+    // that flips on its own -- a bad snap recovered by the defense --
+    // satisfied none of these conditions and its takeover spot was
+    // silently dropped, leaving the banner asking for a kickoff.
+    const effectFlipped = !!(effect.flip && effect.flipApplied);
+    if (pending.reset && (flipHappened || effectFlipped || effect.newDownsSameTeam)){
       const q2 = computeState().quarter;
       const driveTeam = flipHappened ? incomingTeam : computeState().possession;
       // "New drive" is wrong when nothing changed hands. A muffed kick
@@ -4046,7 +4148,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // (findDriveStarts already ignores reset markers after the first,
       // so this was never counted as an extra drive or possession --
       // only the wording was misleading.)
-      const seriesLabel = flipHappened ? 'New drive — ' : 'New series — ';
+      const seriesLabel = (flipHappened || effectFlipped) ? 'New drive — ' : 'New series — ';
       pushAndPersist({ id: nextId++, text: seriesLabel + ordinal(pending.reset.down) + ' & ' + togoLabel(pending.reset.fieldPos, pending.reset.distance) + ' at ' + markerLabel(pending.reset.fieldPos) + ' (' + TEAMS[driveTeam].name + ')', effect: { isReset: true, down: pending.reset.down, distance: pending.reset.distance, fieldPos: pending.reset.fieldPos }, quarter: q2 });
     }
     renderAll();
@@ -4342,17 +4444,49 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       'so no player is charged with the attempt or the yardage.</p>' +
       '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Yards lost</p>' +
       '<input autocomplete="off" type="text" id="badsnap_yds" placeholder="0" style="width:80px;">' +
+      '<div style="margin-top:10px;">' +
+        '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="bs_rec" value="o" checked> Recovered by ' + TEAMS[computeState().possession].name + ' (keeps the ball)</label>' +
+        '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="bs_rec" value="d"> Recovered by ' + TEAMS[otherTeam(computeState().possession)].name + ' (change of possession)</label>' +
+      '</div>' +
+      '<div id="bs_def_box" style="display:none; margin-top:8px;">' +
+        '<p style="font-size:13px; color:#888; margin:0 0 4px;">Recovered by (optional)</p>' +
+        '<input autocomplete="off" type="text" id="bs_recoverer" placeholder="type #" style="width:100px;">' +
+        startingSpotFieldsHtml('bs_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
+      '</div>' +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="badsnap_review">Review play</button>' +
       '<button class="secondary" id="badsnap_clear">Clear</button></div>';
+    // currentSpotGetter is how every other change-of-possession play
+    // hands its takeover spot to the save path. Setting pending.reset
+    // directly did not survive the re-parse that happens at save time,
+    // so the flip landed with no spot and the banner asked for a kickoff.
+    currentSpotGetter = wireStartingSpot(panel, 'bs_spot');
+    const bsSpot = currentSpotGetter;
+    panel.querySelectorAll('input[name=bs_rec]').forEach(r => r.addEventListener('change', () => {
+      document.getElementById('bs_def_box').style.display =
+        panel.querySelector('input[name=bs_rec]:checked').value === 'd' ? 'block' : 'none';
+    }));
     document.getElementById('badsnap_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('badsnap_review').addEventListener('click', () => {
       const n = parseInt((document.getElementById('badsnap_yds').value || '').trim(), 10);
-      document.getElementById('code').value = '0bs ' + (isNaN(n) ? 0 : Math.abs(n));
+      const byDef = panel.querySelector('input[name=bs_rec]:checked').value === 'd';
+      const rec = (document.getElementById('bs_recoverer').value || '').trim();
+      document.getElementById('code').value = '0bs ' + (isNaN(n) ? 0 : Math.abs(n)) +
+        (byDef ? ' ' + (rec || '?') : '');
       showConfirm();
-      if (pending) pending.roles = {
-        carrier: { team: computeState().possession, num: 'TEAM', yards: pending.effect.statYds },
-        playType: 'rush'
-      };
+      if (pending){
+        pending.roles = pending.roles || {
+          carrier: { team: computeState().possession, num: 'TEAM', yards: pending.effect.statYds },
+          playType: 'rush'
+        };
+        if (byDef){
+          if (rec) pending.roles.defense = { team: otherTeam(computeState().possession), num: rec };
+          // The save-time re-parse explicitly carries `reset` across, so
+          // attaching it here is the supported route for a panel that
+          // calls showConfirm() directly instead of going through
+          // buildAndReview.
+          pending.reset = bsSpot();
+        }
+      }
     });
   });
 
