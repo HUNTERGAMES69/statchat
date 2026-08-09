@@ -477,7 +477,14 @@ function findDriveStarts(playsList){
     // counted as ONE continuous drive -- the Current Drive panel still
     // listed its Q2 kneels, and the drive tiles totalled plays from
     // before the interval.
-    if (playsList[i].isDivider && /end of (1st|first) half/i.test(playsList[i].text || '')){
+    // The interval and the start of overtime both end whatever drive
+    // was in progress, even when the same team keeps the ball. Only a
+    // change of possession counted as a boundary, so a team that
+    // finished a period with the ball and got it back to open the
+    // next had both counted as ONE drive.
+    const endsPeriod = (playsList[i].isDivider && /end of (1st|first) half/i.test(playsList[i].text || '')) ||
+      (playsList[i].effect && playsList[i].effect.setQuarter >= 5);
+    if (endsPeriod){
       pushStart(firstRealPlayFrom(i + 1));
       priorPoss = computeState(playsList.slice(0, i + 1)).possession;
       continue;

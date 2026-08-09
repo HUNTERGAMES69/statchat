@@ -207,7 +207,14 @@ const TIMEOUTS_PER_OT = 1;
       // was treated as a boundary, so a team that finished the first half
       // with the ball and received to open the second had both halves
       // counted as ONE continuous drive.
-      if (playsList[i].isDivider && /end of (1st|first) half/i.test(playsList[i].text || '')){
+      // The interval and the start of overtime both end whatever drive
+    // was in progress, even when the same team keeps the ball. Only a
+    // change of possession counted as a boundary, so a team that
+    // finished a period with the ball and got it back to open the
+    // next had both counted as ONE drive.
+    const endsPeriod = (playsList[i].isDivider && /end of (1st|first) half/i.test(playsList[i].text || '')) ||
+      (playsList[i].effect && playsList[i].effect.setQuarter >= 5);
+    if (endsPeriod){
         pushStart(firstRealPlayFrom(i + 1));
         priorPoss = computeState(playsList.slice(0, i + 1)).possession;
         continue;
@@ -647,6 +654,11 @@ const TIMEOUTS_PER_OT = 1;
     findDriveStarts(playsList).forEach(idx => {
       // Possession AFTER the starting play, matching how
       // computeDriveSummary attributes a drive to a team.
+      // Overtime possessions are excluded. OT is a separate, artificial
+      // series -- each side is simply handed the ball -- so counting
+      // them alongside regulation drives distorts every per-possession
+      // figure and makes two games incomparable on the same axis.
+      if ((playsList[idx].quarter || 1) >= 5) return;
       const team = computeState(playsList.slice(0, idx + 1)).possession;
       if (team === 'teamA' || team === 'teamB') counts[team]++;
     });
