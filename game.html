@@ -537,6 +537,20 @@ function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':n===4?'4th':(n+'
 // entry, seconds always two digits, quarter-length bound -- so anything
 // accepted by one is formatted by the other. Returns null for the same
 // inputs clockToAbsSeconds rejects.
+function clockHelpFor(val){
+  // Single digits are the common mistake, and "check the format" does not
+  // explain them. The last two digits are always the seconds, so a lone
+  // "4" is genuinely ambiguous between four seconds and four minutes.
+  // Guessing would silently corrupt time of possession, so it is refused
+  // -- but the refusal spells out both ways to say what was meant.
+  if (/^\d$/.test(val)){
+    return '"' + val + '" is ambiguous -- it could mean ' + val + ' seconds or ' + val + ' minutes. ' +
+      'Type "0' + val + '" for ' + val + ' seconds, or "' + val + '00" for ' + val + ':00.';
+  }
+  return '"' + val + '" is not a valid clock value for this quarter. Use M:SS (9:47) or just ' +
+    'the digits (947). The last two digits are always the seconds, and the value cannot ' +
+    'exceed the quarter length.';
+}
 function normalizeClockStr(quarter, clockStr){
   let m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
   let mins, secs;
@@ -2052,7 +2066,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const q = computeState().quarter;
       const absSec = clockToAbsSeconds(q, val);
       if (absSec === null){
-        alert('"' + val + '" isn\'t a valid clock value for this quarter -- check the format (M:SS) and that it doesn\'t exceed the quarter length.');
+        alert(clockHelpFor(val));
         return;
       }
       if (!confirmClockAdvances(absSec, val)) return;
@@ -2544,7 +2558,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (clockVal){
           clockAbsSec = clockToAbsSeconds(q, clockVal);
           if (clockAbsSec === null){
-            alert('"' + clockVal + '" isn\'t a valid clock value for this quarter. Check the format (M:SS) and that it doesn\'t exceed the quarter length. Nothing was saved -- fix the clock value and try again.');
+            alert(clockHelpFor(clockVal) + '\n\nNothing was saved -- fix the clock and try again.');
             return;
           }
           if (!confirmClockAdvances(clockAbsSec, clockVal)) return;
@@ -3853,7 +3867,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const q0 = computeState().quarter;
       clockAbsSec = clockToAbsSeconds(q0, clockVal);
       if (clockAbsSec === null){
-        alert('"' + clockVal + '" isn\'t a valid clock value for this quarter. Check the format (M:SS) and that it doesn\'t exceed the quarter length. Nothing was saved -- fix the clock value and try again.');
+        alert(clockHelpFor(clockVal) + '\n\nNothing was saved -- fix the clock and try again.');
         return;
       }
       if (!confirmClockAdvances(clockAbsSec, clockVal)) return;
@@ -4163,7 +4177,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<p style="font-size:13px; color:#888; margin:0 0 6px;">QB kneel — recorded as a team rush, ' +
       'so no quarterback is charged with the attempt or the yardage.</p>' +
       '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Yards lost</p>' +
-      '<input autocomplete="off" type="text" id="kneel_yds" value="1" style="width:80px;">' +
+      '<input autocomplete="off" type="text" id="kneel_yds" placeholder="1" style="width:80px;">' +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="kneel_review">Review play</button>' +
       '<button class="secondary" id="kneel_clear">Clear</button></div>';
     document.getElementById('kneel_clear').addEventListener('click', collapsePlayPanel);
