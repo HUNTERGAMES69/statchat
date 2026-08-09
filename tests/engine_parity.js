@@ -21,7 +21,12 @@ const FUNCS = ['computeState', 'parseInput', 'computeBoxScore', 'buildTeams',
                'nameInOffense', 'nameInDefense', 'nameInSpecialTeams', 'playerName',
                'extractNameTag', 'ordinal', 'formatDuration',
                'countPossessions', 'findDriveStarts', 'markerLabel', 'otherTeam',
-               'computePlayerStats', 'posToUnit', 'clockToAbsSeconds'];
+               'computePlayerStats', 'posToUnit', 'clockToAbsSeconds',
+               // Added Aug 7 2026 after an audit found rosterName had
+               // ALREADY diverged -- game.html gained a TEAM guard that
+               // the report files never got. Any function living in more
+               // than one engine file belongs on this list.
+               'rosterName', 'isAdminMarker'];
 
 // Extract a function's full source by brace matching from `function NAME`.
 function extractFunction(src, name) {

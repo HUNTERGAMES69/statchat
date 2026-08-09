@@ -192,7 +192,10 @@ function enterPlay(h, spec) {
     if (spec.spot) setStartingSpot(win, doc, 'pp_spot', spec.spot.side, spec.spot.yardline);
   } else if (t === 'kickoff') {
     P('kicker', spec.kicker);
-    if (spec.yards !== undefined) typeInto(win, q(doc, 'pp_yards'), spec.yards);
+    // Kickoffs have no distance field -- nothing reports kick distance,
+    // so it was removed from the panel. spec.yards is accepted and
+    // ignored so existing scenarios keep working unchanged.
+    void spec.yards;
     if (spec.touchback) {
       toggle(win, doc, 'pp_ko_touchback_toggle');
     } else {

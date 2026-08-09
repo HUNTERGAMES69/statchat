@@ -75,8 +75,8 @@ const MUTANTS = [
   {
     name: 'drive-boundary: let a drive start on an administrative marker (the Aug 6 bug)',
     file: 'view.html',
-    from: '        if (possAfter !== priorPoss) pushStart(firstRealPlayFrom(i + 1));',
-    to: '        if (possAfter !== priorPoss && i + 1 < playsList.length) pushStart(i + 1);',
+    from: '    if (possAfter !== priorPoss) pushStart(firstRealPlayFrom(i + 1));',
+    to: '    if (possAfter !== priorPoss && i + 1 < playsList.length) pushStart(i + 1);',
     expectCaughtBy: ['drive_boundary_check.js']
   },
   {
@@ -94,6 +94,55 @@ const MUTANTS = [
     expectCaughtBy: ['drive_boundary_check.js']
   },
   {
+    name: 'possession-count: reimplement drive boundaries instead of deriving them',
+    file: 'view.html',
+    from: '    findDriveStarts(playsList).forEach(idx => {',
+    to: '    [].concat(findDriveStarts(playsList), findDriveStarts(playsList)).forEach(idx => {',
+    expectCaughtBy: ['possession_and_drive_check.js']
+  },
+  {
+    name: 'adjust-button: let a reset marker always open a new drive',
+    file: 'view.html',
+    from: '      if (!starts.length) pushStart(i);',
+    to: '      pushStart(i);',
+    expectCaughtBy: ['possession_and_drive_check.js']
+  },
+  {
+    name: 'down-conversions: drop incomplete passes from the play-type list again',
+    file: 'view.html',
+    from: "        if (!['rush','pass','incomplete','sack','int','fumble'].includes(type)) continue;",
+    to: "        if (!['rush','pass','sack','int','fumble'].includes(type)) continue;",
+    expectCaughtBy: ['possession_and_drive_check.js']
+  },
+  {
+    name: 'unnamed fumble: stop honouring roles.lost as a turnover',
+    file: 'view.html',
+    from: "      if (r.playType === 'fumble' && r.carrier && (r.lost || r.defense)) counts[r.carrier.team] = (counts[r.carrier.team] || 0) + 1;",
+    to: "      if (r.playType === 'fumble' && r.carrier && r.defense) counts[r.carrier.team] = (counts[r.carrier.team] || 0) + 1;",
+    expectCaughtBy: ['optional_players_check.js']
+  },
+  {
+    name: 'stale text: stop re-parsing the play at save time (the Aug 6 bug)',
+    file: 'game.html',
+    from: '      if (fresh) pending = Object.assign(fresh, { roles: pending.roles, reset: pending.reset });',
+    to: '      if (fresh) { /* deliberately not applied */ }',
+    expectCaughtBy: ['entry_integrity_check.js']
+  },
+  {
+    name: 'safety clock: credit the end-of-possession clock to the scorer again',
+    file: 'game.html',
+    from: '        const endingTeam = preState.possession;',
+    to: '        const endingTeam = effect.score ? effect.score.team : preState.possession;',
+    expectCaughtBy: ['entry_integrity_check.js']
+  },
+  {
+    name: 'penalty no-down-change: adjust distance anyway',
+    file: 'game.html',
+    from: '            state.distance = Math.max(1, Math.min(state.distance, 100 - state.fieldPos));',
+    to: '            state.distance = Math.max(1, Math.min(state.distance - e.fieldDelta, 100 - state.fieldPos));',
+    expectCaughtBy: ['entry_integrity_check.js']
+  },
+  {
     name: 'stat-drop: stop counting rushing attempts',
     file: 'view.html',
     from: '          s.att = (s.att||0) + 1;\n          s.yds = (s.yds||0) + (r.carrier.yards||0);',
@@ -102,7 +151,15 @@ const MUTANTS = [
   }
 ];
 
-const SUITES = ['engine_parity.js', 'run_scripted.js', 'cross_surface.js', 'picker_check.js', 'clock_display_check.js', 'drive_boundary_check.js'];
+// Behavioural suites first, on purpose. engine_parity fires on ANY
+// single-file edit to a duplicated function, so if it ran first it would
+// short-circuit almost every mutant and hide whether the behavioural
+// tests can actually detect the broken behaviour. It stays last as a
+// backstop.
+const SUITES = ['run_scripted.js', 'picker_check.js', 'clock_display_check.js',
+                'drive_boundary_check.js', 'possession_and_drive_check.js',
+                'optional_players_check.js', 'entry_integrity_check.js',
+                'cross_surface.js', 'engine_parity.js'];
 
 function runSuite(file) {
   try {
@@ -141,7 +198,13 @@ function main() {
     fs.writeFileSync(target, original.replace(m.from, m.to));
     let caughtBy = [];
     try {
-      for (const s of SUITES) if (!runSuite(s)) caughtBy.push(s);
+      // Stop at the first suite that catches it. Running all nine
+      // against all nineteen mutants takes long enough to hit tool
+      // timeouts, and one catch is all that's needed to prove the
+      // mutant is not a blind spot.
+      for (const s of SUITES){
+        if (!runSuite(s)){ caughtBy.push(s); break; }
+      }
     } finally {
       fs.writeFileSync(target, original); // always restore
     }

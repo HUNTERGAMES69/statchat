@@ -53,7 +53,6 @@ async function buildKickoffScenario() {
   click(win, doc.querySelector('.ptypeBtn[data-type="kickoff"]'));
   const panel = doc.getElementById('playPanel');
   click(win, panel.querySelector('.pp_kicker_pick[data-num="3"]'));
-  typeInto(win, doc.getElementById('pp_yards'), '60');
   click(win, doc.getElementById('pp_ko_touchback_toggle'));
   click(win, doc.getElementById('pp_review'));
   typeInto(win, doc.getElementById('confirmClockInput'), '5:00');

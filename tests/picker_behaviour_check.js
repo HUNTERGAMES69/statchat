@@ -1,0 +1,170 @@
+// Picker behaviour checks
+// -----------------------
+// Three rules, asserted across all four picker families:
+//
+//   1. Every player named on the likely-starters screen appears in the
+//      pickers for the roles that slot plays -- and NOT in ones it
+//      doesn't. This must hold before a single play is entered, and
+//      regardless of which roster unit the player was filed under or
+//      what position string they carry.
+//   2. Any player entered by hand on a play joins that picker from then
+//      on, so a number never has to be typed twice.
+//   3. Lists are ordered by most recent use.
+//
+// The negative assertions matter as much as the positive ones. Earlier
+// attempts at rule 1 were too broad and put wide receivers in the
+// quarterback picker, which is worse than the original bug.
+
+const { bootGamePage, defaultRoster } = require('./harness');
+const { enterPlay, setDrive, click, typeInto } = require('./ui_driver');
+
+const OPP_ROSTER = [
+  // Deliberately awkward, mirroring a real opponent upload:
+  //  - #6 is seeded RB1 but filed under DEFENSE
+  //  - #5 carries a two-way position string
+  //  - #24 has a position the allow-lists do not know
+  //  - #8 has no position at all
+  //  - #77 is a lineman: rostered, never seeded, must stay out
+  { team_side: 'teamB', unit: 'offense', jersey_number: '1',  player_name: 'Opp QB',     position: 'QB' },
+  { team_side: 'teamB', unit: 'defense', jersey_number: '6',  player_name: 'Opp RB1',    position: 'RB/LB' },
+  { team_side: 'teamB', unit: 'offense', jersey_number: '5',  player_name: 'Opp WR1',    position: 'WR, DB' },
+  { team_side: 'teamB', unit: 'offense', jersey_number: '24', player_name: 'Opp WR2',    position: 'ATH' },
+  { team_side: 'teamB', unit: 'offense', jersey_number: '8',  player_name: 'Opp WR3',    position: '' },
+  { team_side: 'teamB', unit: 'offense', jersey_number: '77', player_name: 'Opp Line',   position: 'OL' }
+];
+const SEEDS = { teamB: { QB: '1', RB1: '6', WR1: '5', WR2: '24', WR3: '8' } };
+
+async function oppWithBall(){
+  const roster = defaultRoster().filter(r => r.team_side === 'teamA').concat(OPP_ROSTER);
+  const h = await bootGamePage({ roster, game: { seed_starters: SEEDS } });
+  h.evalIn('pushAndPersist({id:nextId++,text:"flip",effect:{forcePossession:"teamB"},quarter:1}); renderAll();');
+  return h;
+}
+const nums = (h, type, cls) => {
+  h.evalIn('renderPlayPanel("' + type + '")');
+  return [...h.document.querySelectorAll(cls)].map(b => (b.textContent.match(/#(\d+)/) || [])[1]);
+};
+
+async function run(){
+  const failures = [];
+  const fail = (area, detail) => failures.push({ area, detail });
+  const has = (list, n) => list.indexOf(n) !== -1;
+
+  // --- 1. seeded starters, before any play ---------------------------
+  {
+    const h = await oppWithBall();
+    const carrier  = nums(h, 'rush', '.pp_carrier_pick');
+    const passer   = nums(h, 'pass', '.pp_passer_pick');
+    const receiver = nums(h, 'pass', '.pp_receiver_pick');
+
+    ['1', '6', '5', '24', '8'].forEach(n => {
+      if (!has(carrier, n)) fail('rule 1', 'seeded #' + n + ' missing from the carrier picker: ' + carrier.join(','));
+    });
+    if (!has(passer, '1')) fail('rule 1', 'the seeded QB is missing from the passer picker: ' + passer.join(','));
+    ['6', '5', '24', '8'].forEach(n => {
+      if (!has(receiver, n)) fail('rule 1', 'seeded #' + n + ' missing from the receiver picker: ' + receiver.join(','));
+    });
+
+    // Negative: the seed must not be a blanket bypass.
+    ['6', '5', '24', '8'].forEach(n => {
+      if (has(passer, n)) fail('rule 1 (negative)', 'seeded non-QB #' + n + ' should not be in the passer picker');
+    });
+    if (has(carrier, '77') || has(passer, '77') || has(receiver, '77')){
+      fail('rule 1 (negative)', 'a rostered OL who was never seeded should not appear in any of them');
+    }
+    h.close();
+  }
+
+  // --- 2. a hand-typed player joins the list -------------------------
+  {
+    const h = await oppWithBall();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    if (has(nums(h, 'rush', '.pp_carrier_pick'), '44')){
+      fail('rule 2', '#44 should not be there before he carries');
+    }
+    enterPlay(h, { type: 'rush', carrier: '44', yards: '6' });
+    if (!has(nums(h, 'rush', '.pp_carrier_pick'), '44')){
+      fail('rule 2', 'a hand-typed carrier did not join the picker');
+    }
+    h.close();
+  }
+
+  // --- 2b. same for defence, special teams and returners -------------
+  {
+    const h = await bootGamePage();
+    const mk = roles => h.evalIn('pushAndPersist({id:nextId++,text:"x",effect:{},quarter:1,roles:' + JSON.stringify(roles) + '});');
+    const numsOf = expr => JSON.parse(h.evalIn('JSON.stringify(' + expr + '.map(x => x.num))'));
+
+    if (has(numsOf('defenseEligible("teamB")'), '63')) fail('rule 2', '#63 present before any credit');
+    mk({ defense: { team: 'teamB', num: '63' }, playType: 'sack' });
+    if (!has(numsOf('defenseEligible("teamB")'), '63')) fail('rule 2', 'a hand-typed tackler did not join the picker');
+
+    mk({ punter: { team: 'teamA', num: '61' }, playType: 'punt' });
+    if (!has(numsOf('specialTeamsEligible("teamA")'), '61')) fail('rule 2', 'a hand-typed punter did not join the picker');
+
+    mk({ defense: { team: 'teamB', num: '82' }, playType: 'kickoff_return' });
+    if (!has(numsOf('returnerEligible("teamB")'), '82')) fail('rule 2', 'a hand-typed returner did not join the picker');
+    h.close();
+  }
+
+  // --- 3. recency ordering -------------------------------------------
+  {
+    const h = await oppWithBall();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '6',  yards: '4' });
+    enterPlay(h, { type: 'rush', carrier: '24', yards: '3' });
+    enterPlay(h, { type: 'rush', carrier: '6',  yards: '2' });
+    const carrier = nums(h, 'rush', '.pp_carrier_pick');
+    if (carrier[0] !== '6' || carrier[1] !== '24'){
+      fail('rule 3', 'carriers should be 6 then 24 by recency, got ' + carrier.join(','));
+    }
+    h.close();
+  }
+  {
+    const h = await bootGamePage();
+    const mk = roles => h.evalIn('pushAndPersist({id:nextId++,text:"x",effect:{},quarter:1,roles:' + JSON.stringify(roles) + '});');
+    const numsOf = expr => JSON.parse(h.evalIn('JSON.stringify(' + expr + '.map(x => x.num))'));
+
+    ['55', '99', '55', '21'].forEach(n => mk({ defense: { team: 'teamB', num: n }, playType: 'sack' }));
+    const def = numsOf('defenseEligible("teamB")');
+    if (def[0] !== '21' || def[1] !== '55' || def[2] !== '99'){
+      fail('rule 3', 'tacklers should be 21,55,99 by recency, got ' + def.join(','));
+    }
+
+    mk({ punter: { team: 'teamA', num: '15' }, playType: 'punt' });
+    mk({ kicker: { team: 'teamA', num: '3'  }, playType: 'kickoff' });
+    const st = numsOf('specialTeamsEligible("teamA")');
+    if (st[0] !== '3' || st[1] !== '15'){
+      fail('rule 3', 'special teams should be 3 then 15 by recency, got ' + st.join(','));
+    }
+
+    mk({ defense: { team: 'teamB', num: '82' }, playType: 'kickoff_return' });
+    const ret = numsOf('returnerEligible("teamB")');
+    if (ret[0] !== '82') fail('rule 3', 'the most recent returner should lead, got ' + ret.join(','));
+    h.close();
+  }
+
+  // --- 4. our own fully-positioned roster stays tightly filtered -----
+  {
+    const h = await bootGamePage();
+    const passer = nums(h, 'pass', '.pp_passer_pick');
+    if (passer.length !== 1 || passer[0] !== '7'){
+      fail('rule 1 (negative)', 'a complete roster should still filter the passer picker to the QB, got ' + passer.join(','));
+    }
+    h.close();
+  }
+
+  return failures;
+}
+
+if (require.main === module){
+  run().then(f => {
+    console.log('=== Picker behaviour checks ===\n');
+    console.log('Failures: ' + f.length);
+    f.forEach(x => console.log('  [' + x.area + '] ' + x.detail));
+    if (!f.length) console.log('  starters appear, hand-typed players stick, lists order by recency.');
+    process.exitCode = f.length ? 1 : 0;
+  }).catch(e => { console.error(e.stack); process.exit(1); });
+}
+
+module.exports = { run };
