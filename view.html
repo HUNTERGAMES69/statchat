@@ -1100,12 +1100,25 @@ function computeState(playsList){
     banner.style.background = '#1a1a1a';
     banner.style.color = '#ffffff';
 
-    function renderLogLines(list){
+    // highlightFirst marks the most recent play. The list arrives already
+    // reversed, so index 0 is the play that just happened -- the one a
+    // spectator glancing up is looking for, and the one that was hardest
+    // to pick out of an evenly-weighted list.
+    function renderLogLines(list, highlightFirst){
+      let marked = false;
       return list.map(p => {
         if (p.isDivider) return '<div style="text-align:center; font-size:14px; font-weight:600; color:#888; margin:8px 0; border-top:1px dashed #ccc; padding-top:6px;">' + p.text + '</div>';
         const qtag = p.quarter ? '<span style="color:#999; font-size:12px; margin-right:6px;">Q' + p.quarter + '</span>' : '';
         const text = (p.text || '').replace(/TOUCHDOWN/g, '<strong>TOUCHDOWN</strong>');
-        return '<div class="logline">' + qtag + text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
+        // The first NON-DIVIDER line, not simply the first entry: an "End
+        // of 1st half" rule sitting on top would otherwise take the
+        // emphasis meant for the last real play.
+        let style = '';
+        if (highlightFirst && !marked){
+          marked = true;
+          style = ' style="font-size:calc(17px * var(--stat-scale, 1)); font-weight:700; color:#111;"';
+        }
+        return '<div class="logline"' + style + '>' + qtag + text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
       }).join('');
     }
     // Drive boundaries aren't only marked by explicit isReset plays --
@@ -1121,7 +1134,7 @@ function computeState(playsList){
     if (!isResultsMode){
       const resetIdxs = findDriveStarts(plays);
       const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
-      document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
+      document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse(), true) || '<div style="color:#999;">no active drive yet</div>';
 
       const currentSummary = resetIdxs.length
         ? computeDriveSummary(resetIdxs[resetIdxs.length - 1], plays.length)
