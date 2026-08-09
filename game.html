@@ -2091,7 +2091,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // Penalty, Timeout, Adjust and Manual entry stay available: dead-ball
     // fouls and corrections are real between the score and the kick.
     const st0 = computeState();
+    // Keyed off the LAST PLAY, not merely "no active drive". down is also
+    // null after a turnover whose spot has not been set yet, so the
+    // earlier check locked the panel after an ordinary fumble and
+    // demanded a kickoff that nobody was about to take.
+    // endsDrive is set only by the plays a kickoff really follows: a made
+    // field goal, every PAT outcome, every 2PT outcome, and a safety.
+    let lastReal = null;
+    for (let i = plays.length - 1; i >= 0; i--){
+      if (!isAdminMarker(plays[i])){ lastReal = plays[i]; break; }
+    }
     const awaitingKickoff = st0.down === null && st0.quarter < 5 &&
+      !!(lastReal && lastReal.effect && lastReal.effect.endsDrive) &&
       (gamePhase === 'firstHalf' || gamePhase === 'secondHalf');
     document.querySelectorAll('.ptypeBtn').forEach(b => {
       b.disabled = disable || (awaitingKickoff && b.dataset.type !== 'kickoff');
@@ -2773,7 +2784,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   });
 
   document.querySelectorAll('.ptypeBtn').forEach(b => b.addEventListener('click', () => renderPlayPanel(b.dataset.type)));
-  let currentSpotGetter = null;
+  let currentSpotGetter = null, rushFumSpotGetter = null, passFumSpotGetter = null;
 
   function startingSpotFieldsHtml(idPrefix, label, driveTeamKey){
     const driveTeamLabel = driveTeamKey ? TEAMS[driveTeamKey].name + "'s side" : 'Our side';
@@ -2909,7 +2920,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_rush_fumrec" value="opp" checked> Recovered by opponent</label>' +
           '<div id="pp_rush_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_rushfum_safety" style="display:none;">' +
           '<button type="button" id="pp_rushfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
+          // A lost fumble hands the ball over, so the takeover spot has to
+          // be askable here. The dedicated Fumble play type has this field;
+          // the rush and pass panels' own fumble paths never did, which
+          // left field position unset after the most common way of
+          // entering a turnover.
           '<div id="pp_rush_fum_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_rushfum') + yardsBlock('Return yards (optional)', 'pp_rushfum_retyds') +
+            startingSpotFieldsHtml('pp_rushfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
             '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_rushfum_td" style="display:none;">' +
             '<button type="button" id="pp_rushfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
           '</div>' +
@@ -2932,6 +2949,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_pass_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_passfum_safety" style="display:none;">' +
           '<button type="button" id="pp_passfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
           '<div id="pp_pass_fum_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_passfum') + yardsBlock('Return yards (optional)', 'pp_passfum_retyds') +
+            startingSpotFieldsHtml('pp_passfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
             '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_passfum_td" style="display:none;">' +
             '<button type="button" id="pp_passfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
           '</div>' +
@@ -3166,6 +3184,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
     wireLossToggles(panel);
     currentSpotGetter = (type === 'kickoff' || type === 'punt' || type === 'int' || type === 'fumble' || type === 'fg') ? wireStartingSpot(panel, 'pp_spot') : null;
+    // The rush and pass panels only need a spot when their fumble is lost,
+    // so the getter is swapped in by the fumble toggle rather than set for
+    // the whole panel.
+    if (type === 'rush') rushFumSpotGetter = wireStartingSpot(panel, 'pp_rushfum_spot');
+    if (type === 'pass') passFumSpotGetter = wireStartingSpot(panel, 'pp_passfum_spot');
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
 
     const sel = { carrier:null, passer:null, receiver:null, kicker:null, punter:null, credit:null };
@@ -3253,6 +3276,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       };
       document.getElementById('pp_rush_fumbled').addEventListener('change', (e) => {
         document.getElementById('pp_rush_fumble_fields').style.display = e.target.checked ? 'block' : 'none';
+        // Fire the recovery radio's own handler. It defaults to
+        // "recovered by opponent" but only runs on change, so opening
+        // the fumble fields never installed the takeover-spot getter
+        // and the spot the coach typed was read back as null.
+        const rec = document.querySelector('input[name=pp_rush_fumrec]:checked');
+        if (rec) rec.dispatchEvent(new Event('change', { bubbles: true }));
         if (e.target.checked){
           resetToggle('pp_rush_safety', 'Safety');
           document.getElementById('pp_rush_td_wrap').style.display = 'none';
@@ -3275,6 +3304,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       panel.querySelectorAll('input[name=pp_rush_fumrec]').forEach(r => r.addEventListener('change', () => {
         const isOpp = document.querySelector('input[name=pp_rush_fumrec]:checked').value === 'opp';
         document.getElementById('pp_rush_fum_opp').style.display = isOpp ? 'block' : 'none';
+        // Only ask for a takeover spot when the ball actually changed hands.
+        currentSpotGetter = isOpp ? rushFumSpotGetter : null;
         document.getElementById('pp_rush_fum_own').style.display = isOpp ? 'none' : 'block';
       }));
       const rushFumSafetyToggle = document.getElementById('pp_rushfum_safety_toggle');
@@ -3300,6 +3331,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       };
       document.getElementById('pp_pass_fumbled').addEventListener('change', (e) => {
         document.getElementById('pp_pass_fumble_fields').style.display = e.target.checked ? 'block' : 'none';
+        // Fire the recovery radio's own handler. It defaults to
+        // "recovered by opponent" but only runs on change, so opening
+        // the fumble fields never installed the takeover-spot getter
+        // and the spot the coach typed was read back as null.
+        const rec = document.querySelector('input[name=pp_pass_fumrec]:checked');
+        if (rec) rec.dispatchEvent(new Event('change', { bubbles: true }));
         if (e.target.checked){
           resetToggle('pp_pass_safety', 'Safety');
           document.getElementById('pp_pass_td_wrap').style.display = 'none';
@@ -3322,6 +3359,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       panel.querySelectorAll('input[name=pp_pass_fumrec]').forEach(r => r.addEventListener('change', () => {
         const isOpp = document.querySelector('input[name=pp_pass_fumrec]:checked').value === 'opp';
         document.getElementById('pp_pass_fum_opp').style.display = isOpp ? 'block' : 'none';
+        // Only ask for a takeover spot when the ball actually changed hands.
+        currentSpotGetter = isOpp ? passFumSpotGetter : null;
         document.getElementById('pp_pass_fum_own').style.display = isOpp ? 'none' : 'block';
       }));
       const passFumSafetyToggle = document.getElementById('pp_passfum_safety_toggle');
