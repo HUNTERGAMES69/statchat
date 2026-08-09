@@ -2508,7 +2508,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_blocked_cb') + '</div></div>' +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="g" checked> Good</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="x"> Missed</label></div>' +
-        '<div id="pp_fg_blocked" style="display:none;">' + defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + tdBlock + '</div>';
+        '<div id="pp_fg_blocked" style="display:none;">' + defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + tdBlock + '</div>' +
+        // A missed or blocked field goal hands the ball over, and without
+        // a spot the drive has no field position -- which then refuses
+        // every following scrimmage play. Punts, kickoffs, interceptions
+        // and fumbles all had this field; field goals were the one
+        // change-of-possession play without it.
+        startingSpotFieldsHtml('pp_spot', null, def);
     else if (type === 'pat') html =
         offBlock('kicker','Kicker') +
         '<div style="margin-top:8px;">' + blockedToggleHtml('pp_pat_blocked_cb') + '</div>' +
@@ -2619,7 +2625,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       });
     });
     wireLossToggles(panel);
-    currentSpotGetter = (type === 'kickoff' || type === 'punt' || type === 'int' || type === 'fumble') ? wireStartingSpot(panel, 'pp_spot') : null;
+    currentSpotGetter = (type === 'kickoff' || type === 'punt' || type === 'int' || type === 'fumble' || type === 'fg') ? wireStartingSpot(panel, 'pp_spot') : null;
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
 
     const sel = { carrier:null, passer:null, receiver:null, kicker:null, punter:null, credit:null };
@@ -3366,9 +3372,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       pending = null;
       document.getElementById('confirmCard').style.display = 'none';
       document.getElementById('code').value = '';
-      showMsg('gameMsg', 'The ball\u2019s spot is not set, so this play cannot be recorded — ' +
-        'yardage would not track and could not be checked. Use "Adjust Down/Distance" to set ' +
-        'the spot, then enter the play again.', 'error');
+      const msg = 'The ball\u2019s spot is not set, so this play cannot be recorded — yardage ' +
+        'would not track and could not be checked. Use "Adjust Down/Distance" to set the spot, ' +
+        'then enter the play again.';
+      showMsg('gameMsg', msg, 'error');
+      // Also inside the panel. gameMsg sits at the top of the page, well
+      // above where the coach is looking when they press Review, so the
+      // refusal read as the button simply not working.
+      warningEl.textContent = '⚠️ ' + msg;
+      warningEl.style.display = 'block';
       return;
     }
 
