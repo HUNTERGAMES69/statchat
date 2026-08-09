@@ -2852,6 +2852,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
   }
 
+  // A touchdown ends at the goal line, so "tackled on" has no meaning --
+  // and a fumble's spot is where the ball came loose, not where the
+  // runner was tackled, so the label has to change or it asks the wrong
+  // question.
+  function refreshSpotCalcContext(panel){
+    const c = panel && panel.__spotCalc;
+    if (!c) return;
+    const td = document.getElementById('pp_td');
+    const fum = document.getElementById('pp_rush_fumbled') || document.getElementById('pp_pass_fumbled');
+    const scored = !!(td && td.checked);
+    c.hide(scored);
+    c.setLabel(fum && fum.checked ? 'or ball came loose on' : 'or tackled on');
+  }
+
   function wireLossToggles(panel){
     panel.querySelectorAll('.lossToggle').forEach(b => b.addEventListener('click', () => {
       b.classList.toggle('picked');
@@ -2909,6 +2923,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const lossToggleHtml = (id) => '<div style="margin-bottom:6px;">' +
       '<button type="button" class="lossToggle ptoggle" data-for="' + (id||'pp_yards') + '" ' +
       'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button></div>';
+    // "Tackled on" calculator. fieldPos is possession-relative (0 = own
+    // goal, 100 = opponent's goal), so a gain is simply newFieldPos minus
+    // the current one -- which is why a play crossing midfield needs no
+    // special case at all: own 20 to opp 20 is 80 - 20 = 60. What it DOES
+    // need is the side, because "the 20" is two different places. The
+    // current side is pre-selected so a short gain is still one number.
+    const spotCalcHtml = () => {
+      const st = computeState();
+      const off = st.possession, opp = otherTeam(off);
+      return '<div id="pp_calc_wrap" style="margin-bottom:6px;">' +
+        '<p style="font-size:13px; color:#888; margin:8px 0 4px;">or tackled on</p>' +
+        '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+          '<button type="button" class="ptoggle calcSide" data-side="own" ' +
+            'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+            TEAMS[off].name + '</button>' +
+          '<button type="button" class="ptoggle calcSide" data-side="opp" ' +
+            'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+            TEAMS[opp].name + '</button>' +
+          '<input autocomplete="off" type="text" id="pp_calc_yardline" placeholder="yard line" style="width:90px;">' +
+        '</span>' +
+        '<div id="pp_calc_readout" style="font-size:12px; color:#777; margin-top:4px;"></div>' +
+      '</div>';
+    };
+
     const yardsBlockRet = () => '<div id="pp_retyds_container"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Return yards (optional)</p><input autocomplete="off" type="text" id="pp_retyds" style="width:80px;"></div>';
     const tdBlock = '<div style="margin-top:10px;">' +
       '<input autocomplete="off" type="checkbox" id="pp_td" style="display:none;">' +
@@ -2919,7 +2957,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     let html = '';
     if (type === 'rush') html = offBlock('carrier','Ball carrier') +
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Yards') + '</div>' + lossToggleHtml('pp_yards') +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Yards') + '</div>' + lossToggleHtml('pp_yards') + spotCalcHtml() +
         '<div id="pp_rush_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_rush_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_safety', 'Safety') + '</div></div>' +
         defBlock('Tackled by (optional)') +
@@ -2946,7 +2984,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<button type="button" class="pp-outcome-switch" onclick="renderPlayPanel(\'int\')" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Intercepted</button>' +
         '</div>' +
         offBlock('passer','Passer') + offBlock('receiver','Receiver') +
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap" style="margin-bottom:6px;">' + yardsBlock('Yards') + '</div>' + lossToggleHtml('pp_yards') +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap" style="margin-bottom:6px;">' + yardsBlock('Yards') + '</div>' + lossToggleHtml('pp_yards') + spotCalcHtml() +
         '<div style="margin-bottom:6px;"><input autocomplete="off" type="checkbox" id="pp_incomplete" style="display:none;">' +
         '<button type="button" id="pp_incomplete_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
         '<div id="pp_pass_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_fumbled', 'Fumbled') + '</div>' +
@@ -3102,6 +3140,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         tdToggle.style.color = cb.checked ? '#fff' : '#555';
         tdToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
         tdToggle.textContent = cb.checked ? '✓ Touchdown' : 'Touchdown';
+        refreshSpotCalcContext(panel);
       });
     }
     const rushFumTdToggle = document.getElementById('pp_rushfum_td_toggle');
@@ -3192,6 +3231,68 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (lbl) lbl.style.opacity = locked ? '0.45' : '';
       });
     }
+    // --- "tackled on" calculator -------------------------------------
+    (function wireSpotCalc(){
+      const wrap = document.getElementById('pp_calc_wrap');
+      if (!wrap) return;
+      const ylEl = document.getElementById('pp_calc_yardline');
+      const readout = document.getElementById('pp_calc_readout');
+      const yardsEl = document.getElementById('pp_yards');
+      const lossBtn = panel.querySelector('.lossToggle[data-for="pp_yards"]');
+      const st = computeState();
+      // Pre-select the side the ball is already on, so a short gain stays
+      // one number and only a play crossing midfield costs an extra tap.
+      let side = st.fieldPos !== null ? (st.fieldPos <= 50 ? 'own' : 'opp') : null;
+      const sideBtns = [...wrap.querySelectorAll('.calcSide')];
+      const paintSides = () => sideBtns.forEach(b => b.classList.toggle('picked', b.dataset.side === side));
+
+      const setDisabled = (el, off) => { if (el){ el.disabled = off; el.style.opacity = off ? '0.45' : ''; } };
+
+      function recompute(){
+        const cur = computeState().fieldPos;
+        const raw = (ylEl.value || '').trim();
+        if (cur === null){
+          readout.textContent = 'Spot not set — enter yards directly.';
+          setDisabled(ylEl, true); sideBtns.forEach(b => setDisabled(b, true));
+          return;
+        }
+        if (!raw || !side){ readout.textContent = ''; releaseYards(); return; }
+        const n = parseInt(raw, 10);
+        if (isNaN(n) || n < 0 || n > 50){ readout.textContent = 'Yard line must be 0–50.'; return; }
+        // own N is N from our goal; opp N is N from theirs, so 100 - N.
+        const newPos = side === 'own' ? n : (100 - n);
+        const gain = newPos - cur;
+        yardsEl.value = String(Math.abs(gain));
+        // The sign comes out of the arithmetic, so LOSS is driven from
+        // here rather than left for the coach to set as well -- having
+        // both would double-negate exactly like a typed "-5" plus LOSS.
+        if (lossBtn){
+          lossBtn.classList.toggle('picked', gain < 0);
+          setDisabled(lossBtn, true);
+        }
+        setDisabled(yardsEl, true);
+        readout.textContent = 'from ' + markerLabel(cur) + ' to ' + markerLabel(newPos) +
+          '  =  ' + (gain >= 0 ? '+' : '') + gain;
+      }
+      function releaseYards(){
+        setDisabled(yardsEl, false);
+        if (lossBtn) setDisabled(lossBtn, false);
+      }
+
+      sideBtns.forEach(b => b.addEventListener('click', () => { side = b.dataset.side; paintSides(); recompute(); }));
+      ylEl.addEventListener('input', recompute);
+      // Typing yards directly clears the calculator, so the two inputs
+      // can never disagree about the same play.
+      yardsEl.addEventListener('input', () => {
+        if (!yardsEl.disabled && ylEl.value){ ylEl.value = ''; readout.textContent = ''; }
+      });
+      paintSides();
+      recompute();
+      panel.__spotCalc = { recompute, releaseYards, setLabel: t => {
+        wrap.querySelector('p').textContent = t;
+      }, hide: on => { wrap.style.display = on ? 'none' : ''; if (on){ ylEl.value = ''; readout.textContent = ''; releaseYards(); } } };
+    })();
+
     wireLossToggles(panel);
     currentSpotGetter = (type === 'kickoff' || type === 'punt' || type === 'int' || type === 'fumble' || type === 'fg') ? wireStartingSpot(panel, 'pp_spot') : null;
     // The rush and pass panels only need a spot when their fumble is lost,
@@ -3290,6 +3391,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       };
       document.getElementById('pp_rush_fumbled').addEventListener('change', (e) => {
         document.getElementById('pp_rush_fumble_fields').style.display = e.target.checked ? 'block' : 'none';
+        refreshSpotCalcContext(panel);
         // Fire the recovery radio's own handler. It defaults to
         // "recovered by opponent" but only runs on change, so opening
         // the fumble fields never installed the takeover-spot getter
@@ -3345,6 +3447,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       };
       document.getElementById('pp_pass_fumbled').addEventListener('change', (e) => {
         document.getElementById('pp_pass_fumble_fields').style.display = e.target.checked ? 'block' : 'none';
+        refreshSpotCalcContext(panel);
         // Fire the recovery radio's own handler. It defaults to
         // "recovered by opponent" but only runs on change, so opening
         // the fumble fields never installed the takeover-spot getter
