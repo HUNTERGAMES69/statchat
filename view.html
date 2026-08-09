@@ -859,10 +859,25 @@ function computeState(playsList){
         if (stPunting.length) stInner += table(['Punts','Avg','Long'], stPunting.slice(0, 5));
         rightHtml += tile('Special Teams', stInner);
       }
-      const defNums = Object.keys(s.defense);
-      if (defNums.length){
-        rightHtml += tile('Defense', table(['Int','Fum Rec','Sacks'], [{ name: 'Team', values: [sum(defNums,s.defense,'int'), sum(defNums,s.defense,'fumRec'), sum(defNums,s.defense,'sacks')] }]));
+      // Counted from the play log, not from named defenders. Naming the
+      // tackler, interceptor or recoverer is optional, and summing
+      // s.defense meant a sack with nobody credited recorded no sack at
+      // all -- the Defense tile simply did not render. The event
+      // happened whether or not anyone was identified.
+      const opp = otherTeam(teamKey);
+      const defTotals = plays.reduce((acc, p) => {
+        const r = p.roles; if (!r) return acc;
+        if (r.playType === 'sack' && r.passer && r.passer.team === opp) acc.sacks++;
+        if (r.playType === 'int' && r.passer && r.passer.team === opp) acc.int++;
+        if (r.playType === 'fumble' && r.carrier && r.carrier.team === opp && (r.lost || r.defense)) acc.fumRec++;
+        return acc;
+      }, { int: 0, fumRec: 0, sacks: 0 });
+      const hasDef = defTotals.int || defTotals.fumRec || defTotals.sacks;
+      if (hasDef){
+        rightHtml += tile('Defense', table(['Int','Fum Rec','Sacks'],
+          [{ name: 'Team', values: [defTotals.int, defTotals.fumRec, defTotals.sacks] }]));
       }
+      const defNums = hasDef ? ['team'] : [];
       if (!rushNums.length && !passNums.length && !recNums.length && !stTotalEntries && !defNums.length){
         leftHtml += '<p class="hint">No stats yet for ' + team.name + '.</p>';
       }
