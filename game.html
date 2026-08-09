@@ -91,6 +91,7 @@
       <span class="downdist" id="quarterText"></span>
       <span class="finalTag" id="finalTag" style="display:none;">FINAL</span>
       <span class="finalTag" id="notStartedTag" style="display:none;">NOT STARTED</span>
+      <span class="finalTag" id="halftimeTag" style="display:none;">HALFTIME</span>
     </div>
     <div id="topText" style="text-align:right; font-size:14px; font-weight:600; color:#333; margin:6px 0;"></div>
 
@@ -1795,12 +1796,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     renderFieldStrip(state);
     const isFinal = gamePhase === 'ended';
     const notStarted = gamePhase === 'notStarted';
+    const atHalf = gamePhase === 'halftime';
     document.getElementById('finalTag').style.display = isFinal ? 'inline' : 'none';
     document.getElementById('notStartedTag').style.display = notStarted ? 'inline' : 'none';
+    document.getElementById('halftimeTag').style.display = atHalf ? 'inline' : 'none';
     // Down, distance and quarter describe a game in progress. Before
     // kickoff there is nothing to describe.
-    document.getElementById('downText').style.display = (isFinal || notStarted) ? 'none' : '';
-    document.getElementById('quarterText').style.display = (isFinal || notStarted) ? 'none' : '';
+    const hideLive = isFinal || notStarted || atHalf;
+    document.getElementById('downText').style.display = hideLive ? 'none' : '';
+    document.getElementById('quarterText').style.display = hideLive ? 'none' : '';
     document.getElementById('downText').textContent = downMsg;
     // Just the quarter. Which half it belongs to is obvious from the
     // number and only crowded the banner.

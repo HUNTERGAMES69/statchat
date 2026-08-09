@@ -995,10 +995,34 @@ function computeState(playsList){
     const isGoalToGo = state.down && state.fieldPos !== null && (state.fieldPos + state.distance >= 100);
     const distDisplay = isGoalToGo ? 'Goal' : state.distance;
     document.getElementById('scoreText').textContent = TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' + TEAMS.teamB.name + ' ' + state.scores.teamB;
-    if (currentGameStatus === 'final'){
+    // Phase is derived from the play log rather than passed in, because
+    // view.html is a spectator page and only reliably has the plays. The
+    // markers it looks for are the same ones End 1st half / End game
+    // write, so the banner can never disagree with the drive summary --
+    // which it did: "3rd & 10 at own 21" while the drive panel already
+    // said End of 1st half.
+    const isDiv = (p, t) => p.isDivider && (p.text || '').trim() === t;
+    const halftimeIdx = plays.findIndex(p => isDiv(p, 'End of 1st half'));
+    const secondHalfStarted = plays.some((p, i) =>
+      i > halftimeIdx && halftimeIdx !== -1 && p.effect && p.effect.setQuarter >= 3);
+    const phase =
+      currentGameStatus === 'final' || plays.some(p => isDiv(p, 'Final')) ? 'FINAL'
+      : (halftimeIdx !== -1 && !secondHalfStarted) ? 'HALFTIME'
+      : !plays.some(p => p.roles || (p.effect && p.effect.isStat)) ? 'NOT STARTED'
+      : null;
+    const qEl = document.getElementById('quarterText');
+    if (phase){
       document.getElementById('downText').textContent = '';
-      document.getElementById('quarterText').textContent = 'FINAL';
+      qEl.textContent = phase;
+      // Large and bold: this is the whole state of the game, and at 15px
+      // regular it read as just another label beside the quarter.
+      qEl.style.fontSize = '26px';
+      qEl.style.fontWeight = '800';
+      qEl.style.letterSpacing = '0.06em';
     } else {
+      qEl.style.fontSize = '';
+      qEl.style.fontWeight = '';
+      qEl.style.letterSpacing = '';
       document.getElementById('downText').textContent = state.down
         ? (ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabel(state.fieldPos) + ' — ' + TEAMS[state.possession].name + ' ball')
         : ('no active drive — ' + TEAMS[state.possession].name + ' ball');

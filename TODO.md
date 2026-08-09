@@ -88,6 +88,22 @@ regression. Largest single block of open work.
 
 ---
 
+## 5b. Track targets for receivers
+
+- [ ] **Record a target on every pass attempt**, not just completions.
+  Today an incomplete pass stores the passer and, if named, the
+  intended receiver — but nothing counts it as a target, so the
+  receiving line shows catches only. Targets are the standard
+  companion stat: 4 catches on 5 targets says something 4 catches
+  alone does not, and catch rate falls out of it for free.
+  The data is already being captured on incompletions (`roles.receiver`
+  is set when the intended receiver is named), so this is mostly a
+  matter of counting it in `computeBoxScore` and adding a column.
+  Note the receiver is optional, so targets will undercount whenever
+  nobody was named — same caveat as every other optional-player stat.
+
+---
+
 ## 6. NFL-data QA harness — designed, not built
 
 Reopens the NFL-validation idea that was closed earlier (the old
