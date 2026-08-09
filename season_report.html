@@ -191,6 +191,16 @@ const TIMEOUTS_PER_OT = 1;
         priorPoss = computeState(playsList.slice(0, i + 1)).possession;
         continue;
       }
+      // A half ends every drive in progress, even when the same team gets
+      // the ball back to start the next one. Only a change of possession
+      // was treated as a boundary, so a team that finished the first half
+      // with the ball and received to open the second had both halves
+      // counted as ONE continuous drive.
+      if (playsList[i].isDivider && /end of (1st|first) half/i.test(playsList[i].text || '')){
+        pushStart(firstRealPlayFrom(i + 1));
+        priorPoss = computeState(playsList.slice(0, i + 1)).possession;
+        continue;
+      }
       const possAfter = computeState(playsList.slice(0, i + 1)).possession;
       if (possAfter !== priorPoss) pushStart(firstRealPlayFrom(i + 1));
       priorPoss = possAfter;
