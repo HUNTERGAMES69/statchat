@@ -163,6 +163,7 @@
            corrections and manual overrides underneath. -->
       <div class="row">
         <button id="penUtilBtn" style="background:#ffc72c; color:#1a1a1a;">Penalty</button>
+        <button id="badSnapUtilBtn">Bad snap</button>
         <button class="ptypeBtn" data-type="fumble">Fumble</button>
         <button class="ptypeBtn" data-type="safety">Safety</button>
         <button id="kneelUtilBtn">QB kneel</button>
@@ -945,7 +946,7 @@ function parseInput(raw, state){
     : y < 0 ? 'for a loss of ' + Math.abs(y)
     : 'for ' + y;
 
-  if (['r', 'p', 'i', 's', 'kn'].includes(type)){
+  if (['r', 'p', 'i', 's', 'kn', 'bs'].includes(type)){
     let netYards = 0, tackler = null, text;
     if (type === 'r'){
       netYards = parseInt(rest[0]) || 0; tackler = rest[1];
@@ -955,6 +956,15 @@ function parseInput(raw, state){
           flipEligible: false, team: off, quarter: state.quarter };
       }
       text = O(p1) + ' rush ' + gainPhrase(netYards);
+    }
+    else if (type === 'bs'){
+      // A bad snap is charged the same way as a kneel: a TEAM rush, with
+      // the loss against the team and no individual credited. Nobody
+      // "carried" it, and pinning the yardage on the quarterback or the
+      // centre would misstate both their lines.
+      const bsY = parseInt(rest[0], 10);
+      netYards = -Math.abs(isNaN(bsY) ? 0 : bsY);
+      text = TEAMS[off].name + ' — bad snap, team rush ' + gainPhrase(netYards);
     }
     else if (type === 'kn'){
       // NCAA statistics rules charge a quarterback kneel as a TEAM rush:
@@ -2046,6 +2056,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('flipBtn').disabled = disable;
     document.getElementById('timeoutUtilBtn').disabled = disable;
     document.getElementById('kneelUtilBtn').disabled = disable;
+    document.getElementById('badSnapUtilBtn').disabled = disable;
     if (disable) document.getElementById('playPanel').style.display = 'none';
     document.getElementById('startGameBtn').style.display = (gamePhase === 'notStarted' && !guided.active) ? 'inline-block' : 'none';
     // Self-heal a stranded guided flow. guided_state is stored on the
@@ -3481,7 +3492,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       document.getElementById('pp_fg_blocked_cb').addEventListener('change', (e) => {
         document.getElementById('pp_fg_blocked').style.display = e.target.checked ? 'block' : 'none';
         setKickResultLocked('pp_fgres', e.target.checked);
+        if (e.target.checked) prefillMissedFgSpot();
       });
+      // NFHS: a missed field goal that reaches the end zone is a
+      // touchback, so the defense takes over at its own 20 -- which is
+      // where most misses end up. Pre-filled rather than forced: a short
+      // miss that stays in the field of play is dead where it lies, and
+      // that spot has to be typed in.
+      function prefillMissedFgSpot(){
+        const yl = document.getElementById('pp_spot_yardline');
+        if (yl && !yl.value) yl.value = '20';
+        const own = panel.querySelector('.pp_spot_side[data-side="own"]');
+        if (own) own.click();
+      }
+      panel.querySelectorAll('input[name=pp_fgres]').forEach(r =>
+        r.addEventListener('change', () => { if (r.value === 'x' && r.checked) prefillMissedFgSpot(); }));
     }
     if (type === 'pat'){
       document.getElementById('pp_pat_blocked_cb').addEventListener('change', (e) => {
@@ -4308,6 +4333,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   };
   document.getElementById('fieldStripToggle').addEventListener('click', () => setStripHidden(true));
   document.getElementById('fieldStripShow').addEventListener('click', () => setStripHidden(false));
+
+  document.getElementById('badSnapUtilBtn').addEventListener('click', () => {
+    const panel = document.getElementById('playPanel');
+    panel.style.display = 'block';
+    panel.innerHTML =
+      '<p style="font-size:13px; color:#888; margin:0 0 6px;">Bad snap — recorded as a team rush, ' +
+      'so no player is charged with the attempt or the yardage.</p>' +
+      '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Yards lost</p>' +
+      '<input autocomplete="off" type="text" id="badsnap_yds" placeholder="0" style="width:80px;">' +
+      '<div class="row" style="margin-top:12px;"><button class="primary" id="badsnap_review">Review play</button>' +
+      '<button class="secondary" id="badsnap_clear">Clear</button></div>';
+    document.getElementById('badsnap_clear').addEventListener('click', collapsePlayPanel);
+    document.getElementById('badsnap_review').addEventListener('click', () => {
+      const n = parseInt((document.getElementById('badsnap_yds').value || '').trim(), 10);
+      document.getElementById('code').value = '0bs ' + (isNaN(n) ? 0 : Math.abs(n));
+      showConfirm();
+      if (pending) pending.roles = {
+        carrier: { team: computeState().possession, num: 'TEAM', yards: pending.effect.statYds },
+        playType: 'rush'
+      };
+    });
+  });
 
   document.getElementById('kneelUtilBtn').addEventListener('click', () => {
     const panel = document.getElementById('playPanel');
