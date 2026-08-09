@@ -883,14 +883,22 @@ function computeState(playsList){
       stPunting.sort((a, b) => b.yds - a.yds);
       const stTotalEntries = stKicking.length + stPunting.length + stKickoffs.length;
       if (stTotalEntries){
-        let stInner = '';
-        if (stKicking.length) stInner += table(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, 5));
-        if (stPunting.length) stInner += table(['Punts','Avg','Long'], stPunting.slice(0, 5));
+        // Three separate tables share this tile, and concatenated flush
+        // they read as one run-on block: a header row lands directly
+        // under the previous table's data row, so "Punts Avg Long" looks
+        // like more numbers for the kicker above it. A rule and a gap
+        // between sections makes each one legible on its own.
+        const stSections = [];
+        if (stKicking.length) stSections.push(table(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, 5)));
+        if (stPunting.length) stSections.push(table(['Punts','Avg','Long'], stPunting.slice(0, 5)));
         // Kickoffs: just the count and how many stayed in the end zone.
         // Individual kickoff distance is not reported anywhere and the
         // panel does not even ask for it, so a per-kicker yardage table
         // would be all zeroes.
-        if (stKickoffs.length) stInner += table(['Kickoffs','TB %'], stKickoffs);
+        if (stKickoffs.length) stSections.push(table(['Kickoffs','TB %'], stKickoffs));
+        const stInner = stSections.map((sec, i) => i === 0 ? sec :
+          '<div style="border-top:1px solid #dde3ea; margin-top:calc(9px * var(--stat-scale, 1)); ' +
+          'padding-top:calc(7px * var(--stat-scale, 1));">' + sec + '</div>').join('');
         rightHtml += tile('Special Teams', stInner);
       }
       // Counted from the play log, not from named defenders. Naming the
