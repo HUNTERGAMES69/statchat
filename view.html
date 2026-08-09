@@ -794,6 +794,21 @@ function computeState(playsList){
           return { name: playerName(teamKey, n), leader: i === 0 && passNums.length > 1, values: [d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0] };
         })));
       }
+      // NFHS charges sack yardage to the team, and the team total tile
+      // already subtracts it. Folding it into the TEAM rushing row makes
+      // the individual rows actually add up to that tile -- otherwise
+      // the column visibly disagreed with the total beside it.
+      const sackYds = plays.reduce((t, p) => {
+        const r = p.roles;
+        return (r && r.playType === 'sack' && r.passer && r.passer.team === teamKey) ? t + (r.passer.yards || 0) : t;
+      }, 0);
+      const sackCount = plays.filter(p => p.roles && p.roles.playType === 'sack' &&
+        p.roles.passer && p.roles.passer.team === teamKey).length;
+      if (sackCount){
+        s.rushing.TEAM = s.rushing.TEAM || {};
+        s.rushing.TEAM.att = (s.rushing.TEAM.att || 0) + sackCount;
+        s.rushing.TEAM.yds = (s.rushing.TEAM.yds || 0) - sackYds;
+      }
       const rushSorted = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
       const rushNums = capWithTdException(rushSorted, s.rushing, 'td');
       if (rushNums.length){
