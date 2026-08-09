@@ -1208,6 +1208,13 @@ function offenseEligible(team, role){
     // numbers, and a rule that drops them leaves the picker empty --
     // or worse, showing only the one player who happened to get a
     // position, which reads as broken rather than as filtered.
+    // Guard the narrow roles FIRST. Passer, kicker and punter accept
+    // exactly one position, so neither a blank position nor an
+    // unrecognised one is grounds to offer someone -- a genuine starter
+    // there is admitted by the seed check above, which is explicit.
+    // Without this the blank-position fallback below put every
+    // unpositioned player into the quarterback picker.
+    if (allowedPos.length === 1 && !allowedPos.some(p => pos.split(/[^A-Z]+/).indexOf(p) !== -1)) return false;
     if (!pos) return true;
     // Split on any run of non-letters, so RB/LB, RB-LB, "WR, DB" and
     // "WR | DB" all separate. Rosters get typed by hand and every one of
