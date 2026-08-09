@@ -379,10 +379,22 @@
       const s = seeds[side] || {};
       return ['QB','RB1','RB2','WR1','WR2','WR3'].map(role => s[role]).filter(Boolean);
     };
+    // The slot a player was seeded into already states what they do, so
+    // keep it. Flattening to a bare list of numbers threw that away, and
+    // a blanket "seeded players bypass the filter" then put wide
+    // receivers in the quarterback picker.
+    const seedPosFor = (side) => {
+      const s = seeds[side] || {}, out = {};
+      Object.keys(s).forEach(role => {
+        if (!s[role]) return;
+        out[s[role]] = role.replace(/[0-9]+$/, '');   // WR2 -> WR, RB1 -> RB
+      });
+      return out;
+    };
     TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: ourBranding.logo_url || null, seedOrder: seedOrderFor('teamA') };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: ourBranding.logo_url || null, seedOrder: seedOrderFor('teamA'), seedPos: seedPosFor('teamA') };
     TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#8B0000', text: game.opponent_secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: game.opponent_logo_url || null, seedOrder: seedOrderFor('teamB') };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: game.opponent_logo_url || null, seedOrder: seedOrderFor('teamB'), seedPos: seedPosFor('teamB') };
     rosterRows.forEach(r => {
       const team = TEAMS[r.team_side];
       if (!team) return;
@@ -1161,8 +1173,17 @@ function offenseEligible(team, role){
   // already carried must appear in the carrier list, or the recency
   // ordering below can never surface him and the coach has to type the
   // number every single time.
+  // Naming someone a likely starter is an explicit statement by the
+  // coach, and it outranks anything guessed from a position string --
+  // but only for the roles that slot actually plays. The seeded slot is
+  // checked against the SAME allow-list as a roster position, so a
+  // seeded WR reaches the carrier and receiver pickers and never the
+  // passer one.
+  const seedPos = TEAMS[team].seedPos || {};
+
   const nums = Object.keys(visible).filter(num => {
     if (!roster[num]) return false;
+    if (seedPos[num] && allowedPos && allowedPos.indexOf(seedPos[num]) !== -1) return true;
     if (usedInRole[num] !== undefined) return true;   // already did this role
     if (!allowedPos) return true;                     // no filter for this role
     const pos = (posOffense[num] || '').toUpperCase().trim();
@@ -1185,6 +1206,12 @@ function offenseEligible(team, role){
     // picker. Excluding someone requires positively knowing their
     // positions are recognised AND wrong for this role -- otherwise
     // show them and let the coach decide.
+    // ...but only for broad roles. Passer, kicker and punter each accept
+    // exactly ONE position, so guessing is nearly always wrong and just
+    // fills a one-name picker with the whole roster. For those, an
+    // unrecognised position means "not this role" -- a genuine starter
+    // there is covered by the seed check above, which is explicit.
+    if (allowedPos.length === 1) return false;
     const KNOWN = parts.some(part =>
       OFFENSE_POS.has(part) || DEFENSE_POS.has(part) || SPECIAL_POS.has(part));
     return !KNOWN;
