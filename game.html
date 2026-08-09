@@ -190,6 +190,9 @@
         <label id="flipRow" style="display:none;"><input autocomplete="off" type="checkbox" id="flipCheck" checked> <span id="flipLabel"></span></label>
         <div id="confirmClockRow" style="display:none; margin-bottom:8px;">
           <span id="confirmClockLabel">Clock</span>&nbsp;<input autocomplete="off" type="text" id="confirmClockInput" placeholder="M:SS or MSS" style="width:90px; display:inline-block;">
+          <div id="confirmClockWarn" style="font-size:12px; color:#a05a00; margin-top:4px;">
+            Optional — but with no clock this possession's time won't be counted.
+          </div>
         </div>
         <div class="row" style="margin-top:8px;">
           <button class="primary" id="saveBtn">Save</button>
@@ -1261,8 +1264,14 @@ function offenseEligible(team, role){
   // never a candidate in the first place and the usedInRole check below
   // could never reach him. That meant a back who was not on the likely-
   // starters list had to be typed in on every single carry.
-  const candidates = Object.keys(visible);
-  Object.keys(usedInRole).forEach(n => { if (candidates.indexOf(n) === -1) candidates.push(n); });
+  const candidates = Object.keys(visible).filter(n => n !== 'TEAM');
+  // TEAM is a stat bucket for kneels and sack yardage, not a person. It
+  // lands in usedInRole like any other "carrier", so adding used players
+  // to the candidate list swept it into the picker -- offering "#TEAM
+  // TEAM" as someone you could hand the ball to.
+  Object.keys(usedInRole).forEach(n => {
+    if (n !== 'TEAM' && candidates.indexOf(n) === -1) candidates.push(n);
+  });
 
   const nums = candidates.filter(num => {
     if (usedInRole[num] !== undefined) return true;   // has played this role
@@ -2155,6 +2164,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   document.getElementById('clockPromptSave').addEventListener('click', () => resolveClockPrompt(false));
   document.getElementById('clockPromptSkip').addEventListener('click', () => resolveClockPrompt(true));
   document.getElementById('clockPromptInput').addEventListener('keydown', e => { if (e.key === 'Enter') resolveClockPrompt(false); });
+  document.getElementById('confirmClockInput').addEventListener('input', e => {
+    const w = document.getElementById('confirmClockWarn');
+    if (w) w.style.display = e.target.value.trim() ? 'none' : 'block';
+  });
 
   function startGuided(quarterNum, targetPhase){
     guided = { active: true, quarter: quarterNum, kickingTeam: null, receivingTeam: null, step: 'pickKicker', targetPhase };
@@ -2530,6 +2543,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="gr_spot_kick" style="display:none;">' + startingSpotFieldsHtml('gr_kickspot', 'Spot where ' + TEAMS[guided.kickingTeam].name + ' took over', guided.kickingTeam) + '</div>' +
         '<p style="font-size:13px; color:#888; margin:10px 0 4px;">Clock</p>' +
         '<input autocomplete="off" type="text" id="guidedReturnClock" placeholder="M:SS or MSS" style="width:110px;">' +
+        '<div id="grClockWarn" style="font-size:12px; color:#a05a00; margin-top:4px;">' +
+          'Optional — but with no clock this possession\'s time won\'t be counted.</div>' +
         '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedReturnSave">Save return</button></div>';
       let returnerNum = null;
       const getReturnReset = wireStartingSpot(content, 'gr_spot');
@@ -2559,6 +2574,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         grMuffBtn.style.color = on ? '#fff' : '#555';
         grMuffBtn.style.borderColor = on ? '#a05a00' : '#ccc';
       };
+      const grClock = document.getElementById('guidedReturnClock');
+      if (grClock) grClock.addEventListener('input', e => {
+        const w = document.getElementById('grClockWarn');
+        if (w) w.style.display = e.target.value.trim() ? 'none' : 'block';
+      });
       const grTbBtn = document.getElementById('gr_touchback_toggle'), grTbCb = document.getElementById('gr_touchback');
       const grReturnFields = () => [document.getElementById('gr_returner_grid'),
         document.getElementById('gr_returner_manual'), document.getElementById('gr_yards').parentElement];
@@ -2943,8 +2963,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="margin-top:8px;">' + blockedToggleHtml('pp_pat_blocked_cb') + '</div>' +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_patres" value="g" checked> Good</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_patres" value="x"> Missed</label></div>' +
-        '<div id="pp_pat_blocked" style="display:none;">' + defBlock('Returned by (optional)') + yardsBlock('Return yards (optional)') +
-        '<label class="inline" style="margin-top:6px; display:block;"><input autocomplete="off" type="checkbox" id="pp_pat_2pt"> Returned all the way (defense +2)</label></div>';
+        // NFHS ends the try the instant the defense gains possession, so a
+        // blocked PAT has no return and cannot be scored on. NCAA and the
+        // NFL allow a defensive two, which is where these controls came
+        // from -- they simply do not apply to high-school football.
+        '<div id="pp_pat_blocked" style="display:none;">' + defBlock('Blocked by (optional)') +
+        '<p style="font-size:12px; color:#888; margin:6px 0 0;">NFHS: the try ends when the defense gains possession — no return, and the defense cannot score.</p></div>';
     else if (type === 'twopt') html =
         '<div style="margin-bottom:10px;"><label>Play type</label><div class="row">' +
         '<button type="button" class="secondary" id="pp_2pt_rush_btn">Rush</button>' +
@@ -2955,16 +2979,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_rush_res" value="g" checked> Good (scored)</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_rush_res" value="x"> No good, stopped short</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_rush_res" value="b"> Fumbled, turned over</label></div>' +
-          '<div id="pp_2pt_rush_def" style="display:none;">' + defBlock('Recovered by (optional)', '_2ptRush') +
-          '<label class="inline" style="margin-top:6px; display:block;"><input autocomplete="off" type="checkbox" id="pp_2pt_rush_defTd"> Returned all the way (defense +2)</label></div>' +
+          '<div id="pp_2pt_rush_def" style="display:none;">' + defBlock('Recovered by (optional)', '_2ptRush') + '<p style="font-size:12px; color:#888; margin:6px 0 0;">NFHS: the try ends when the defense gains possession — no return, and the defense cannot score.</p>' + '</div>' +
         '</div>' +
         '<div id="pp_2pt_pass_fields" style="display:none;">' +
           offBlock('passer','Passer') + offBlock('receiver','Receiver') +
           '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_pass_res" value="g" checked> Good (caught for the score)</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_pass_res" value="x"> Incomplete</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_pass_res" value="b"> Intercepted, turned over</label></div>' +
-          '<div id="pp_2pt_pass_def" style="display:none;">' + defBlock('Intercepted by (optional)', '_2ptPass') +
-          '<label class="inline" style="margin-top:6px; display:block;"><input autocomplete="off" type="checkbox" id="pp_2pt_pass_defTd"> Returned all the way (defense +2)</label></div>' +
+          '<div id="pp_2pt_pass_def" style="display:none;">' + defBlock('Intercepted by (optional)', '_2ptPass') + '<p style="font-size:12px; color:#888; margin:6px 0 0;">NFHS: the try ends when the defense gains possession — no return, and the defense cannot score.</p>' + '</div>' +
         '</div>';
 
     html += '<div class="row" style="margin-top:12px;"><button class="primary" id="pp_review">Review play</button><button class="secondary" id="pp_clear">Clear</button></div>';
@@ -3048,6 +3070,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         cb.dispatchEvent(new Event('change'));
       });
     });
+    // Declared at panel scope: a function statement inside an `if` block
+    // is block-scoped, so the copy that lived in the field-goal branch
+    // was invisible to the PAT branch and threw the moment Blocked was
+    // ticked there.
+    function setKickResultLocked(groupName, locked){
+      document.querySelectorAll('input[name=' + groupName + ']').forEach(r => {
+        if (locked && r.value === 'x') r.checked = true;
+        if (locked && r.value === 'g') r.checked = false;
+        r.disabled = locked;
+        const lbl = r.closest('label');
+        if (lbl) lbl.style.opacity = locked ? '0.45' : '';
+      });
+    }
     wireLossToggles(panel);
     currentSpotGetter = (type === 'kickoff' || type === 'punt' || type === 'int' || type === 'fumble' || type === 'fg') ? wireStartingSpot(panel, 'pp_spot') : null;
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
@@ -3445,11 +3480,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (type === 'fg'){
       document.getElementById('pp_fg_blocked_cb').addEventListener('change', (e) => {
         document.getElementById('pp_fg_blocked').style.display = e.target.checked ? 'block' : 'none';
+        setKickResultLocked('pp_fgres', e.target.checked);
       });
     }
     if (type === 'pat'){
       document.getElementById('pp_pat_blocked_cb').addEventListener('change', (e) => {
         document.getElementById('pp_pat_blocked').style.display = e.target.checked ? 'block' : 'none';
+        // A blocked kick is never good, so Good/Missed is not a choice any
+        // more. Leaving "Good" selected and clickable invited a
+        // contradiction the panel would then have to silently resolve.
+        setKickResultLocked('pp_patres', e.target.checked);
       });
     }
     if (type === 'twopt'){
@@ -3740,9 +3780,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const blocked = document.getElementById('pp_pat_blocked_cb').checked;
       const res = blocked ? 'b' : document.querySelector('input[name=pp_patres]:checked').value;
       if (res === 'b'){
-        const twoPt = document.getElementById('pp_pat_2pt').checked;
-        const retyds = yards('pp_yards');
-        code = sel.kicker + 'pa b' + (sel.credit ? ' ' + sel.credit : '') + (retyds ? ' ' + retyds : '') + (twoPt ? ' td' : '');
+        // No return yardage and no ' td' token: under NFHS the try is dead
+        // as soon as the defense has the ball, so neither can happen.
+        code = sel.kicker + 'pa b' + (sel.credit ? ' ' + sel.credit : '');
       } else {
         code = sel.kicker + 'pa ' + res;
       }
@@ -3754,8 +3794,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (!sel.carrier) return;
         const res = document.querySelector('input[name=pp_2pt_rush_res]:checked').value;
         if (res === 'b'){
-          const defTd = document.getElementById('pp_2pt_rush_defTd').checked;
-          code = sel.carrier + 'tpr b' + (sel.credit ? ' ' + sel.credit : '') + (defTd ? ' td' : '');
+          code = sel.carrier + 'tpr b' + (sel.credit ? ' ' + sel.credit : '');
         } else {
           code = sel.carrier + 'tpr ' + res;
         }
@@ -3766,8 +3805,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const recTok2 = sel.receiver || '?';
         const res = document.querySelector('input[name=pp_2pt_pass_res]:checked').value;
         if (res === 'b'){
-          const defTd = document.getElementById('pp_2pt_pass_defTd').checked;
-          code = sel.passer + 'tpp ' + recTok2 + ' b' + (sel.credit ? ' ' + sel.credit : '') + (defTd ? ' td' : '');
+          code = sel.passer + 'tpp ' + recTok2 + ' b' + (sel.credit ? ' ' + sel.credit : '');
         } else {
           code = sel.passer + 'tpp ' + recTok2 + ' ' + res;
         }
@@ -3869,7 +3907,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('flipRow').style.display = 'none';
       }
       const needsClock = pending.flipEligible || (pending.effect && pending.effect.endsDrive);
-      document.getElementById('confirmClockRow').style.display = needsClock ? 'flex' : 'none';
+      document.getElementById('confirmClockRow').style.display = needsClock ? 'block' : 'none';
+      // The note is the whole point of "warn but allow": the cost of
+      // skipping the clock is invisible otherwise -- the play saves fine
+      // and the missing time only shows up later as a drive with no TOP.
+      const ccw = document.getElementById('confirmClockWarn');
+      if (ccw) ccw.style.display = 'block';
       if (needsClock) document.getElementById('confirmClockInput').value = '';
     }
     document.getElementById('confirmCard').style.display = 'block';
