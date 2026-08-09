@@ -837,8 +837,14 @@ function computeState(playsList){
           return { name: playerName(teamKey, n), leader: i === 0 && recNums.length > 1, values: [d.rec||0, d.yds||0, d.td||0] };
         })));
       }
-      const stNums = Object.keys(s.specialTeams).filter(n => s.specialTeams[n].fgAtt || s.specialTeams[n].patAtt || s.specialTeams[n].punts);
-      const stKicking = [], stPunting = [];
+      // kickoffs belongs in this gate too -- without it a pure kickoff
+      // specialist never entered the loop at all, so the kickoff table
+      // could never be built no matter what the box score held.
+      const stNums = Object.keys(s.specialTeams).filter(n => {
+        const d = s.specialTeams[n];
+        return d.fgAtt || d.patAtt || d.punts || d.kickoffs;
+      });
+      const stKicking = [], stPunting = [], stKickoffs = [];
       stNums.forEach(n => {
         const d = s.specialTeams[n];
         const name = playerName(teamKey, n, 'special');
@@ -854,6 +860,10 @@ function computeState(playsList){
           const xp = d.patAtt ? [d.patAtt, d.patMade || 0] : ['—', '—'];
           stKicking.push({ yds: d.fgLong || 0, name, values: fg.concat(xp) });
         }
+        if (d.kickoffs){
+          const tbPct = Math.round(100 * (d.touchbacks || 0) / d.kickoffs);
+          stKickoffs.push({ name, values: [d.kickoffs, tbPct + '%'] });
+        }
         if (d.punts){
           const avg = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
           // Total punt yardage is not a stat anyone reads -- it is just
@@ -864,11 +874,16 @@ function computeState(playsList){
       });
       stKicking.sort((a, b) => b.yds - a.yds);
       stPunting.sort((a, b) => b.yds - a.yds);
-      const stTotalEntries = stKicking.length + stPunting.length;
+      const stTotalEntries = stKicking.length + stPunting.length + stKickoffs.length;
       if (stTotalEntries){
         let stInner = '';
         if (stKicking.length) stInner += table(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, 5));
         if (stPunting.length) stInner += table(['Punts','Avg','Long'], stPunting.slice(0, 5));
+        // Kickoffs: just the count and how many stayed in the end zone.
+        // Individual kickoff distance is not reported anywhere and the
+        // panel does not even ask for it, so a per-kicker yardage table
+        // would be all zeroes.
+        if (stKickoffs.length) stInner += table(['Kickoffs','TB %'], stKickoffs);
         rightHtml += tile('Special Teams', stInner);
       }
       // Counted from the play log, not from named defenders. Naming the
