@@ -489,6 +489,15 @@ const TIMEOUTS_PER_OT = 1;
         const s = bucket(r.carrier.team, targetCat, r.carrier.num);
         if (s) s.fum = (s.fum||0) + 1;
       }
+      // A target is a pass thrown AT someone, caught or not. Counted on
+      // completions above, and here for the two ways a pass fails with a
+      // known intended receiver. Two-point conversions are excluded --
+      // NFHS keeps conversion attempts out of season passing and
+      // receiving totals, so 'tpp' never reaches this branch.
+      if (r.receiver && (type === 'incomplete' || type === 'int')){
+        const rs = bucket(r.receiver.team, 'receiving', r.receiver.num);
+        if (rs) rs.tgt = (rs.tgt||0) + 1;
+      }
       if (r.passer && type === 'incomplete'){
         const s = bucket(r.passer.team, 'passing', r.passer.num);
         if (s) s.att = (s.att||0) + 1;
@@ -506,6 +515,7 @@ const TIMEOUTS_PER_OT = 1;
           const rs = bucket(r.receiver.team, 'receiving', r.receiver.num);
           if (rs){
             rs.rec = (rs.rec||0) + 1;
+            rs.tgt = (rs.tgt||0) + 1;
             rs.yds = (rs.yds||0) + (r.receiver.yards||0);
             rs.long = Math.max(rs.long||0, r.receiver.yards||0);
             if (e.td) rs.td = (rs.td||0) + 1;
@@ -1086,10 +1096,10 @@ const TIMEOUTS_PER_OT = 1;
         'yds') + '</div>';
 
     html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Receiving</div>' +
-      seasonStatTable(seasonAgg.receiving, ['Rec','Yds','Y/C','Long','TD','Fum'],
-        d => [d.rec||0, d.yds||0, d.rec?+(d.yds/d.rec).toFixed(1):0, d.long||0, d.td||0, d.fum||0],
-        (obj, names) => { const rec=names.reduce((t,n)=>t+(obj[n].rec||0),0), yds=names.reduce((t,n)=>t+(obj[n].yds||0),0);
-          return [rec, yds, rec?+(yds/rec).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].long||0)), names.reduce((t,n)=>t+(obj[n].td||0),0), names.reduce((t,n)=>t+(obj[n].fum||0),0)]; },
+      seasonStatTable(seasonAgg.receiving, ['Tgt','Rec','Catch %','Yds','Y/C','Long','TD','Fum'],
+        d => [d.tgt||0, d.rec||0, d.tgt?Math.round(100*(d.rec||0)/d.tgt)+'%':'—', d.yds||0, d.rec?+(d.yds/d.rec).toFixed(1):0, d.long||0, d.td||0, d.fum||0],
+        (obj, names) => { const rec=names.reduce((t,n)=>t+(obj[n].rec||0),0), yds=names.reduce((t,n)=>t+(obj[n].yds||0),0), tgt=names.reduce((t,n)=>t+(obj[n].tgt||0),0);
+          return [tgt, rec, tgt?Math.round(100*rec/tgt)+'%':'—', yds, rec?+(yds/rec).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].long||0)), names.reduce((t,n)=>t+(obj[n].td||0),0), names.reduce((t,n)=>t+(obj[n].fum||0),0)]; },
         'yds') + '</div>';
 
     html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Rushing</div>' +

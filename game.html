@@ -3113,7 +3113,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '<button type="button" id="pp_sackfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
           '</div>' +
         '</div>';
-    else if (type === 'int') html = offBlock('passer','Passer') + defBlock('Intercepted by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot', null, def);
+    // The intended receiver is asked for here so the throw counts as a
+    // TARGET against him. Every other pass outcome already records it;
+    // the interception panel was the only one that did not, which made
+    // targets undercount precisely on the throws a coach most wants to
+    // look back at. Optional, like the receiver everywhere else.
+    else if (type === 'int') html = offBlock('passer','Passer') + offBlock('receiver','Intended receiver (optional)') + defBlock('Intercepted by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot', null, def);
     else if (type === 'fumble') html = offBlock('carrier','Who fumbled') +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="own"> Recovered by own team</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="opp" checked> Recovered by opponent</label></div>' +
@@ -4007,6 +4012,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (isIncomplete){
         code = sel.passer + 'i ' + recTok;
         roles = { passer: { team: off, num: sel.passer, yards: 0 }, playType: 'incomplete' };
+        // The intended receiver, when known, so the throw counts as a
+        // target against him. No yardage -- it was not caught.
         if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: 0 };
       } else {
         const yds = signedYards('pp_yards') || '0';
@@ -4081,6 +4088,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       code = sel.passer + 'x ' + (sel.credit || '?') + (yds ? ' ' + yds : '') + (td ? ' td' : '');
       roles = { passer: { team: off, num: sel.passer }, playType: 'int' };
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
+      // Carries the target. No yardage: the throw was not caught, so the
+      // receiver gets an attempt against his name and nothing else.
+      if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: 0 };
+      
     } else if (type === 'fumble'){
       if (!sel.carrier) return;
       const rec = document.querySelector('input[name=pp_fumrec]:checked').value;

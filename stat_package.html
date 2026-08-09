@@ -461,6 +461,15 @@ const TIMEOUTS_PER_OT = 1;
         const s = bucket(r.carrier.team, targetCat, r.carrier.num);
         if (s) s.fum = (s.fum||0) + 1;
       }
+      // A target is a pass thrown AT someone, caught or not. Counted on
+      // completions above, and here for the two ways a pass fails with a
+      // known intended receiver. Two-point conversions are excluded --
+      // NFHS keeps conversion attempts out of season passing and
+      // receiving totals, so 'tpp' never reaches this branch.
+      if (r.receiver && (type === 'incomplete' || type === 'int')){
+        const rs = bucket(r.receiver.team, 'receiving', r.receiver.num);
+        if (rs) rs.tgt = (rs.tgt||0) + 1;
+      }
       if (r.passer && type === 'incomplete'){
         const s = bucket(r.passer.team, 'passing', r.passer.num);
         if (s) s.att = (s.att||0) + 1;
@@ -478,6 +487,7 @@ const TIMEOUTS_PER_OT = 1;
           const rs = bucket(r.receiver.team, 'receiving', r.receiver.num);
           if (rs){
             rs.rec = (rs.rec||0) + 1;
+            rs.tgt = (rs.tgt||0) + 1;
             rs.yds = (rs.yds||0) + (r.receiver.yards||0);
             rs.long = Math.max(rs.long||0, r.receiver.yards||0);
             if (e.td) rs.td = (rs.td||0) + 1;
@@ -1058,10 +1068,10 @@ const TIMEOUTS_PER_OT = 1;
         'yds') || '<p class="no-stats">No passing stats recorded.</p>');
 
     html += '<div class="section-title">' + TEAMS.teamA.name + ' — Receiving</div>' +
-      (statTable('teamA', box.teamA.receiving, ['Rec','Yds','Y/C','Long','TD','Fumble'],
-        d => [d.rec||0, d.yds||0, d.rec?(d.yds/d.rec).toFixed(1):'0.0', d.long||0, d.td||0, d.fum||0],
-        (obj) => { const rec=sumStat(obj,'rec'), yds=sumStat(obj,'yds');
-          return [rec, yds, rec?(yds/rec).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
+      (statTable('teamA', box.teamA.receiving, ['Tgt','Rec','Catch %','Yds','Y/C','Long','TD','Fumble'],
+        d => [d.tgt||0, d.rec||0, d.tgt?Math.round(100*(d.rec||0)/d.tgt)+'%':'—', d.yds||0, d.rec?(d.yds/d.rec).toFixed(1):'0.0', d.long||0, d.td||0, d.fum||0],
+        (obj) => { const rec=sumStat(obj,'rec'), yds=sumStat(obj,'yds'), tgt=sumStat(obj,'tgt');
+          return [tgt, rec, tgt?Math.round(100*rec/tgt)+'%':'—', yds, rec?(yds/rec).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
         'yds') || '<p class="no-stats">No receiving stats recorded.</p>');
 
     html += '<div class="section-title">' + TEAMS.teamA.name + ' — Rushing</div>' +

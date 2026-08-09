@@ -668,6 +668,15 @@ function computeState(playsList){
         const s = bucket(r.carrier.team, targetCat, r.carrier.num);
         if (s) s.fum = (s.fum||0) + 1;
       }
+      // A target is a pass thrown AT someone, caught or not. Counted on
+      // completions above, and here for the two ways a pass fails with a
+      // known intended receiver. Two-point conversions are excluded --
+      // NFHS keeps conversion attempts out of season passing and
+      // receiving totals, so 'tpp' never reaches this branch.
+      if (r.receiver && (type === 'incomplete' || type === 'int')){
+        const rs = bucket(r.receiver.team, 'receiving', r.receiver.num);
+        if (rs) rs.tgt = (rs.tgt||0) + 1;
+      }
       if (r.passer && type === 'incomplete'){
         const s = bucket(r.passer.team, 'passing', r.passer.num);
         if (s) s.att = (s.att||0) + 1;
@@ -685,6 +694,7 @@ function computeState(playsList){
           const rs = bucket(r.receiver.team, 'receiving', r.receiver.num);
           if (rs){
             rs.rec = (rs.rec||0) + 1;
+            rs.tgt = (rs.tgt||0) + 1;
             rs.yds = (rs.yds||0) + (r.receiver.yards||0);
             rs.long = Math.max(rs.long||0, r.receiver.yards||0);
             if (e.td) rs.td = (rs.td||0) + 1;
@@ -878,9 +888,11 @@ function computeState(playsList){
       const recSorted = sortByYds(Object.keys(s.receiving), s.receiving, 'yds');
       const recNums = capWithTdException(recSorted, s.receiving, 'td');
       if (recNums.length){
-        recHtml += tile('Receiving', table(['Rec','Yds','TD'], recNums.map((n, i) => {
+        // Tgt before Rec: the throw comes before the catch, and reading
+        // "3 targets, 1 catch" left to right is how it is said out loud.
+        recHtml += tile('Receiving', table(['Tgt','Rec','Yds','TD'], recNums.map((n, i) => {
           const d = s.receiving[n];
-          return { name: playerName(teamKey, n), leader: i === 0 && recNums.length > 1, values: [d.rec||0, d.yds||0, d.td||0] };
+          return { name: playerName(teamKey, n), leader: i === 0 && recNums.length > 1, values: [d.tgt||0, d.rec||0, d.yds||0, d.td||0] };
         })));
       }
       // kickoffs belongs in this gate too -- without it a pure kickoff
