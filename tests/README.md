@@ -10,6 +10,13 @@ node tests/cross_surface.js       # ~4s   does one play look the same on every p
 node tests/picker_check.js        # ~1s   is the returner picker populated and isolated?
 node tests/clock_display_check.js # ~1s   does a colon-less clock entry always DISPLAY with a colon?
 node tests/drive_boundary_check.js # ~4s   do drives start on real plays, not clock markers?
+node tests/possession_and_drive_check.js  # ~10s possessions == drives; downs count incompletes?
+node tests/optional_players_check.js      # ~5s  returner/interceptor/recoverer optional?
+node tests/entry_integrity_check.js       # ~10s does the saved text match the engine?
+node tests/picker_behaviour_check.js      # ~8s  starters present, manual entries stick, recency order
+node tests/takeover_spot_check.js         # ~12s every change of possession records a takeover spot
+node tests/yardage_calculator_check.js    # ~8s  tackled-on spots convert to yardage, incl. across midfield
+node tests/receiver_targets_check.js      # ~8s  targets on catches, incompletions and interceptions
 node tests/coverage_probe.js      # ~25s  can every UI path be reached and saved?
 node tests/mutation_check.js      # ~4min do these tests actually catch real bugs?
 ```
@@ -17,7 +24,9 @@ node tests/mutation_check.js      # ~4min do these tests actually catch real bug
 Every suite exits non-zero on failure, so they can be chained:
 
 ```bash
-for t in engine_parity run_scripted cross_surface picker_check clock_display_check drive_boundary_check coverage_probe; do
+for t in engine_parity run_scripted cross_surface picker_check clock_display_check \
+         drive_boundary_check possession_and_drive_check optional_players_check \
+         entry_integrity_check coverage_probe; do
   node tests/$t.js || echo "FAILED: $t"
 done
 ```
@@ -51,7 +60,14 @@ which tested nothing at all.
 | `picker_check.js` | Checks the kickoff/punt returner picker is populated and correctly ranked, and that the other credit pickers stay defense-only. |
 | `clock_display_check.js` | Checks that a colon-less clock entry ("1156") is normalized to "M:SS" before being stored, across all seven places `game.html` embeds a clock value into play text. |
 | `drive_boundary_check.js` | Checks that a drive never starts on an administrative marker (clock line, divider, manual flip), and that a drive's summary line reports a real play rather than the trailing clock marker. |
-| `mutation_check.js` | Re-introduces twelve known bugs and confirms the suite goes red for each. |
+| `possession_and_drive_check.js` | Possessions equal drives; "Adjust Down/Distance" registers none; Current Drive has a TOP tile; 3rd/4th-down conversions count incomplete passes. |
+| `optional_players_check.js` | Kick/punt returner, interceptor and fumble recoverer are all optional, without losing return yardage, turnovers, or gaining phantom players. |
+| `entry_integrity_check.js` | The saved log text always matches the recomputed engine state; redo, QB pre-selection, penalty no-down-change and safety clock attribution. |
+| `picker_behaviour_check.js` | Every likely starter appears in the pickers for the roles that slot plays and no others; a hand-typed player joins the list from then on; all four picker families order by most recent use. |
+| `takeover_spot_check.js` | Drives all 11 change-of-possession flows through the real panels and asserts the takeover spot reaches the log as a New drive marker. Three separate causes of a silently-null spot were found on 2026-08-07: missing spot fields on the rush/pass/sack fumble paths, a recovery radio that defaults checked but only wires its getter on `change`, and the Sacked outcome switch re-rendering away the listeners `wireStartingSpot` had attached. All three left a filled-in form returning null. |
+| `yardage_calculator_check.js` | The "or tackled on" input on the rush and pass panels. Asserts the arithmetic in both directions across midfield (own 20 to opp 20 is +60), that a negative result drives LOSS rather than leaving both settable, that typing yards hands control back, that a touchdown hides the calculator and a fumble relabels it, and that an unknown spot disables it. |
+| `receiver_targets_check.js` | Targets counted on completions, incompletions and interceptions, and NOT on two-point conversions (NFHS keeps conversion attempts out of season totals). Also asserts an unnamed incompletion credits nobody, and that the Tgt column reaches the rendered table. |
+| `mutation_check.js` | Re-introduces nineteen known bugs and confirms the suite goes red for each. |
 
 ## Writing expectations
 
@@ -75,6 +91,19 @@ combined-score check passed on a game where *both* teams' scores were
 wrong, because it only compared the sum. Run `mutation_check.js` after
 adding any new assertion, and treat a surviving mutant as a blind spot
 in the tests rather than a curiosity.
+
+**Suite order in `mutation_check.js` is deliberate.** `engine_parity`
+fires on *any* single-file edit to a duplicated function, so if it ran
+first it would short-circuit almost every mutant and hide whether the
+behavioural tests can actually detect the broken behaviour. It runs
+last, as a backstop. The runner also stops at the first suite that
+catches a mutant -- running all nine against all nineteen takes long
+enough to hit tool timeouts.
+
+**If the run is interrupted, check the working tree before doing
+anything else.** The runner restores files in a `finally` block, but a
+hard timeout kills it mid-mutation and leaves a file modified. This has
+already happened once.
 
 **"SURVIVED" can also mean a test file failed to upload, not that the
 fix is broken.** This happened once already: `picker_check.js` silently
