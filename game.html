@@ -727,6 +727,13 @@ function computeState(playsList){
           if (state.fieldPos !== null){
             state.distance = Math.max(1, Math.min(state.distance, 100 - state.fieldPos));
           }
+        } else if (e.autoFirstDown){
+          // Defensive holding, roughing, pass interference and the like
+          // award a first down whatever the yardage -- a 5-yard foul on
+          // 3rd & 20 still moves the chains, so the distance maths below
+          // must not get a say.
+          state.down = 1;
+          state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
         } else {
           state.distance -= e.fieldDelta;
           if (state.distance <= 0){
@@ -840,6 +847,12 @@ function parseInput(raw, state){
     // over at 1st & 10 turned into "1st & 20", because the normal path
     // adjusts distance against a line-to-gain that no longer applies.
     const noDownChange = tokens.slice(2).some(t => /^nd$/i.test(t));
+    // 'fd' = automatic first down. Defensive holding, roughing, pass
+    // interference and the rest award a first down whatever the yardage
+    // -- a 5-yard foul on 3rd & 20 still moves the chains. There was no
+    // way to record that, so the coach had to fix the down afterwards
+    // with Adjust Down/Distance.
+    const autoFirstDown = tokens.slice(2).some(t => /^fd$/i.test(t));
     const newFieldPos = state.fieldPos !== null ? Math.max(0, Math.min(100, state.fieldPos + fieldDelta)) : null;
     let newDown = state.down, newDistance = state.distance !== null ? (state.distance - fieldDelta) : null;
     if (noDownChange){
@@ -850,10 +863,17 @@ function parseInput(raw, state){
       newDown = 1;
       newDistance = newFieldPos !== null ? Math.max(1, Math.min(10, 100 - newFieldPos)) : 10;
     }
+    if (autoFirstDown && newFieldPos !== null){
+      newDown = 1;
+      newDistance = Math.max(1, Math.min(10, 100 - newFieldPos));
+    }
     const downDistanceText = (newDown !== null && newDistance !== null) ? (' — ' + ordinal(newDown) + ' & ' + togoLabel(newFieldPos, newDistance)) : '';
     return {
-      text: 'Penalty on ' + TEAMS[team].name + ' — ' + yds + ' yds' + (noDownChange ? ' (no down change)' : '') + downDistanceText,
-      effect: Object.assign({ penaltyTeam: team, penaltyYds: yds, fieldDelta }, noDownChange ? { noDownChange: true } : {}),
+      text: 'Penalty on ' + TEAMS[team].name + ' — ' + yds + ' yds' +
+        (noDownChange ? ' (no down change)' : '') +
+        (autoFirstDown ? ' (automatic first down)' : '') + downDistanceText,
+      effect: Object.assign({ penaltyTeam: team, penaltyYds: yds, fieldDelta },
+        noDownChange ? { noDownChange: true } : {}, autoFirstDown ? { autoFirstDown: true } : {}),
       flipEligible: false, team
     };
   }
@@ -4062,9 +4082,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<button type="button" class="penTeamBtn" data-team="def">On defense</button>' +
       '<div style="margin-top:8px;"><label class="inline">Yards <input autocomplete="off" type="text" id="pen_yds" style="width:70px; display:inline-block; margin-left:6px;"></label></div>' +
       '<label class="inline" style="margin-top:8px; display:block;"><input autocomplete="off" type="checkbox" id="pen_no_down"> Dead-ball / after a kick or change of possession (move the ball, keep the down &amp; distance)</label>' +
+      '<div style="margin-top:8px;">' +
+        '<input autocomplete="off" type="checkbox" id="pen_first_down" style="display:none;">' +
+        '<button type="button" id="pen_first_down_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Automatic first down</button>' +
+      '</div>' +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="pen_review">Review</button><button class="secondary" id="pen_clear">Clear</button></div>';
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
     let penTeam = null;
+    const fdBtn = document.getElementById('pen_first_down_toggle'), fdCb = document.getElementById('pen_first_down');
+    fdBtn.addEventListener('click', () => {
+      fdCb.checked = !fdCb.checked;
+      fdBtn.classList.toggle('picked', fdCb.checked);
+      fdBtn.textContent = fdCb.checked ? '\u2713 Automatic first down' : 'Automatic first down';
+    });
     panel.querySelectorAll('.penTeamBtn').forEach(b => b.addEventListener('click', () => {
       penTeam = b.dataset.team;
       panel.querySelectorAll('.penTeamBtn').forEach(x => x.classList.remove('picked'));
@@ -4075,7 +4105,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const yds = document.getElementById('pen_yds').value.trim();
       if (!penTeam || !yds) return;
       const noDown = document.getElementById('pen_no_down').checked;
-      const code = (penTeam === 'off' ? 'po' : 'pd') + ' ' + yds + (noDown ? ' nd' : '');
+      const firstDown = document.getElementById('pen_first_down').checked;
+      const code = (penTeam === 'off' ? 'po' : 'pd') + ' ' + yds + (noDown ? ' nd' : '') + (firstDown ? ' fd' : '');
       document.getElementById('code').value = code;
       showConfirm();
     });
