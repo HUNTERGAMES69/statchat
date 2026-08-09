@@ -2872,10 +2872,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const scored = !!(td && td.checked) || puntVoid;
     c.hide(scored);
     c.setLabel(
-      (fum && fum.checked) ? 'or ball came loose on'
-      : (puntMuffed && puntMuffed.checked) ? 'or muffed on'
-      : (puntTb || puntBlocked) ? 'or came down on'
-      : 'or tackled on');
+      (fum && fum.checked) ? 'Or enter ball came loose on'
+      : (puntMuffed && puntMuffed.checked) ? 'Or enter muffed on'
+      : (puntTb || puntBlocked) ? 'Or enter downed/received on'
+      : 'Or enter tackled on');
     // A touchdown IS the distance to the goal line -- there is exactly one
     // possible gain, so asking for it is busywork and getting it wrong is
     // easy from the far end of the field. Filled and locked while ticked,
@@ -2964,7 +2964,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, (num, p) => (p && p.pos) || '', 'no returners on the roster — type a number below') + '</div>' +
         '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px; margin-top:4px;">';
     }
-    const yardsBlock = (label, id) => '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label||'Yards') + '</p>' +
+    // Field labels carry the choice being offered, so they were too quiet
+    // at 13px #888 -- the same grey as every hint on the page.
+    const fieldLabel = t => '<p style="font-size:14px; font-weight:600; color:#444; margin:8px 0 4px;">' + t + '</p>';
+    const yardsBlock = (label, id) => fieldLabel(label || 'Enter yards') +
       '<input autocomplete="off" type="text" id="' + (id||'pp_yards') + '" style="width:80px;">';
     // LOSS is a sibling of the Incomplete/Fumbled/Safety toggles rather
     // than something tucked in beside the input, and carries their exact
@@ -2986,8 +2989,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const spotCalcHtml = (label) => {
       const st = computeState();
       const off = st.possession, opp = otherTeam(off);
-      return '<div id="pp_calc_wrap" style="margin-bottom:6px;">' +
-        '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label || 'or tackled on') + '</p>' +
+      // A wide left margin and a rule: the gap is what tells the coach
+      // these are two ways to answer the same question, not two things to
+      // fill in. Sitting flush in the row they read as sequential fields.
+      return '<div id="pp_calc_wrap" style="margin-bottom:6px; margin-left:22px; ' +
+        'padding-left:22px; border-left:1px solid #d8d8d8;">' +
+        fieldLabel(label || 'Or enter tackled on') +
         '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
           '<button type="button" class="ptoggle calcSide" data-side="own" ' +
             'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
@@ -3019,7 +3026,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     let html = '';
     if (type === 'rush') html = offBlock('carrier','Ball carrier') +
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Yards') + '</div>' + lossToggleHtml('pp_yards') + spotCalcHtml() +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Enter yards') + '</div>' + lossToggleHtml('pp_yards') + spotCalcHtml() +
         '<div id="pp_rush_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_rush_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_safety', 'Safety') + '</div></div>' +
         spotCalcReadoutHtml() +
@@ -3047,7 +3054,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<button type="button" class="pp-outcome-switch" onclick="renderPlayPanel(\'int\')" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Intercepted</button>' +
         '</div>' +
         offBlock('passer','Passer') + offBlock('receiver','Receiver') +
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap" style="margin-bottom:6px;">' + yardsBlock('Yards') + '</div>' + lossToggleHtml('pp_yards') + spotCalcHtml() +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap" style="margin-bottom:6px;">' + yardsBlock('Enter yards') + '</div>' + lossToggleHtml('pp_yards') + spotCalcHtml() +
         '<div style="margin-bottom:6px;"><input autocomplete="off" type="checkbox" id="pp_incomplete" style="display:none;">' +
         '<button type="button" id="pp_incomplete_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
         '<div id="pp_pass_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_fumbled', 'Fumbled') + '</div>' +
@@ -3127,8 +3134,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // Punt distance is the same subtraction as a rushing gain: where
         // the ball came down, minus the line of scrimmage. A coach reads
         // the landing spot off the field, not the distance.
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Punt distance') + '</div>' +
-        spotCalcHtml('or came down on') +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Enter distance') + '</div>' +
+        spotCalcHtml('Or enter downed/received on') +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_punt_touchback', 'Touchback') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_blocked') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_muffed', 'Muffed / fumbled catch') + '</div></div>' +
