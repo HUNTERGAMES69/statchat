@@ -476,6 +476,22 @@ const TIMEOUTS_PER_OT = 1;
           if (type === 'sack') s.sacks = (s.sacks||0) + 1;
           if (type === 'fumble') s.fumRec = (s.fumRec||0) + 1;
         }
+      } else if (type === 'int' || type === 'sack' || (type === 'fumble' && r.lost)){
+        // Naming the tackler, interceptor or recoverer is optional, and
+        // these stats used to be keyed entirely off that name -- so a
+        // sack with nobody credited recorded no sack anywhere at all,
+        // not even for the team. The event happened regardless, so it is
+        // credited to a TEAM bucket. Every caller sums the whole defense
+        // object, so this reaches all of them without touching each one.
+        const victim = (type === 'fumble') ? (r.carrier && r.carrier.team) : (r.passer && r.passer.team);
+        if (victim){
+          const s = bucket(otherTeam(victim), 'defense', 'TEAM');
+          if (s){
+            if (type === 'int') s.int = (s.int||0) + 1;
+            if (type === 'sack') s.sacks = (s.sacks||0) + 1;
+            if (type === 'fumble') s.fumRec = (s.fumRec||0) + 1;
+          }
+        }
       }
       if (r.kicker && type === 'kickoff'){
         const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
