@@ -88,6 +88,78 @@ regression. Largest single block of open work.
 
 ---
 
+## 6. NFL-data QA harness — designed, not built
+
+Reopens the NFL-validation idea that was closed earlier (the old
+converter stalled because it never handled penalties). This is a
+different shape: it drives the REAL UI and compares against an
+independent source of truth, rather than checking the app against
+itself.
+
+**Reachability confirmed** (Aug 7, 2026): nflverse release assets are
+downloadable from this sandbox — `release-assets.githubusercontent.com`
+is allowlisted. `play_by_play_2023.csv.gz` is ~19 MB.
+
+### Shape
+```
+nflverse play-by-play
+  -> convert each row to a UI action
+  -> enterPlay() through the real DOM (ui_driver)
+  -> game.html -> mock DB rows
+  -> view.html / recap.html / stat_package.html
+  -> compare against nflverse player_stats + official final score
+```
+
+Exercises `parseInput`, every entry panel, `computeState`,
+`computeBoxScore` and cross-surface agreement against ~150 plays per
+game instead of the 19-step scripted game.
+
+### Files
+- [ ] `tests/nfl/fetch.js` — download and cache `play_by_play_YYYY.csv.gz`
+  and `player_stats_YYYY.csv.gz` to /tmp. One-time cost, cached after.
+- [ ] `tests/nfl/convert.js` — one PBP row to one `enterPlay()` spec.
+  Columns that matter: `play_type`, `yards_gained`, `rusher/passer/
+  receiver_player_id`, `sack`, `interception`, `fumble_lost`,
+  `touchdown`, `penalty_team`, `penalty_yards`, `yardline_100`, `down`,
+  `ydstogo`, `qb_kneel`.
+- [ ] `tests/nfl/expected.js` — expected box score from `player_stats`,
+  with an EXPLICIT convention-adjustment layer.
+- [ ] `tests/nfl/run_qa.js` — drive N games, diff, report per game.
+
+### Convention differences that must be normalised
+StatChat now uses NFHS, nflverse is NFL, so a raw comparison fails every
+game for reasons that are not bugs:
+
+| | NFL / nflverse | StatChat (NFHS) |
+|---|---|---|
+| Sack yardage | off team PASSING | off team RUSHING |
+| QB kneel | individual QB rush | TEAM rush |
+
+**That adjustment layer is the main risk in this whole design** -- a
+wrong "adjustment" can hide a real bug. Hence the tiering below.
+
+### Assertion tiers -- build 1 and 3 first
+- [ ] **Tier 1, convention-independent, must match exactly.** Final
+  score, per-player rushing yards, receiving yards, individual passing
+  yards, touchdowns, interceptions, total plays. No adjustment applies,
+  so any mismatch is unambiguous.
+- [ ] **Tier 3, signal rather than comparison.** `validateGame()` must
+  report ZERO issues on every game. Across 150 real plays that is a
+  strong check on down continuity, impossible gains and touchdown
+  distances, and it needs no reference data at all.
+- [ ] Tier 2 (team rushing/passing totals, compared after normalising)
+  only once tiers 1 and 3 are clean.
+
+### Cost and limits
+- ~30-60s per game in jsdom; 10 games is roughly 10 minutes. A nightly
+  or pre-release run, not part of the normal suite.
+- Cannot cover layout or rendering (no layout engine in jsdom),
+  realtime, RLS, or the offline queue.
+- No nflverse equivalent for the high-school-specific paths: muffed
+  punts and kickoffs, the guided kickoff flow, timeouts.
+
+---
+
 ## BEFORE GOING TO PRODUCTION
 
 Everything here is fine for a test app and **not** fine once real users
