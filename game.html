@@ -1161,10 +1161,19 @@ function offenseEligible(team, role){
   // already carried must appear in the carrier list, or the recency
   // ordering below can never surface him and the coach has to type the
   // number every single time.
-  const nums = Object.keys(visible).filter(num => roster[num] && (
+  let nums = Object.keys(visible).filter(num => roster[num] && (
     usedInRole[num] !== undefined ||
     !allowedPos ||
     allowedPos.indexOf((posOffense[num]||'').toUpperCase()) !== -1));
+  // If the position filter matched nobody, show the whole roster rather
+  // than an empty grid. A roster entered without positions -- common for
+  // an opponent, where you often only have a programme with names and
+  // numbers -- would otherwise leave every picker blank and force the
+  // coach to type every number by hand. A slightly over-broad list is
+  // far better than no list.
+  if (!nums.length && allowedPos){
+    nums = Object.keys(visible).filter(num => roster[num]);
+  }
   const resolved = nums.slice().sort((a, b) => {
     const ar = usedInRole[a], br = usedInRole[b];
     // Anyone used this game sorts ahead of anyone who has not been.
