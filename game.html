@@ -971,7 +971,10 @@ function parseInput(raw, state){
   if (type === 'pt'){
     const yds = rest[0], ret = rest[1], retyds = rest[2];
     let t = ST(p1) + ' punts ' + yds;
-    if (ret) t += ', returned' + (ret === '?' ? '' : ' by ' + D(ret)) + (retyds ? ' for ' + retyds : '');
+    // A punt into the end zone is a touchback exactly like a kickoff --
+    // the token was already parsed for both, the punt branch never read it.
+    if (isTouchback) t += ' — TOUCHBACK';
+    else if (ret) t += ', returned' + (ret === '?' ? '' : ' by ' + D(ret)) + (retyds ? ' for ' + retyds : '');
     let score = null;
     if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
@@ -1399,6 +1402,15 @@ function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
   return list.map(p => '<button type="button" class="' + groupClass + '" data-num="' + p.num + '"' + (p.resolvedName ? ' data-resolved="' + p.resolvedName.replace(/"/g,'') + '"' : '') + (p.unit ? ' data-unit="' + p.unit + '"' : '') + ' style="margin:0 6px 6px 0;">#' + p.num + ' ' + (p.name||'') + (statLabelFn && statLabelFn(p.num, p) ? ' <span style="color:#999; font-size:11px;">(' + statLabelFn(p.num, p) + ')</span>' : '') + '</button>').join('');
 }
 const PICKED_BG = 'var(--bg-accent, #e6f1fb)';
+// NFHS spots a touchback at the receiving team's own 20. The spot widget
+// is already labelled from their point of view, so "own" is their side.
+// Pre-filled rather than forced -- the coach can still change it.
+function prefillTouchbackSpot(panel, idPrefix){
+  const yl = document.getElementById(idPrefix + '_yardline');
+  if (yl && !yl.value) yl.value = '20';
+  const own = panel.querySelector('.' + idPrefix + '_side[data-side="own"]');
+  if (own) own.click();
+}
 function markPicked(el, on){
   if (!el) return;
   // Any deliberate pick supersedes the pre-selected suggestion, so the
@@ -2758,6 +2770,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     else if (type === 'punt') html =
         offBlock('punter','Punter') +
         '<div style="display:flex; align-items:flex-end; gap:14px;"><div style="margin-bottom:6px;">' + yardsBlock('Punt distance') + '</div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_punt_touchback', 'Touchback') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_blocked') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_muffed', 'Muffed / fumbled catch') + '</div></div>' +
         '<div id="pp_punt_normal">' + retBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div></div>' +
@@ -3179,6 +3192,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // of possession and still needs the general one.
         const genSpotKo = document.getElementById('pp_spot_wrap');
         if (genSpotKo) genSpotKo.style.display = kickingRecovers ? 'none' : 'block';
+        if (tb) prefillTouchbackSpot(panel, 'pp_spot');
         currentSpotGetter = kickingRecovers ? koMuffSpotGetter : koSpotGetter;
       };
       const koTouchbackCb = document.getElementById('pp_ko_touchback');
@@ -3224,7 +3238,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const refreshPuntMode = () => {
         const blocked = document.getElementById('pp_blocked').checked;
         const muffed = document.getElementById('pp_muffed').checked;
-        document.getElementById('pp_punt_normal').style.display = (blocked || muffed) ? 'none' : 'block';
+        const touchback = document.getElementById('pp_punt_touchback').checked;
+        document.getElementById('pp_punt_normal').style.display = (blocked || muffed || touchback) ? 'none' : 'block';
+        if (touchback) prefillTouchbackSpot(panel, 'pp_spot');
         document.getElementById('pp_punt_blocked').style.display = blocked ? 'block' : 'none';
         document.getElementById('pp_punt_muffed').style.display = muffed ? 'block' : 'none';
         const kickingRecovers = muffed &&
@@ -3240,6 +3256,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         currentSpotGetter = kickingRecovers ? muffSpotGetter : puntSpotGetter;
         updatePuntTdVisibility();
       };
+      document.getElementById('pp_punt_touchback').addEventListener('change', (e) => {
+        if (e.target.checked){
+          ['pp_blocked', 'pp_muffed'].forEach(id => {
+            const o = document.getElementById(id);
+            if (o.checked){ o.checked = false; o.dispatchEvent(new Event('change')); }
+          });
+        }
+        refreshPuntMode();
+      });
       document.getElementById('pp_blocked').addEventListener('change', (e) => {
         // Blocked and muffed are different plays; turning one on clears
         // the other rather than leaving both claiming the panel.
@@ -3531,8 +3556,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
       } else {
         const yds = yards('pp_yards') || '0';
+        const puntTb = document.getElementById('pp_punt_touchback') && document.getElementById('pp_punt_touchback').checked;
         const muffed = document.getElementById('pp_muffed') && document.getElementById('pp_muffed').checked;
-        if (muffed){
+        if (puntTb){
+          code = sel.punter + 'pt ' + yds + ' tb';
+          roles = { punter: { team: off, num: sel.punter, yards: parseInt(yds) || 0, blocked: false }, playType: 'punt' };
+        } else if (muffed){
           const recTeamTok = document.querySelector('input[name=pp_punt_muffrec]:checked').value;
           const muffRec = (document.getElementById('pp_muff_rec') || {}).value;
           const recNum = (muffRec || '').trim() || '?';
