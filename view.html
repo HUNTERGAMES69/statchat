@@ -796,6 +796,13 @@ function computeState(playsList){
   function renderTeamBoxScore(teamKey, box){
       const team = TEAMS[teamKey];
       const s = box[teamKey];
+      // Built into named holders rather than appended straight to the
+      // columns, because the display order is not the order the sections
+      // are computed in -- rushing is calculated before receiving but
+      // has to appear after it. Assembling at the end keeps the layout
+      // decision in one readable place instead of depending on which
+      // block happens to run first.
+      let passHtml = '', recHtml = '', rushHtml = '', defHtml = '', stHtml = '';
       let leftHtml = '', rightHtml = '';
 
       const sum = (nums, obj, key) => nums.reduce((t, n) => t + ((obj[n] && obj[n][key]) || 0), 0);
@@ -822,7 +829,7 @@ function computeState(playsList){
       const passSorted = sortByYds(Object.keys(s.passing), s.passing, 'yds');
       const passNums = capWithTdException(passSorted, s.passing, 'td');
       if (passNums.length){
-        leftHtml += tile('Passing', table(['Att','Comp','%','Yds','TD','Int'], passNums.map((n, i) => {
+        passHtml += tile('Passing', table(['Att','Comp','%','Yds','TD','Int'], passNums.map((n, i) => {
           const d = s.passing[n];
           const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
           return { name: playerName(teamKey, n), leader: i === 0 && passNums.length > 1, values: [d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0] };
@@ -831,7 +838,7 @@ function computeState(playsList){
       const rushSorted = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
       const rushNums = capWithTdException(rushSorted, s.rushing, 'td');
       if (rushNums.length){
-        rightHtml += tile('Rushing', table(['Att','Yds','TD'], rushNums.map((n, i) => {
+        rushHtml += tile('Rushing', table(['Att','Yds','TD'], rushNums.map((n, i) => {
           const d = s.rushing[n];
           return { name: playerName(teamKey, n), leader: i === 0 && rushNums.length > 1, values: [d.att||0, d.yds||0, d.td||0] };
         })));
@@ -839,7 +846,7 @@ function computeState(playsList){
       const recSorted = sortByYds(Object.keys(s.receiving), s.receiving, 'yds');
       const recNums = capWithTdException(recSorted, s.receiving, 'td');
       if (recNums.length){
-        leftHtml += tile('Receiving', table(['Rec','Yds','TD'], recNums.map((n, i) => {
+        recHtml += tile('Receiving', table(['Rec','Yds','TD'], recNums.map((n, i) => {
           const d = s.receiving[n];
           return { name: playerName(teamKey, n), leader: i === 0 && recNums.length > 1, values: [d.rec||0, d.yds||0, d.td||0] };
         })));
@@ -899,7 +906,7 @@ function computeState(playsList){
         const stInner = stSections.map((sec, i) => i === 0 ? sec :
           '<div style="border-top:1px solid #dde3ea; margin-top:calc(9px * var(--stat-scale, 1)); ' +
           'padding-top:calc(7px * var(--stat-scale, 1));">' + sec + '</div>').join('');
-        rightHtml += tile('Special Teams', stInner);
+        stHtml += tile('Special Teams', stInner);
       }
       // Counted from the play log, not from named defenders. Naming the
       // tackler, interceptor or recoverer is optional, and summing
@@ -916,14 +923,18 @@ function computeState(playsList){
       }, { int: 0, fumRec: 0, sacks: 0 });
       const hasDef = defTotals.int || defTotals.fumRec || defTotals.sacks;
       if (hasDef){
-        rightHtml += tile('Defense', table(['Int','Fum Rec','Sacks'],
+        defHtml += tile('Defense', table(['Int','Fum Rec','Sacks'],
           [{ name: 'Team', values: [defTotals.int, defTotals.fumRec, defTotals.sacks] }]));
       }
       const defNums = hasDef ? ['team'] : [];
       if (!rushNums.length && !passNums.length && !recNums.length && !stTotalEntries && !defNums.length){
-        leftHtml += '<p class="hint">No stats yet for ' + team.name + '.</p>';
+        passHtml += '<p class="hint">No stats yet for ' + team.name + '.</p>';
       }
       const totalRows = passNums.length + rushNums.length + recNums.length + Math.min(stKicking.length, 5) + Math.min(stPunting.length, 5) + (defNums.length ? 1 : 0);
+      // Left: the passing game top to bottom, then rushing.
+      // Right: defense, then special teams.
+      leftHtml = passHtml + recHtml + rushHtml;
+      rightHtml = defHtml + stHtml;
       return { html: '<div class="stat-category-grid"><div class="stat-category-col">' + leftHtml + '</div><div class="stat-category-col">' + rightHtml + '</div></div>', totalRows };
   }
 
