@@ -813,9 +813,19 @@ function computeState(playsList){
       // Caps a sorted list at 5 entries -- except anyone with a touchdown
       // stays in regardless of rank, since a scorer never just vanishes
       // even if their overall yardage was modest.
+      // The touchdown exception exists so a scorer is never dropped just
+      // for having low yardage, but it was unbounded: EVERY remaining
+      // player with a TD got a row, so five scoring receivers meant ten
+      // rows in one tile. The page cannot scroll (body and .quad are both
+      // overflow:hidden) and the auto-fit stops shrinking at 0.5, so past
+      // that the extra rows are silently clipped -- present in the data,
+      // invisible on screen. Capped so the tile height is bounded.
+      const MAX_TD_EXTRAS = 3;
       const capWithTdException = (sortedNums, obj, tdKey) => {
         const top5 = sortedNums.slice(0, 5);
-        const extras = sortedNums.slice(5).filter(n => (obj[n] && obj[n][tdKey]) > 0);
+        const extras = sortedNums.slice(5)
+          .filter(n => (obj[n] && obj[n][tdKey]) > 0)
+          .slice(0, MAX_TD_EXTRAS);
         return top5.concat(extras);
       };
       const table = (headers, rows) => {
