@@ -2039,6 +2039,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('kneelUtilBtn').disabled = disable;
     if (disable) document.getElementById('playPanel').style.display = 'none';
     document.getElementById('startGameBtn').style.display = (gamePhase === 'notStarted' && !guided.active) ? 'inline-block' : 'none';
+    // Self-heal a stranded guided flow. guided_state is stored on the
+    // game row, so a second-half kickoff that was started and then undone
+    // stays "active" even after the half divider is gone from the log.
+    // An active guided flow disables every control and hides both half
+    // buttons, so the game looks locked with no way forward. If the flow
+    // is waiting on a half that the log says never ended, it is stale.
+    const halfDividerPresent = plays.some(p => p.isDivider && /end of (1st|first) half/i.test(p.text || ''));
+    const strandedGuided = guided.active && guided.targetPhase === 'secondHalf' && !halfDividerPresent;
+    const strandedPhase = !halfDividerPresent && (gamePhase === 'halftime' || gamePhase === 'secondHalf');
+    if (strandedGuided || strandedPhase){
+      // Both halves of the same repair. Clearing the guided flow alone
+      // still left the phase claiming halftime with no half-end marker in
+      // the log -- entry disabled, both half buttons hidden. The log is
+      // the source of truth: no divider means the first half is still on.
+      if (strandedGuided){
+        guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
+        const gp = document.getElementById('guidedPanel');
+        if (gp) gp.style.display = 'none';
+      }
+      if (strandedPhase) gamePhase = 'firstHalf';
+      persistUiState();
+    }
     document.getElementById('endFirstHalfBtn').style.display = (gamePhase === 'firstHalf' && !guided.active) ? 'inline-block' : 'none';
     document.getElementById('startHalfBtn').style.display = (gamePhase === 'halftime' && !guided.active) ? 'inline-block' : 'none';
     document.getElementById('endGameBtn').style.display = (gamePhase === 'secondHalf' && !guided.active) ? 'inline-block' : 'none';
