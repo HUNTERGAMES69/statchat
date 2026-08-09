@@ -21,6 +21,12 @@
   button.primary { background:#1a7a4c; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
   button.danger { background:#fff; color:#a32d2d; border:1px solid #a32d2d; }
+  /* Deliberately unlike anything else on the page. Manual entry writes a
+     text note that is flagged unresolved and contributes no stats, no
+     yardage and no down change -- it is the escape hatch for a play the
+     app cannot model, not a shortcut. It read as an ordinary secondary
+     button, which made it look like a peer of the real entry paths. */
+  button.lastresort { background:#8a3a12; color:#fff; border:2px solid #5c2409; font-weight:700; letter-spacing:0.02em; }
   button:disabled { opacity:0.5; cursor:default; }
   /* Selection used to set background only. Buttons are dark navy with
      WHITE text, so a pale fill left white-on-pale and read as a washed
@@ -156,7 +162,7 @@
       <div class="row" style="margin-top:6px;">
         <button id="driveUtilBtn">Adjust Down/Distance</button>
         <button id="flipBtn">Flip possession</button>
-        <button class="secondary" id="manualBtn">Manual entry</button>
+        <button id="manualBtn" class="lastresort" title="Free text only — the play is flagged unresolved and contributes no stats, no yardage and no down change">⚠ Manual entry</button>
       </div>
 
       <div id="playPanel" style="display:none;"></div>
@@ -2221,9 +2227,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<p style="font-size:13px; color:#888; margin:0 0 4px;">Returner</p>' +
         '<div id="gr_returner_grid">' + pickerHtml(returnerList, 'gr_returner_pick') + '</div>' +
         '<input autocomplete="off" type="text" id="gr_returner_manual" placeholder="type #" style="width:100px; margin:4px 0 8px;"><br>' +
-        '<label class="inline">Return yards <input autocomplete="off" type="text" id="gr_yards" style="width:70px; margin-left:6px; display:inline-block;"></label>' +
-        '<label class="inline" style="margin-left:12px; display:inline-block;"><input autocomplete="off" type="checkbox" id="gr_td"> Touchdown</label>' +
-        '<label class="inline" style="margin-left:12px; display:inline-block;">Clock <input autocomplete="off" type="text" id="guidedReturnClock" placeholder="M:SS or MSS" style="width:80px; margin-left:6px; display:inline-block;"></label>' +
+        // Laid out like the manual panels: labelled fields on one
+        // baseline, then the full-width Touchdown toggle. The guided
+        // flow cannot see renderPlayPanel's tdBlock (different scope),
+        // which is why it had a bare checkbox while every other tree
+        // had a proper button.
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;">' +
+          '<div style="margin-bottom:6px;"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Return yards</p>' +
+            '<input autocomplete="off" type="text" id="gr_yards" style="width:80px;"></div>' +
+          '<div style="margin-bottom:6px;"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Clock</p>' +
+            '<input autocomplete="off" type="text" id="guidedReturnClock" placeholder="M:SS or MSS" style="width:110px;"></div>' +
+        '</div>' +
+        '<div style="margin-top:10px;">' +
+          '<input autocomplete="off" type="checkbox" id="gr_td" style="display:none;">' +
+          '<button type="button" id="gr_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button>' +
+        '</div>' +
         startingSpotFieldsHtml('gr_spot', 'Ball spot after the return (sets 1st down for ' + TEAMS[guided.receivingTeam].name + ')', guided.receivingTeam) +
         '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedReturnSave">Save return</button></div>';
       let returnerNum = null;
@@ -2236,6 +2254,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('gr_returner_manual').value = returnerNum;
       }));
       document.getElementById('gr_returner_manual').addEventListener('input', e => { returnerNum = e.target.value.trim(); });
+      const grTdBtn = document.getElementById('gr_td_toggle'), grTdCb = document.getElementById('gr_td');
+      grTdBtn.addEventListener('click', () => {
+        grTdCb.checked = !grTdCb.checked;
+        grTdBtn.textContent = grTdCb.checked ? '\u2713 Touchdown' : 'Touchdown';
+        grTdBtn.style.background = grTdCb.checked ? '#1a7a4c' : '#fff';
+        grTdBtn.style.color = grTdCb.checked ? '#fff' : '#555';
+        grTdBtn.style.borderColor = grTdCb.checked ? '#1a7a4c' : '#ccc';
+      });
       attachNameConfirm('gr_returner_manual', guided.receivingTeam, ['defense','special','offense']);
       document.getElementById('guidedReturnSave').addEventListener('click', () => {
         const yds = document.getElementById('gr_yards').value.trim();
@@ -2462,9 +2488,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // a field to fill in on every kickoff for no downstream use. The
     // return yardage and the resulting spot are what matter.
     else if (type === 'kickoff') html = offBlock('kicker','Kicker') +
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div id="pp_ko_ret_wrap" style="margin-bottom:6px;">' + retBlock('Returned by (optional)') + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_touchback', 'Touchback') + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_muffed', 'Muffed / fumbled catch') + '</div></div>' +
+        '<div id="pp_ko_ret_wrap">' + retBlock('Returned by (optional)') + '</div>' +
         // The kickoff is where a half starts, so it is the natural place
         // to state which way the receiving team is driving. Pre-selected
         // with whatever is already known, so a normal kickoff needs no
@@ -2472,7 +2496,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Which way is ' + TEAMS[off].name + ' kicking?</p>' +
         '<button type="button" class="koDirBtn" data-dir="left">&#8592; left</button> ' +
         '<button type="button" class="koDirBtn" data-dir="right">right &#8594;</button>' +
-        '<div id="pp_ret_yds_wrap">' + yardsBlockRet() + '</div>' +
+        // Touchback and Muffed sit beside the return-yards box, because
+        // they are the two answers to "what happened to the return" --
+        // Touchback used to live up beside the returner picker, a whole
+        // question away from the field it overrides.
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;">' +
+          '<div id="pp_ret_yds_wrap" style="margin-bottom:6px;">' + yardsBlockRet() + '</div>' +
+          '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_touchback', 'Touchback') + '</div>' +
+          '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_muffed', 'Muffed / fumbled catch') + '</div>' +
+        '</div>' +
         '<div id="pp_ko_muff" style="display:none;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_ko_muffrec" value="k" checked> Recovered by the kicking team (they keep the ball)</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_ko_muffrec" value="r"> Recovered by the receiving team</label>' +
