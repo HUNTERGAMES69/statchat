@@ -3247,8 +3247,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="' + idPrefix + '_rush_fields">' + offBlock('carrier', 'Ball carrier') + '</div>' +
         '<div id="' + idPrefix + '_pass_fields" style="display:none;">' +
           offBlock('passer', 'Passer') + offBlock('receiver', 'Receiver (optional)') +
-          '<label class="inline" style="display:block; margin-top:6px;">' +
-            '<input autocomplete="off" type="checkbox" id="' + idPrefix + '_incomplete"> Incomplete</label>' +
+          // The SAME controls as the ordinary pass panel. These were plain
+          // checkboxes at first, which meant the one place a coach reaches
+          // for a fake looked unlike every other panel in the app.
+          '<div style="margin-top:8px;">' + blockedToggleHtml(idPrefix + '_incomplete', 'Incomplete') + '</div>' +
         '</div>' +
         fieldLabel('Enter yards') +
         '<span style="display:inline-flex; align-items:center; gap:8px;">' +
@@ -3256,8 +3258,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<button type="button" class="lossToggle ptoggle" data-for="' + idPrefix + '_yards" ' +
             'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button>' +
         '</span>' +
-        '<label class="inline" style="display:block; margin-top:8px;">' +
-          '<input autocomplete="off" type="checkbox" id="' + idPrefix + '_td"> Touchdown</label>' +
+        '<div style="margin-top:10px;">' +
+          '<input autocomplete="off" type="checkbox" id="' + idPrefix + '_td" style="display:none;">' +
+          '<button type="button" id="' + idPrefix + '_td_toggle" style="width:100%; padding:12px; ' +
+            'border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; ' +
+            'font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button></div>' +
       '</div>';
 
     const spotCalcHtml = (label) => {
@@ -3721,6 +3726,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           passBtn.classList.toggle('secondary', sub !== 'pass');
           panel.dataset[pre + 'Sub'] = sub;
         };
+        const fakeTdBtn = document.getElementById(pre + '_td_toggle');
+        const fakeTdCb = document.getElementById(pre + '_td');
+        if (fakeTdBtn){
+          fakeTdBtn.addEventListener('click', () => {
+            fakeTdCb.checked = !fakeTdCb.checked;
+            fakeTdBtn.style.background = fakeTdCb.checked ? '#1a7a4c' : '#fff';
+            fakeTdBtn.style.color = fakeTdCb.checked ? '#fff' : '#555';
+            fakeTdBtn.style.borderColor = fakeTdCb.checked ? '#1a7a4c' : '#ccc';
+            fakeTdBtn.textContent = fakeTdCb.checked ? '\u2713 Touchdown' : 'Touchdown';
+          });
+        }
         rushBtn.addEventListener('click', () => setSub('rush'));
         passBtn.addEventListener('click', () => setSub('pass'));
         setSub('rush');
@@ -3737,7 +3753,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           box.style.display = e.target.checked ? 'block' : 'none';
           const kickRow = document.getElementById('pp_yards');
           if (kickRow) kickRow.disabled = e.target.checked;
-          refreshSpotCalcContext(panel);
+          // Everything that describes the KICK goes away. The yardage
+          // calculator measures where a kick came down, and the takeover
+          // spot only applies when the ball changes hands -- neither has
+          // any meaning on a fake, and both were still on screen asking
+          // to be filled in.
+          const calc = document.getElementById('pp_calc_wrap');
+          if (calc) calc.style.display = e.target.checked ? 'none' : '';
+          const readout = document.getElementById('pp_calc_readout');
+          if (readout) readout.style.display = e.target.checked ? 'none' : '';
+          const spotWrap = document.getElementById('pp_spot_wrap');
+          if (spotWrap) spotWrap.style.display = e.target.checked ? 'none' : '';
+          if (!e.target.checked) refreshSpotCalcContext(panel);
         });
       });
     })();
