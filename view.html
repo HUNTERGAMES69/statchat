@@ -626,6 +626,13 @@ function computeState(playsList){
   // An NCAA team rush (a QB kneel) is charged to the team, not a player,
   // so it carries the sentinel number TEAM and has no roster entry.
   if (num === 'TEAM') return 'TEAM';
+  // A composite key means the play told us which of two players wearing
+  // this number it was. Trust that over the roster map, which can only
+  // hold one name per number.
+  if (typeof num === 'string' && num.indexOf('\u241F') !== -1){
+    const parts = num.split('\u241F');
+    return '#' + parts[0] + ' ' + parts[1];
+  }
     const t = TEAMS[team];
     const buckets = { offense: t.rosterOffense, defense: t.rosterDefense, special: t.rosterSpecialTeams };
     const order = preferredUnit ? [preferredUnit, ...Object.keys(buckets).filter(u => u !== preferredUnit)] : ['offense', 'defense', 'special'];
@@ -641,11 +648,18 @@ function computeState(playsList){
       teamA: { rushing:{}, passing:{}, receiving:{}, defense:{}, specialTeams:{} },
       teamB: { rushing:{}, passing:{}, receiving:{}, defense:{}, specialTeams:{} }
     };
-    function bucket(team, cat, num){
+    // A key, not just a number. Two players wearing one jersey are two
+    // players: bucketing both under "5" merged their lines and displayed
+    // whichever roster row happened to load last. When a play records
+    // which of them it was, that name becomes part of the key so the two
+    // stay apart -- and playerName() reads it back off the key.
+    function keyFor(num, name){ return name ? num + '\u241F' + name : num; }
+    function bucket(team, cat, num, name){
       if (!team || !stats[team]) return null;
       const b = stats[team][cat];
-      if (!b[num]) b[num] = {};
-      return b[num];
+      const k = keyFor(num, name);
+      if (!b[k]) b[k] = {};
+      return b[k];
     }
     playsList.forEach(p => {
       const r = p.roles || {};
@@ -653,7 +667,7 @@ function computeState(playsList){
       const type = r.playType;
 
       if (r.carrier && type === 'rush'){
-        const s = bucket(r.carrier.team, 'rushing', r.carrier.num);
+        const s = bucket(r.carrier.team, 'rushing', r.carrier.num, r.carrier.name);
         if (s){
           s.att = (s.att||0) + 1;
           s.yds = (s.yds||0) + (r.carrier.yards||0);
@@ -665,7 +679,7 @@ function computeState(playsList){
         const teamObj = TEAMS[r.carrier.team];
         const pos = ((teamObj && teamObj.posOffense[r.carrier.num]) || '').toUpperCase();
         const targetCat = RECEIVE_POS.has(pos) ? 'receiving' : 'rushing';
-        const s = bucket(r.carrier.team, targetCat, r.carrier.num);
+        const s = bucket(r.carrier.team, targetCat, r.carrier.num, r.carrier.name);
         if (s) s.fum = (s.fum||0) + 1;
       }
       // A target is a pass thrown AT someone, caught or not. Counted on
@@ -674,15 +688,15 @@ function computeState(playsList){
       // NFHS keeps conversion attempts out of season passing and
       // receiving totals, so 'tpp' never reaches this branch.
       if (r.receiver && (type === 'incomplete' || type === 'int')){
-        const rs = bucket(r.receiver.team, 'receiving', r.receiver.num);
+        const rs = bucket(r.receiver.team, 'receiving', r.receiver.num, r.receiver.name);
         if (rs) rs.tgt = (rs.tgt||0) + 1;
       }
       if (r.passer && type === 'incomplete'){
-        const s = bucket(r.passer.team, 'passing', r.passer.num);
+        const s = bucket(r.passer.team, 'passing', r.passer.num, r.passer.name);
         if (s) s.att = (s.att||0) + 1;
       }
       if (r.passer && type === 'pass'){
-        const s = bucket(r.passer.team, 'passing', r.passer.num);
+        const s = bucket(r.passer.team, 'passing', r.passer.num, r.passer.name);
         if (s){
           s.att = (s.att||0) + 1;
           s.comp = (s.comp||0) + 1;
@@ -691,7 +705,7 @@ function computeState(playsList){
           if (e.td) s.td = (s.td||0) + 1;
         }
         if (r.receiver){
-          const rs = bucket(r.receiver.team, 'receiving', r.receiver.num);
+          const rs = bucket(r.receiver.team, 'receiving', r.receiver.num, r.receiver.name);
           if (rs){
             rs.rec = (rs.rec||0) + 1;
             rs.tgt = (rs.tgt||0) + 1;
@@ -702,7 +716,7 @@ function computeState(playsList){
         }
       }
       if (r.passer && type === 'sack'){
-        const s = bucket(r.passer.team, 'passing', r.passer.num);
+        const s = bucket(r.passer.team, 'passing', r.passer.num, r.passer.name);
         if (s) s.sacked = (s.sacked||0) + 1;
         // NFHS charges sack yardage to the team as a rushing loss. Doing
         // it here rather than as a subtraction in each page's totals
@@ -715,7 +729,7 @@ function computeState(playsList){
         }
       }
       if (r.passer && type === 'int'){
-        const s = bucket(r.passer.team, 'passing', r.passer.num);
+        const s = bucket(r.passer.team, 'passing', r.passer.num, r.passer.name);
         if (s){
           s.att = (s.att||0) + 1;
           s.intThrown = (s.intThrown||0) + 1;

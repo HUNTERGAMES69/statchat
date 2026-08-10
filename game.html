@@ -3468,9 +3468,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (grid) wirePickerButtons(panel, 'pp_' + role + '_pick', 'pp_' + role + '_manual', (num, resolvedName) => {
         if (resolvedName) targetRoster[num] = resolvedName;
         sel[role] = num;
+        // Remember WHICH player, not just the number. The roster override
+        // above only makes the log text right at entry; the saved play
+        // carried the number alone, so the box score resolved it back to
+        // whichever roster row loaded last and credited the wrong man.
+        sel[role + 'Name'] = resolvedName || null;
       });
       const manual = document.getElementById('pp_' + role + '_manual');
-      if (manual) manual.addEventListener('input', e => { sel[role] = e.target.value.trim(); });
+      if (manual) manual.addEventListener('input', e => {
+        sel[role] = e.target.value.trim();
+        sel[role + 'Name'] = null;   // typed by hand: no disambiguation implied
+      });
       // Kickers and punters are named from the special-teams roster
       // first; everyone else from offense. Mirroring that here means the
       // name shown on blur is the name that ends up in the log.
@@ -4010,25 +4018,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // branch build a Fumble-type play for the turnover itself.
         const rushParsed = parseInput(sel.carrier + 'r ' + yds, computeState());
         pushAndPersist({ id: nextId++, text: rushParsed.text, effect: rushParsed.effect, team: off, quarter: computeState().quarter,
-          roles: { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0 }, playType: 'rush' } });
+          roles: { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0, name: sel.carrierName || undefined }, playType: 'rush' } });
         const rec = document.querySelector('input[name=pp_rush_fumrec]:checked').value;
         if (rec === 'own'){
           const isRushFumSafety = document.getElementById('pp_rushfum_safety').checked;
           code = sel.carrier + 'f' + (isRushFumSafety ? ' sf' : '');
-          roles = { carrier: { team: off, num: sel.carrier }, playType: 'fumble' };
+          roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined }, playType: 'fumble' };
         } else {
           const fumCredit = sel.credit;
           // Optional -- see the standalone fumble branch.
           const retyds = yards('pp_rushfum_retyds');
           const returnTd = document.getElementById('pp_rushfum_td').checked;
           code = sel.carrier + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
-          roles = { carrier: { team: off, num: sel.carrier }, playType: 'fumble', lost: true };
+          roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined }, playType: 'fumble', lost: true };
           if (fumCredit) roles.defense = { team: def, num: fumCredit };
         }
       } else {
         const isRushSafety = document.getElementById('pp_rush_safety').checked;
         code = sel.carrier + 'r ' + yds + (sel.credit ? ' ' + sel.credit : '') + (isRushSafety ? ' sf' : (td ? ' td' : ''));
-        roles = { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0 } };
+        roles = { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0, name: sel.carrierName || undefined } };
         if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
     } else if (type === 'pass'){
@@ -4040,10 +4048,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const isIncomplete = document.getElementById('pp_incomplete') && document.getElementById('pp_incomplete').checked;
       if (isIncomplete){
         code = sel.passer + 'i ' + recTok;
-        roles = { passer: { team: off, num: sel.passer, yards: 0 }, playType: 'incomplete' };
+        roles = { passer: { team: off, num: sel.passer, yards: 0, name: sel.passerName || undefined }, playType: 'incomplete' };
         // The intended receiver, when known, so the throw counts as a
         // target against him. No yardage -- it was not caught.
-        if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: 0 };
+        if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: 0, name: sel.receiverName || undefined };
       } else {
         const yds = signedYards('pp_yards') || '0';
         const fumbled = document.getElementById('pp_pass_fumbled').checked;
@@ -4054,27 +4062,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // the receiver, same as the Rush panel's equivalent.
           const passParsed = parseInput(sel.passer + 'p ' + recTok + ' ' + yds, computeState());
           pushAndPersist({ id: nextId++, text: passParsed.text, effect: passParsed.effect, team: off, quarter: computeState().quarter,
-            roles: Object.assign({ passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, playType: 'pass' },
-              sel.receiver ? { receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0 } } : {}) });
+            roles: Object.assign({ passer: { team: off, num: sel.passer, yards: parseInt(yds)||0, name: sel.passerName || undefined }, playType: 'pass' },
+              sel.receiver ? { receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0, name: sel.receiverName || undefined } } : {}) });
           const rec = document.querySelector('input[name=pp_pass_fumrec]:checked').value;
           if (rec === 'own'){
             const isPassFumSafety = document.getElementById('pp_passfum_safety').checked;
             code = sel.receiver + 'f' + (isPassFumSafety ? ' sf' : '');
-            roles = { carrier: { team: off, num: sel.receiver }, playType: 'fumble' };
+            roles = { carrier: { team: off, num: sel.receiver, name: sel.receiverName || undefined }, playType: 'fumble' };
           } else {
             const fumCredit = sel.credit;
             // Optional -- see the standalone fumble branch.
             const retyds = yards('pp_passfum_retyds');
             const returnTd = document.getElementById('pp_passfum_td').checked;
             code = sel.receiver + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
-            roles = { carrier: { team: off, num: sel.receiver }, playType: 'fumble', lost: true };
+            roles = { carrier: { team: off, num: sel.receiver, name: sel.receiverName || undefined }, playType: 'fumble', lost: true };
             if (fumCredit) roles.defense = { team: def, num: fumCredit };
           }
         } else {
           const isPassSafety = document.getElementById('pp_pass_safety').checked;
           code = sel.passer + 'p ' + recTok + ' ' + yds + (sel.credit ? ' ' + sel.credit : '') + (isPassSafety ? ' sf' : (td ? ' td' : ''));
-          roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 } };
-          if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: parseInt(yds)||0 };
+          roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0, name: sel.passerName || undefined } };
+          if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: parseInt(yds)||0, name: sel.receiverName || undefined };
           if (sel.credit) roles.defense = { team: def, num: sel.credit };
         }
       }
@@ -4088,25 +4096,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // Fumble-type play for the turnover itself.
         const sackParsed = parseInput(sel.passer + 's ' + yds, computeState());
         pushAndPersist({ id: nextId++, text: sackParsed.text, effect: sackParsed.effect, team: off, quarter: computeState().quarter,
-          roles: { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 }, playType: 'sack' } });
+          roles: { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0, name: sel.passerName || undefined }, playType: 'sack' } });
         const rec = document.querySelector('input[name=pp_sack_fumrec]:checked').value;
         if (rec === 'own'){
           const isSackFumSafety = document.getElementById('pp_sackfum_safety').checked;
           code = sel.passer + 'f' + (isSackFumSafety ? ' sf' : '');
-          roles = { carrier: { team: off, num: sel.passer }, playType: 'fumble' };
+          roles = { carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble' };
         } else {
           const fumCredit = sel.credit;
           // Optional -- see the standalone fumble branch.
           const retyds = yards('pp_sackfum_retyds');
           const returnTd = document.getElementById('pp_sackfum_td').checked;
           code = sel.passer + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
-          roles = { carrier: { team: off, num: sel.passer }, playType: 'fumble', lost: true };
+          roles = { carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble', lost: true };
           if (fumCredit) roles.defense = { team: def, num: fumCredit };
         }
       } else {
         const isSackSafety = document.getElementById('pp_sack_safety').checked;
         code = sel.passer + 's ' + yds + (sel.credit ? ' ' + sel.credit : '') + (isSackSafety ? ' sf' : '');
-        roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0 } };
+        roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0, name: sel.passerName || undefined } };
         if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
     } else if (type === 'int'){
@@ -4115,11 +4123,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // Who intercepted it is optional -- the interception itself, and
       // the return yardage, are what matter and are always visible.
       code = sel.passer + 'x ' + (sel.credit || '?') + (yds ? ' ' + yds : '') + (td ? ' td' : '');
-      roles = { passer: { team: off, num: sel.passer }, playType: 'int' };
+      roles = { passer: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'int' };
       if (sel.credit) roles.defense = { team: def, num: sel.credit };
       // Carries the target. No yardage: the throw was not caught, so the
       // receiver gets an attempt against his name and nothing else.
-      if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: 0 };
+      if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: 0, name: sel.receiverName || undefined };
       
     } else if (type === 'fumble'){
       if (!sel.carrier) return;
@@ -4127,7 +4135,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (rec === 'own'){
         const isFumSafety = document.getElementById('pp_fum_safety').checked;
         code = sel.carrier + 'f' + (isFumSafety ? ' sf' : '');
-        roles = { carrier: { team: off, num: sel.carrier } };
+        roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined } };
       }
       else {
         // Optional, same reasoning as the kick/punt returner: a pile
@@ -4137,7 +4145,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // turnover without needing a named recoverer.
         const yds = yards('pp_yards');
         code = sel.carrier + 'f ' + (sel.credit || '?') + (yds ? ' ' + yds : '') + (td ? ' td' : '');
-        roles = { carrier: { team: off, num: sel.carrier }, playType: 'fumble', lost: true };
+        roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined }, playType: 'fumble', lost: true };
         if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
     } else if (type === 'safety'){
