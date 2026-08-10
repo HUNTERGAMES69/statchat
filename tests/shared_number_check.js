@@ -17,7 +17,7 @@
 // the collision and offers each of them with a "?" so the coach picks
 // per play. These assertions cover both halves.
 
-const { bootGamePage, defaultRoster } = require('./harness');
+const { bootGamePage, bootPage, defaultRoster } = require('./harness');
 const { setDrive, click, typeInto } = require('./ui_driver');
 const fs = require('fs');
 const path = require('path');
@@ -139,6 +139,73 @@ async function run() {
       fail('game page', 'no player should be marked ambiguous on a clean roster');
     }
     h.close();
+  }
+
+  // --- the stats must follow the PLAYER, not the number ---------------
+  // The bug that surfaced this: the log read "Dalen Powell rush for 3"
+  // while the rushing tile credited Jayden Reddick. The play stored only
+  // the number, so the box score resolved it back through the roster map
+  // -- which holds one name per number -- and picked whichever row
+  // loaded last. Worse than a display slip: both players' lines merged
+  // into one row.
+  {
+    const roster = defaultRoster().concat([
+      { team_side: 'teamA', unit: 'offense', jersey_number: '5', player_name: 'Reddick', position: 'RB' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '5', player_name: 'Powell',  position: 'WR' }
+    ]);
+    const h = await bootGamePage({ roster });
+    const { window: win, document: doc } = h;
+
+    const rushAs = (who, yds) => {
+      setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 20 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="rush"]'));
+      const btn = [...doc.querySelectorAll('.pp_carrier_pick')]
+        .find(x => new RegExp(who).test(x.textContent));
+      click(win, btn);
+      const y = doc.getElementById('pp_yards');
+      y.value = yds;
+      y.dispatchEvent(new win.Event('input', { bubbles: true }));
+      click(win, doc.getElementById('pp_review'));
+      click(win, doc.getElementById('saveBtn'));
+    };
+    rushAs('Powell', '3');
+    rushAs('Reddick', '8');
+    rushAs('Powell', '5');
+
+    const rows = h.db.plays.map((r, i) =>
+      Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+
+    for (const page of ['view.html', 'recap.html', 'stat_package.html']) {
+      const v = await bootPage(page, { existingPlays: rows });
+      const rushing = JSON.parse(v.evalIn('JSON.stringify(computeBoxScore(plays).teamA.rushing)'));
+      const keys = Object.keys(rushing);
+      if (keys.length !== 2) {
+        fail(page, 'two players on #5 should keep two rushing lines, got ' +
+             keys.length + ': ' + keys.join(' , '));
+      }
+      const powell = keys.find(k => /Powell/.test(k));
+      const reddick = keys.find(k => /Reddick/.test(k));
+      if (!powell || !reddick) {
+        fail(page, 'expected a line each for Powell and Reddick, got ' + keys.join(' , '));
+      } else {
+        if (rushing[powell].att !== 2 || rushing[powell].yds !== 8) {
+          fail(page, 'Powell should be 2 for 8, got ' + JSON.stringify(rushing[powell]));
+        }
+        if (rushing[reddick].att !== 1 || rushing[reddick].yds !== 8) {
+          fail(page, 'Reddick should be 1 for 8, got ' + JSON.stringify(rushing[reddick]));
+        }
+      }
+      v.close();
+    }
+
+    // ...and the rendered table must name them, not show "#5" twice.
+    const v = await bootPage('view.html', { existingPlays: rows });
+    const shown = [...v.document.querySelectorAll('td')].map(e => e.textContent.trim());
+    if (!shown.some(t => /Powell/.test(t)) || !shown.some(t => /Reddick/.test(t))) {
+      fail('view.html', 'both names should appear in the rushing tile');
+    }
+    v.close();
   }
 
   return failures;
