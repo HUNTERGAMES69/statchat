@@ -781,6 +781,45 @@ inline style, so `.picked` can win.**
 
 ---
 
+## Box-score buckets are keyed by NAME, not jersey number (August 7, 2026)
+
+`computeBoxScore` keys every player bucket by the display name, not the
+number. This was a deliberate refactor after two players shared #5 and
+their lines merged.
+
+**Numbers are not identity.** Keying on the number meant Powell's carries
+and Reddick's carries landed in one bucket, displayed under whichever
+roster row loaded last. The log text was right -- it is generated at
+entry -- so the two disagreed on screen, which is how it was noticed.
+
+An intermediate fix used a composite `5<US>Powell` key. It worked, but
+composite keys are contagious: `playerName` had to unpack them, and so
+would anything else iterating buckets. Resolving to the name once, in
+`keyFor`, means **a bucket key IS its label** and nothing downstream
+resolves anything.
+
+It also matches how `season_report.html` has always aggregated across
+games (by `playerName`), so a player's season line merges for free
+instead of needing a second scheme.
+
+Consequences worth knowing:
+
+- A play records `roles.<role>.name` when the picker resolved an
+  ambiguous number. That name wins over the roster.
+- Otherwise the roster answers, falling back to `#21` for a player
+  entered by hand who was never rostered.
+- Renaming a player mid-season splits their line. Two players with the
+  same NAME would merge. Both are rarer and less damaging than the
+  number collision this replaced.
+- Plays entered before this change carry no name, so they key by whatever
+  the roster says today.
+- Tests that assert stats must look up by name. Three had to be updated
+  (`cross_surface`, `optional_players_check`, `receiver_targets_check`)
+  -- if a stat assertion fails with the right numbers under an
+  unexpected key, that is why.
+
+---
+
 ## GameID
 
 There's no dedicated GameID column in the database — it's parsed out
