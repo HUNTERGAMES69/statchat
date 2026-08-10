@@ -15,7 +15,7 @@
 // Both entry trees are covered here, because they are separate code paths
 // and a fix to one has repeatedly missed the other.
 
-const { bootGamePage } = require('./harness');
+const { bootGamePage, bootPage } = require('./harness');
 const { setDrive, click, typeInto } = require('./ui_driver');
 
 // --- manual kickoff panel ---------------------------------------------
@@ -124,6 +124,99 @@ async function run() {
         ? 'the kicking team recovered and should keep the ball, banner: "' + r.banner + '"'
         : 'the receiving team recovered and should have the ball, banner: "' + r.banner + '"');
     }
+  }
+
+  // --- a recovery is a NEW POSSESSION, not a retained set of downs ------
+  // The kicking team does not have the ball during a kickoff -- they are
+  // giving it up -- so coming up with their own onside kick is a
+  // possession GAINED, exactly as a regular kickoff is for the receiving
+  // team. It was first built with newDownsSameTeam, which produced a
+  // "New series" marker and no drive at all: the possession never
+  // appeared in the count, the per-drive stats, or the drive tiles.
+  {
+    const h = await bootGamePage();
+    const { window: win, document: doc } = h;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 35 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="kickoff"]'));
+    const panel = doc.getElementById('playPanel');
+    click(win, panel.querySelector('.pp_kicker_pick[data-num="3"]'));
+    click(win, doc.getElementById('pp_ko_onside_toggle'));
+    const radio = panel.querySelector('input[name=pp_ko_onsiderec][value="k"]');
+    radio.checked = true;
+    radio.dispatchEvent(new win.Event('change', { bubbles: true }));
+    const sideBtn = panel.querySelector('.pp_koonsidespot_side[data-side="own"]');
+    if (sideBtn) click(win, sideBtn);
+    typeInto(win, doc.getElementById('pp_koonsidespot_yardline'), '48');
+    click(win, doc.getElementById('pp_review'));
+    const clockRow = doc.getElementById('confirmClockRow');
+    if (clockRow && clockRow.style.display !== 'none') {
+      typeInto(win, doc.getElementById('confirmClockInput'), '10:00');
+    }
+    click(win, doc.getElementById('saveBtn'));
+
+    const marker = JSON.parse(h.evalIn('JSON.stringify(plays[plays.length - 1].text)'));
+    if (!/New drive/.test(marker)) {
+      fail('possession', 'recovering an onside kick should open a NEW DRIVE, marker reads "' +
+           marker + '"');
+    }
+    const rows = h.db.plays.map((x, i) =>
+      Object.assign({}, x, { sequence_number: x.sequence_number || i + 1 }));
+    h.close();
+
+    // Every surface has its own copy of findDriveStarts, so all of them
+    // have to agree or the counts diverge between pages.
+    for (const page of ['view.html', 'recap.html', 'stat_package.html']) {
+      const v = await bootPage(page, { existingPlays: rows });
+      const poss = JSON.parse(v.evalIn('JSON.stringify(countPossessions(plays))'));
+      if (poss.teamA !== 2) {
+        fail(page, 'the onside recovery should count as a second possession, got ' +
+             JSON.stringify(poss));
+      }
+      v.close();
+    }
+  }
+
+  // --- the same rule for MUFFED kicks -----------------------------------
+  // Recovering your own muffed punt or kickoff is a possession gained for
+  // exactly the same reason: the kicking team did not have the ball. Both
+  // used newDownsSameTeam ("New series", no drive) until Aug 7, 2026.
+  for (const [label, kind, sideBtnSide, spotPrefix, yardline] of [
+    ['muffed punt, kicking recovers',    'punt',    'opp', 'pp_muffspot',   '35'],
+    ['muffed kickoff, kicking recovers', 'kickoff', 'own', 'pp_komuffspot', '45']
+  ]) {
+    const h = await bootGamePage();
+    const { window: win, document: doc } = h;
+    setDrive(h, { down: kind === 'punt' ? 4 : 1, distance: 9, side: 'own',
+                  yardline: kind === 'punt' ? 30 : 35 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="' + kind + '"]'));
+    const panel = doc.getElementById('playPanel');
+    click(win, panel.querySelector(kind === 'punt'
+      ? '.pp_punter_pick[data-num="15"]' : '.pp_kicker_pick[data-num="3"]'));
+    if (kind === 'punt') typeInto(win, doc.getElementById('pp_yards'), '35');
+    click(win, doc.getElementById(kind === 'punt' ? 'pp_muffed_toggle' : 'pp_ko_muffed_toggle'));
+    const sb = panel.querySelector('.' + spotPrefix + '_side[data-side="' + sideBtnSide + '"]');
+    if (sb) click(win, sb);
+    typeInto(win, doc.getElementById(spotPrefix + '_yardline'), yardline);
+    click(win, doc.getElementById('pp_review'));
+    const clockRow = doc.getElementById('confirmClockRow');
+    if (clockRow && clockRow.style.display !== 'none') {
+      typeInto(win, doc.getElementById('confirmClockInput'), '8:00');
+    }
+    click(win, doc.getElementById('saveBtn'));
+
+    const marker = JSON.parse(h.evalIn('JSON.stringify(plays[plays.length - 1].text)'));
+    if (!/New drive/.test(marker)) {
+      fail(label, 'should open a NEW DRIVE, marker reads "' + marker + '"');
+    }
+    const rows = h.db.plays.map((x, i) =>
+      Object.assign({}, x, { sequence_number: x.sequence_number || i + 1 }));
+    h.close();
+    const v = await bootPage('view.html', { existingPlays: rows });
+    const poss = JSON.parse(v.evalIn('JSON.stringify(countPossessions(plays))'));
+    if (poss.teamA !== 2) {
+      fail(label, 'should count as a second possession, got ' + JSON.stringify(poss));
+    }
+    v.close();
   }
 
   // --- one outcome at a time -------------------------------------------
