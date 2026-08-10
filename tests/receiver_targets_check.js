@@ -128,6 +128,34 @@ async function run() {
     v.close();
   }
 
+  // A target alone must not put a receiver on the LIVE VIEW. That panel
+  // auto-shrinks to fit, so a row for someone with no catches costs size
+  // on the rows that matter. The detailed reports still list them.
+  {
+    const v = await bootPage('view.html', { existingPlays: rows });
+    const shown = [...v.document.querySelectorAll('td')].map(e => e.textContent.trim());
+    // #84 has 2 targets and no catches in this fixture.
+    const name84 = v.evalIn('playerName("teamA", "84")');
+    if (shown.indexOf(name84) !== -1) {
+      fail('view.html', '#84 has targets but no catches and should not appear in the live tile');
+    }
+    const name80 = v.evalIn('playerName("teamA", "80")');
+    if (shown.indexOf(name80) === -1) {
+      fail('view.html', '#80 caught two and must still appear');
+    }
+    v.close();
+  }
+  // ...but recap keeps them, since it is not size-constrained.
+  {
+    const r = await bootPage('recap.html', { existingPlays: rows });
+    const shown = [...r.document.querySelectorAll('td')].map(e => e.textContent.trim());
+    const name84 = r.evalIn('playerName("teamA", "84")');
+    if (shown.indexOf(name84) === -1) {
+      fail('recap.html', '#84 should still be listed in the full report');
+    }
+    r.close();
+  }
+
   // The column has to actually reach the page, not just the box score.
   {
     const v = await bootPage('view.html', { existingPlays: rows });
