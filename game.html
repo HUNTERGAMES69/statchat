@@ -462,6 +462,30 @@ const TIMEOUTS_PER_OT = 1;
 // Lives in the engine core (top level) rather than inside
 // findDriveStarts because computeDriveSummary needs it too, from a
 // different scope.
+// Bookkeeping the drive tiles do not need. These are entries the app
+// writes to keep its own state straight -- clock events, chain
+// corrections, the direction arrow -- rather than things that happened on
+// the field. The tiles are for reading at a glance, so they are dropped
+// there; the ALL PLAYS list is the audit trail and keeps everything.
+//
+// Deliberately KEPT: penalties and timeouts (real events), quarter
+// markers, overtime markers, dividers, and "New series" -- which looks
+// like "New drive" but means something different: a muffed kick
+// recovered by the kicking team, a fresh set of downs with no change of
+// possession. Manual entry NOTEs are kept too; a coach typed those on
+// purpose. Only the two "Manual ..." state overrides are dropped.
+function isDriveTileNoise(p){
+  if (!p || p.isDivider) return false;
+  const e = p.effect || {};
+  if (e.clockEvent) return true;
+  if (e.setDirection) return true;
+  const t = (p.text || '').trim();
+  if (t.indexOf('Down & distance adjusted') === 0) return true;
+  if (t.indexOf('New drive') === 0) return true;
+  if (t.indexOf('Manual flip') === 0) return true;
+  if (t.indexOf('Manual score adjust') === 0) return true;
+  return false;
+}
 function isAdminMarker(p){
   if (!p) return true;
   const e = p.effect || {};
@@ -2030,8 +2054,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const resetIdxs = findDriveStarts(plays);
     const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
     const previousDrivePlays = resetIdxs.length >= 2 ? plays.slice(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1]) : [];
-    document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
-    document.getElementById('prevDriveLogScroll').innerHTML = renderLogLines(previousDrivePlays.slice().reverse()) || '<div style="color:#999;">no previous drive yet</div>';
+    document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.filter(x => !isDriveTileNoise(x)).slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
+    document.getElementById('prevDriveLogScroll').innerHTML = renderLogLines(previousDrivePlays.filter(x => !isDriveTileNoise(x)).slice().reverse()) || '<div style="color:#999;">no previous drive yet</div>';
     // The kickoff restriction depends on live game state, so the gating
     // has to be re-evaluated whenever the state changes -- not just at
     // load. Without this the buttons were locked to whatever the state
