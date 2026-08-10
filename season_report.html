@@ -205,7 +205,11 @@ function isAdminMarker(p){
         // correct the chains, so using it mid-drive -- or twice in a row
         // -- must not register another drive, and therefore another
         // possession, for a team that never gave the ball up.
-        if (!starts.length) pushStart(i);
+        // ...unless the marker says a new POSSESSION began. An onside
+        // kick recovered by the kicking team hands them the ball with no
+        // change of possession for the detector below to notice, so
+        // without this the drive is invisible to every count.
+        if (!starts.length || playsList[i].effect.newPossession) pushStart(i);
         priorPoss = computeState(playsList.slice(0, i + 1)).possession;
         continue;
       }
