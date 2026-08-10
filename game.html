@@ -405,12 +405,36 @@
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: ourBranding.logo_url || null, seedOrder: seedOrderFor('teamA'), seedPos: seedPosFor('teamA') };
     TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#8B0000', text: game.opponent_secondary_color || '#ffffff',
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: game.opponent_logo_url || null, seedOrder: seedOrderFor('teamB'), seedPos: seedPosFor('teamB') };
+    TEAMS.teamA.ambiguousOffense = {}; TEAMS.teamA.ambiguousDefense = {}; TEAMS.teamA.ambiguousSpecialTeams = {};
+    TEAMS.teamB.ambiguousOffense = {}; TEAMS.teamB.ambiguousDefense = {}; TEAMS.teamB.ambiguousSpecialTeams = {};
+    // Shared jersey numbers are recorded, not silently overwritten.
+    //
+    // These maps are keyed by number, so two players wearing 5 meant the
+    // second row replaced the first and the first became unreachable --
+    // no warning anywhere, and no way to pick him during a game. The
+    // pickers have always READ `ambiguousOffense` and offered a choice;
+    // nothing ever wrote it, so the whole mechanism was dead code.
+    const noteAmbiguous = (team, bucket, num, name) => {
+      const existing = team[bucket][num];
+      if (existing === undefined || existing === name) return false;
+      const amb = team[{ rosterOffense: 'ambiguousOffense',
+                         rosterDefense: 'ambiguousDefense',
+                         rosterSpecialTeams: 'ambiguousSpecialTeams' }[bucket]];
+      amb[num] = amb[num] || [existing];
+      if (amb[num].indexOf(name) === -1) amb[num].push(name);
+      return true;
+    };
     rosterRows.forEach(r => {
       const team = TEAMS[r.team_side];
       if (!team) return;
-      if (r.unit === 'offense'){ team.rosterOffense[r.jersey_number] = r.player_name; team.posOffense[r.jersey_number] = r.position; }
-      else if (r.unit === 'defense'){ team.rosterDefense[r.jersey_number] = r.player_name; team.posDefense[r.jersey_number] = r.position; }
-      else if (r.unit === 'special'){ team.rosterSpecialTeams[r.jersey_number] = r.player_name; team.posSpecialTeams[r.jersey_number] = r.position; }
+      const unitMap = { offense: ['rosterOffense', 'posOffense'],
+                        defense: ['rosterDefense', 'posDefense'],
+                        special: ['rosterSpecialTeams', 'posSpecialTeams'] }[r.unit];
+      if (!unitMap) return;
+      const [rosterKey, posKey] = unitMap;
+      noteAmbiguous(team, rosterKey, r.jersey_number, r.player_name);
+      team[rosterKey][r.jersey_number] = r.player_name;
+      team[posKey][r.jersey_number] = r.position;
     });
   }
 
@@ -1317,6 +1341,11 @@ function offenseEligible(team, role){
   });
 
   const nums = candidates.filter(num => {
+    // A shared number is offered once per player from the ambiguous list
+    // above, so it must not ALSO appear as a single resolved button --
+    // that showed "#5 Powell ?", "#5 Reddick ?" and a bare "#5 Reddick",
+    // the last of which silently means whichever row loaded second.
+    if (ambiguous[num]) return false;
     if (usedInRole[num] !== undefined) return true;   // has played this role
     // The seed check MUST come before the roster check. A likely starter
     // who is not in this team's OFFENSIVE roster -- an opponent whose
