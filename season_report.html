@@ -447,13 +447,7 @@ const TIMEOUTS_PER_OT = 1;
   // An NCAA team rush (a QB kneel) is charged to the team, not a player,
   // so it carries the sentinel number TEAM and has no roster entry.
   if (num === 'TEAM') return 'TEAM';
-  // A composite key means the play told us which of two players wearing
-  // this number it was. Trust that over the roster map, which can only
-  // hold one name per number.
-  if (typeof num === 'string' && num.indexOf('\u241F') !== -1){
-    const parts = num.split('\u241F');
-    return '#' + parts[0] + ' ' + parts[1];
-  }
+
     const t = TEAMS[team];
     const buckets = { offense: t.rosterOffense, defense: t.rosterDefense, special: t.rosterSpecialTeams };
     const order = preferredUnit ? [preferredUnit, ...Object.keys(buckets).filter(u => u !== preferredUnit)] : ['offense', 'defense', 'special'];
@@ -469,16 +463,31 @@ const TIMEOUTS_PER_OT = 1;
       teamA: { rushing:{}, passing:{}, receiving:{}, defense:{}, specialTeams:{} },
       teamB: { rushing:{}, passing:{}, receiving:{}, defense:{}, specialTeams:{} }
     };
-    // A key, not just a number. Two players wearing one jersey are two
-    // players: bucketing both under "5" merged their lines and displayed
-    // whichever roster row happened to load last. When a play records
-    // which of them it was, that name becomes part of the key so the two
-    // stay apart -- and playerName() reads it back off the key.
-    function keyFor(num, name){ return name ? num + '\u241F' + name : num; }
+    // BUCKETS ARE KEYED BY DISPLAY NAME, not by jersey number.
+    //
+    // Numbers are not identity. Two players can wear one jersey, and
+    // keying on the number merged their lines and showed whichever
+    // roster row loaded last -- Powell's carries credited to Reddick.
+    // A composite "5<sep>Powell" key fixed that but leaked into every
+    // consumer, which then had to know how to unpack it.
+    //
+    // Resolving to the name once, here, keeps the rest of the code
+    // simple: a bucket key IS the label, so nothing downstream has to
+    // resolve anything. It also matches how season_report has always
+    // aggregated across games, so a player's line merges season-wide for
+    // free. `name` on the role wins when a play recorded which of two
+    // players it was; otherwise the roster answers, falling back to
+    // "#21" for someone never rostered.
+    const UNIT_FOR_CAT = { rushing: null, passing: null, receiving: null,
+                           defense: 'defense', specialTeams: 'special' };
+    function keyFor(team, cat, num, name){
+      if (name) return name;
+      return playerName(team, num, UNIT_FOR_CAT[cat] || undefined);
+    }
     function bucket(team, cat, num, name){
       if (!team || !stats[team]) return null;
       const b = stats[team][cat];
-      const k = keyFor(num, name);
+      const k = keyFor(team, cat, num, name);
       if (!b[k]) b[k] = {};
       return b[k];
     }
@@ -737,11 +746,11 @@ const TIMEOUTS_PER_OT = 1;
 
     ['rushing','passing','receiving'].forEach(cat => {
       Object.keys(box.teamA[cat]).forEach(n => {
-        mergeInto(seasonAgg[cat], playerName('teamA', n), box.teamA[cat][n]);
+        mergeInto(seasonAgg[cat], n, box.teamA[cat][n]);
       });
     });
     Object.keys(box.teamA.specialTeams).forEach(n => {
-      mergeInto(seasonAgg.specialTeams, playerName('teamA', n, 'special'), box.teamA.specialTeams[n]);
+      mergeInto(seasonAgg.specialTeams, n, box.teamA.specialTeams[n]);
     });
     seasonAgg.defense.int += sumStat(box.teamA.defense, 'int');
     seasonAgg.defense.fumRec += sumStat(box.teamA.defense, 'fumRec');
@@ -834,34 +843,34 @@ const TIMEOUTS_PER_OT = 1;
 
     Object.keys(box.teamA.rushing).forEach(n => {
       const d = box.teamA.rushing[n], row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: n,
         'Rush Attempts': d.att||0, 'Rush Yards': d.yds||0, 'Yds Per Carry': d.att?+(d.yds/d.att).toFixed(1):'',
         'Long Rush': d.long||0, 'Rush TD': d.td||0, FUMBLE: d.fum || '' });
       xlsStatsRows.push(row);
     });
     Object.keys(box.teamA.passing).forEach(n => {
       const d = box.teamA.passing[n], row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: n,
         'Pass Attempts': d.att||0, 'Pass Completions': d.comp||0, 'Comp Pctg': d.att?+(100*(d.comp||0)/d.att).toFixed(1):'',
         'Pass Yards': d.yds||0, 'Long Pass': d.long||0, 'Pass TD': d.td||0, INT: d.intThrown||0, SACK: d.sacked||0 });
       xlsStatsRows.push(row);
     });
     Object.keys(box.teamA.receiving).forEach(n => {
       const d = box.teamA.receiving[n], row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n),
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: n,
         Receptions: d.rec||0, 'Receiving Yards': d.yds||0, 'Yards Per Catch': d.rec?+(d.yds/d.rec).toFixed(1):'',
         'Long Recept': d.long||0, 'Receiving TD': d.td||0, FUMBLE: d.fum || '' });
       xlsStatsRows.push(row);
     });
     Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].kickoffs).forEach(n => {
       const d = box.teamA.specialTeams[n], row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n, 'special'),
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: n,
         'KO Attempt': d.kickoffs||0, 'KO Touchback': d.touchbacks||0 });
       xlsStatsRows.push(row);
     });
     Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].patAtt).forEach(n => {
       const d = box.teamA.specialTeams[n], row = blankRow();
-      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: playerName('teamA', n, 'special'),
+      setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: n,
         'PA Attempt': d.patAtt||0, 'PA Made': d.patMade||0, 'PA Block': d.patBlocked||0 });
       xlsStatsRows.push(row);
     });
@@ -1095,7 +1104,10 @@ const TIMEOUTS_PER_OT = 1;
     const seasonStatTable = (bucketObj, headers, rowFn, totalFn, sortKey) => {
       const names = Object.keys(bucketObj);
       if (!names.length) return '<p class="no-stats">No stats recorded.</p>';
-      const sorted = names.slice().sort((a,b) => (bucketObj[b][sortKey]||0) - (bucketObj[a][sortKey]||0));
+      // TEAM last -- a bookkeeping bucket, not a player. See recap.html.
+      const sorted = names.slice().sort((a,b) =>
+        ((a === 'TEAM' ? 1 : 0) - (b === 'TEAM' ? 1 : 0)) ||
+        ((bucketObj[b][sortKey]||0) - (bucketObj[a][sortKey]||0)));
       let h = '<table class="stat-table"><tr><th></th>' + headers.map(x=>'<th>'+x+'</th>').join('') + '</tr>';
       sorted.forEach(name => { h += '<tr><td>'+name+'</td>'+rowFn(bucketObj[name]).map(v=>'<td>'+v+'</td>').join('')+'</tr>'; });
       h += '<tr class="total-row"><td>Total</td>'+totalFn(bucketObj, sorted).map(v=>'<td>'+v+'</td>').join('')+'</tr>';
