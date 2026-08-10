@@ -4602,7 +4602,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       } else {
         document.getElementById('flipRow').style.display = 'none';
       }
-      const needsClock = pending.flipEligible || (pending.effect && pending.effect.endsDrive);
+      // newPossession too: recovering your own kick opens a drive without
+      // any change of possession, so the flip test never fired and the
+      // clock was never asked for. The new drive then had no start event
+      // and accumulated no time of possession at all.
+      const needsClock = pending.flipEligible ||
+        (pending.effect && (pending.effect.endsDrive || pending.effect.newPossession));
       document.getElementById('confirmClockRow').style.display = needsClock ? 'block' : 'none';
       // The note is the whole point of "warn but allow": the cost of
       // skipping the clock is invisible otherwise -- the play saves fine
@@ -4690,6 +4695,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const absSec = clockAbsSec;
       if (flipHappened){
         pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' at change of possession (' + TEAMS[outgoingTeam].name + ' \u2192 ' + TEAMS[incomingTeam].name + ')', effect: { clockEvent: { type: 'transition', outgoingTeam, incomingTeam, absSec } }, quarter: q });
+      }
+      // A new possession for the team that already had the ball: the old
+      // one has to be closed and a new one opened, or the two drives run
+      // together as a single stretch of time. Two events rather than a
+      // transition, because a transition names two different teams.
+      if (effect.newPossession && !flipHappened){
+        const who = preState.possession;
+        pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' end of possession (' + TEAMS[who].name + ')', effect: { clockEvent: { type: 'end', team: who, absSec } }, quarter: q });
+        pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' start of possession (' + TEAMS[who].name + ')', effect: { clockEvent: { type: 'start', team: who, absSec } }, quarter: q });
       }
       if (effect.endsDrive){
         // The possession that just ended always belongs to whoever HAD
