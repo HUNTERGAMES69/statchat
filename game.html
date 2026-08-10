@@ -414,14 +414,22 @@
     // no warning anywhere, and no way to pick him during a game. The
     // pickers have always READ `ambiguousOffense` and offered a choice;
     // nothing ever wrote it, so the whole mechanism was dead code.
-    const noteAmbiguous = (team, bucket, num, name) => {
+    // Each entry keeps its OWN position. Positions are stored keyed by
+    // number too, so without this both players wearing 5 share one
+    // position and neither can be filtered by role -- which is how a
+    // lineman ended up in the quarterback picker.
+    const AMB_KEY = { rosterOffense: 'ambiguousOffense',
+                      rosterDefense: 'ambiguousDefense',
+                      rosterSpecialTeams: 'ambiguousSpecialTeams' };
+    const POS_KEY = { rosterOffense: 'posOffense',
+                      rosterDefense: 'posDefense',
+                      rosterSpecialTeams: 'posSpecialTeams' };
+    const noteAmbiguous = (team, bucket, num, name, position) => {
       const existing = team[bucket][num];
       if (existing === undefined || existing === name) return false;
-      const amb = team[{ rosterOffense: 'ambiguousOffense',
-                         rosterDefense: 'ambiguousDefense',
-                         rosterSpecialTeams: 'ambiguousSpecialTeams' }[bucket]];
-      amb[num] = amb[num] || [existing];
-      if (amb[num].indexOf(name) === -1) amb[num].push(name);
+      const amb = team[AMB_KEY[bucket]];
+      amb[num] = amb[num] || [{ name: existing, position: team[POS_KEY[bucket]][num] || '' }];
+      if (!amb[num].some(e => e.name === name)) amb[num].push({ name, position: position || '' });
       return true;
     };
     rosterRows.forEach(r => {
@@ -432,7 +440,7 @@
                         special: ['rosterSpecialTeams', 'posSpecialTeams'] }[r.unit];
       if (!unitMap) return;
       const [rosterKey, posKey] = unitMap;
-      noteAmbiguous(team, rosterKey, r.jersey_number, r.player_name);
+      noteAmbiguous(team, rosterKey, r.jersey_number, r.player_name, r.position);
       team[rosterKey][r.jersey_number] = r.player_name;
       team[posKey][r.jersey_number] = r.position;
     });
@@ -1409,9 +1417,22 @@ function offenseEligible(team, role){
   // lives in another unit's roster, so fall back to the cross-unit
   // resolver rather than rendering a nameless button.
   }).map(num => ({ num, name: roster[num] || nameInOffense(team, num) }));
+  // A shared number does NOT excuse a player from the position filter.
+  // Injecting every ambiguous entry into every picker put linemen in the
+  // passer list and turned the panel into a wall of question marks.
   const ambiguousList = [];
   Object.keys(ambiguous).forEach(num => {
-    ambiguous[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', resolvedName: name }));
+    ambiguous[num].forEach(entry => {
+      const nm = typeof entry === 'string' ? entry : entry.name;
+      const pos = (typeof entry === 'string' ? '' : (entry.position || '')).toUpperCase().trim();
+      if (allowedPos && pos){
+        const parts = pos.split(/[^A-Z]+/).filter(Boolean);
+        if (!parts.some(pt => allowedPos.indexOf(pt) !== -1)) return;
+      } else if (allowedPos && !pos && allowedPos.length === 1){
+        return;   // narrow roles do not take guesses -- same rule as above
+      }
+      ambiguousList.push({ num, name: nm + ' ?', resolvedName: nm });
+    });
   });
   return ambiguousList.concat(resolved);
 }
@@ -1444,9 +1465,18 @@ function byRecency(recency, tiebreak){
 function defenseEligible(team){
   const { stats, discovered } = computePlayerStats();
   const ambiguous = TEAMS[team].ambiguousDefense || {};
+  // This picker has never pre-populated -- it builds from players who
+  // have actually been credited. Seeding it with every shared number
+  // filled it with names on 0 credits before a snap was played.
+  // A shared number that HAS been credited still needs disambiguating,
+  // so those are offered; the rest are not.
   const ambiguousList = [];
   Object.keys(ambiguous).forEach(num => {
-    ambiguous[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', resolvedName: name }));
+    if (discovered[team].indexOf(num) === -1) return;
+    ambiguous[num].forEach(entry => {
+      const nm = typeof entry === 'string' ? entry : entry.name;
+      ambiguousList.push({ num, name: nm + ' ?', resolvedName: nm });
+    });
   });
   const defRecency = lastUsedByRole(team, ['defense']);
   const discoveredList = discovered[team].slice()
@@ -1458,9 +1488,23 @@ function defenseEligible(team){
 function specialTeamsEligible(team){
   const roster = TEAMS[team].rosterSpecialTeams || {};
   const ambiguous = TEAMS[team].ambiguousSpecialTeams || {};
+  // Only once that number has actually kicked or punted. Otherwise a
+  // shared number on the special-teams roster appears in the kicker
+  // picker twice for no reason.
+  const kickedNums = {};
+  plays.forEach(p => {
+    const r = p.roles; if (!r) return;
+    ['kicker', 'punter'].forEach(k => {
+      if (r[k] && r[k].team === team && r[k].num) kickedNums[r[k].num] = true;
+    });
+  });
   const ambiguousList = [];
   Object.keys(ambiguous).forEach(num => {
-    ambiguous[num].forEach(name => ambiguousList.push({ num, name: name + ' ?', resolvedName: name }));
+    if (!kickedNums[num]) return;
+    ambiguous[num].forEach(entry => {
+      const nm = typeof entry === 'string' ? entry : entry.name;
+      ambiguousList.push({ num, name: nm + ' ?', resolvedName: nm });
+    });
   });
   // Anyone who has actually kicked or punted for this team, whether or
   // not they are on the special-teams roster. This list was built purely
