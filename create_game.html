@@ -179,13 +179,21 @@
         if (unit) buckets[unit].push(en);
         else unknown.push(en);
       });
-      const hasCollision = buckets.offense.length > 1 || buckets.defense.length > 1 || buckets.special.length > 1 || unknown.length > 1;
+      // Two real players sharing a number is a FACT ABOUT THE TEAM, not a
+      // conflict to be resolved away. Both are kept, and the game page
+      // asks which one on each play. Forcing a choice here silently made
+      // one of them unreachable for the whole game -- the number resolved
+      // to whoever was picked, and the other simply did not exist.
+      //
+      // A position we do not recognise is still a genuine question, and a
+      // number with two UNKNOWN-unit players still needs a hand, since
+      // game_rosters has nowhere to file them.
       resolved[num] = {
-        offense: buckets.offense[0] || null,
-        defense: buckets.defense[0] || null,
-        special: buckets.special[0] || null
+        offense: buckets.offense.slice(),
+        defense: buckets.defense.slice(),
+        special: buckets.special.slice()
       };
-      if (hasCollision){
+      if (unknown.length > 1){
         conflicts.push({ num, entries: group });
       } else if (unknown.length === 1){
         needsAssignment.push({ num, entry: unknown[0] });
@@ -240,7 +248,12 @@
       radio.addEventListener('change', () => {
         const num = radio.dataset.num, unit = radio.dataset.unit;
         const entry = needsAssignment.find(a => a.num === num).entry;
-        resolvedRef[num][unit] = entry;
+        // Unit slots hold LISTS now. This player has no unit yet, so he is
+        // removed from wherever he was and appended to the chosen one.
+        ['offense','defense','special'].forEach(u => {
+          resolvedRef[num][u] = (resolvedRef[num][u] || []).filter(e => e !== entry);
+        });
+        resolvedRef[num][unit] = (resolvedRef[num][unit] || []).concat([entry]);
       });
     });
   }
@@ -286,11 +299,10 @@
         const num = cb.dataset.num, unit = cb.dataset.unit, idx = parseInt(cb.dataset.idx);
         const conflict = conflicts.find(c => c.num === num);
         const entry = conflict.entries[idx];
-        if (cb.checked){
-          resolvedRef[num][unit] = entry;
-        } else if (resolvedRef[num][unit] === entry){
-          resolvedRef[num][unit] = null;
-        }
+        const list = resolvedRef[num][unit] = (resolvedRef[num][unit] || []);
+        const at = list.indexOf(entry);
+        if (cb.checked){ if (at === -1) list.push(entry); }
+        else if (at !== -1){ list.splice(at, 1); }
         // Uncheck this entry for this unit in any OTHER row it might also
         // appear checked under (shouldn't normally happen since each entry
         // is only in the group once, but keep resolvedRef authoritative).
@@ -432,7 +444,10 @@
           String(en.number).trim() === String(saved.jersey_number).trim() &&
           (en.playerId === saved.player_id || en.name === saved.player_name)
         );
-        if (match) bucket[saved.unit] = match;
+        if (match){
+          bucket[saved.unit] = (bucket[saved.unit] || []);
+          if (bucket[saved.unit].indexOf(match) === -1) bucket[saved.unit].push(match);
+        }
       });
       conflicts = filterUnresolvedConflicts(conflicts, savedOurRows);
     }
@@ -533,8 +548,9 @@
     const rows = [];
     Object.keys(resolved).forEach(num => {
       ['offense','defense','special'].forEach(unit => {
-        const entry = resolved[num][unit];
-        if (entry){
+        // A LIST per unit now, not a single entry: everyone sharing a
+        // number is written, and the game page disambiguates per play.
+        (resolved[num][unit] || []).forEach(entry => {
           rows.push({
             team_side: teamSide,
             jersey_number: num,
@@ -543,7 +559,7 @@
             position: entry.position || null,
             player_id: entry.playerId || null
           });
-        }
+        });
       });
     });
     return rows;

@@ -183,6 +183,50 @@ incompletions, which would slow the fastest-moving entry in the app.
 
 ---
 
+## 5c. Edit the roster during a game
+
+Raised Aug 7, 2026, after two players sharing #5 left one of them
+unreachable mid-game.
+
+**The immediate cause is fixed** — shared numbers are now recorded as
+ambiguous and both players are offered, so that specific case no longer
+needs a roster edit. This item is about the general gap.
+
+**What is still not possible mid-game:** adding a player who is not on
+the roster at all under his own name, correcting a misspelling, or
+fixing a wrong jersey number. The workaround is to type the number,
+which records the play correctly but shows `#21` instead of a name for
+the rest of the game and in every report.
+
+- [ ] **Decide whether this is worth building.** The workaround is not
+  terrible — the stats are right, only the display is bare. Weigh that
+  against a real piece of work before starting.
+- [ ] If yes, the scope is: a panel on the game page that writes to
+  `game_rosters` for this game, plus a decision on the awkward part —
+  **what happens to plays already logged against a number whose meaning
+  changes.** Renaming #5 from Reddick to Powell silently rewrites the
+  history of every #5 play already entered, because the log resolves
+  names at render time rather than storing them. That is fine when
+  correcting a typo and wrong when the number genuinely changed hands.
+  Options: allow renames only for numbers with no plays yet; or store
+  the resolved name on the play at entry so history is immutable (a
+  bigger change, and it would also fix the same latent issue for the
+  existing shared-number picker).
+- [x] ~~The opponent roster upload does not warn about duplicate
+  numbers.~~ **Fixed Aug 7:** it no longer needs to. Setup keeps every
+  player sharing a number instead of making the coach pick one, and the
+  game page offers each of them per play. A shared number is a fact
+  about the team, not a conflict.
+
+**One consequence worth knowing.** Games created BEFORE this fix have
+only the chosen player in `game_rosters` — the other was never written.
+Re-uploading the roster on the setup page will now save both. For a game
+already in progress, inserting the missing row directly into
+`game_rosters` also works: the game page re-reads that table on every
+load rather than working from a snapshot.
+
+---
+
 ## 6. NFL-data QA harness — designed, not built
 
 Reopens the NFL-validation idea that was closed earlier (the old
@@ -358,8 +402,14 @@ Recorded so the reasoning is not re-argued. Details in PROJECT_NOTES.
 - **Picker rules**: seeded starters always appear for the roles their slot
   plays; hand-typed players stick; all four picker families sort by
   recency; the returner picker starts empty and builds.
-- Two new suites: `takeover_spot_check.js`, `yardage_calculator_check.js`.
-  **13 suites total.**
+- **Receiver targets** on catches, incompletions and interceptions; 2PT
+  excluded. Live view shows a receiver only once he has a catch.
+- **Shared jersey numbers** are recorded as ambiguous and both players
+  offered. The pickers always read `ambiguousOffense`; nothing had ever
+  written it, so the mechanism was dead code.
+- Three new suites: `takeover_spot_check.js`,
+  `yardage_calculator_check.js`, `receiver_targets_check.js`.
+  **14 suites total.**
 
 ---
 
