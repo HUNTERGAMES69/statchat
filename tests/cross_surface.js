@@ -85,6 +85,11 @@ async function run() {
   // 3. Re-open every other surface against those exact saved rows.
   const boxScores = {};
   const rendered = {};
+  // Buckets are keyed by DISPLAY NAME, not jersey number (Aug 7, 2026 --
+  // numbers are not identity, two players can share one). The fixture
+  // below is written by number, because that is what was entered, so the
+  // mapping is captured here while a page is still open to resolve it.
+  const nameFor = {};
   for (const page of REPORT_PAGES) {
     let h;
     try {
@@ -104,6 +109,18 @@ async function run() {
       ));
     } catch (e) {
       notes.push(page.file + ': could not read computeBoxScore directly (' + e.message.split('\n')[0] + ')');
+    }
+    if (!Object.keys(nameFor).length){
+      for (const team of Object.keys(EXPECTED_STATS)){
+        for (const cat of Object.keys(EXPECTED_STATS[team])){
+          const unit = cat === 'defense' ? 'defense' : cat === 'specialTeams' ? 'special' : null;
+          for (const num of Object.keys(EXPECTED_STATS[team][cat])){
+            nameFor[team + '|' + cat + '|' + num] = h.evalIn(
+              'playerName(' + JSON.stringify(team) + ', ' + JSON.stringify(num) +
+              (unit ? ', ' + JSON.stringify(unit) : '') + ')');
+          }
+        }
+      }
     }
     rendered[page.file] = h.document.body.textContent.replace(/\s+/g, ' ');
     h.close();
@@ -129,8 +146,9 @@ async function run() {
       for (const cat of Object.keys(EXPECTED_STATS[team])) {
         for (const num of Object.keys(EXPECTED_STATS[team][cat])) {
           const want = EXPECTED_STATS[team][cat][num];
+          const key = nameFor[team + '|' + cat + '|' + num] || num;
           for (const stat of Object.keys(want)) {
-            const actual = get(box, team, cat, num, stat) || 0;
+            const actual = get(box, team, cat, key, stat) || 0;
             if (actual !== want[stat]) {
               failures.push({ area: 'stat accuracy',
                 detail: team + '.' + cat + '.#' + num + '.' + stat +

@@ -1,3 +1,6 @@
+// NOTE (Aug 7, 2026): box-score buckets are keyed by DISPLAY NAME, not by
+// jersey number. Numbers are not identity -- two players can wear one, and
+// keying on the number merged their lines. Lookups here use names.
 // Optional-player checks (Aug 6, 2026 session)
 // --------------------------------------------
 // A coach frequently cannot read the jersey number on a return, an
@@ -158,10 +161,15 @@ async function run() {
     g.close();
     const v2 = await bootPage('view.html', { existingPlays: r2 });
     const b2 = JSON.parse(v2.evalIn('JSON.stringify(computeBoxScore(plays))'));
-    if (!(b2.teamB.defense && b2.teamB.defense['21'] && b2.teamB.defense['21'].int === 1)) {
+    // Buckets are keyed by the DISPLAY name playerName() produces, which
+    // is the bare roster name -- nameInDefense() appends the team and so
+    // would not match.
+    const INT_NAME = v2.evalIn('playerName("teamB", "21", "defense")');
+    const FUM_NAME = v2.evalIn('playerName("teamA", "99", "defense")');
+    if (!(b2.teamB.defense && b2.teamB.defense[INT_NAME] && b2.teamB.defense[INT_NAME].int === 1)) {
       fail('named credit', 'a named interceptor lost their INT: ' + JSON.stringify(b2.teamB.defense));
     }
-    if (!(b2.teamA.defense && b2.teamA.defense['99'] && b2.teamA.defense['99'].fumRec === 1)) {
+    if (!(b2.teamA.defense && b2.teamA.defense[FUM_NAME] && b2.teamA.defense[FUM_NAME].fumRec === 1)) {
       fail('named credit', 'a named recoverer lost their fumble recovery: ' +
            JSON.stringify(b2.teamA.defense));
     }

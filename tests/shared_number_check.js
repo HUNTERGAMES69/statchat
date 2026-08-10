@@ -208,6 +208,53 @@ async function run() {
     v.close();
   }
 
+  // --- a shared number does NOT escape the position filter ------------
+  // Injecting every ambiguous entry into every picker turned the pass
+  // panel into a wall of question marks: two linemen in the passer list,
+  // three defenders pre-populating "Tackled by" on zero credits. A
+  // shared number is a disambiguation problem, not a licence to ignore
+  // what position someone plays.
+  {
+    const roster = defaultRoster().filter(r => r.team_side === 'teamA').concat([
+      { team_side: 'teamB', unit: 'offense', jersey_number: '5',  player_name: 'Powell',   position: 'WR' },
+      { team_side: 'teamB', unit: 'offense', jersey_number: '5',  player_name: 'Reddick',  position: 'RB' },
+      { team_side: 'teamB', unit: 'offense', jersey_number: '70', player_name: 'Rochelle', position: 'OL' },
+      { team_side: 'teamB', unit: 'offense', jersey_number: '70', player_name: 'Millican', position: 'OL' },
+      { team_side: 'teamB', unit: 'offense', jersey_number: '7',  player_name: 'Hartwell', position: 'QB' },
+      { team_side: 'teamB', unit: 'defense', jersey_number: '3',  player_name: 'Brice',    position: 'LB' },
+      { team_side: 'teamB', unit: 'defense', jersey_number: '3',  player_name: 'Jones',    position: 'DB' }
+    ]);
+    const h = await bootGamePage({ roster });
+    const { window: win, document: doc } = h;
+    h.evalIn('pushAndPersist({id:nextId++,text:"flip",effect:{forcePossession:"teamB"},quarter:1}); renderAll();');
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 30 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+
+    const texts = sel => [...doc.querySelectorAll(sel)].map(b => b.textContent);
+    const passers = texts('.pp_passer_pick');
+    if (passers.some(t => /Rochelle|Millican/.test(t))) {
+      fail('position filter', 'linemen appeared in the passer picker: ' + passers.join(' , '));
+    }
+    if (!passers.some(t => /Hartwell/.test(t))) {
+      fail('position filter', 'the quarterback is missing from the passer picker');
+    }
+    // The receiving pair still has to be offered -- both play skill
+    // positions, so both are legitimate answers.
+    const receivers = texts('.pp_receiver_pick');
+    if (!receivers.some(t => /Powell/.test(t)) || !receivers.some(t => /Reddick/.test(t))) {
+      fail('position filter', 'both #5s should still be offered as receivers');
+    }
+    if (receivers.some(t => /Rochelle|Millican/.test(t))) {
+      fail('position filter', 'linemen appeared in the receiver picker');
+    }
+    // Defence never pre-populates: it builds from actual credits.
+    const tacklers = texts('.pp_credit_pick');
+    if (tacklers.length) {
+      fail('position filter', '"Tackled by" should start empty, offers: ' + tacklers.join(' , '));
+    }
+    h.close();
+  }
+
   return failures;
 }
 

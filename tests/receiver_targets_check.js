@@ -1,3 +1,6 @@
+// NOTE (Aug 7, 2026): box-score buckets are keyed by DISPLAY NAME, not by
+// jersey number. Numbers are not identity -- two players can wear one, and
+// keying on the number merged their lines. Lookups here use names.
 // Receiver target checks
 // ----------------------
 // A target is a pass thrown AT a receiver, caught or not. It is the
@@ -105,23 +108,24 @@ async function run() {
 
   // #80: 2 catches, 3 targets (the 2PT is excluded)
   // #84: 0 catches, 2 targets (one incompletion, one interception)
-  const EXPECTED = { '80': { rec: 2, tgt: 3 }, '84': { rec: 0, tgt: 2 } };
+  // Keyed by NAME, not number -- see the note at the top of this file.
+  const EXPECTED = { 'N Receiver': { rec: 2, tgt: 3 }, 'N Receiver Two': { rec: 0, tgt: 2 } };
 
   for (const page of ['view.html', 'recap.html', 'stat_package.html']) {
     const v = await bootPage(page, { existingPlays: rows });
     const recv = JSON.parse(v.evalIn('JSON.stringify(computeBoxScore(plays))')).teamA.receiving;
-    for (const num of Object.keys(EXPECTED)) {
-      const got = recv[num] || {};
-      const want = EXPECTED[num];
+    for (const who of Object.keys(EXPECTED)) {
+      const got = recv[who] || {};
+      const want = EXPECTED[who];
       if ((got.tgt || 0) !== want.tgt) {
-        fail(page, '#' + num + ' should have ' + want.tgt + ' targets, has ' + (got.tgt || 0));
+        fail(page, who + ' should have ' + want.tgt + ' targets, has ' + (got.tgt || 0));
       }
       if ((got.rec || 0) !== want.rec) {
-        fail(page, '#' + num + ' should have ' + want.rec + ' catches, has ' + (got.rec || 0));
+        fail(page, who + ' should have ' + want.rec + ' catches, has ' + (got.rec || 0));
       }
     }
     // An unnamed incompletion must credit nobody rather than inventing a row.
-    const phantom = Object.keys(recv).filter(n => n !== '80' && n !== '84');
+    const phantom = Object.keys(recv).filter(n => !EXPECTED[n]);
     if (phantom.length) {
       fail(page, 'an unnamed incompletion created receiving rows: ' + phantom.join(','));
     }
@@ -135,11 +139,11 @@ async function run() {
     const v = await bootPage('view.html', { existingPlays: rows });
     const shown = [...v.document.querySelectorAll('td')].map(e => e.textContent.trim());
     // #84 has 2 targets and no catches in this fixture.
-    const name84 = v.evalIn('playerName("teamA", "84")');
+    const name84 = 'N Receiver Two';
     if (shown.indexOf(name84) !== -1) {
       fail('view.html', '#84 has targets but no catches and should not appear in the live tile');
     }
-    const name80 = v.evalIn('playerName("teamA", "80")');
+    const name80 = 'N Receiver';
     if (shown.indexOf(name80) === -1) {
       fail('view.html', '#80 caught two and must still appear');
     }
@@ -149,7 +153,7 @@ async function run() {
   {
     const r = await bootPage('recap.html', { existingPlays: rows });
     const shown = [...r.document.querySelectorAll('td')].map(e => e.textContent.trim());
-    const name84 = r.evalIn('playerName("teamA", "84")');
+    const name84 = 'N Receiver Two';
     if (shown.indexOf(name84) === -1) {
       fail('recap.html', '#84 should still be listed in the full report');
     }
