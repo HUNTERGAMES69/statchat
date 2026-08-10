@@ -18,6 +18,7 @@ node tests/takeover_spot_check.js         # ~12s every change of possession reco
 node tests/yardage_calculator_check.js    # ~8s  tackled-on spots convert to yardage, incl. across midfield
 node tests/receiver_targets_check.js      # ~8s  targets on catches, incompletions and interceptions
 node tests/shared_number_check.js         # ~6s  two players on one number: both kept, both offered
+node tests/onside_kick_check.js           # ~10s onside kicks on both trees, either side recovering
 node tests/coverage_probe.js      # ~25s  can every UI path be reached and saved?
 node tests/mutation_check.js      # ~4min do these tests actually catch real bugs?
 ```
@@ -69,6 +70,7 @@ which tested nothing at all.
 | `yardage_calculator_check.js` | The "or tackled on" input on the rush and pass panels. Asserts the arithmetic in both directions across midfield (own 20 to opp 20 is +60), that a negative result drives LOSS rather than leaving both settable, that typing yards hands control back, that a touchdown hides the calculator and a fumble relabels it, and that an unknown spot disables it. |
 | `receiver_targets_check.js` | Targets counted on completions, incompletions and interceptions, and NOT on two-point conversions (NFHS keeps conversion attempts out of season totals). Also asserts an unnamed incompletion credits nobody, and that the Tgt column reaches the rendered table. |
 | `shared_number_check.js` | Two players wearing one number. Covers both halves of the Aug 7 fix: `create_game.html` keeps every player instead of forcing a choice at import, and `game.html` records the collision and offers each with a "?". Also asserts no bare third button (which silently meant whichever row loaded second) and that a clean roster raises no ambiguity. |
+| `onside_kick_check.js` | Onside kicks on the manual panel AND the guided flow, with either side recovering. Asserts the play is logged as an onside kick rather than a muff (the only path that existed before), that recovering your own kick keeps possession, that the ball lands on the recovery spot, and that Onside / Touchback / Muffed stay mutually exclusive. Mutation-tested: all three ways it can break are caught. |
 | `mutation_check.js` | Re-introduces nineteen known bugs and confirms the suite goes red for each. |
 
 ## Writing expectations
