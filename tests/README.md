@@ -19,6 +19,13 @@ node tests/yardage_calculator_check.js    # ~8s  tackled-on spots convert to yar
 node tests/receiver_targets_check.js      # ~8s  targets on catches, incompletions and interceptions
 node tests/shared_number_check.js         # ~6s  two players on one number: both kept, both offered
 node tests/onside_kick_check.js           # ~10s onside kicks on both trees, either side recovering
+node tests/fake_kick_check.js             # ~8s  fake punts and fake field goals
+node tests/full_game_check.js             # ~15s a WHOLE GAME through the UI, nothing injected
+
+# Not in the normal suite -- slow, needs network on first run:
+node tests/nfl/run_qa.js 5                # ~4m  five real NFL games through the real UI
+node tests/nfl/run_week.js 1 2 3          # ~13m three whole NFL weeks (background it)
+#   3 clean weeks as of Aug 10 2026: 48 games, 6,977 plays, 4,787 state pairs, 0 issues
 node tests/coverage_probe.js      # ~25s  can every UI path be reached and saved?
 node tests/mutation_check.js      # ~4min do these tests actually catch real bugs?
 ```
@@ -71,6 +78,9 @@ which tested nothing at all.
 | `receiver_targets_check.js` | Targets counted on completions, incompletions and interceptions, and NOT on two-point conversions (NFHS keeps conversion attempts out of season totals). Also asserts an unnamed incompletion credits nobody, and that the Tgt column reaches the rendered table. |
 | `shared_number_check.js` | Two players wearing one number. Covers both halves of the Aug 7 fix: `create_game.html` keeps every player instead of forcing a choice at import, and `game.html` records the collision and offers each with a "?". Also asserts no bare third button (which silently meant whichever row loaded second) and that a clean roster raises no ambiguity. |
 | `onside_kick_check.js` | Onside kicks on the manual panel AND the guided flow, with either side recovering. Asserts the play is logged as an onside kick rather than a muff (the only path that existed before), that recovering your own kick keeps possession, that the ball lands on the recovery spot, and that Onside / Touchback / Muffed stay mutually exclusive. Mutation-tested: all three ways it can break are caught. |
+| `nfl/run_qa.js` | **Not part of the normal suite** — `node tests/nfl/run_qa.js 5`, roughly 30-60s per game. Drives real NFL games from nflverse play-by-play through the actual UI and checks against an independent source. Every other suite checks the app against itself; this one checks it against reality. Tier 1 asserts per-player rushing/receiving/passing yardage (convention-independent — NFHS and NFL disagree only about TEAM totals, never about what an individual gained). Tier 3 asserts `validateGame()` reports zero issues, which needs no reference data at all and so cannot be masked by a wrong adjustment. Tier 2 (team totals, normalised NFL→NFHS) is deliberately not built: the adjustment layer is the main risk in the design. |
+| `full_game_check.js` | One complete game, opening kickoff to overtime, driven entirely through the UI with **nothing injected** — no `forcePossession`, no `setDrive`, no writes via `evalIn`. Every other suite (including the NFL harness) asserts the situation before each play, so none can tell you whether play N sets up play N+1 across a whole game. This does: chains moving, field position carried drive to drive, possession surviving a punt, an interception, a muffed punt and the interval, timeouts decrementing and resetting at halftime, a tie refused at the whistle. Also reaches what NFL data structurally cannot: the guided kickoff both halves, an onside kick, a muffed punt recovery, timeouts, overtime. Mutation-tested. |
+| `fake_kick_check.js` | Fake punts and fake field goals on both panels: rush and pass variants, incompletion, touchdown, converting vs failing on downs, and that the yardage lands on the runner while the kicker gets NOTHING. Also asserts Fake clears Touchback — a fake is not a kick. **Worth reading the header**: it records why 48 NFL games and a full-game walkthrough never surfaced that fakes were unmodelled, and what that says about the limits of every suite here. |
 | `mutation_check.js` | Re-introduces nineteen known bugs and confirms the suite goes red for each. |
 
 ## Writing expectations
