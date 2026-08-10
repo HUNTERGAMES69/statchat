@@ -227,6 +227,41 @@ load rather than working from a snapshot.
 
 ---
 
+## 5d. Individual tackler stats
+
+Team TFL shipped Aug 7, 2026. Per-player tackles did not, and the gap is
+worth stating plainly: **the app captures tackles and throws them away.**
+
+"Tackled by" is filled in on most rushes and passes, stored as
+`roles.defense`, and used to rank the tackler picker by credits. But
+`computeBoxScore` only ever increments `int`, `sacks` and `fumRec` — a
+plain tackle produces no stat at all. A defensive coordinator gets
+nothing from this app today beyond three turnover-ish counts and the
+team TFL.
+
+- [ ] **Count tackles per player.** `roles.defense` already carries who,
+  on every scrimmage play. Counting it is the same shape as the targets
+  work: a branch in `computeBoxScore` and a column in four report pages.
+- [ ] **Decide solo vs assisted first.** The panel takes ONE tackler, so
+  today every tackle is implicitly solo. Real sheets split them, which
+  means either a second field or accepting that the number is "tackles"
+  with no split. Adding a second field slows the fastest-moving entry in
+  the app — worth weighing against how often anyone reads the split.
+- [ ] **Per-player TFL** falls out for free once tackles are counted:
+  a credited tackle on a play with negative yardage. Note this WILL
+  disagree with the team TFL already shipped, which counts from the play
+  and needs no tackler — the team number is a ceiling, the per-player
+  numbers sum to something lower. Show both, or explain the difference,
+  but do not let them silently contradict.
+
+**The honest caveat, same as targets.** Naming the tackler is optional
+and skipped at speed, so per-player tackles will undercount. That is
+exactly why team TFL was built to count from the play log instead.
+Decide whether per-player tackles are worth having as a known-incomplete
+number before building them.
+
+---
+
 ## 6. NFL-data QA harness — designed, not built
 
 Reopens the NFL-validation idea that was closed earlier (the old
@@ -407,6 +442,14 @@ Recorded so the reasoning is not re-argued. Details in PROJECT_NOTES.
 - **Shared jersey numbers** are recorded as ambiguous and both players
   offered. The pickers always read `ambiguousOffense`; nothing had ever
   written it, so the mechanism was dead code.
+- **Team tackles for loss** on all four surfaces, counted from the play
+  log (sacks included, no tackler required).
+- **Onside kicks** on both the manual kickoff panel and the guided flow.
+  Previously there was no path: the closest was "muffed kickoff, kicking
+  team recovers", which got the state right but logged a deliberate call
+  as a mistake. Reuses the muff machinery -- same live-ball shape, same
+  two spot fields -- but defaults to the RECEIVING team recovering,
+  because most onside kicks fail.
 - Three new suites: `takeover_spot_check.js`,
   `yardage_calculator_check.js`, `receiver_targets_check.js`.
   **14 suites total.**

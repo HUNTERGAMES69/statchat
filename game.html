@@ -1217,6 +1217,34 @@ function parseInput(raw, state){
       flipTo: def, team: off, quarter: state.quarter
     };
   }
+  if (type === 'ks'){
+    // Onside kick. Structurally the same as a muffed kickoff -- the ball
+    // is live and either side can come up with it -- but it is a
+    // deliberate call, not a mistake, so it gets its own type rather than
+    // being logged as a muff. Recording it as "MUFFED" would misread the
+    // game in the recap and in anyone's notes.
+    const kickingRecovers = (rest[0] || 'r').toLowerCase() === 'k';
+    const recNum = rest[1];
+    const recTeam = kickingRecovers ? off : def;
+    const named = recNum && recNum !== '?';
+    const recName = named
+      ? (kickingRecovers ? ST(recNum) : D(recNum))
+      : TEAMS[recTeam].name;
+    let t = ST(p1) + ' ONSIDE KICK — recovered by ' + recName;
+    let score = null;
+    if (td){ t += ' — TOUCHDOWN'; score = { team: recTeam, points: 6 }; }
+    return {
+      text: t,
+      // Recovering your own onside kick keeps the ball and starts a fresh
+      // set of downs, exactly as a muff recovery does.
+      effect: Object.assign(score ? { score, endsDrive: true } : {},
+        (kickingRecovers && !score) ? { newDownsSameTeam: true } : {}),
+      flipEligible: !kickingRecovers,
+      flipTo: def, team: off, quarter: state.quarter,
+      roles: { kicker: { team: off, num: p1, yards: 0, onside: true },
+               playType: 'kickoff' }
+    };
+  }
   if (type === 'fg'){
     if (rest[0] === 'm' || rest[0] === 'M'){
       // The snap or hold was botched and no kick was taken. That is not a
@@ -2711,6 +2739,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '<input autocomplete="off" type="checkbox" id="gr_muffed" style="display:none;">' +
             '<button type="button" id="gr_muffed_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:13px; font-weight:600; cursor:pointer;">Muffed / fumbled catch</button>' +
           '</div>' +
+          // An onside kick reuses the muff structure -- a live ball either
+          // side can recover, with the same two spot fields -- but it is a
+          // deliberate call, so it is logged as an onside kick rather than
+          // as somebody's mistake.
+          '<div id="gr_onside_wrap" style="margin-bottom:6px;">' +
+            '<input autocomplete="off" type="checkbox" id="gr_onside" style="display:none;">' +
+            '<button type="button" id="gr_onside_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:13px; font-weight:600; cursor:pointer;">Onside kick</button>' +
+          '</div>' +
         '</div>' +
         '<div id="gr_muff_box" style="display:none; margin-top:8px;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="gr_muffrec" value="k" checked> Recovered by ' + TEAMS[guided.kickingTeam].name + ' (the kicking team keeps the ball)</label>' +
@@ -2745,18 +2781,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       document.getElementById('gr_returner_manual').addEventListener('input', e => { returnerNum = e.target.value.trim(); });
       const grKickSpot = wireStartingSpot(content, 'gr_kickspot');
       const grMuffBtn = document.getElementById('gr_muffed_toggle'), grMuffCb = document.getElementById('gr_muffed');
+      const grOnsideBtn = document.getElementById('gr_onside_toggle'), grOnsideCb = document.getElementById('gr_onside');
       const refreshGrMuff = () => {
-        const on = grMuffCb.checked;
+        // Muff and onside share this whole block: the same recovery
+        // question, the same two spot fields. Only the wording differs.
+        const onsideOn = !!(grOnsideCb && grOnsideCb.checked);
+        const on = grMuffCb.checked || onsideOn;
         const kickingRecovers = on &&
           content.querySelector('input[name=gr_muffrec]:checked').value === 'k';
         document.getElementById('gr_muff_box').style.display = on ? 'block' : 'none';
+        const boxHead = document.getElementById('gr_muff_box').querySelector('p');
+        if (boxHead) boxHead.textContent = 'Recovered by (optional)';
         // The heading and the returner both describe a clean return, so
         // they go away once the catch was muffed.
         document.getElementById('gr_returner_grid').style.display = on ? 'none' : 'block';
         document.getElementById('gr_returner_manual').style.display = on ? 'none' : 'inline-block';
         document.getElementById('gr_spot_recv').style.display = kickingRecovers ? 'none' : 'block';
         document.getElementById('gr_spot_kick').style.display = kickingRecovers ? 'block' : 'none';
-        grMuffBtn.textContent = on ? '\u2713 Muffed / fumbled catch' : 'Muffed / fumbled catch';
+        grMuffBtn.textContent = grMuffCb.checked ? '\u2713 Muffed / fumbled catch' : 'Muffed / fumbled catch';
+        if (grOnsideBtn) grOnsideBtn.textContent = onsideOn ? '\u2713 Onside kick' : 'Onside kick';
         grMuffBtn.style.background = on ? '#a05a00' : '#fff';
         grMuffBtn.style.color = on ? '#fff' : '#555';
         grMuffBtn.style.borderColor = on ? '#a05a00' : '#ccc';
@@ -2794,8 +2837,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       grMuffBtn.addEventListener('click', () => {
         grMuffCb.checked = !grMuffCb.checked;
         if (grMuffCb.checked && grTbCb.checked){ grTbCb.checked = false; refreshGrTb(); }
+        if (grMuffCb.checked && grOnsideCb) grOnsideCb.checked = false;
         refreshGrMuff();
       });
+      if (grOnsideBtn){
+        grOnsideBtn.addEventListener('click', () => {
+          grOnsideCb.checked = !grOnsideCb.checked;
+          // One outcome at a time: a kick is onside, or muffed, or a
+          // touchback, never two of them.
+          if (grOnsideCb.checked){
+            if (grTbCb.checked){ grTbCb.checked = false; refreshGrTb(); }
+            grMuffCb.checked = false;
+          }
+          refreshGrMuff();
+        });
+      }
       content.querySelectorAll('input[name=gr_muffrec]').forEach(r => r.addEventListener('change', refreshGrMuff));
       const grTdBtn = document.getElementById('gr_td_toggle'), grTdCb = document.getElementById('gr_td');
       grTdBtn.addEventListener('click', () => {
@@ -2815,7 +2871,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // is what the rest of the flow needs.
         const touchback = document.getElementById('gr_touchback').checked;
         // A touchback has no return, so requiring yardage would block it.
-        if (!yds && !touchback) return;
+        // Nor does an onside kick or a muffed catch -- the ball is
+        // recovered where it lies, and demanding return yardage silently
+        // refused to save the play at all.
+        const grOnsideNow = document.getElementById('gr_onside');
+        const noReturnExpected = touchback ||
+          document.getElementById('gr_muffed').checked ||
+          !!(grOnsideNow && grOnsideNow.checked);
+        if (!yds && !noReturnExpected) return;
         const q = guided.quarter;
 
         // Validate the clock before anything gets saved, same reasoning
@@ -2836,12 +2899,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // that does not hand the ball over, so possession, the log text
         // and which spot field applies all branch on it.
         const muffed = document.getElementById('gr_muffed').checked;
-        const kickingRecovers = muffed &&
+        const onsideEl = document.getElementById('gr_onside');
+        const onside = !!(onsideEl && onsideEl.checked);
+        // Onside shares the muff's recovery radio, so the same question
+        // answers both -- only the wording of the log line differs.
+        const kickingRecovers = (muffed || onside) &&
           document.querySelector('input[name=gr_muffrec]:checked').value === 'k';
         const takingOver = kickingRecovers ? guided.kickingTeam : guided.receivingTeam;
 
         let text, effect;
-        if (muffed){
+        if (onside){
+          const recNum = (document.getElementById('gr_muff_rec').value || '').trim();
+          const recName = recNum
+            ? (kickingRecovers ? nameInSpecialTeams(guided.kickingTeam, recNum) : nameInDefense(guided.receivingTeam, recNum))
+            : TEAMS[takingOver].name;
+          text = TEAMS[guided.kickingTeam].name + ' ONSIDE KICK — recovered by ' + recName;
+          effect = kickingRecovers ? {} : { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
+        } else if (muffed){
           const recNum = (document.getElementById('gr_muff_rec').value || '').trim();
           const recName = recNum
             ? (kickingRecovers ? nameInSpecialTeams(guided.kickingTeam, recNum) : nameInDefense(guided.receivingTeam, recNum))
@@ -2859,7 +2933,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (td){ text += ' — TOUCHDOWN'; effect.score = { team: takingOver, points: 6 }; }
         pushAndPersist({ id: nextId++, text, effect, team: takingOver, quarter: guided.quarter,
           roles: Object.assign({ playType: 'kickoff_return' },
-            (!muffed && returnerNum) ? { defense: { team: guided.receivingTeam, num: returnerNum } } : {}) });
+            (!muffed && !onside && returnerNum) ? { defense: { team: guided.receivingTeam, num: returnerNum } } : {}) });
         const receivingName = TEAMS[takingOver].name;
         const receivingTeamKey = takingOver;
         if (clockVal && clockAbsSec !== null){
@@ -3246,6 +3320,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_ret_yds_wrap" style="margin-bottom:6px;">' + yardsBlockRet() + '</div>' +
           '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_touchback', 'Touchback') + '</div>' +
           '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_muffed', 'Muffed / fumbled catch') + '</div>' +
+          '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_onside', 'Onside kick') + '</div>' +
+        '</div>' +
+        // An onside kick is a deliberate call, not a mistake, so it gets
+        // its own control rather than being filed under Muffed. The
+        // receiving team recovering is the DEFAULT because most onside
+        // kicks fail -- the opposite default to a muff, where the unusual
+        // outcome is the one worth asking about.
+        '<div id="pp_ko_onside_box" style="display:none;">' +
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_ko_onsiderec" value="r" checked> Recovered by ' + TEAMS[def].name + '</label>' +
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_ko_onsiderec" value="k"> Recovered by ' + TEAMS[off].name + ' (they keep the ball)</label>' +
+          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
+          '<input autocomplete="off" type="text" id="pp_ko_onside_rec" placeholder="type #" style="width:100px;">' +
+          '<div id="pp_ko_onside_spot_wrap">' + startingSpotFieldsHtml('pp_koonsidespot', 'Spot where the ball was recovered', off) + '</div>' +
         '</div>' +
         '<div id="pp_ko_muff" style="display:none;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_ko_muffrec" value="k" checked> Recovered by the kicking team (they keep the ball)</label>' +
@@ -3831,8 +3918,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const refreshKoMode = () => {
         const tb = document.getElementById('pp_ko_touchback').checked;
         const muffed = document.getElementById('pp_ko_muffed').checked;
-        document.getElementById('pp_ko_ret_wrap').style.display = (tb || muffed) ? 'none' : 'block';
-        document.getElementById('pp_ret_yds_wrap').style.display = (tb || muffed) ? 'none' : 'block';
+        const onsideEl = document.getElementById('pp_ko_onside');
+        const onside = !!(onsideEl && onsideEl.checked);
+        // An onside kick has no return and no touchback, so its fields go
+        // away exactly as they do for the other two outcomes.
+        const oBox = document.getElementById('pp_ko_onside_box');
+        if (oBox) oBox.style.display = onside ? 'block' : 'none';
+        document.getElementById('pp_ko_ret_wrap').style.display = (tb || muffed || onside) ? 'none' : 'block';
+        document.getElementById('pp_ret_yds_wrap').style.display = (tb || muffed || onside) ? 'none' : 'block';
         document.getElementById('pp_ko_muff').style.display = muffed ? 'block' : 'none';
         const kickingRecovers = muffed &&
           document.querySelector('input[name=pp_ko_muffrec]:checked').value === 'k';
@@ -3841,10 +3934,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // own spot field. A receiving-team recovery is an ordinary change
         // of possession and still needs the general one.
         const genSpotKo = document.getElementById('pp_spot_wrap');
-        if (genSpotKo) genSpotKo.style.display = kickingRecovers ? 'none' : 'block';
+        if (genSpotKo) genSpotKo.style.display = (kickingRecovers || onside) ? 'none' : 'block';
         if (tb) prefillTouchbackSpot(panel, 'pp_spot');
-        currentSpotGetter = kickingRecovers ? koMuffSpotGetter : koSpotGetter;
+        currentSpotGetter = onside ? koOnsideSpotGetter
+          : (kickingRecovers ? koMuffSpotGetter : koSpotGetter);
       };
+      const koOnsideSpotGetter = wireStartingSpot(panel, 'pp_koonsidespot');
+      const koOnsideCb = document.getElementById('pp_ko_onside');
+      if (koOnsideCb){
+        koOnsideCb.addEventListener('change', (e) => {
+          // An onside kick is a deliberate call; a touchback and a muff
+          // are different plays. Only one can be true.
+          if (e.target.checked){
+            ['pp_ko_touchback', 'pp_ko_muffed'].forEach(id => {
+              const o = document.getElementById(id);
+              if (o && o.checked){ o.checked = false; o.dispatchEvent(new Event('change')); }
+            });
+          }
+          refreshKoMode();
+        });
+        panel.querySelectorAll('input[name=pp_ko_onsiderec]').forEach(r =>
+          r.addEventListener('change', refreshKoMode));
+      }
       const koTouchbackCb = document.getElementById('pp_ko_touchback');
       if (koTouchbackCb){
         koTouchbackCb.addEventListener('change', (e) => {
@@ -3852,6 +3963,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           if (e.target.checked){
             const m = document.getElementById('pp_ko_muffed');
             if (m.checked){ m.checked = false; m.dispatchEvent(new Event('change')); }
+            const os = document.getElementById('pp_ko_onside');
+            if (os && os.checked){ os.checked = false; os.dispatchEvent(new Event('change')); }
           }
           refreshKoMode();
         });
@@ -4224,7 +4337,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const yds = yards('pp_yards') || '0';
       const isTouchback = document.getElementById('pp_ko_touchback').checked;
       const koMuffed = document.getElementById('pp_ko_muffed') && document.getElementById('pp_ko_muffed').checked;
-      if (isTouchback){
+      const koOnside = document.getElementById('pp_ko_onside') && document.getElementById('pp_ko_onside').checked;
+      if (koOnside){
+        const recTok = document.querySelector('input[name=pp_ko_onsiderec]:checked').value;
+        const recRaw = (document.getElementById('pp_ko_onside_rec') || {}).value;
+        const recNum = (recRaw || '').trim() || '?';
+        code = sel.kicker + 'ks ' + recTok + ' ' + recNum + (td ? ' td' : '');
+        // The parse branch supplies the roles, including onside:true on
+        // the kicker so the play can be told apart later.
+        roles = null;
+      } else if (isTouchback){
         code = sel.kicker + 'ko ' + yds + ' tb';
         roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0, touchback: true } };
       } else if (koMuffed){

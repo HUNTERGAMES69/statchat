@@ -158,7 +158,25 @@ const TIMEOUTS_PER_OT = 1;
   //
   // isReset markers are deliberately NOT administrative: they are explicit
   // "new drive" announcements and are valid drive starts.
-  function isAdminMarker(p){
+    // Team tackles for loss, counted from the PLAY rather than a named
+  // tackler. Naming the tackler is optional and often skipped at speed,
+  // so requiring one would undercount a stat the log already knows for
+  // certain: a scrimmage snap by the other team that lost yardage was a
+  // tackle for loss, whoever made it. Sacks are included, per NFHS and
+  // NCAA, and reported alongside the sack count so both can be read.
+  function teamTflFor(playsList, defTeam){
+    const TYPES = ['rush', 'pass', 'sack'];
+    return (playsList || []).reduce((n, p) => {
+      const r = p.roles, e = p.effect || {};
+      if (!r) return n;
+      const byOpp = (r.carrier && r.carrier.team !== defTeam && r.carrier.team) ||
+                    (r.passer && r.passer.team !== defTeam && r.passer.team);
+      if (!byOpp) return n;
+      if (TYPES.indexOf(r.playType) === -1) return n;
+      return (typeof e.statYds === 'number' && e.statYds < 0) ? n + 1 : n;
+    }, 0);
+  }
+function isAdminMarker(p){
     if (!p) return true;
     const e = p.effect || {};
     if (e.isReset) return false;
@@ -884,8 +902,8 @@ const TIMEOUTS_PER_OT = 1;
 
       const defNums = Object.keys(box[teamKey].defense);
       const defTable = defNums.length
-        ? '<table class="player-table"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th></tr>' +
-          '<tr><td>Team</td><td>' + sumStat(box[teamKey].defense,'int') + '</td><td>' + sumStat(box[teamKey].defense,'fumRec') + '</td><td>' + sumStat(box[teamKey].defense,'sacks') + '</td></tr></table>'
+        ? '<table class="player-table"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th><th>TFL</th></tr>' +
+          '<tr><td>Team</td><td>' + sumStat(box[teamKey].defense,'int') + '</td><td>' + sumStat(box[teamKey].defense,'fumRec') + '</td><td>' + sumStat(box[teamKey].defense,'sacks') + '</td><td>' + teamTflFor(plays, teamKey) + '</td></tr></table>'
         : '<p class="no-stats">No defensive stats recorded.</p>';
       out += '<div class="section player-section"><h2>' + teamName + ' — Defense</h2>' + defTable + '</div>';
 

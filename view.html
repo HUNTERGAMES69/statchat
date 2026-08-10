@@ -1035,15 +1035,29 @@ function computeState(playsList){
       const opp = otherTeam(teamKey);
       const defTotals = plays.reduce((acc, p) => {
         const r = p.roles; if (!r) return acc;
+        const e = p.effect || {};
         if (r.playType === 'sack' && r.passer && r.passer.team === opp) acc.sacks++;
         if (r.playType === 'int' && r.passer && r.passer.team === opp) acc.int++;
         if (r.playType === 'fumble' && r.carrier && r.carrier.team === opp && (r.lost || r.defense)) acc.fumRec++;
+        // Tackles for loss, counted from the PLAY rather than from a named
+        // tackler. Naming the tackler is optional and often skipped at
+        // speed, so requiring one would undercount a team stat that the
+        // play log already knows for certain: a scrimmage snap by the
+        // other team that lost yardage was a tackle for loss, whoever
+        // made it. Sacks are included -- NFHS and NCAA both treat a sack
+        // as a tackle behind the line -- and shown alongside the sack
+        // count so the two can be read separately.
+        const TFL_TYPES = ['rush', 'pass', 'sack'];
+        const byOpp = (r.carrier && r.carrier.team === opp) ||
+                      (r.passer && r.passer.team === opp);
+        if (byOpp && TFL_TYPES.indexOf(r.playType) !== -1 &&
+            typeof e.statYds === 'number' && e.statYds < 0) acc.tfl++;
         return acc;
-      }, { int: 0, fumRec: 0, sacks: 0 });
-      const hasDef = defTotals.int || defTotals.fumRec || defTotals.sacks;
+      }, { int: 0, fumRec: 0, sacks: 0, tfl: 0 });
+      const hasDef = defTotals.int || defTotals.fumRec || defTotals.sacks || defTotals.tfl;
       if (hasDef){
-        defHtml += tile('Defense', table(['Int','Fum Rec','Sacks'],
-          [{ name: 'Team', values: [defTotals.int, defTotals.fumRec, defTotals.sacks] }]));
+        defHtml += tile('Defense', table(['Int','Fum Rec','Sacks','TFL'],
+          [{ name: 'Team', values: [defTotals.int, defTotals.fumRec, defTotals.sacks, defTotals.tfl] }]));
       }
       const defNums = hasDef ? ['team'] : [];
       if (!rushNums.length && !passNums.length && !recNums.length && !stTotalEntries && !defNums.length){

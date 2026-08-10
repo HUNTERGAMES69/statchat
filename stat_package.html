@@ -119,7 +119,25 @@ const TIMEOUTS_PER_OT = 1;
   //
   // isReset markers are deliberately NOT administrative: they are explicit
   // "new drive" announcements and are valid drive starts.
-  function isAdminMarker(p){
+    // Team tackles for loss, counted from the PLAY rather than a named
+  // tackler. Naming the tackler is optional and often skipped at speed,
+  // so requiring one would undercount a stat the log already knows for
+  // certain: a scrimmage snap by the other team that lost yardage was a
+  // tackle for loss, whoever made it. Sacks are included, per NFHS and
+  // NCAA, and reported alongside the sack count so both can be read.
+  function teamTflFor(playsList, defTeam){
+    const TYPES = ['rush', 'pass', 'sack'];
+    return (playsList || []).reduce((n, p) => {
+      const r = p.roles, e = p.effect || {};
+      if (!r) return n;
+      const byOpp = (r.carrier && r.carrier.team !== defTeam && r.carrier.team) ||
+                    (r.passer && r.passer.team !== defTeam && r.passer.team);
+      if (!byOpp) return n;
+      if (TYPES.indexOf(r.playType) === -1) return n;
+      return (typeof e.statYds === 'number' && e.statYds < 0) ? n + 1 : n;
+    }, 0);
+  }
+function isAdminMarker(p){
     if (!p) return true;
     const e = p.effect || {};
     if (e.isReset) return false;
@@ -807,7 +825,7 @@ const TIMEOUTS_PER_OT = 1;
       'Receptions','Receiving Yards','Yards Per Catch','Long Recept','Receiving TD','FUMBLE',
       'KO Attempt','KO Touchback','PA Attempt','PA Made','PA Block','FG Attempt','FG Made','FG Block','FG Yards','Long FG',
       'Punt Attempt','Punt Yards','Long Punt','PUNT BLK',
-      'D-Sack','D-INT','D-FUM','D-3rdAtt','D-3rdConv','D-4thAtt','D-4thStop','D-20PlusPlay'];
+      'D-Sack','D-INT','D-FUM','D-TFL','D-3rdAtt','D-3rdConv','D-4thAtt','D-4thStop','D-20PlusPlay'];
     const blankRow = () => headers.map(() => '');
     const setCols = (row, obj) => { Object.keys(obj).forEach(k => { row[headers.indexOf(k)] = obj[k]; }); return row; };
     const rows = [headers];
@@ -913,7 +931,7 @@ const TIMEOUTS_PER_OT = 1;
     const defRow = blankRow();
     setCols(defRow, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Defense',
       'D-Sack': sumStat(box.teamA.defense,'sacks')||'', 'D-INT': sumStat(box.teamA.defense,'int')||'',
-      'D-FUM': sumStat(box.teamA.defense,'fumRec')||'',
+      'D-FUM': sumStat(box.teamA.defense,'fumRec')||'', 'D-TFL': teamTflFor(plays, 'teamA')||'',
       'D-3rdAtt': oppOffenseVsUs.d3att||'', 'D-3rdConv': oppOffenseVsUs.d3conv||'',
       'D-4thAtt': oppOffenseVsUs.d4att||'', 'D-4thStop': oppOffenseVsUs.d4att ? (oppOffenseVsUs.d4att - oppOffenseVsUs.d4conv) : '',
       'D-20PlusPlay': oppOffenseVsUs.explosive||'' });
@@ -1110,9 +1128,13 @@ const TIMEOUTS_PER_OT = 1;
     const defOwn = box.teamB.oppDowns;
     const defNums = Object.keys(box.teamA.defense);
     html += '<div class="section-title">' + TEAMS.teamA.name + ' — Defense</div>';
-    html += defNums.length || defOwn.d3att || defOwn.d4att || defOwn.explosive
-      ? '<table class="stat-table"><tr><th></th><th>Int</th><th>Fum Forced</th><th>Sacks</th><th>Opp 3rd %</th><th>Opp 4th %</th><th>Plays Over 20 Allowed</th></tr>' +
-        '<tr><td>Defense</td><td>' + sumStat(box.teamA.defense,'int') + '</td><td>' + sumStat(box.teamA.defense,'fumRec') + '</td><td>' + sumStat(box.teamA.defense,'sacks') + '</td>' +
+    // TFL belongs in the gate too: a defence that made tackles for loss
+    // but no sacks, picks or recoveries would otherwise report "no
+    // defensive stats recorded" while holding a real number.
+    const defTfl = teamTflFor(plays, 'teamA');
+    html += defNums.length || defOwn.d3att || defOwn.d4att || defOwn.explosive || defTfl
+      ? '<table class="stat-table"><tr><th></th><th>Int</th><th>Fum Forced</th><th>Sacks</th><th>TFL</th><th>Opp 3rd %</th><th>Opp 4th %</th><th>Plays Over 20 Allowed</th></tr>' +
+        '<tr><td>Defense</td><td>' + sumStat(box.teamA.defense,'int') + '</td><td>' + sumStat(box.teamA.defense,'fumRec') + '</td><td>' + sumStat(box.teamA.defense,'sacks') + '</td><td>' + defTfl + '</td>' +
         '<td>' + (defOwn.d3Pct !== null ? defOwn.d3Pct+'%' : '—') + '</td><td>' + (defOwn.d4Pct !== null ? defOwn.d4Pct+'%' : '—') + '</td><td>' + defOwn.explosive + '</td></tr></table>'
       : '<p class="no-stats">No defensive stats recorded.</p>';
 

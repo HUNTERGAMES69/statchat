@@ -147,7 +147,25 @@ const TIMEOUTS_PER_OT = 1;
   //
   // isReset markers are deliberately NOT administrative: they are explicit
   // "new drive" announcements and are valid drive starts.
-  function isAdminMarker(p){
+    // Team tackles for loss, counted from the PLAY rather than a named
+  // tackler. Naming the tackler is optional and often skipped at speed,
+  // so requiring one would undercount a stat the log already knows for
+  // certain: a scrimmage snap by the other team that lost yardage was a
+  // tackle for loss, whoever made it. Sacks are included, per NFHS and
+  // NCAA, and reported alongside the sack count so both can be read.
+  function teamTflFor(playsList, defTeam){
+    const TYPES = ['rush', 'pass', 'sack'];
+    return (playsList || []).reduce((n, p) => {
+      const r = p.roles, e = p.effect || {};
+      if (!r) return n;
+      const byOpp = (r.carrier && r.carrier.team !== defTeam && r.carrier.team) ||
+                    (r.passer && r.passer.team !== defTeam && r.passer.team);
+      if (!byOpp) return n;
+      if (TYPES.indexOf(r.playType) === -1) return n;
+      return (typeof e.statYds === 'number' && e.statYds < 0) ? n + 1 : n;
+    }, 0);
+  }
+function isAdminMarker(p){
     if (!p) return true;
     const e = p.effect || {};
     if (e.isReset) return false;
@@ -724,7 +742,7 @@ const TIMEOUTS_PER_OT = 1;
   let seasonYearLabel = '';
   const seasonAgg = {
     rushing: {}, passing: {}, receiving: {}, specialTeams: {},
-    defense: { int: 0, fumRec: 0, sacks: 0 },
+    defense: { int: 0, fumRec: 0, sacks: 0, tfl: 0 },
     perGame: [],
     totals: { rushAtt:0, rushYds:0, rushTd:0, passAtt:0, passComp:0, passYds:0, passTd:0, sacked:0, totalPlays:0, possessions:0, turnovers:0, penCount:0, penYds:0,
       oppD3att:0, oppD3conv:0, oppD4att:0, oppD4conv:0, explosiveFor:0,
@@ -755,6 +773,9 @@ const TIMEOUTS_PER_OT = 1;
     seasonAgg.defense.int += sumStat(box.teamA.defense, 'int');
     seasonAgg.defense.fumRec += sumStat(box.teamA.defense, 'fumRec');
     seasonAgg.defense.sacks += sumStat(box.teamA.defense, 'sacks');
+    // Counted from this game's plays, not from a bucket -- TFL is a team
+    // stat derived from the log rather than credited to a player.
+    seasonAgg.defense.tfl += teamTflFor(plays, 'teamA');
 
     const t = seasonAgg.totals;
     const ownDowns = box.teamB.oppDowns, oppDowns = box.teamA.oppDowns;
@@ -1136,8 +1157,8 @@ const TIMEOUTS_PER_OT = 1;
         'yds') + '</div>';
 
     html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Defense</div>' +
-      (seasonAgg.defense.int || seasonAgg.defense.fumRec || seasonAgg.defense.sacks
-        ? '<table class="stat-table"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th></tr><tr><td>Defense</td><td>'+seasonAgg.defense.int+'</td><td>'+seasonAgg.defense.fumRec+'</td><td>'+seasonAgg.defense.sacks+'</td></tr></table>'
+      (seasonAgg.defense.int || seasonAgg.defense.fumRec || seasonAgg.defense.sacks || seasonAgg.defense.tfl
+        ? '<table class="stat-table"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th><th>TFL</th></tr><tr><td>Defense</td><td>'+seasonAgg.defense.int+'</td><td>'+seasonAgg.defense.fumRec+'</td><td>'+seasonAgg.defense.sacks+'</td><td>'+seasonAgg.defense.tfl+'</td></tr></table>'
         : '<p class="no-stats">No defensive stats recorded.</p>') + '</div>';
 
     const koNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].kickoffs);
