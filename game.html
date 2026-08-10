@@ -1232,6 +1232,57 @@ function parseInput(raw, state){
       flipTo: def, team: off, quarter: state.quarter
     };
   }
+  if (type === 'fk'){
+    // Fake punt or fake field goal: a genuine rush or pass out of kick
+    // formation. The yardage and the stat belong to the ball carrier or
+    // the passer exactly as on any scrimmage play -- the KICKER gets
+    // nothing, because no kick was attempted. Only the log text records
+    // that it was a fake, which is the whole point: without it the play
+    // reads later as an ordinary run on 4th down with no explanation.
+    const kind = rest[0];                 // 'r' rush | 'p' pass | 'i' incomplete
+    const who  = rest[1];                 // carrier or passer
+    const rec  = rest[2];                 // receiver, pass only
+    const fkYds = parseInt(rest[3], 10);
+    const isLoss = rest.some(t => /^loss$/i.test(t));
+    const fakeOf = rest.some(t => /^fg$/i.test(t)) ? 'FIELD GOAL' : 'PUNT';
+    let netY = isNaN(fkYds) ? 0 : Math.abs(fkYds);
+    if (isLoss) netY = -netY;
+
+    let t = 'FAKE ' + fakeOf + ' — ';
+    let roles;
+    if (kind === 'p' || kind === 'i'){
+      const recName = (rec && rec !== '?') ? O(rec) : null;
+      if (kind === 'i'){
+        t += O(who) + ' pass' + (recName ? ' intended for ' + recName : '') + ' — INCOMPLETE';
+        netY = 0;
+        roles = { passer: { team: off, num: who, yards: 0 }, playType: 'incomplete' };
+        if (rec && rec !== '?') roles.receiver = { team: off, num: rec, yards: 0 };
+      } else {
+        t += O(who) + ' pass' + (recName ? ' to ' + recName : '') + ' ' + gainPhrase(netY);
+        roles = { passer: { team: off, num: who, yards: netY }, playType: 'pass' };
+        if (rec && rec !== '?') roles.receiver = { team: off, num: rec, yards: netY };
+      }
+    } else {
+      t += O(who) + ' rush ' + gainPhrase(netY);
+      roles = { carrier: { team: off, num: who, yards: netY }, playType: 'rush' };
+    }
+    if (td){ t += ' — TOUCHDOWN'; }
+
+    const curDist = state.distance || 10;
+    const convertsFake = netY >= curDist;
+    const failedOnDowns = !td && !convertsFake && (state.down || 4) >= 4;
+    if (!td) t += failedOnDowns ? ' — NO GOOD, turnover on downs'
+                                : (convertsFake ? ' — FIRST DOWN' : '');
+    return {
+      text: t,
+      effect: Object.assign(
+        { isStat: true, statYds: netY, fieldDelta: netY, td, converts: convertsFake },
+        td ? { score: { team: off, points: 6 }, endsDrive: true } : {},
+        failedOnDowns ? { turnoverOnDowns: true } : {}),
+      flipEligible: failedOnDowns, flipTo: def,
+      team: off, quarter: state.quarter, roles
+    };
+  }
   if (type === 'ks'){
     // Onside kick. Structurally the same as a muffed kickoff -- the ball
     // is live and either side can come up with it -- but it is a
@@ -3185,6 +3236,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // special case at all: own 20 to opp 20 is 80 - 20 = 60. What it DOES
     // need is the side, because "the 20" is two different places. The
     // current side is pre-selected so a short gain is still one number.
+    const fakeBlockHtml = (idPrefix, kickLabel) =>
+      '<div id="' + idPrefix + '_box" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
+        '<p style="font-size:13px; color:#888; margin:0 0 6px;">Fake ' + kickLabel +
+          ' \u2014 recorded as a rush or pass, not as a kick.</p>' +
+        '<div style="display:flex; gap:8px; margin-bottom:8px;">' +
+          '<button type="button" class="secondary" id="' + idPrefix + '_rush_btn">Rush</button>' +
+          '<button type="button" class="secondary" id="' + idPrefix + '_pass_btn">Pass</button>' +
+        '</div>' +
+        '<div id="' + idPrefix + '_rush_fields">' + offBlock('carrier', 'Ball carrier') + '</div>' +
+        '<div id="' + idPrefix + '_pass_fields" style="display:none;">' +
+          offBlock('passer', 'Passer') + offBlock('receiver', 'Receiver (optional)') +
+          '<label class="inline" style="display:block; margin-top:6px;">' +
+            '<input autocomplete="off" type="checkbox" id="' + idPrefix + '_incomplete"> Incomplete</label>' +
+        '</div>' +
+        fieldLabel('Enter yards') +
+        '<span style="display:inline-flex; align-items:center; gap:8px;">' +
+          '<input autocomplete="off" type="text" id="' + idPrefix + '_yards" style="width:80px;">' +
+          '<button type="button" class="lossToggle ptoggle" data-for="' + idPrefix + '_yards" ' +
+            'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button>' +
+        '</span>' +
+        '<label class="inline" style="display:block; margin-top:8px;">' +
+          '<input autocomplete="off" type="checkbox" id="' + idPrefix + '_td"> Touchdown</label>' +
+      '</div>';
+
     const spotCalcHtml = (label) => {
       const st = computeState();
       const off = st.possession, opp = otherTeam(off);
@@ -3373,7 +3448,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_punt_touchback', 'Touchback') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_blocked') + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_muffed', 'Muffed / fumbled catch') + '</div></div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_muffed', 'Muffed / fumbled catch') + '</div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_punt_fake', 'Fake') + '</div></div>' +
+        fakeBlockHtml('pp_puntfake', 'punt') +
         '<div id="pp_punt_normal">' + retBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div></div>' +
         '<div id="pp_punt_muffed" style="display:none;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_punt_muffrec" value="k" checked> Recovered by the kicking team (they keep the ball)</label>' +
@@ -3395,7 +3472,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         offBlock('kicker','Kicker') +
         '<div style="display:flex; align-items:flex-end; gap:14px;"><div style="margin-bottom:6px;">' + yardsBlock('Distance') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_blocked_cb') + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_muffhold', 'Muffed hold') + '</div></div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_muffhold', 'Muffed hold') + '</div>' +
+        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_fake', 'Fake') + '</div></div>' +
+        fakeBlockHtml('pp_fgfake', 'field goal') +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="g" checked> Good</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="x"> Missed</label></div>' +
         '<div id="pp_fg_blocked" style="display:none;">' + defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + tdBlock + '</div>' +
@@ -3621,6 +3700,46 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         wrap.style.display = on ? 'none' : '';
         if (on){ ylEl.value = ''; releaseYards(); }
       }, say: t => { readout.textContent = t; } };
+    })();
+
+    // --- fake punt / fake field goal -----------------------------------
+    (function wireFake(){
+      [['pp_punt_fake', 'pp_puntfake', ['pp_punt_touchback', 'pp_blocked', 'pp_muffed']],
+       ['pp_fg_fake',   'pp_fgfake',   ['pp_fg_blocked_cb', 'pp_fg_muffhold']]
+      ].forEach(([cbId, pre, others]) => {
+        const cb = document.getElementById(cbId);
+        if (!cb) return;
+        const box = document.getElementById(pre + '_box');
+        const rushBtn = document.getElementById(pre + '_rush_btn');
+        const passBtn = document.getElementById(pre + '_pass_btn');
+        const setSub = sub => {
+          document.getElementById(pre + '_rush_fields').style.display = sub === 'rush' ? 'block' : 'none';
+          document.getElementById(pre + '_pass_fields').style.display = sub === 'pass' ? 'block' : 'none';
+          rushBtn.classList.toggle('picked', sub === 'rush');
+          passBtn.classList.toggle('picked', sub === 'pass');
+          rushBtn.classList.toggle('secondary', sub !== 'rush');
+          passBtn.classList.toggle('secondary', sub !== 'pass');
+          panel.dataset[pre + 'Sub'] = sub;
+        };
+        rushBtn.addEventListener('click', () => setSub('rush'));
+        passBtn.addEventListener('click', () => setSub('pass'));
+        setSub('rush');
+        cb.addEventListener('change', e => {
+          // A fake is not a kick. Everything that describes the KICK --
+          // distance, touchback, blocked, muffed -- is meaningless, so
+          // those are cleared and the kick fields hidden.
+          if (e.target.checked){
+            others.forEach(id => {
+              const o = document.getElementById(id);
+              if (o && o.checked){ o.checked = false; o.dispatchEvent(new Event('change')); }
+            });
+          }
+          box.style.display = e.target.checked ? 'block' : 'none';
+          const kickRow = document.getElementById('pp_yards');
+          if (kickRow) kickRow.disabled = e.target.checked;
+          refreshSpotCalcContext(panel);
+        });
+      });
     })();
 
     wireLossToggles(panel);
@@ -4193,6 +4312,29 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   }
 
   function buildAndReview(type, sel){
+    // Shared by both fake paths: read the sub-panel and build the code.
+    const fakeCode = (pre, isFg) => {
+      const panelEl = document.getElementById('playPanel');
+      const sub = panelEl.dataset[pre + 'Sub'] || 'rush';
+      const val = id => ((document.getElementById(id) || {}).value || '').trim();
+      const yds = val(pre + '_yards');
+      const lossBtn = panelEl.querySelector('.lossToggle[data-for="' + pre + '_yards"]');
+      const isLoss = !!(lossBtn && lossBtn.classList.contains('picked'));
+      const isTd = !!(document.getElementById(pre + '_td') || {}).checked;
+      const inc = !!(document.getElementById(pre + '_incomplete') || {}).checked;
+      let parts;
+      if (sub === 'pass'){
+        const passer = sel.passer, rec = sel.receiver || '?';
+        if (!passer) return null;
+        parts = [inc ? 'i' : 'p', passer, rec, yds || '0'];
+      } else {
+        if (!sel.carrier) return null;
+        parts = ['r', sel.carrier, '-', yds || '0'];
+      }
+      return '0fk ' + parts.join(' ') + (isLoss ? ' loss' : '') +
+             (isTd ? ' td' : '') + (isFg ? ' fg' : '');
+    };
+
     const yards = (id) => (document.getElementById(id) ? document.getElementById(id).value.trim() : '');
     // Signed read: LOSS flips a positive entry negative. Math.abs first
     // so a coach who ALSO types a minus does not end up back at positive.
@@ -4393,6 +4535,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0 } };
         if (sel.credit) roles.defense = { team: def, num: sel.credit };
       }
+    } else if (type === 'punt' && document.getElementById('pp_punt_fake') &&
+               document.getElementById('pp_punt_fake').checked){
+      // A fake is not a kick, so it never reaches the punt branch below --
+      // no punter attempt, no distance, nothing on the kicker's line.
+      const c = fakeCode('pp_puntfake', false);
+      if (!c) return;
+      document.getElementById('code').value = c;
+      showConfirm();
+      return;
+    } else if (type === 'fg' && document.getElementById('pp_fg_fake') &&
+               document.getElementById('pp_fg_fake').checked){
+      const c = fakeCode('pp_fgfake', true);
+      if (!c) return;
+      document.getElementById('code').value = c;
+      showConfirm();
+      return;
     } else if (type === 'punt'){
       const blocked = document.getElementById('pp_blocked').checked;
       if (!sel.punter) return;

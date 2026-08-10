@@ -820,6 +820,32 @@ Consequences worth knowing:
 
 ---
 
+## Tests verify what exists; they cannot report what is missing (August 10, 2026)
+
+Andy asked why 48 NFL games and a full-game UI walkthrough had never
+surfaced that fake punts and fake field goals were unmodelled. The
+answer bounds what the whole test suite can tell you, so it is worth
+keeping.
+
+- **The NFL harness dispatches on `play_type`.** nflverse labels a fake
+  by its ACTUAL play type -- a fake punt arrives as `"run"` -- so the
+  converter entered them as ordinary rushes, StatChat handled them
+  perfectly, and every tier passed. "Punt formation" exists only in the
+  description text, which the harness never reads.
+- **The full-game walkthrough contains what was written down.** No fake
+  was written, so none was tested.
+- **`coverage_probe` sounds like it should catch this** -- it reports
+  47/47 paths -- but that list was enumerated from the app's own panels.
+  It is a mirror of the implementation, not a specification, and it
+  would keep reporting 47/47 with half the rulebook missing.
+
+**There is no oracle for "features that should exist."** Closing that
+gap needs a checklist from outside the code: the NFHS rulebook, a real
+stat sheet, or someone who knows football looking at the app and asking
+where something is. That is exactly how this gap was found.
+
+---
+
 ## GameID
 
 There's no dedicated GameID column in the database — it's parsed out
