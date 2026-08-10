@@ -526,7 +526,12 @@ function findDriveStarts(playsList){
       // correct the chains, so using it mid-drive -- or twice in a row
       // -- must not register another drive, and therefore another
       // possession, for a team that never gave the ball up.
-      if (!starts.length) pushStart(i);
+      // ...unless the marker says a new POSSESSION began. An onside kick
+      // recovered by the kicking team hands them the ball without any
+      // change of possession for the detector below to notice, so
+      // without this the drive is invisible: no possession counted, no
+      // per-drive stats, and the previous drive stays on screen.
+      if (!starts.length || playsList[i].effect.newPossession) pushStart(i);
       priorPoss = computeState(playsList.slice(0, i + 1)).possession;
       continue;
     }
@@ -1153,11 +1158,15 @@ function parseInput(raw, state){
     if (td){ t += ' — TOUCHDOWN'; score = { team: recTeam, points: 6 }; }
     return {
       text: t,
-      // When the kicking team recovers they keep the ball but start a
-      // fresh set of downs at the spot of recovery, so the save handler
-      // still has to lay down a new-drive marker even though nothing
-      // changed hands.
-      effect: Object.assign(score ? { score, endsDrive: true } : {}, (kickingRecovers && !score) ? { newDownsSameTeam: true } : {}),
+      // Recovering your own muffed kick is a new POSSESSION, not a
+      // retained set of downs. The kicking team does not have the ball
+      // during a kick -- they are giving it up -- so coming up with it is
+      // a possession GAINED, the same as an onside recovery and the same
+      // as a regular kick is for the receiving team. newDownsSameTeam
+      // produced a "New series" marker and NO DRIVE, so the possession
+      // was invisible: uncounted, absent from per-drive stats, and the
+      // previous drive stayed on screen.
+      effect: Object.assign(score ? { score, endsDrive: true } : {}, (kickingRecovers && !score) ? { newPossession: true } : {}),
       // Only a receiving-team recovery is a change of possession.
       flipEligible: !kickingRecovers,
       flipTo: def, team: off, quarter: state.quarter
@@ -1210,9 +1219,15 @@ function parseInput(raw, state){
     if (td){ t += ' — TOUCHDOWN'; score = { team: recTeam, points: 6 }; }
     return {
       text: t,
-      // The kicking team keeps the ball but starts a fresh set of downs
-      // at the spot of recovery, so a new-drive marker is still needed.
-      effect: Object.assign(score ? { score, endsDrive: true } : {}, (kickingRecovers && !score) ? { newDownsSameTeam: true } : {}),
+      // Recovering your own muffed kick is a new POSSESSION, not a
+      // retained set of downs. The kicking team does not have the ball
+      // during a kick -- they are giving it up -- so coming up with it is
+      // a possession GAINED, the same as an onside recovery and the same
+      // as a regular kick is for the receiving team. newDownsSameTeam
+      // produced a "New series" marker and NO DRIVE, so the possession
+      // was invisible: uncounted, absent from per-drive stats, and the
+      // previous drive stayed on screen.
+      effect: Object.assign(score ? { score, endsDrive: true } : {}, (kickingRecovers && !score) ? { newPossession: true } : {}),
       flipEligible: !kickingRecovers,
       flipTo: def, team: off, quarter: state.quarter
     };
@@ -1235,10 +1250,15 @@ function parseInput(raw, state){
     if (td){ t += ' — TOUCHDOWN'; score = { team: recTeam, points: 6 }; }
     return {
       text: t,
-      // Recovering your own onside kick keeps the ball and starts a fresh
-      // set of downs, exactly as a muff recovery does.
+      // Recovering your own onside kick is a new POSSESSION, not a fresh
+      // set of downs. The kicking team does not have the ball during a
+      // kickoff -- they are giving it up -- so coming up with it is a
+      // possession GAINED, exactly as a regular kickoff is for the
+      // receiving team. newDownsSameTeam was wrong here: it produced a
+      // "New series" marker and no drive at all, so the drive never
+      // appeared in the possession count or the per-drive stats.
       effect: Object.assign(score ? { score, endsDrive: true } : {},
-        (kickingRecovers && !score) ? { newDownsSameTeam: true } : {}),
+        (kickingRecovers && !score) ? { newPossession: true } : {}),
       flipEligible: !kickingRecovers,
       flipTo: def, team: off, quarter: state.quarter,
       roles: { kicker: { team: off, num: p1, yards: 0, onside: true },
@@ -4695,7 +4715,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // satisfied none of these conditions and its takeover spot was
     // silently dropped, leaving the banner asking for a kickoff.
     const effectFlipped = !!(effect.flip && effect.flipApplied);
-    if (pending.reset && (flipHappened || effectFlipped || effect.newDownsSameTeam)){
+    // newDownsSameTeam is gone: nothing sets it any more. Recovering your
+    // own kick is a new possession, not a retained set of downs, so both
+    // muff paths and the onside path now use newPossession instead.
+    if (pending.reset && (flipHappened || effectFlipped || effect.newPossession)){
       const q2 = computeState().quarter;
       const driveTeam = flipHappened ? incomingTeam : computeState().possession;
       // "New drive" is wrong when nothing changed hands. A muffed kick
@@ -4704,8 +4727,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // (findDriveStarts already ignores reset markers after the first,
       // so this was never counted as an extra drive or possession --
       // only the wording was misleading.)
-      const seriesLabel = (flipHappened || effectFlipped) ? 'New drive — ' : 'New series — ';
-      pushAndPersist({ id: nextId++, text: seriesLabel + ordinal(pending.reset.down) + ' & ' + togoLabel(pending.reset.fieldPos, pending.reset.distance) + ' at ' + markerLabel(pending.reset.fieldPos) + ' (' + TEAMS[driveTeam].name + ')', effect: { isReset: true, down: pending.reset.down, distance: pending.reset.distance, fieldPos: pending.reset.fieldPos }, quarter: q2 });
+      const seriesLabel = (flipHappened || effectFlipped || effect.newPossession) ? 'New drive — ' : 'New series — ';
+      pushAndPersist({ id: nextId++, text: seriesLabel + ordinal(pending.reset.down) + ' & ' + togoLabel(pending.reset.fieldPos, pending.reset.distance) + ' at ' + markerLabel(pending.reset.fieldPos) + ' (' + TEAMS[driveTeam].name + ')', effect: Object.assign({ isReset: true, down: pending.reset.down, distance: pending.reset.distance, fieldPos: pending.reset.fieldPos },
+          effect.newPossession ? { newPossession: true } : {}), quarter: q2 });
     }
     renderAll();
     document.getElementById('confirmCard').style.display = 'none';
