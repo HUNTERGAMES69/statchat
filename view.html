@@ -89,9 +89,6 @@
   table.player-stat-table th:first-child, table.player-stat-table td:first-child { text-align:left; }
   table.player-stat-table td { text-align:right; padding:calc(2px * var(--stat-scale, 1)) 4px; white-space:nowrap; }
   table.player-stat-table td:first-child { font-weight:700; color:#1a1a2e; white-space:nowrap; }
-  table.player-stat-table tr.leader { background:rgba(255,193,7,0.28); }
-  table.player-stat-table tr.leader td:first-child { border-radius:4px 0 0 4px; }
-  table.player-stat-table tr.leader td:last-child { border-radius:0 4px 4px 0; }
   .live-badge { display:inline-block; font-size:11px; font-weight:700; color:#a37a00; background:#fff3cd; padding:2px 8px; border-radius:10px; margin-left:8px; vertical-align:middle; }
   @media (min-width: 640px) { body { padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); } .card { padding:24px; } }
 
@@ -950,7 +947,11 @@ function computeState(playsList){
       const table = (headers, rows) => {
         let h = '<table class="player-stat-table"><tr><th></th>' + headers.map(x => '<th>' + x + '</th>').join('') + '</tr>';
         rows.forEach(r => {
-          h += '<tr' + (r.leader ? ' class="leader"' : '') + '><td>' + r.name + '</td>' + r.values.map(v => '<td>' + v + '</td>').join('') + '</tr>';
+          // No leader highlight. The rows are already sorted with the
+          // leader first, so the colour was saying something the order
+          // already said -- and a tinted row on a panel that is also
+          // colour-coded by team read as if it meant something else.
+          h += '<tr><td>' + r.name + '</td>' + r.values.map(v => '<td>' + v + '</td>').join('') + '</tr>';
         });
         return h + '</table>';
       };
@@ -964,7 +965,7 @@ function computeState(playsList){
         passHtml += tile('Passing', table(['Att','Comp','%','Yds','TD','Int','Sack'], passNums.map((n, i) => {
           const d = s.passing[n];
           const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
-          return { name: n, leader: i === 0 && passNums.length > 1, values: [d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0, d.sacked||0] };
+          return { name: n, values: [d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0, d.sacked||0] };
         }).filter(rowHasValue)));
       }
       const rushSorted = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
@@ -972,7 +973,7 @@ function computeState(playsList){
       if (rushNums.length){
         rushHtml += tile('Rushing', table(['Att','Yds','TD'], rushNums.map((n, i) => {
           const d = s.rushing[n];
-          return { name: n, leader: i === 0 && rushNums.length > 1, values: [d.att||0, d.yds||0, d.td||0] };
+          return { name: n, values: [d.att||0, d.yds||0, d.td||0] };
         }).filter(rowHasValue)));
       }
       // A target alone does not earn a row on the live view. Adding targets
@@ -989,7 +990,7 @@ function computeState(playsList){
         // "3 targets, 1 catch" left to right is how it is said out loud.
         recHtml += tile('Receiving', table(['Tgt','Rec','Yds','TD'], recNums.map((n, i) => {
           const d = s.receiving[n];
-          return { name: n, leader: i === 0 && recNums.length > 1, values: [d.tgt||0, d.rec||0, d.yds||0, d.td||0] };
+          return { name: n, values: [d.tgt||0, d.rec||0, d.yds||0, d.td||0] };
         }).filter(rowHasValue)));
       }
       // kickoffs belongs in this gate too -- without it a pure kickoff
