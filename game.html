@@ -1082,7 +1082,15 @@ function parseInput(raw, state){
     }
 
     const curDown = state.down || 1, curDist = state.distance || 10;
+    // Reading order: what happened, then how it ended, then who made the
+    // tackle, then the new situation. The tackler used to be appended
+    // last, AFTER the down and distance -- so a line read
+    // "...rush for 4 — 2nd & 6, tackled by Jones", which puts the next
+    // play's situation in the middle of the last play's description.
+    // The down and distance is what the eye looks for, so it goes at the
+    // end where it is always in the same place.
     let score = null, converts = false, turnoverOnDowns = false;
+    if (tackler) text += ', tackled by ' + D(tackler);
     if (td){
       text += ' — TOUCHDOWN';
       score = { team: off, points: 6 };
@@ -1094,7 +1102,6 @@ function parseInput(raw, state){
         text += ' — ' + ordinal(curDown + 1) + ' & ' + togoLabel(newFp, Math.max(curDist - netYards, 1));
       }
     }
-    if (tackler) text += ', tackled by ' + D(tackler);
 
     const effect = { isStat: true, statYds: netYards, fieldDelta: netYards, td, converts, turnoverOnDowns };
     if (score) effect.score = score;
