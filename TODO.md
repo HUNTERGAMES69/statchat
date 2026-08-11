@@ -566,7 +566,84 @@ of rows:
   invocations. Fine on Vercel's free tier, but consider a short
   `s-maxage` so bursts are absorbed — balanced against 8c above.
 
-### 8e. What the feed can expose (verified against the engine Aug 10)
+### 8e. How vMix actually consumes this — and a SECOND, much cheaper route
+
+Worth understanding before committing to 8a, because one of these needs
+almost none of it.
+
+**Route 1 — Data Source (what 8a-8d describe).** vMix never sees a page
+of ours. It reads raw values and injects them into a graphic designed
+INSIDE vMix:
+
+1. The graphic is built in vMix GT Title Designer — artwork, fonts,
+   positions. Each changeable piece of text is a named field.
+2. A Data Source is added pointing at our URL. vMix fetches it and shows
+   a table: columns from our attribute names, rows from our elements.
+3. Each column is mapped to a title field ("Mapping a Data Source to a
+   Title" in the vMix docs).
+4. vMix re-polls on its interval and rewrites the text in place.
+
+Division of labour: **we own the numbers, vMix owns the look.** Andy can
+redesign the scoreboard without touching StatChat. vMix can also bind an
+IMAGE field to a column holding a URL, so team logos could populate
+automatically rather than being baked into each template.
+
+**Route 2 — vMix Web Browser input.** vMix can render a live web page as
+a video layer. A transparent-background scoreboard page served by
+StatChat would work **today**, with no engine extraction, no endpoint and
+no field mapping — it is one HTML page reusing code that already exists.
+
+| | Data Source | Web Browser input |
+|---|---|---|
+| Who designs the look | Andy, in vMix | us, in HTML/CSS |
+| Build cost | 8a + 8b (engine extraction + endpoint) | one HTML page |
+| Compositing / keying / transitions | full vMix control | a flat layer |
+| Changing the design later | drag in Title Designer | a code change |
+| Fits existing vMix templates | yes | no |
+
+**Andy wants BOTH (decided Aug 10, 2026).**
+
+- [x] **`broadcast.html` BUILT Aug 10, 2026** — a transparent score bug,
+  live via the existing realtime subscription. **Generated** by
+  `tools/make_broadcast.py` from `view.html` rather than hand-written, so
+  the engine is byte-identical rather than drifting. Regenerate; do not
+  hand-edit.
+
+  **This is deliberate debt.** It is a SIXTH copy of the engine — exactly
+  what 8a exists to remove. Taken this way so something could be in vMix
+  today. When `engine.js` lands, delete the generator and have
+  `broadcast.html` load `engine.js` like everything else.
+
+  The generator makes three targeted substitutions, each of which is a
+  thing view.html needs and an overlay does not: the page-fitting
+  `applyDisplayScale`, the resize handler, and the **auth gate** (vMix
+  cannot sign in, so the redirect would bounce it to the login page).
+
+- [ ] **Still to do on Route 2:** more layouts than `bug` and `full`
+  (drive summary, last play ticker, leaders), and a decision on whether
+  the overlay should require a per-game token (8d) now that it is
+  reachable without signing in.
+- [x] ~~Build Route 2 first.~~ It is a fraction of the work, needs none of
+  the engine extraction, and puts something usable on screen while the
+  larger piece is done properly. It also flushes out the real questions
+  early — what a producer actually wants on a scoreboard, refresh
+  behaviour, how it looks over live video.
+- [ ] **A transparent scoreboard page**, e.g. `broadcast.html?game=<id>`.
+  Body background transparent (vMix keys it), no chrome, no navigation,
+  large high-contrast type, and a layout that assumes it is overlaid on
+  moving footage rather than sitting on a white page. Reuses `view.html`'s
+  engine copy as-is — no extraction needed for this route.
+- [ ] Decide what goes on it: score bug only, or score plus down and
+  distance plus clock. Probably a couple of variants
+  (`?layout=bug`, `?layout=full`) rather than one crowded design.
+- [ ] Confirm vMix's Web Browser input honours CSS transparency in Andy's
+  version before building to it.
+- [ ] **Then Route 1** per 8a-8d, for graphics that must live inside his
+  existing vMix templates.
+
+---
+
+### 8f. What either route can expose (verified against the engine Aug 10)
 
 Everything `view.html` computes:
 
