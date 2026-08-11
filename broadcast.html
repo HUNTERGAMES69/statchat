@@ -1106,71 +1106,57 @@ function computeState(playsList){
     document.body.classList.toggle('debug', p.get('debug') === '1');
   }
 
-  // ---- boot. Deliberately minimal: read the id, load the game, its
-  // roster and its plays, build the teams, draw, then subscribe for
-  // live updates. No auth gate -- vMix cannot sign in, and a scoreboard
-  // is public information anyway (see TODO 8d on whether this should
-  // carry a per-game token).
-  async function initOverlay(){
-    const params = new URLSearchParams(window.location.search);
-    currentGameId = params.get('id');
-    if (!currentGameId){
-      document.body.innerHTML =
-        '<p style="color:#fff;background:#900;padding:12px;font:16px sans-serif;">' +
-        'No game id. Use broadcast.html?id=&lt;gameId&gt;</p>';
-      return;
-    }
-    const { data: gameRows } = await supabaseClient
-      .from('games').select('*').eq('id', currentGameId).limit(1);
-    const game = (gameRows || [])[0];
-    if (!game) return;
-    startingPossession = game.starting_possession || 'teamA';
-    quarterLengthSec   = game.quarter_length_seconds || 720;
+  // ---- boot ---------------------------------------------------------
+  // Everything comes from /api/gamedata, which reads server-side with the
+  // service key. The overlay cannot query Supabase directly: it has no
+  // session, and every RLS policy requires one.
+  //
+  // POLLING, not realtime. Supabase realtime also needs a session, so the
+  // overlay re-fetches on an interval instead. Two seconds is well inside
+  // what a scoreboard needs and is trivial load for one game.
+  const POLL_MS = 2000;
 
-    const { data: rosterRows } = await supabaseClient
-      .from('game_rosters').select('*').eq('game_id', currentGameId);
-    const { data: teamRows } = await supabaseClient
-      .from('teams').select('primary_color, secondary_color, logo_url')
-      .eq('is_our_team', true).limit(1);
-    buildTeams(game, rosterRows || [], (teamRows || [])[0] || {});
-
-    await reloadPlaysAndRender();
-    subscribeToLiveUpdates();
+  function showFatal(msg){
+    document.body.innerHTML =
+      '<p style="position:absolute;left:40px;bottom:40px;margin:0;color:#fff;' +
+      'background:#8a1414;padding:14px 20px;border-radius:6px;' +
+      'font:500 20px sans-serif;">' + msg + '</p>';
   }
-  initOverlay();
-  async function reloadPlaysAndRender(){
-    const { data: existingPlays } = await supabaseClient
-      .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
-    plays = (existingPlays || []).map(p => ({
-      text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
-      roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+
+  async function fetchAndRender(){
+    const r = await fetch('/api/gamedata?id=' + encodeURIComponent(currentGameId), { cache: 'no-store' });
+    if (!r.ok){
+      const body = await r.json().catch(() => ({}));
+      throw new Error(body.error || ('HTTP ' + r.status));
+    }
+    const d = await r.json();
+    startingPossession = d.game.starting_possession || 'teamA';
+    quarterLengthSec   = d.game.quarter_length_seconds || 720;
+    buildTeams(d.game, d.roster || [], d.ourBranding || {});
+    plays = (d.plays || []).map(p => ({
+      id: p.id, seq: p.sequence_number, text: p.text,
+      effect: p.effect || {}, roles: p.roles || null,
+      team: p.team_side, quarter: p.quarter,
+      isDivider: !!p.is_divider, unresolved: !!p.unresolved
     }));
     renderAll();
   }
 
-  function subscribeToLiveUpdates(){
-    // Inserts and updates can be filtered server-side by game_id.
-    // Deletes (Undo) can't be filtered server-side at all in Postgres
-    // Changes, so we listen to every delete on this table and check
-    // game_id ourselves once it arrives -- this only works because the
-    // migration set REPLICA IDENTITY FULL, which makes sure a delete
-    // event actually carries the deleted row's other columns instead
-    // of just its id.
-    supabaseClient
-      .channel('plays-' + currentGameId)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'plays', filter: 'game_id=eq.' + currentGameId }, () => {
-        reloadPlaysAndRender();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'plays', filter: 'game_id=eq.' + currentGameId }, () => {
-        reloadPlaysAndRender();
-      })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'plays' }, (payload) => {
-        if (payload.old && payload.old.game_id === currentGameId){
-          reloadPlaysAndRender();
-        }
-      })
-      .subscribe();
+  async function initOverlay(){
+    const params = new URLSearchParams(window.location.search);
+    currentGameId = params.get('id');
+    if (!currentGameId){ showFatal('No game id \u2014 use broadcast.html?id=&lt;gameId&gt;'); return; }
+    try {
+      await fetchAndRender();
+    } catch (e){
+      showFatal('Could not load the game: ' + e.message);
+      return;
+    }
+    // A later failure must not blank a working scoreboard -- keep showing
+    // the last good state and try again on the next tick.
+    setInterval(() => { fetchAndRender().catch(() => {}); }, POLL_MS);
   }
+  initOverlay();
 
 </script>
 </body>
