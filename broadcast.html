@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StatChat broadcast overlay</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="team-icon.js"></script>
+<style>
+  /* TRANSPARENT. vMix's Web Browser input keys this out, so anything not
+     explicitly painted shows the programme feed through. Do not give
+     html or body a background colour. */
+  html, body { background:transparent !important; margin:0; padding:0; overflow:hidden;
+               font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+               -webkit-font-smoothing:antialiased; }
+
+  /* Sized for a 1920x1080 browser input, anchored bottom-left where a
+     score bug normally lives. */
+  #bug { position:absolute; left:60px; bottom:60px; display:none; align-items:stretch;
+         border-radius:8px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,0.55);
+         font-weight:800; }
+  .side { display:flex; align-items:center; gap:14px; padding:14px 22px; }
+  .side img { height:44px; width:auto; display:block; }
+  .abbr { font-size:34px; }
+  .pts  { font-size:44px; min-width:64px; text-align:right; font-variant-numeric:tabular-nums; }
+  .poss { font-size:26px; }
+  #situation { background:rgba(12,12,14,0.92); color:#fff; padding:14px 26px; font-size:30px;
+               display:flex; align-items:center; gap:22px; }
+  .dim { opacity:0.6; font-weight:600; font-size:24px; }
+
+  body.layout-bug #situation { display:none; }   /* ?layout=bug  */
+  body.debug { background:#123 !important; }     /* ?debug=1     */
+</style>
+</head>
+<body>
+  <div id="bug">
+    <div class="side" id="sideA"></div>
+    <div id="situation">
+      <span id="downText"></span>
+      <span id="quarterText" class="dim"></span>
+    </div>
+    <div class="side" id="sideB"></div>
+  </div>
+
+<script>
+// ===================================================================
+// BROADCAST OVERLAY -- GENERATED FILE, do not hand-edit.
+//   regenerate: python3 tools/make_broadcast.py
+//
+// TEMPORARY BY DESIGN. The engine below is copied from view.html,
+// making this the SIXTH copy in the repo -- the duplication TODO 8a
+// exists to remove. Taken this way so an overlay could be in vMix
+// today rather than after the extraction. Fold it into engine.js when
+// 8a is done; do not let it drift.
+//
+// VMIX SETUP
+//   Add Input -> Web Browser
+//   URL   https://nevillestatchat.vercel.app/broadcast.html?id=<gameId>
+//   Size  1920 x 1080
+//   The background is transparent, so it keys straight over video.
+//
+//   ?layout=bug   score only, no down and distance
+//   ?debug=1      solid background, to see the edges while positioning
+// ===================================================================
+
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  // A passive viewer (as opposed to whoever's actively typing plays) is
+  // far more likely to lock their screen or background the tab between
+  // checks -- and browsers, especially iOS, aggressively throttle JS
+  // timers in that state. That silently breaks the realtime connection's
+  // heartbeat with no visible error and no automatic recovery, which is
+  // exactly what was reported: it looked like an admin-vs-viewer
+  // permissions issue, but was actually just who happens to keep their
+  // device active. Both mitigations below are Supabase's own documented
+  // fix for this exact failure mode -- see
+  // https://supabase.com/docs/guides/troubleshooting/realtime-handling-silent-disconnections-in-backgrounded-applications-592794
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    realtime: {
+      worker: true,
+      heartbeatCallback: (status) => {
+        if (status === 'disconnected'){
+          supabaseClient.realtime.connect();
+        }
+      }
+    }
+  });
+
+  // The display is designed against a fixed 1920x1080 canvas so every font
+  // size and tile dimension throughout stays correct relative to every
+  // other -- rather than rewriting all of that in relative units, the
+  // whole canvas is scaled up or down as a single unit to fit whatever
+  // viewport is actually available, so nothing is ever clipped or forced
+  // to scroll regardless of the real screen/browser size. Skipped
+  // entirely below the mobile breakpoint, where the layout is already
+  // its own natural, responsive, scrolling design.
+  function applyDisplayScale(){
+    if (window.innerWidth <= 700){
+      document.querySelector('.wrap').style.transform = '';
+      return;
+    }
+    // Scale X and Y independently -- rather than one uniform scale
+    // (which forces the fixed 1920x1080 (16:9) aspect ratio and always
+    // leaves wasted space on whichever axis doesn't match the actual
+    // screen), this stretches the whole canvas to exactly fill
+    // whatever viewport is actually available, since every real screen
+    // has a different ratio. The very slight non-uniform distortion
+    // this can introduce is far less noticeable than the wasted-space
+    // gaps it replaces, since almost everything on this page is text,
+    // tables, and tiles rather than shapes where aspect ratio matters.
+    const scaleX = window.innerWidth / 1920;
+    const scaleY = window.innerHeight / 1080;
+    document.querySelector('.wrap').style.transform = 'scale(' + scaleX + ', ' + scaleY + ')';
+  }
+  // resize handler removed: fixed canvas.
+  // Logos and webfonts land after first paint and change measured
+  // heights, so the first fit is made on stale numbers. Re-fit once
+  // everything has actually loaded.
+  window.addEventListener('load', () => { if (plays.length) renderBoxScore(); });
+  // applyDisplayScale() removed: no .wrap on the overlay, and vMix
+  // renders at a fixed size.
+
+  function showView(name){
+    ['loading','errorView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+  }
+  function showMsg(elId, text, type){
+    document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+  }
+
+  let currentGameId = null;
+  let isResultsMode = false;
+  let currentGameStatus = null;
+  let TEAMS = { teamA: {}, teamB: {} };
+  let plays = [], startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
+
+  // auth gate removed: an overlay cannot sign in. See TODO 8d.
+
+  function luminance(hex){
+    const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+    return (0.299*r + 0.587*g + 0.114*b) / 255;
+  }
+  // A logo's two detected colors can both be dark and saturated (navy
+  // and red, for instance) -- using one directly as banner text on the
+  // other as background then reads as low-contrast, hard to read text,
+  // even though each color individually looks fine. Checks the actual
+  // luminance gap between this specific background/text pairing, and
+  // only overrides to black/white when that gap is too small to read
+  // comfortably -- a light background with intentionally dark text
+  // stays untouched, since that's already good contrast.
+  function safeTextColor(bgHex, preferredHex){
+    if (Math.abs(luminance(bgHex) - luminance(preferredHex)) > 0.35) return preferredHex;
+    return luminance(bgHex) > 0.55 ? '#1a1a1a' : '#ffffff';
+  }
+  function colorDistance(hexA, hexB){
+    const a = { r: parseInt(hexA.slice(1,3),16), g: parseInt(hexA.slice(3,5),16), b: parseInt(hexA.slice(5,7),16) };
+    const b = { r: parseInt(hexB.slice(1,3),16), g: parseInt(hexB.slice(3,5),16), b: parseInt(hexB.slice(5,7),16) };
+    return Math.sqrt((a.r-b.r)**2 + (a.g-b.g)**2 + (a.b-b.b)**2);
+  }
+  function buildTeams(game, rosterRows, ourBranding){
+    const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
+    const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null };
+    const oppPrimary = game.opponent_primary_color || '#8B0000', oppSecondary = game.opponent_secondary_color || '#ffffff';
+    TEAMS.teamB = { name: oppName, bg: oppPrimary, text: oppSecondary,
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null };
+    // Each team's color is set independently -- nothing checks that
+    // they're actually distinguishable from each other, and two
+    // different schools can genuinely share a similar accent color.
+    // Only the opponent's displayed color adjusts here, never our own,
+    // since our identity should stay put -- first try swapping to their
+    // own secondary color, since that's still genuinely their color, and
+    // only fall back to a neutral tone if even that's too close.
+    if (colorDistance(TEAMS.teamA.bg, TEAMS.teamB.bg) < 60){
+      if (colorDistance(TEAMS.teamA.bg, oppSecondary) >= 60){
+        TEAMS.teamB.bg = oppSecondary;
+        TEAMS.teamB.text = oppPrimary;
+      } else {
+        TEAMS.teamB.bg = luminance(TEAMS.teamA.bg) > 0.5 ? '#3a3a3a' : '#c8c8c8';
+        TEAMS.teamB.text = luminance(TEAMS.teamB.bg) > 0.55 ? '#1a1a1a' : '#ffffff';
+      }
+    }
+    rosterRows.forEach(r => {
+      const team = TEAMS[r.team_side];
+      if (!team) return;
+      if (r.unit === 'offense'){ team.rosterOffense[r.jersey_number] = r.player_name; team.posOffense[r.jersey_number] = r.position; }
+      else if (r.unit === 'defense'){ team.rosterDefense[r.jersey_number] = r.player_name; }
+      else if (r.unit === 'special'){ team.rosterSpecialTeams[r.jersey_number] = r.player_name; }
+    });
+  }
+
+  // --- Proven read-only engine core, extracted verbatim from game.html ---
+function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+const TIMEOUTS_PER_HALF = 3;
+const TIMEOUTS_PER_OT = 1;
+// Administrative entries -- clock markers, quarter/half dividers, manual
+// possession flips -- are announcements, not football plays. They carry
+// no roles and no yardage, so anything reasoning about "what actually
+// happened on this drive" has to skip them.
+//
+// isReset markers are deliberately NOT administrative: they are explicit
+// "new drive" announcements and are valid drive starts.
+//
+// Lives in the engine core (top level) rather than inside
+// findDriveStarts because computeDriveSummary needs it too, from a
+// different scope.
+// Bookkeeping the drive tiles do not need. These are entries the app
+// writes to keep its own state straight -- clock events, chain
+// corrections, the direction arrow -- rather than things that happened on
+// the field. The tiles are for reading at a glance, so they are dropped
+// there; the ALL PLAYS list is the audit trail and keeps everything.
+//
+// Deliberately KEPT: penalties and timeouts (real events), quarter
+// markers, overtime markers, dividers, and "New series" -- which looks
+// like "New drive" but means something different: a muffed kick
+// recovered by the kicking team, a fresh set of downs with no change of
+// possession. Manual entry NOTEs are kept too; a coach typed those on
+// purpose. Only the two "Manual ..." state overrides are dropped.
+function isDriveTileNoise(p){
+  if (!p || p.isDivider) return false;
+  const e = p.effect || {};
+  if (e.clockEvent) return true;
+  if (e.setDirection) return true;
+  const t = (p.text || '').trim();
+  if (t.indexOf('Down & distance adjusted') === 0) return true;
+  if (t.indexOf('New drive') === 0) return true;
+  if (t.indexOf('Manual flip') === 0) return true;
+  if (t.indexOf('Manual score adjust') === 0) return true;
+  return false;
+}
+function isAdminMarker(p){
+  if (!p) return true;
+  const e = p.effect || {};
+  if (e.isReset) return false;
+  return !!(e.clockEvent || e.setQuarter || e.forcePossession || p.isDivider);
+}
+function findDriveStarts(playsList){
+  // A drive must never START on an administrative marker. Doing so
+  // produces a one-play "drive" whose every counter is zero, and
+  // because only the last two drives are ever shown, it silently
+  // pushes the real drive out of the "previous drive" slot. That is
+  // what made a completed scoring drive display as
+  // "Clock - 5:00 at change of possession" with 0/0 tiles: the
+  // kickoff flipped possession, so the drive began on the clock
+  // line that happened to follow it.
+  const firstRealPlayFrom = from => {
+    for (let j = from; j < playsList.length; j++){
+      if (!isAdminMarker(playsList[j])) return j;
+    }
+    return -1;
+  };
+  const starts = [];
+  // Start indices are produced in non-decreasing order, so checking
+  // only the last entry is enough to stop a detected possession
+  // change and an explicit reset marker from both claiming the same
+  // play (which they often do, since skipping markers lands the
+  // possession change exactly on the reset marker that follows it).
+  const pushStart = idx => {
+    if (idx !== -1 && starts[starts.length - 1] !== idx) starts.push(idx);
+  };
+  let priorPoss = startingPossession;
+  for (let i = 0; i < playsList.length; i++){
+    if (playsList[i].effect && playsList[i].effect.isReset){
+      // A reset marker only OPENS the game's first drive. Every later
+      // drive begins at a real possession change, which is detected
+      // below and already lands on the reset marker that follows it.
+      // "Adjust down / distance" writes a reset marker purely to
+      // correct the chains, so using it mid-drive -- or twice in a row
+      // -- must not register another drive, and therefore another
+      // possession, for a team that never gave the ball up.
+      // ...unless the marker says a new POSSESSION began. An onside kick
+      // recovered by the kicking team hands them the ball without any
+      // change of possession for the detector below to notice, so
+      // without this the drive is invisible: no possession counted, no
+      // per-drive stats, and the previous drive stays on screen.
+      if (!starts.length || playsList[i].effect.newPossession) pushStart(i);
+      priorPoss = computeState(playsList.slice(0, i + 1)).possession;
+      continue;
+    }
+    // A half ends every drive in progress, even when the same team gets
+    // the ball back to start the next one. Only a change of possession
+    // was treated as a boundary, so a team that finished the first half
+    // with the ball and received to open the second had both halves
+    // counted as ONE continuous drive -- the Current Drive panel still
+    // listed its Q2 kneels, and the drive tiles totalled plays from
+    // before the interval.
+    // The interval and the start of overtime both end whatever drive
+    // was in progress, even when the same team keeps the ball. Only a
+    // change of possession counted as a boundary, so a team that
+    // finished a period with the ball and got it back to open the
+    // next had both counted as ONE drive.
+    const endsPeriod = (playsList[i].isDivider && /end of (1st|first) half/i.test(playsList[i].text || '')) ||
+      (playsList[i].effect && playsList[i].effect.setQuarter >= 5);
+    if (endsPeriod){
+      pushStart(firstRealPlayFrom(i + 1));
+      priorPoss = computeState(playsList.slice(0, i + 1)).possession;
+      continue;
+    }
+    const possAfter = computeState(playsList.slice(0, i + 1)).possession;
+    if (possAfter !== priorPoss) pushStart(firstRealPlayFrom(i + 1));
+    priorPoss = possAfter;
+  }
+  return starts;
+}
+// Jersey numbers resolve across ALL THREE roster units, not just the one
+// the play type implies. High-school rosters routinely list a player
+// under a single unit even though they play several, and a dedicated
+// kick/punt returner is normally rostered on special teams only -- which
+// is why returners used to render in the log as a bare "#25".
+//
+// A fallback can only ever turn "#25" into a name; it can never change a
+// name that already resolved, because the expected unit is always
+// searched first. This mirrors playerName() in the report pages.
+function rosterName(teamKey, num, order){
+  // Kneels are charged to a TEAM bucket that has no roster entry.
+  if (num === 'TEAM') return 'TEAM';
+  const t = TEAMS[teamKey];
+  const buckets = { offense: t.rosterOffense, defense: t.rosterDefense, special: t.rosterSpecialTeams };
+  for (const unit of order){
+    const roster = buckets[unit];
+    if (roster && roster[num]) return roster[num];
+  }
+  return null;
+}
+function nameInOffense(teamKey, num){
+  const n = rosterName(teamKey, num, ['offense','special','defense']);
+  return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
+}
+function nameInDefense(teamKey, num){
+  const n = rosterName(teamKey, num, ['defense','special','offense']);
+  return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
+}
+function nameInSpecialTeams(teamKey, num){
+  const n = rosterName(teamKey, num, ['special','offense','defense']);
+  return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
+}
+function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':n===4?'4th':(n+'th'); }
+function clockToAbsSeconds(quarter, clockStr){
+  let m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
+  let mins, secs;
+  if (m){
+    mins = parseInt(m[1]); secs = parseInt(m[2]);
+  } else {
+    // Colon-less entry: last two digits are seconds, everything
+    // before that is minutes -- e.g. "1156" reads the same as
+    // "11:56" would, "56" alone reads as "0:56". Requires at least
+    // two digits so this split is never ambiguous.
+    m = clockStr.match(/^(\d*)(\d{2})$/);
+    if (!m) return null;
+    mins = m[1] ? parseInt(m[1]) : 0; secs = parseInt(m[2]);
+  }
+  if (secs > 59) return null;
+  const remaining = mins * 60 + secs;
+  // A clock value can never show more time than the quarter itself
+  // holds -- e.g. "15:00" is meaningless in a 12-minute quarter.
+  if (remaining > quarterLengthSec) return null;
+  return (quarter - 1) * quarterLengthSec + (quarterLengthSec - remaining);
+}
+function formatDuration(sec){
+  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+function markerLabel(fp){
+  if (fp === null || fp === undefined) return '';
+  return fp <= 50 ? ('own ' + fp) : ('opp ' + (100 - fp));
+}
+
+function readFileAsDataURL(file){
+  return new Promise(resolve => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.readAsDataURL(file);
+  });
+}
+
+const OFFENSE_POS = new Set(['QB','RB','FB','HB','WR','TE','OL','OT','OG','C']);
+const DEFENSE_POS = new Set(['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE']);
+const SPECIAL_POS = new Set(['K','P','LS','H','KR','PR']);
+function posToUnit(pos){
+  if (!pos) return null;
+  const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
+  if (SPECIAL_POS.has(first)) return 'st';
+  if (OFFENSE_POS.has(first)) return 'o';
+  if (DEFENSE_POS.has(first)) return 'd';
+  return null;
+}
+function extractNameTag(rawName){
+  const m = String(rawName).match(/\(\s*(O|D|ST)\s*\)\s*$/i);
+  if (!m) return { cleanName: String(rawName).trim(), explicitUnit: null };
+  const tag = m[1].toUpperCase();
+  const cleanName = String(rawName).slice(0, m.index).trim();
+  return { cleanName, explicitUnit: tag.toLowerCase() };
+}
+function computeState(playsList){
+  const list = playsList || plays;
+  const state = {
+    possession: startingPossession,
+    quarter: 1,
+    scores: { teamA: 0, teamB: 0 },
+    possessionTime: { teamA: 0, teamB: 0 },
+    down: null, distance: null, fieldPos: null, startSpot: null, statYards: 0,
+    penalties: { teamA: { count: 0, yds: 0 }, teamB: { count: 0, yds: 0 } },
+    // NFHS: three timeouts per team per half, and they do NOT carry
+    // over -- both teams get a fresh three at the start of the second
+    // half regardless of what was left.
+    timeouts: { teamA: TIMEOUTS_PER_HALF, teamB: TIMEOUTS_PER_HALF },
+    // Which physical end of the field a team attacks. Recorded once and
+    // alternated by quarter, because teams change ends after Q1, Q2 and
+    // Q3. Everything else in this engine is possession-relative, so this
+    // is the only place the app knows anything about actual direction.
+    dirTeam: null, dirValue: null, dirQuarter: 1
+  };
+  const pendingClockStart = { teamA: null, teamB: null };
+  for (const p of list){
+    const e = p.effect;
+    if (!e) continue;
+    if (e.isReset){
+      state.down = e.down; state.distance = e.distance; state.fieldPos = e.fieldPos;
+      state.startSpot = e.fieldPos; state.statYards = 0;
+    }
+    if (e.isStat){
+      if (state.fieldPos !== null){
+        state.fieldPos += e.fieldDelta;
+        state.fieldPos = Math.max(0, Math.min(100, state.fieldPos));
+      }
+      state.statYards += e.statYds;
+      if (e.td){
+        state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+      } else {
+        if (e.converts){
+          state.down = 1;
+          state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+        }
+        else if (e.turnoverOnDowns && e.flipApplied){
+          state.possession = otherTeam(state.possession);
+          // The ball does not move on a turnover on downs -- it is spotted
+          // exactly where the play ended, and the team taking over starts
+          // 1st & 10 from there. fieldPos is possession-RELATIVE (0 is the
+          // possessing team's own goal line), so keeping the same physical
+          // spot means mirroring it to 100 - fieldPos for the new offense.
+          // Clearing it instead used to force the coach to re-enter a spot
+          // the app already knew.
+          state.fieldPos = state.fieldPos !== null ? 100 - state.fieldPos : null;
+          state.down = 1;
+          state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+          state.startSpot = state.fieldPos; state.statYards = 0;
+        } else if (!e.turnoverOnDowns){
+          state.down = (state.down || 1) + 1;
+          state.distance = Math.max((state.distance || 10) - e.statYds, 1);
+        }
+      }
+    }
+    if (e.endsDrive && !e.isStat){
+      state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+    }
+    if (e.penaltyTeam){
+      state.penalties[e.penaltyTeam].count += 1;
+      state.penalties[e.penaltyTeam].yds += e.penaltyYds;
+      if (state.fieldPos !== null){
+        state.fieldPos += e.fieldDelta;
+        state.fieldPos = Math.max(0, Math.min(100, state.fieldPos));
+      }
+      if (state.distance !== null){
+        if (e.noDownChange){
+          // Dead-ball foul, or one assessed after a kick or change of
+          // possession: it is walked off before the series begins, so
+          // the ball moves but the down and distance-to-go stay put.
+          // Adjusting distance here would measure against a
+          // line-to-gain that no longer exists -- which is how a
+          // 10-yard foul against a team that had just taken over at
+          // 1st & 10 used to become "1st & 20".
+          if (state.fieldPos !== null){
+            state.distance = Math.max(1, Math.min(state.distance, 100 - state.fieldPos));
+          }
+        } else if (e.autoFirstDown){
+          // Defensive holding, roughing, pass interference and the like
+          // award a first down whatever the yardage -- a 5-yard foul on
+          // 3rd & 20 still moves the chains, so the distance maths below
+          // must not get a say.
+          state.down = 1;
+          state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+        } else {
+          state.distance -= e.fieldDelta;
+          if (state.distance <= 0){
+            // Penalty yardage alone reached or passed the marker --
+            // an automatic first down, regardless of what down it was.
+            state.down = 1;
+            state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+          }
+        }
+      }
+    }
+    if (e.score){ state.scores[e.score.team] += e.score.points; }
+    if (e.scoreAdjust){ state.scores[e.scoreAdjust.team] += e.scoreAdjust.pts; }
+    if (e.flip && e.flipApplied && !e.isStat){
+      state.possession = e.flipTo;
+      state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
+    }
+    if (e.forcePossession){ state.possession = e.forcePossession; }
+    if (e.setQuarter){
+      // Crossing into the second half (or into overtime) resets the
+      // allowance. Guarded on the quarter actually changing so that
+      // re-entering a Q3 marker cannot hand out a second fresh set.
+      if (e.setQuarter >= 3 && state.quarter < 3) state.timeouts = { teamA: TIMEOUTS_PER_HALF, teamB: TIMEOUTS_PER_HALF };
+      if (e.setQuarter >= 5 && state.quarter < 5) state.timeouts = { teamA: TIMEOUTS_PER_OT, teamB: TIMEOUTS_PER_OT };
+      state.quarter = e.setQuarter;
+    }
+    if (e.setDirection){
+      state.dirTeam = e.setDirection.team;
+      state.dirValue = e.setDirection.dir;
+      state.dirQuarter = state.quarter;
+    }
+    if (e.timeout && state.timeouts[e.timeout.team] !== undefined){
+      // Floored at zero: the log is a record of what the coach called,
+      // and a fourth timeout should not read as -1 remaining.
+      state.timeouts[e.timeout.team] = Math.max(0, state.timeouts[e.timeout.team] - 1);
+    }
+    if (e.clockEvent){
+      const ce = e.clockEvent;
+      if (ce.type === 'start'){ pendingClockStart[ce.team] = ce.absSec; }
+      if (ce.type === 'end' && pendingClockStart[ce.team] !== null){
+        state.possessionTime[ce.team] += Math.max(0, ce.absSec - pendingClockStart[ce.team]);
+        pendingClockStart[ce.team] = null;
+      }
+      if (ce.type === 'transition'){
+        if (pendingClockStart[ce.outgoingTeam] !== null){
+          state.possessionTime[ce.outgoingTeam] += Math.max(0, ce.absSec - pendingClockStart[ce.outgoingTeam]);
+          pendingClockStart[ce.outgoingTeam] = null;
+        }
+        pendingClockStart[ce.incomingTeam] = ce.absSec;
+      }
+    }
+    if (e.setScores){ state.scores.teamA = e.setScores.teamA; state.scores.teamB = e.setScores.teamB; }
+  }
+  // Direction the team WITH THE BALL is currently driving. Derived, not
+  // stored: ends alternate every quarter, so one recorded answer covers
+  // the whole game, and re-recording it mid-game just re-bases the
+  // alternation from that quarter.
+  state.driveDir = null;
+  if (state.dirValue && state.possession){
+    const flipped = Math.abs((state.quarter || 1) - state.dirQuarter) % 2 === 1;
+    let d = flipped ? (state.dirValue === 'right' ? 'left' : 'right') : state.dirValue;
+    if (state.possession !== state.dirTeam) d = (d === 'right' ? 'left' : 'right');
+    state.driveDir = d;
+  }
+  return state;
+}
+
+  // --- End engine core ---
+
+  const RUSH_POS = new Set(['QB','RB','FB','HB','TB']);
+  const RECEIVE_POS = new Set(['WR','TE','SE','FL','SLOT']);
+
+  function playerName(team, num, preferredUnit){
+  // An NCAA team rush (a QB kneel) is charged to the team, not a player,
+  // so it carries the sentinel number TEAM and has no roster entry.
+  if (num === 'TEAM') return 'TEAM';
+
+    const t = TEAMS[team];
+    const buckets = { offense: t.rosterOffense, defense: t.rosterDefense, special: t.rosterSpecialTeams };
+    const order = preferredUnit ? [preferredUnit, ...Object.keys(buckets).filter(u => u !== preferredUnit)] : ['offense', 'defense', 'special'];
+    for (const unit of order){
+      const roster = buckets[unit];
+      if (roster && roster[num]) return roster[num];
+    }
+    return '#' + num;
+  }
+
+  function computeBoxScore(playsList){
+    const stats = {
+      teamA: { rushing:{}, passing:{}, receiving:{}, defense:{}, specialTeams:{} },
+      teamB: { rushing:{}, passing:{}, receiving:{}, defense:{}, specialTeams:{} }
+    };
+    // BUCKETS ARE KEYED BY DISPLAY NAME, not by jersey number.
+    //
+    // Numbers are not identity. Two players can wear one jersey, and
+    // keying on the number merged their lines and showed whichever
+    // roster row loaded last -- Powell's carries credited to Reddick.
+    // A composite "5<sep>Powell" key fixed that but leaked into every
+    // consumer, which then had to know how to unpack it.
+    //
+    // Resolving to the name once, here, keeps the rest of the code
+    // simple: a bucket key IS the label, so nothing downstream has to
+    // resolve anything. It also matches how season_report has always
+    // aggregated across games, so a player's line merges season-wide for
+    // free. `name` on the role wins when a play recorded which of two
+    // players it was; otherwise the roster answers, falling back to
+    // "#21" for someone never rostered.
+    const UNIT_FOR_CAT = { rushing: null, passing: null, receiving: null,
+                           defense: 'defense', specialTeams: 'special' };
+    function keyFor(team, cat, num, name){
+      if (name) return name;
+      return playerName(team, num, UNIT_FOR_CAT[cat] || undefined);
+    }
+    function bucket(team, cat, num, name){
+      if (!team || !stats[team]) return null;
+      const b = stats[team][cat];
+      const k = keyFor(team, cat, num, name);
+      if (!b[k]) b[k] = {};
+      return b[k];
+    }
+    playsList.forEach(p => {
+      const r = p.roles || {};
+      const e = p.effect || {};
+      const type = r.playType;
+
+      if (r.carrier && type === 'rush'){
+        const s = bucket(r.carrier.team, 'rushing', r.carrier.num, r.carrier.name);
+        if (s){
+          s.att = (s.att||0) + 1;
+          s.yds = (s.yds||0) + (r.carrier.yards||0);
+          s.long = Math.max(s.long||0, r.carrier.yards||0);
+          if (e.td) s.td = (s.td||0) + 1;
+        }
+      }
+      if (r.carrier && type === 'fumble'){
+        const teamObj = TEAMS[r.carrier.team];
+        const pos = ((teamObj && teamObj.posOffense[r.carrier.num]) || '').toUpperCase();
+        const targetCat = RECEIVE_POS.has(pos) ? 'receiving' : 'rushing';
+        const s = bucket(r.carrier.team, targetCat, r.carrier.num, r.carrier.name);
+        if (s) s.fum = (s.fum||0) + 1;
+      }
+      // A target is a pass thrown AT someone, caught or not. Counted on
+      // completions above, and here for the two ways a pass fails with a
+      // known intended receiver. Two-point conversions are excluded --
+      // NFHS keeps conversion attempts out of season passing and
+      // receiving totals, so 'tpp' never reaches this branch.
+      if (r.receiver && (type === 'incomplete' || type === 'int')){
+        const rs = bucket(r.receiver.team, 'receiving', r.receiver.num, r.receiver.name);
+        if (rs) rs.tgt = (rs.tgt||0) + 1;
+      }
+      if (r.passer && type === 'incomplete'){
+        const s = bucket(r.passer.team, 'passing', r.passer.num, r.passer.name);
+        if (s) s.att = (s.att||0) + 1;
+      }
+      if (r.passer && type === 'pass'){
+        const s = bucket(r.passer.team, 'passing', r.passer.num, r.passer.name);
+        if (s){
+          s.att = (s.att||0) + 1;
+          s.comp = (s.comp||0) + 1;
+          s.yds = (s.yds||0) + (r.passer.yards||0);
+          s.long = Math.max(s.long||0, r.passer.yards||0);
+          if (e.td) s.td = (s.td||0) + 1;
+        }
+        if (r.receiver){
+          const rs = bucket(r.receiver.team, 'receiving', r.receiver.num, r.receiver.name);
+          if (rs){
+            rs.rec = (rs.rec||0) + 1;
+            rs.tgt = (rs.tgt||0) + 1;
+            rs.yds = (rs.yds||0) + (r.receiver.yards||0);
+            rs.long = Math.max(rs.long||0, r.receiver.yards||0);
+            if (e.td) rs.td = (rs.td||0) + 1;
+          }
+        }
+      }
+      if (r.passer && type === 'sack'){
+        const s = bucket(r.passer.team, 'passing', r.passer.num, r.passer.name);
+        if (s) s.sacked = (s.sacked||0) + 1;
+        // NFHS charges sack yardage to the team as a rushing loss. Doing
+        // it here rather than as a subtraction in each page's totals
+        // means the rushing rows actually add up to the rushing tile,
+        // and every surface gets the same numbers from one place.
+        const ts = bucket(r.passer.team, 'rushing', 'TEAM');
+        if (ts){
+          ts.att = (ts.att||0) + 1;
+          ts.yds = (ts.yds||0) - (r.passer.yards||0);
+        }
+      }
+      if (r.passer && type === 'int'){
+        const s = bucket(r.passer.team, 'passing', r.passer.num, r.passer.name);
+        if (s){
+          s.att = (s.att||0) + 1;
+          s.intThrown = (s.intThrown||0) + 1;
+        }
+      }
+      if (r.defense && (type === 'int' || type === 'sack' || type === 'fumble')){
+        const s = bucket(r.defense.team, 'defense', r.defense.num);
+        if (s){
+          if (type === 'int') s.int = (s.int||0) + 1;
+          if (type === 'sack') s.sacks = (s.sacks||0) + 1;
+          if (type === 'fumble') s.fumRec = (s.fumRec||0) + 1;
+        }
+      } else if (type === 'int' || type === 'sack' || (type === 'fumble' && r.lost)){
+        // Naming the tackler, interceptor or recoverer is optional, and
+        // these stats used to be keyed entirely off that name -- so a
+        // sack with nobody credited recorded no sack anywhere at all,
+        // not even for the team. The event happened regardless, so it is
+        // credited to a TEAM bucket. Every caller sums the whole defense
+        // object, so this reaches all of them without touching each one.
+        const victim = (type === 'fumble') ? (r.carrier && r.carrier.team) : (r.passer && r.passer.team);
+        if (victim){
+          const s = bucket(otherTeam(victim), 'defense', 'TEAM');
+          if (s){
+            if (type === 'int') s.int = (s.int||0) + 1;
+            if (type === 'sack') s.sacks = (s.sacks||0) + 1;
+            if (type === 'fumble') s.fumRec = (s.fumRec||0) + 1;
+          }
+        }
+      }
+      if (r.kicker && type === 'kickoff'){
+        const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
+        if (s){
+          s.kickoffs = (s.kickoffs||0) + 1;
+          if (r.kicker.touchback) s.touchbacks = (s.touchbacks||0) + 1;
+        }
+      }
+      if (r.kicker && type === 'fg'){
+        const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
+        if (s){
+          s.fgAtt = (s.fgAtt||0) + 1;
+          if (r.kicker.result === 'g'){
+            s.fgMade = (s.fgMade||0) + 1;
+            s.fgLong = Math.max(s.fgLong||0, r.kicker.yards||0);
+          }
+          if (r.kicker.result === 'b') s.fgBlocked = (s.fgBlocked||0) + 1;
+        }
+      }
+      if (r.kicker && type === 'pat'){
+        const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
+        if (s){
+          s.patAtt = (s.patAtt||0) + 1;
+          if (r.kicker.result === 'g') s.patMade = (s.patMade||0) + 1;
+          if (r.kicker.result === 'b') s.patBlocked = (s.patBlocked||0) + 1;
+        }
+      }
+      if (r.punter && type === 'punt'){
+        const s = bucket(r.punter.team, 'specialTeams', r.punter.num);
+        if (s){
+          s.punts = (s.punts||0) + 1;
+          if (!r.punter.blocked){
+            s.puntYds = (s.puntYds||0) + (r.punter.yards||0);
+            s.puntsWithYards = (s.puntsWithYards||0) + 1;
+            s.puntLong = Math.max(s.puntLong||0, r.punter.yards||0);
+          } else {
+            s.blocked = (s.blocked||0) + 1;
+          }
+        }
+      }
+    });
+
+    ['teamA','teamB'].forEach(defTeam => {
+      const offTeam = otherTeam(defTeam);
+      let d3att=0, d3conv=0, d4att=0, d4conv=0, explosive=0;
+      for (let i = 0; i < playsList.length; i++){
+        const p = playsList[i];
+        const type = p.roles && p.roles.playType;
+        // Must match scrimmageTypes exactly. 'incomplete' was missing
+        // here (and only here -- every other definition in the codebase
+        // includes it), so an incomplete pass on 3rd down, which is the
+        // single most common 3rd-down outcome in football, was not even
+        // counted as an ATTEMPT. A drive that went incomplete / run for
+        // no gain / incomplete / punt reported "no 3rd downs" rather
+        // than 0 of 1.
+        if (!['rush','pass','incomplete','sack','int','fumble'].includes(type)) continue;
+        const before = computeState(playsList.slice(0, i));
+        if (before.possession !== offTeam) continue;
+        const down = before.down;
+        const success = !!(p.effect && (p.effect.converts || p.effect.td));
+        if (down === 3){ d3att++; if (success) d3conv++; }
+        else if (down === 4){ d4att++; if (success) d4conv++; }
+        if (((p.effect && p.effect.statYds) || 0) >= 20) explosive++;
+      }
+      stats[defTeam].oppDowns = {
+        d3Pct: d3att ? Math.round(100*d3conv/d3att) : null, d3att, d3conv,
+        d4Pct: d4att ? Math.round(100*d4conv/d4att) : null, d4att, d4conv,
+        explosive
+      };
+    });
+
+    return stats;
+  }
+
+  function statRow(cells){
+    return '<tr>' + cells.map(c => '<td>' + c + '</td>').join('') + '</tr>';
+  }
+
+  function renderTeamBoxScore(teamKey, box){
+      const team = TEAMS[teamKey];
+      const s = box[teamKey];
+      // Built into named holders rather than appended straight to the
+      // columns, because the display order is not the order the sections
+      // are computed in -- rushing is calculated before receiving but
+      // has to appear after it. Assembling at the end keeps the layout
+      // decision in one readable place instead of depending on which
+      // block happens to run first.
+      let passHtml = '', recHtml = '', rushHtml = '', defHtml = '', stHtml = '';
+      let leftHtml = '', rightHtml = '';
+
+      const sum = (nums, obj, key) => nums.reduce((t, n) => t + ((obj[n] && obj[n][key]) || 0), 0);
+      const tile = (label, inner) => '<div class="stat-category-tile"><div class="stat-category-label">' + label + '</div>' + inner + '</div>';
+      // Sorts jersey numbers by a yardage-like field, descending, so the
+      // category leader always sorts first.
+      // TEAM is a bucket, not a player -- kneels, bad snaps and sack
+      // yardage. Its total is usually negative, so ranking by yards put a
+      // bookkeeping row above the actual runners. Pinned last.
+      const teamLast = (a, b) => (a === 'TEAM' ? 1 : 0) - (b === 'TEAM' ? 1 : 0);
+      const sortByYds = (nums, obj, key) => nums.slice().sort((a, b) =>
+        teamLast(a, b) || (((obj[b] && obj[b][key]) || 0) - ((obj[a] && obj[a][key]) || 0)));
+      // Caps a sorted list at 5 entries -- except anyone with a touchdown
+      // stays in regardless of rank, since a scorer never just vanishes
+      // even if their overall yardage was modest.
+      // The touchdown exception exists so a scorer is never dropped just
+      // for having low yardage, but it was unbounded: EVERY remaining
+      // player with a TD got a row, so five scoring receivers meant ten
+      // rows in one tile. The page cannot scroll (body and .quad are both
+      // overflow:hidden) and the auto-fit stops shrinking at 0.5, so past
+      // that the extra rows are silently clipped -- present in the data,
+      // invisible on screen. Capped so the tile height is bounded.
+      const MAX_TD_EXTRAS = 3;
+      const capWithTdException = (sortedNums, obj, tdKey) => {
+        const top5 = sortedNums.slice(0, 5);
+        const extras = sortedNums.slice(5)
+          .filter(n => (obj[n] && obj[n][tdKey]) > 0)
+          .slice(0, MAX_TD_EXTRAS);
+        return top5.concat(extras);
+      };
+      // A row whose every displayed value is zero says nothing, and this
+      // panel auto-shrinks to fit -- an empty row costs font size on the
+      // rows that matter. They arise legitimately: a sack-fumble creates
+      // a rushing bucket holding only { fum: 1 }, and the live rushing
+      // table has no Fum column, so the quarterback appeared as 0/0/0.
+      // Filtering on the DISPLAYED values rather than the bucket keeps
+      // the rule general -- the same player still shows up in recap,
+      // which does have a Fum column and therefore a reason to list him.
+      const rowHasValue = r => (r.values || []).some(v => {
+        if (v === null || v === undefined) return false;
+        const t = String(v).trim();
+        if (t === '' || t === '—' || t === '-') return false;
+        const n = parseFloat(t);
+        return isNaN(n) ? true : n !== 0;
+      });
+      const table = (headers, rows) => {
+        let h = '<table class="player-stat-table"><tr><th></th>' + headers.map(x => '<th>' + x + '</th>').join('') + '</tr>';
+        rows.forEach(r => {
+          // No leader highlight. The rows are already sorted with the
+          // leader first, so the colour was saying something the order
+          // already said -- and a tinted row on a panel that is also
+          // colour-coded by team read as if it meant something else.
+          h += '<tr><td>' + r.name + '</td>' + r.values.map(v => '<td>' + v + '</td>').join('') + '</tr>';
+        });
+        return h + '</table>';
+      };
+
+      const passSorted = sortByYds(Object.keys(s.passing), s.passing, 'yds');
+      const passNums = capWithTdException(passSorted, s.passing, 'td');
+      if (passNums.length){
+        // Sacks belong on the passing line -- recap and stat_package both
+        // show them and view did not, so the live page was the only one
+        // where you could not see a quarterback being got at.
+        passHtml += tile('Passing', table(['Att','Comp','%','Yds','TD','Int','Sack'], passNums.map((n, i) => {
+          const d = s.passing[n];
+          const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
+          return { name: n, values: [d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0, d.sacked||0] };
+        }).filter(rowHasValue)));
+      }
+      const rushSorted = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
+      const rushNums = capWithTdException(rushSorted, s.rushing, 'td');
+      if (rushNums.length){
+        rushHtml += tile('Rushing', table(['Att','Yds','TD'], rushNums.map((n, i) => {
+          const d = s.rushing[n];
+          return { name: n, values: [d.att||0, d.yds||0, d.td||0] };
+        }).filter(rowHasValue)));
+      }
+      // A target alone does not earn a row on the live view. Adding targets
+      // meant anyone thrown at once appeared with 0 catches and 0 yards,
+      // padding the tile with players who have not caught anything -- and
+      // this panel auto-shrinks to fit, so every wasted row costs size on
+      // the rows that matter. The full-detail reports still list them.
+      const recSorted = sortByYds(
+        Object.keys(s.receiving).filter(n => (s.receiving[n].rec || 0) > 0),
+        s.receiving, 'yds');
+      const recNums = capWithTdException(recSorted, s.receiving, 'td');
+      if (recNums.length){
+        // Tgt before Rec: the throw comes before the catch, and reading
+        // "3 targets, 1 catch" left to right is how it is said out loud.
+        recHtml += tile('Receiving', table(['Tgt','Rec','Yds','TD'], recNums.map((n, i) => {
+          const d = s.receiving[n];
+          return { name: n, values: [d.tgt||0, d.rec||0, d.yds||0, d.td||0] };
+        }).filter(rowHasValue)));
+      }
+      // kickoffs belongs in this gate too -- without it a pure kickoff
+      // specialist never entered the loop at all, so the kickoff table
+      // could never be built no matter what the box score held.
+      const stNums = Object.keys(s.specialTeams).filter(n => {
+        const d = s.specialTeams[n];
+        return d.fgAtt || d.patAtt || d.punts || d.kickoffs;
+      });
+      const stKicking = [], stPunting = [], stKickoffs = [];
+      stNums.forEach(n => {
+        const d = s.specialTeams[n];
+        const name = n;
+        if (d.fgAtt || d.patAtt){
+          // A dash, not a zero, for a category the kicker never attempted.
+          // "0 for 0" reads as a failure; on a PAT-only kicker it looked
+          // like he had missed field goals he was never asked to take.
+          // Long is also dashed on an 0-for-N day -- a missed 45 is not
+          // a "long" of 45, and nor is it a long of 0.
+          const fg = d.fgAtt
+            ? [d.fgAtt, d.fgMade || 0, d.fgMade ? (d.fgLong || 0) : '—']
+            : ['—', '—', '—'];
+          const xp = d.patAtt ? [d.patAtt, d.patMade || 0] : ['—', '—'];
+          stKicking.push({ yds: d.fgLong || 0, name, values: fg.concat(xp) });
+        }
+        if (d.kickoffs){
+          const tbPct = Math.round(100 * (d.touchbacks || 0) / d.kickoffs);
+          stKickoffs.push({ name, values: [d.kickoffs, tbPct + '%'] });
+        }
+        if (d.punts){
+          const avg = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
+          // Total punt yardage is not a stat anyone reads -- it is just
+          // punts x average. Longest is the one that gets talked about,
+          // and computeBoxScore already tracks it.
+          stPunting.push({ yds: d.puntYds||0, name, values: [d.punts||0, avg, d.puntLong||0] });
+        }
+      });
+      stKicking.sort((a, b) => b.yds - a.yds);
+      stPunting.sort((a, b) => b.yds - a.yds);
+      const stTotalEntries = stKicking.length + stPunting.length + stKickoffs.length;
+      if (stTotalEntries){
+        // Three separate tables share this tile, and concatenated flush
+        // they read as one run-on block: a header row lands directly
+        // under the previous table's data row, so "Punts Avg Long" looks
+        // like more numbers for the kicker above it. A rule and a gap
+        // between sections makes each one legible on its own.
+        const stSections = [];
+        const pushIfRows = (hdrs, rows) => { if (rows.length) stSections.push(table(hdrs, rows)); };
+        pushIfRows(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, 5).filter(rowHasValue));
+        pushIfRows(['Punts','Avg','Long'], stPunting.slice(0, 5).filter(rowHasValue));
+        // Kickoffs: just the count and how many stayed in the end zone.
+        // Individual kickoff distance is not reported anywhere and the
+        // panel does not even ask for it, so a per-kicker yardage table
+        // would be all zeroes.
+        pushIfRows(['Kickoffs','TB %'], stKickoffs.filter(rowHasValue));
+        const stInner = stSections.map((sec, i) => i === 0 ? sec :
+          '<div style="border-top:1px solid #dde3ea; margin-top:calc(9px * var(--stat-scale, 1)); ' +
+          'padding-top:calc(7px * var(--stat-scale, 1));">' + sec + '</div>').join('');
+        stHtml += tile('Special Teams', stInner);
+      }
+      // Counted from the play log, not from named defenders. Naming the
+      // tackler, interceptor or recoverer is optional, and summing
+      // s.defense meant a sack with nobody credited recorded no sack at
+      // all -- the Defense tile simply did not render. The event
+      // happened whether or not anyone was identified.
+      const opp = otherTeam(teamKey);
+      const defTotals = plays.reduce((acc, p) => {
+        const r = p.roles; if (!r) return acc;
+        const e = p.effect || {};
+        if (r.playType === 'sack' && r.passer && r.passer.team === opp) acc.sacks++;
+        if (r.playType === 'int' && r.passer && r.passer.team === opp) acc.int++;
+        if (r.playType === 'fumble' && r.carrier && r.carrier.team === opp && (r.lost || r.defense)) acc.fumRec++;
+        // Tackles for loss, counted from the PLAY rather than from a named
+        // tackler. Naming the tackler is optional and often skipped at
+        // speed, so requiring one would undercount a team stat that the
+        // play log already knows for certain: a scrimmage snap by the
+        // other team that lost yardage was a tackle for loss, whoever
+        // made it. Sacks are included -- NFHS and NCAA both treat a sack
+        // as a tackle behind the line -- and shown alongside the sack
+        // count so the two can be read separately.
+        const TFL_TYPES = ['rush', 'pass', 'sack'];
+        const byOpp = (r.carrier && r.carrier.team === opp) ||
+                      (r.passer && r.passer.team === opp);
+        if (byOpp && TFL_TYPES.indexOf(r.playType) !== -1 &&
+            typeof e.statYds === 'number' && e.statYds < 0) acc.tfl++;
+        return acc;
+      }, { int: 0, fumRec: 0, sacks: 0, tfl: 0 });
+      const hasDef = defTotals.int || defTotals.fumRec || defTotals.sacks || defTotals.tfl;
+      if (hasDef){
+        defHtml += tile('Defense', table(['Int','Fum Rec','Sacks','TFL'],
+          [{ name: 'Team', values: [defTotals.int, defTotals.fumRec, defTotals.sacks, defTotals.tfl] }]));
+      }
+      const defNums = hasDef ? ['team'] : [];
+      if (!rushNums.length && !passNums.length && !recNums.length && !stTotalEntries && !defNums.length){
+        passHtml += '<p class="hint">No stats yet for ' + team.name + '.</p>';
+      }
+      const totalRows = passNums.length + rushNums.length + recNums.length + Math.min(stKicking.length, 5) + Math.min(stPunting.length, 5) + (defNums.length ? 1 : 0);
+      // Left: the passing game top to bottom, then rushing.
+      // Right: defense, then special teams.
+      leftHtml = passHtml + recHtml + rushHtml;
+      rightHtml = defHtml + stHtml;
+      // Early in a game a team can easily have defensive or special-teams
+      // stats and no offensive ones -- the opening play being a punt or a
+      // sack does it. That left the first column empty and the content
+      // stranded in the right half with a gap beside it. Reading order is
+      // left to right, so a lone column belongs on the left.
+      if (!leftHtml && rightHtml){
+        leftHtml = rightHtml;
+        rightHtml = '';
+      }
+      return { html: '<div class="stat-category-grid"><div class="stat-category-col">' + leftHtml + '</div><div class="stat-category-col">' + rightHtml + '</div></div>', totalRows };
+  }
+
+  function renderBoxScore(){
+    const box = computeBoxScore(plays);
+    const a = renderTeamBoxScore('teamA', box);
+    const b = renderTeamBoxScore('teamB', box);
+    const quadBL = document.getElementById('quadBL'), quadBR = document.getElementById('quadBR');
+    quadBL.style.setProperty('--stat-scale', 1);
+    quadBR.style.setProperty('--stat-scale', 1);
+    document.getElementById('boxScoreTeamA').innerHTML = a.html;
+    document.getElementById('boxScoreTeamB').innerHTML = b.html;
+
+    // Measure real rendered height at scale 1, then compute the scale
+    // that actually fills the available space -- growing when there's
+    // room to spare (a team with modest stats shouldn't render small
+    // and leave the rest of the quadrant empty), shrinking when there's
+    // more content than fits. Both sides use the same scale so neither
+    // panel looks visually denser or sparser than its sibling.
+    // offsetHeight, NOT getBoundingClientRect(). The whole page sits
+    // inside a `transform: scale()` wrapper, and getBoundingClientRect
+    // returns the VISUAL box -- already multiplied by that transform --
+    // while clientHeight and scrollHeight return the unscaled layout
+    // box. Mixing the two made availableHeight too generous by exactly
+    // the display scale factor, so --stat-scale came out too large and
+    // the content overflowed its quadrant. At 1920x1080 the transform
+    // is 1:1 and the bug is invisible, which is why it looked like it
+    // "sometimes worked".
+    const availableHeight = (quad) => {
+      const header = quad.querySelector('h2');
+      const headerH = header ? header.offsetHeight + 10 : 0;
+      return quad.clientHeight - headerH - 16;
+    };
+    const contentHeight = (id) => document.getElementById(id).scrollHeight;
+    // A 4% safety margin. The fit is computed from measurements taken
+    // before the browser has finished reflowing at the new scale, so
+    // landing exactly on the available height reliably overshoots by a
+    // pixel or two -- which is all it takes to get a scrollbar.
+    const FIT_MARGIN = 0.96;
+    // Growth is allowed but capped well below the old 2.2. Enlarging a
+    // table does not increase its height proportionally -- columns
+    // re-wrap and rows gain padding -- so a scale derived from
+    // measurements taken at 1.0 overshoots, and the error compounds the
+    // further it grows. At 2.2 that overshoot produced scrollbars and
+    // clipped rows; a modest ceiling keeps the prediction close enough
+    // for the refinement loop below to correct the remainder.
+    const MAX_GROW = 1.5;
+    const scaleFor = (avail, content) => {
+      if (content <= 0) return 1;
+      return Math.min(MAX_GROW, Math.max(0.5, (avail / content) * FIT_MARGIN));
+    };
+    const availA = availableHeight(quadBL), availB = availableHeight(quadBR);
+    let scale = Math.min(scaleFor(availA, contentHeight('boxScoreTeamA')),
+                         scaleFor(availB, contentHeight('boxScoreTeamB')));
+    quadBL.style.setProperty('--stat-scale', scale);
+    quadBR.style.setProperty('--stat-scale', scale);
+
+    // Scaling text does not change height linearly -- lines re-wrap and
+    // line heights round to whole pixels -- so one pass can still
+    // overshoot. Re-measure and back off until it genuinely fits.
+    for (let i = 0; i < 8; i++){
+      // Measure against the margin, not the raw height, so the loop
+      // stops slightly short of the edge rather than flush against it.
+      const targetA = availA * FIT_MARGIN, targetB = availB * FIT_MARGIN;
+      const overA = contentHeight('boxScoreTeamA') - targetA;
+      const overB = contentHeight('boxScoreTeamB') - targetB;
+      if (overA <= 0 && overB <= 0) break;
+      const worst = Math.max(overA / targetA, overB / targetB);
+      scale = Math.max(0.5, scale * (1 - Math.min(0.2, worst)));
+      quadBL.style.setProperty('--stat-scale', scale);
+      quadBR.style.setProperty('--stat-scale', scale);
+    }
+  }
+
+  // ---- overlay rendering (NOT copied from view.html) ----------------
+  function safeText(bg, fallback){
+    try { return safeTextColor(bg, fallback); } catch (e) { return fallback || '#fff'; }
+  }
+
+  // view.html's init() paints into elements this page does not have.
+  // Stubbed so the shared boot path runs unchanged.
+  function showView(){}
+  function showMsg(){}
+  function renderTeamSummary(){}
+  function renderBoxScore(){}
+  function applyDisplayScale(){}
+
+  function renderAll(){
+    const state = computeState(plays);
+    document.getElementById('bug').style.display = 'flex';
+
+    const sideHtml = (teamKey) => {
+      const t = TEAMS[teamKey];
+      const has = state.possession === teamKey && state.down;
+      return '<span class="poss" style="visibility:' + (has ? 'visible' : 'hidden') + ';">\uD83C\uDFC8</span>' +
+             (t.logo ? '<img src="' + t.logo + '" alt="">' : '') +
+             '<span class="abbr">' + (t.abbr || t.name) + '</span>' +
+             '<span class="pts">' + (state.scores[teamKey] || 0) + '</span>';
+    };
+    const paint = (id, teamKey) => {
+      const el = document.getElementById(id), t = TEAMS[teamKey];
+      el.style.background = t.bg || '#1a1a2e';
+      el.style.color = safeText(t.bg, t.text);
+      el.innerHTML = sideHtml(teamKey);
+    };
+    paint('sideA', 'teamA');
+    paint('sideB', 'teamB');
+
+    const dist = (state.down && state.fieldPos !== null &&
+                  state.fieldPos + state.distance >= 100) ? 'Goal' : state.distance;
+    document.getElementById('downText').textContent = state.down
+      ? (ordinal(state.down) + ' & ' + dist + ' at ' + markerLabel(state.fieldPos))
+      : '';
+    document.getElementById('quarterText').textContent =
+      state.quarter >= 5 ? 'OT' : ('Q' + state.quarter);
+
+    const p = new URLSearchParams(window.location.search);
+    document.body.classList.toggle('layout-bug', p.get('layout') === 'bug');
+    document.body.classList.toggle('debug', p.get('debug') === '1');
+  }
+
+  // ---- boot. Deliberately minimal: read the id, load the game, its
+  // roster and its plays, build the teams, draw, then subscribe for
+  // live updates. No auth gate -- vMix cannot sign in, and a scoreboard
+  // is public information anyway (see TODO 8d on whether this should
+  // carry a per-game token).
+  async function initOverlay(){
+    const params = new URLSearchParams(window.location.search);
+    currentGameId = params.get('id');
+    if (!currentGameId){
+      document.body.innerHTML =
+        '<p style="color:#fff;background:#900;padding:12px;font:16px sans-serif;">' +
+        'No game id. Use broadcast.html?id=&lt;gameId&gt;</p>';
+      return;
+    }
+    const { data: gameRows } = await supabaseClient
+      .from('games').select('*').eq('id', currentGameId).limit(1);
+    const game = (gameRows || [])[0];
+    if (!game) return;
+    startingPossession = game.starting_possession || 'teamA';
+    quarterLengthSec   = game.quarter_length_seconds || 720;
+
+    const { data: rosterRows } = await supabaseClient
+      .from('game_rosters').select('*').eq('game_id', currentGameId);
+    const { data: teamRows } = await supabaseClient
+      .from('teams').select('primary_color, secondary_color, logo_url')
+      .eq('is_our_team', true).limit(1);
+    buildTeams(game, rosterRows || [], (teamRows || [])[0] || {});
+
+    await reloadPlaysAndRender();
+    subscribeToLiveUpdates();
+  }
+  initOverlay();
+  async function reloadPlaysAndRender(){
+    const { data: existingPlays } = await supabaseClient
+      .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
+    plays = (existingPlays || []).map(p => ({
+      text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+      roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+    }));
+    renderAll();
+  }
+
+  function subscribeToLiveUpdates(){
+    // Inserts and updates can be filtered server-side by game_id.
+    // Deletes (Undo) can't be filtered server-side at all in Postgres
+    // Changes, so we listen to every delete on this table and check
+    // game_id ourselves once it arrives -- this only works because the
+    // migration set REPLICA IDENTITY FULL, which makes sure a delete
+    // event actually carries the deleted row's other columns instead
+    // of just its id.
+    supabaseClient
+      .channel('plays-' + currentGameId)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'plays', filter: 'game_id=eq.' + currentGameId }, () => {
+        reloadPlaysAndRender();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'plays', filter: 'game_id=eq.' + currentGameId }, () => {
+        reloadPlaysAndRender();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'plays' }, (payload) => {
+        if (payload.old && payload.old.game_id === currentGameId){
+          reloadPlaysAndRender();
+        }
+      })
+      .subscribe();
+  }
+
+</script>
+</body>
+</html>
