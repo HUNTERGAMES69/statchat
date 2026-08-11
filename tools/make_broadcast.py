@@ -23,13 +23,15 @@ body = max(scripts, key=len)
 lines = body.split('\n')
 
 cut  = next(n for n, l in enumerate(lines) if l.startswith('  function renderAll'))
-boot = next(n for n, l in enumerate(lines) if l.startswith('  async function init('))
-reload_at = next(n for n, l in enumerate(lines) if l.startswith('  async function reloadPlaysAndRender'))
 engine = '\n'.join(lines[:cut])              # config, supabase, engine, helpers
-# view.html's init() paints into DOM the overlay does not have, so only
-# the reload + realtime-subscribe functions are carried across and the
-# overlay supplies its own boot below.
-tail   = '\n'.join(lines[reload_at:])
+# NOTHING from view.html's boot is carried across. Its init() paints into
+# DOM the overlay lacks, and -- more importantly -- it queries Supabase
+# directly, which an unauthenticated browser input cannot do: every RLS
+# policy is `auth.role() = 'authenticated'`, so the queries returned
+# nothing and the overlay rendered an empty canvas. That is what a black
+# page in vMix looked like. The overlay boots against /api/gamedata
+# instead, which reads server-side with the service key.
+tail = ''
 
 head_scripts = ''.join('<script src="%s"></script>\n' % m
                        for m in re.findall(r'<script src="([^"]+)"></script>', src))
@@ -104,36 +106,55 @@ OVERLAY = r'''
     document.body.classList.toggle('debug', p.get('debug') === '1');
   }
 
-  // ---- boot. Deliberately minimal: read the id, load the game, its
-  // roster and its plays, build the teams, draw, then subscribe for
-  // live updates. No auth gate -- vMix cannot sign in, and a scoreboard
-  // is public information anyway (see TODO 8d on whether this should
-  // carry a per-game token).
+  // ---- boot ---------------------------------------------------------
+  // Everything comes from /api/gamedata, which reads server-side with the
+  // service key. The overlay cannot query Supabase directly: it has no
+  // session, and every RLS policy requires one.
+  //
+  // POLLING, not realtime. Supabase realtime also needs a session, so the
+  // overlay re-fetches on an interval instead. Two seconds is well inside
+  // what a scoreboard needs and is trivial load for one game.
+  const POLL_MS = 2000;
+
+  function showFatal(msg){
+    document.body.innerHTML =
+      '<p style="position:absolute;left:40px;bottom:40px;margin:0;color:#fff;' +
+      'background:#8a1414;padding:14px 20px;border-radius:6px;' +
+      'font:500 20px sans-serif;">' + msg + '</p>';
+  }
+
+  async function fetchAndRender(){
+    const r = await fetch('/api/gamedata?id=' + encodeURIComponent(currentGameId), { cache: 'no-store' });
+    if (!r.ok){
+      const body = await r.json().catch(() => ({}));
+      throw new Error(body.error || ('HTTP ' + r.status));
+    }
+    const d = await r.json();
+    startingPossession = d.game.starting_possession || 'teamA';
+    quarterLengthSec   = d.game.quarter_length_seconds || 720;
+    buildTeams(d.game, d.roster || [], d.ourBranding || {});
+    plays = (d.plays || []).map(p => ({
+      id: p.id, seq: p.sequence_number, text: p.text,
+      effect: p.effect || {}, roles: p.roles || null,
+      team: p.team_side, quarter: p.quarter,
+      isDivider: !!p.is_divider, unresolved: !!p.unresolved
+    }));
+    renderAll();
+  }
+
   async function initOverlay(){
     const params = new URLSearchParams(window.location.search);
     currentGameId = params.get('id');
-    if (!currentGameId){
-      document.body.innerHTML =
-        '<p style="color:#fff;background:#900;padding:12px;font:16px sans-serif;">' +
-        'No game id. Use broadcast.html?id=&lt;gameId&gt;</p>';
+    if (!currentGameId){ showFatal('No game id \u2014 use broadcast.html?id=&lt;gameId&gt;'); return; }
+    try {
+      await fetchAndRender();
+    } catch (e){
+      showFatal('Could not load the game: ' + e.message);
       return;
     }
-    const { data: gameRows } = await supabaseClient
-      .from('games').select('*').eq('id', currentGameId).limit(1);
-    const game = (gameRows || [])[0];
-    if (!game) return;
-    startingPossession = game.starting_possession || 'teamA';
-    quarterLengthSec   = game.quarter_length_seconds || 720;
-
-    const { data: rosterRows } = await supabaseClient
-      .from('game_rosters').select('*').eq('game_id', currentGameId);
-    const { data: teamRows } = await supabaseClient
-      .from('teams').select('primary_color, secondary_color, logo_url')
-      .eq('is_our_team', true).limit(1);
-    buildTeams(game, rosterRows || [], (teamRows || [])[0] || {});
-
-    await reloadPlaysAndRender();
-    subscribeToLiveUpdates();
+    // A later failure must not blank a working scoreboard -- keep showing
+    // the last good state and try again on the next tick.
+    setInterval(() => { fetchAndRender().catch(() => {}); }, POLL_MS);
   }
   initOverlay();
 '''
