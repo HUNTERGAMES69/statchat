@@ -68,7 +68,10 @@ module.exports = async function handler(req, res) {
       role: (profileById[u.id] && profileById[u.id].role) || 'view',
       createdAt: u.created_at,
       lastSignInAt: u.last_sign_in_at,
-      emailConfirmedAt: u.email_confirmed_at
+      emailConfirmedAt: u.email_confirmed_at,
+      // banned_until comes back as a timestamp when set. Anything in the
+      // future means the account is locked out.
+      disabled: !!(u.banned_until && new Date(u.banned_until) > new Date())
     }));
     res.status(200).json({ users });
     return;
@@ -129,6 +132,28 @@ module.exports = async function handler(req, res) {
       return;
     }
     const { error } = await adminClient.auth.admin.deleteUser(userId);
+    if (error) { res.status(400).json({ error: error.message }); return; }
+    res.status(200).json({ success: true });
+    return;
+  }
+
+  if (action === 'setDisabled') {
+    const { userId, disabled } = body;
+    if (!userId) { res.status(400).json({ error: 'A user id is required' }); return; }
+    // The same guard as delete, and for the same reason: an admin who
+    // disables himself is locked out of the only page that could undo it.
+    // Enforced HERE rather than only in the UI -- the button being greyed
+    // out stops a mis-tap, not someone calling the API directly.
+    if (userId === callerId) {
+      res.status(400).json({ error: "You can't disable your own account." });
+      return;
+    }
+    // Supabase has no "disabled" flag; the supported way to lock an
+    // account out is a ban duration. A very long one is indefinite in
+    // practice, and 'none' lifts it.
+    const { error } = await adminClient.auth.admin.updateUserById(userId, {
+      ban_duration: disabled ? '876000h' : 'none'
+    });
     if (error) { res.status(400).json({ error: error.message }); return; }
     res.status(200).json({ success: true });
     return;
