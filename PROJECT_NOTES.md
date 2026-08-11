@@ -846,6 +846,49 @@ where something is. That is exactly how this gap was found.
 
 ---
 
+## Whitelist the expected UI, do not blacklist the unwanted (August 10, 2026)
+
+The fake punt / fake field goal panels produced FOUR round trips in a
+row. Each report named one stray control -- the yardage calculator, then
+the takeover spot, then a duplicate Touchdown button, then Good/Missed --
+and each fix hid exactly the one named.
+
+That is a **blacklist**: a list of ids to hide. Anything not on the list
+stays visible, and the list only grows when a human notices. It cannot
+converge, because nothing in the code knows what the complete set is.
+
+**The fix was to invert the assertion.** `fake_kick_check.js` now
+enumerates every live control on the panel and compares it against a
+list of what is ALLOWED. Anything else fails by name. Writing that test
+immediately found a fifth stray -- the kick distance field, hidden from
+me because it was disabled rather than removed, which still reads as
+something you were meant to fill in.
+
+Mutation-tested: adding a new kick control without hiding it fails with
+`these are still live on a fake and should not be: pp_newkickthing_toggle`.
+
+**But a whitelist has a blind spot, and it bit immediately.** A FIFTH
+report followed: "Returned by (optional)" still sat at the foot of every
+fake punt, and the new test had passed. The returner controls are
+`pp_credit_*`, and when writing the ALLOWED list I had annotated those as
+"who made the tackle" -- a reasonable-sounding guess that was wrong for
+that panel.
+
+So: **a whitelist catches controls nobody thought about; it cannot catch
+one that was thought about and filed under the wrong heading.** When
+writing such a list, verify what each id actually IS on that specific
+panel rather than inferring from its name. `pp_credit_*` is the tackler
+on a rush panel and the returner on a punt panel.
+
+**Generalise this.** Any "hide the irrelevant controls" behaviour should
+be tested as a whitelist. The same shape applies to the guided flows,
+correction mode, and the phase gating after a score -- all of them
+currently hide by enumeration, and all of them can drift the same way.
+The test does not just catch the bug; it turns "did I get them all?"
+from a memory exercise into a failing assertion that names the answer.
+
+---
+
 ## GameID
 
 There's no dedicated GameID column in the database — it's parsed out

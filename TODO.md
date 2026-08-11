@@ -619,6 +619,20 @@ no field mapping — it is one HTML page reusing code that already exists.
   `applyDisplayScale`, the resize handler, and the **auth gate** (vMix
   cannot sign in, so the redirect would bounce it to the login page).
 
+  **The black-page bug, Aug 10.** First vMix attempt showed nothing. The
+  login *redirect* had been stripped, but the DATABASE was still gated —
+  every RLS policy is `auth.role() = 'authenticated'`, so an
+  unauthenticated browser input got empty results from all three queries
+  and drew a transparent canvas. Fixed with **`api/gamedata.js`**: a
+  read-only endpoint that reads server-side with the service key and
+  returns one game's game/roster/plays/branding. The overlay no longer
+  touches Supabase directly, and **polls every 2s** because realtime also
+  needs a session.
+
+  Narrower than the alternative, which was public-read RLS policies —
+  those would open every game to anyone with the anon key. But it IS a
+  deliberate decision to make part of a game publicly readable by id.
+
 - [ ] **Still to do on Route 2:** more layouts than `bug` and `full`
   (drive summary, last play ticker, leaders), and a decision on whether
   the overlay should require a per-game token (8d) now that it is
@@ -660,6 +674,140 @@ Everything `view.html` computes:
   kickoffs and TB%
 - **Branding:** team names, logos, colours, so a graphic can style itself
 - **Play text** for a ticker
+
+---
+
+## 9. ROAD TO FIRST REAL GAME — agreed Aug 10, 2026
+
+**First real game: ~Aug 24, 2026.** Andy's three criteria, in his words:
+protect a fallback point and do not go backwards; do everything possible
+for data integrity; and a vMix DATA SOURCE integration (JSON/XML), with
+ALL game and view data available, no authentication.
+
+**Standing instruction: every check must be clear before shipping.** Not
+"probably fine" — the 19 suites, the fuzzer, and three NFL weeks all
+green, verified, every time.
+
+### Phase 1 — freeze the fallback (day 1)
+
+- [ ] GitHub **release tag** `v1.0-preseason`. Permanent, labelled, and
+  restorable without hunting.
+- [ ] Record the current **Vercel deployment id** so "promote this one"
+  is a known target under pressure.
+- [ ] **Write the rollback procedure down**, one page, in the repo.
+  Nobody reads code at 7pm on a Friday.
+
+Nothing after this point is irreversible.
+
+### Phase 2a — engine consolidation (days 2-4, FIRST)
+
+Argued through on Aug 10 and agreed. The deciding evidence:
+
+- **Drift has already happened twice** (see PROJECT_NOTES ~line 477:
+  possession counting diverged between copies and produced different
+  numbers on different pages). `engine_parity.js` exists only because of
+  it — a suite whose whole job is detecting drift that should not be
+  possible.
+- **Four engine changes on Aug 10 each touched 4-5 files, and one was
+  missed** — the `newPossession` check did not reach `view.html`, which
+  is why a drive tile failed to split, and cost a debugging round trip.
+  That was a calm day with a full suite. In-season it is worse.
+- **70% of view.html is engine** (1,003 of 1,431 script lines); ~4,000
+  duplicated lines across five files.
+- **The vMix feed needs a server-side engine anyway.** Without this we
+  generate a SEVENTH copy. The choice is one copy or seven.
+
+**Measured before deciding:** all five copies are currently byte-identical
+for computeState, computeBoxScore, findDriveStarts, countPossessions,
+rosterName and playerName. So this is pure deduplication — no variant
+"wins", nothing is forced to change. That is what makes it safe.
+
+- [ ] Extract to `engine.js` with the dual export (see 8a).
+- [ ] Replace the inline copies in all five pages with `<script src>`.
+- [ ] **Load order matters more than anything else here.** If engine.js
+  loads after inline code that uses it the page breaks — loudly, but
+  jsdom is more forgiving than a browser. **Open all five pages in a
+  real browser** and check the console.
+- [ ] Retire `engine_parity.js` deliberately.
+
+**ACCEPTANCE, all of it:** 19 suites pass · fuzzer clean over 60 games ·
+three NFL weeks match 48 games / 6,977 plays / zero issues ·
+`broadcast.html` still renders · all five pages clean in a real browser.
+
+- [ ] **HARD ABORT:** not green by end of day 4, revert to the tag and
+  fall back to the generator approach. Three days lost, ten in hand.
+
+### Phase 2b — data integrity (days 2-6, parallel)
+
+- [ ] **RLS role enforcement** — the items under BEFORE GOING TO
+  PRODUCTION below. Highest value on this list: a `view` account can
+  currently delete plays via the API. Do this even if everything else
+  slips.
+- [ ] **Export a game to JSON** — a download button. If anything goes
+  wrong you still have the plays.
+- [ ] **Test the offline queue, and rehearse it.** Confirmed by hand,
+  NO automated test, and it fails silently — you find out plays are
+  missing after the game. Airplane mode mid-drive, then reconnect.
+- [ ] **Derive game phase from the log** (1b). Three lockups came from
+  stored phase; all self-heal now, but a fourth variant locks the UI
+  mid-game.
+- [x] ~~Two simultaneous scorers~~ — **excluded from this release** by
+  Andy, Aug 10. One scorer.
+
+### Phase 3 — vMix data source (days 4-10)
+
+- [ ] `api/feed.js` — **the URL must NOT change game to game.** The
+  broadcast team sets it up once, the day before, and never touches it.
+  Andy's team starts the day before kickoff, so this cannot depend on a
+  game being in progress.
+- [ ] **Broadcast toggle on the game row**, settable from the dashboard
+  as soon as a game is CREATED. Dashboard shows which game is flagged so
+  nobody has to wonder. Automatic fallback (most recent in-progress) only
+  when nothing is flagged. Two games are never live at once (confirmed).
+- [ ] One **static** key if we want any gate at all — never per-game.
+- [ ] The eight views from 8b, XML and JSON.
+- [ ] **No-cache headers** (8c) — the classic vMix "stopped updating".
+- [ ] **A test asserting every field the view page shows appears in some
+  feed view.** That is Andy's "ALL data" requirement made checkable
+  rather than assumed.
+
+### Phase 4 — rehearsal (days 11-12)
+
+- [ ] **A full scrimmage on the real hardware, on the venue wifi, with
+  vMix live.** Enter a complete game. Deliberately drop the connection
+  mid-drive. This finds what no test can.
+- [ ] Test on **the actual device the scorer will use** — nobody has yet.
+- [ ] Let the device **sleep and wake** mid-game. Does realtime recover?
+
+### Phase 5 — freeze (days 13-14)
+
+- [ ] **No code changes in the final 48 hours** except a rollback.
+- [ ] Final full regression, fallback tag re-verified, rollback page
+  printed on paper.
+
+### GAPS FOUND Aug 10 that were not previously on any list
+
+- [ ] **Supabase free-tier projects pause after inactivity.** VERIFY the
+  plan and the policy. If it pauses the week before a game, the first
+  request of the night is a cold start or an outage. Cheap to rule out,
+  catastrophic to discover at kickoff.
+- [ ] **No service worker: reloading while genuinely offline fails.**
+  Already noted below, but reframed — a scorer who reloads on bad stadium
+  wifi gets nothing. Decide whether that is acceptable or needs a cache.
+- [ ] **What happens if the scorer's device dies mid-game?** Plays are in
+  the database so another device can take over — but the pending queue is
+  in that device's localStorage and would be lost. Document the
+  handover, and know how many plays are at risk.
+- [ ] **A paper fallback.** If the app is unavailable at kickoff, what
+  does the crew do? One printed sheet.
+- [ ] **Who is on call, and what do they do?** A named person and a
+  one-page runbook beats improvisation.
+- [ ] **Load the real rosters** — Neville's squad and the week-one
+  opponent — well before game day, not on the night.
+- [ ] **PDF and XLS export are completely untested.** Post-game rather
+  than in-game, so lower priority, but they will be used.
+- [ ] **Realtime sync has no automated test.** If the view page stops
+  updating live, the broadcast freezes. Worth one test.
 
 ---
 
