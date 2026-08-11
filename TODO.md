@@ -262,75 +262,327 @@ number before building them.
 
 ---
 
-## 6. NFL-data QA harness — designed, not built
+## 6. NFL-data QA harness — BUILT Aug 10, 2026
 
-Reopens the NFL-validation idea that was closed earlier (the old
-converter stalled because it never handled penalties). This is a
-different shape: it drives the REAL UI and compares against an
-independent source of truth, rather than checking the app against
-itself.
+`tests/nfl/` — fetch.js, convert.js, run_qa.js. Not part of the normal
+suite; `node tests/nfl/run_qa.js 5` takes about four minutes.
 
-**Reachability confirmed** (Aug 7, 2026): nflverse release assets are
-downloadable from this sandbox — `release-assets.githubusercontent.com`
-is allowlisted. `play_by_play_2023.csv.gz` is ~19 MB.
+**THREE CONSECUTIVE CLEAN WEEKS — 2023 weeks 1, 2 and 3, Aug 10, 2026:**
 
-### Shape
-```
-nflverse play-by-play
-  -> convert each row to a UI action
-  -> enterPlay() through the real DOM (ui_driver)
-  -> game.html -> mock DB rows
-  -> view.html / recap.html / stat_package.html
-  -> compare against nflverse player_stats + official final score
-```
+| | |
+|---|---|
+| Games | 48 |
+| Plays entered | 6,977 |
+| State-progression pairs | 4,787 |
+| Tier 0 / 1 / 2 / 3 issues | **0** |
+| Entry failures | **0** |
 
-Exercises `parseInput`, every entry panel, `computeState`,
-`computeBoxScore` and cross-surface agreement against ~150 plays per
-game instead of the 19-step scripted game.
+Run: `node tests/nfl/run_week.js 1 2 3` (about 13 minutes, background it).
 
-### Files
-- [ ] `tests/nfl/fetch.js` — download and cache `play_by_play_YYYY.csv.gz`
-  and `player_stats_YYYY.csv.gz` to /tmp. One-time cost, cached after.
-- [ ] `tests/nfl/convert.js` — one PBP row to one `enterPlay()` spec.
-  Columns that matter: `play_type`, `yards_gained`, `rusher/passer/
-  receiver_player_id`, `sack`, `interception`, `fumble_lost`,
-  `touchdown`, `penalty_team`, `penalty_yards`, `yardline_100`, `down`,
-  `ydstogo`, `qb_kneel`.
-- [ ] `tests/nfl/expected.js` — expected box score from `player_stats`,
-  with an EXPLICIT convention-adjustment layer.
-- [ ] `tests/nfl/run_qa.js` — drive N games, diff, report per game.
+**Earlier single-week result, kept for the record:**
 
-### Convention differences that must be normalised
-StatChat now uses NFHS, nflverse is NFL, so a raw comparison fails every
-game for reasons that are not bugs:
+| | |
+|---|---|
+| Plays entered | 2,307 |
+| Entry failures | 0 |
+| State pairs checked | 1,572 |
+| Tier 0 state mismatches | **0** |
+| Tier 1 yardage mismatches | **0** |
+| Tier 3 validateGame issues | **0** |
 
-| | NFL / nflverse | StatChat (NFHS) |
+Run: `node tests/nfl/run_qa.js 16` (about 12 minutes).
+
+- [x] Tier 1 — per-player rushing, receiving and passing yardage against
+  nflverse. Convention-independent, so any mismatch is unambiguous.
+- [x] Tier 3 — `validateGame()` must report zero issues. Needs no
+  reference data, so no adjustment layer can hide a defect.
+- [ ] Tier 2 — team totals, compared after normalising NFL→NFHS. Still
+  deliberately NOT built. The adjustment layer is the main risk in the
+  whole design, and tiers 1 and 3 being clean is the precondition.
+
+**Three bugs it found on its first run, all in the harness rather than
+the app** — which is itself the useful result, since it means 700 real
+plays agreed with the engine:
+
+1. `ui_driver` had no `loss` flag, so every negative rush was recorded as
+   a gain. Fixed in the driver, and it benefits every other suite.
+2. The harness never set POSSESSION, so plays were credited to whichever
+   team held the ball from the previous row. Isolating one player's
+   carries reproduced his total exactly, which is what pointed here.
+3. The expected totals summed two-point conversion yardage, which is
+   excluded from rushing and receiving totals by NFHS and the NFL alike.
+   StatChat was right and the comparison was wrong.
+
+### Tier 0 and Tier 2 added Aug 10, 2026
+
+- [x] **Tier 0 — state progression.** Compares the down, distance, field
+  position and possession the app COMPUTED against what the next
+  nflverse row says they really were. This was the real gap: the harness
+  re-asserted the situation before every play, so nothing ever tested
+  that play N sets up play N+1. Only compares across genuinely
+  consecutive pairs — same drive, same possession, no skipped row, no
+  penalty on the play — then resyncs so one bad play cannot cascade.
+**Both tiers mutation-tested Aug 10.** Requiring a first down to need
+one extra yard is caught; making field position short by one yard is
+caught on 97 of 97 pairs. An earlier "surviving" mutant turned out to
+be a mutation that never applied — the string did not exist in the file
+— which is worth remembering when a mutant appears to survive.
+
+- [x] **Tier 2 — rendered output and cross-surface.** Reads the DOM to
+  confirm the leading rusher actually appears on screen (everything else
+  reads computeBoxScore, which would pass even if nothing rendered), and
+  compares all four surfaces against each other over ~140 real plays
+  instead of 19. Mutation-tested: halving recap's rushing yardage is
+  caught immediately.
+
+- [x] ~~4 Tier 0 mismatches in DAL_NYG, uninvestigated.~~ **Explained
+  Aug 10.** All four were ONE cause, not four: a fumble recovered by the
+  OWN team. nflverse's `yards_gained` covers the play only — a 7-yard
+  catch, fumbled forward, recovered 8 yards on, still reports 7. That is
+  the correct RECEIVING yardage, which is why tier 1 always passed; it
+  is the field position that diverged, because the converter never
+  entered the fumble. The two "Aborted" snaps were the same thing:
+  `fumble=1, fumble_lost=0`. Those pairs are now excluded and counted
+  separately, alongside penalties.
+- [ ] **Model own-recovered fumbles in the converter** rather than
+  excluding them, if tier 0 coverage is ever wanted on those ~8 pairs
+  per game. Low value: tier 1 already proves the yardage is right.
+- [x] ~~Run more than five games.~~ **Full week run Aug 10: 16 games,
+  2,307 plays, clean.** It found one more harness bug on the way (see
+  below). Next step if wanted is a full season, which is ~285 games and
+  several hours — a nightly job rather than something to sit through.
+
+**The bug the wider run found, and why it matters.** One game in sixteen
+showed nine consecutive possession mismatches. The harness resynced
+possession only when the EXPECTED team changed, so once the engine's
+possession drifted, nothing corrected it and the same single drift got
+reported nine times as nine faults. Now it compares the app's ACTUAL
+possession every play and corrects on difference.
+
+Generalise from that: a run of consecutive similar failures is usually
+ONE fault plus a missing resync, not N faults. The same shape produced
+the four DAL_NYG "mismatches" that turned out to be one fumble rule.
+
+**The bug week 3 found, and it is the best one.** TEN_CLE reported a
+receiver with 48 yards in nflverse and ZERO in StatChat. Cause: two
+different people named **D.Hopkins** — DeAndre receiving for Tennessee,
+Dustin kicking for Cleveland. `buildRoster` keyed by NAME, so they
+collapsed into one player filed as a kicker, and the receiver's seven
+catches went nowhere.
+
+That is the same lesson the app itself learned about jersey numbers, in
+the same session, and the harness still made the mistake: **a label is
+not an identity.** The roster now keys on nflverse `player_id`.
+
+Worth carrying forward: `computeBoxScore` currently keys buckets by
+DISPLAY NAME. That is right for a high-school app where two players
+almost never share a name and jersey collisions are common — but it has
+the same theoretical weakness. If it ever bites, the answer is a stable
+per-player id, not another label.
+- [ ] Kickoffs are skipped by the converter — StatChat models the ensuing
+  spot through its own flow. Worth revisiting if kick coverage stats
+  ever matter.
+- [ ] No nflverse equivalent exists for the high-school-specific paths:
+  muffed punts and kickoffs, onside kicks, the guided flow, timeouts.
+  Those stay covered by the hand-written suites.
+
+---
+
+## 6b. Synthetic full-game UI test — BUILT Aug 10, 2026
+
+The third leg of end-to-end testing, agreed Aug 10, 2026 and not yet
+started.
+
+**Why NFL data cannot cover it.** The harness skips kickoffs, penalties
+and anything it cannot model, and it injects possession and the spot
+before every play. So the paths that are most specific to this app are
+completely untested by it: the guided kickoff flow, muffed punts and
+kickoffs, onside kicks, timeouts, halftime, overtime, the clock prompts,
+and correction mode.
+
+- [x] **`tests/full_game_check.js`** — 43 plays, opening kickoff to
+  overtime, nothing injected. Passing and mutation-tested.
+
+**Three findings on its first run, and only one was the app's:**
+
+1. My assertion said only a kickoff should be offerable after a
+   TOUCHDOWN. Wrong: the restriction applies after the TRY, and the PAT
+   has to be enterable first. The app was right.
+2. `ui_driver` had no support for the penalty panel's automatic-first-down
+   or dead-ball toggles, so the driver could only ever enter the plain
+   case. Added — this widens every other suite too.
+3. **`validateGame` caught the test.** The scripted game punted on THIRD
+   down and the checker objected: "punted 2 times but only 1 failed third
+   down was recorded". The heuristic was right and my game was
+   unrealistic. Good evidence that check earns its place.
+
+**A robustness lesson worth keeping.** A divergent run can leave a click
+handler queued inside the jsdom VM that fires after teardown, surfacing
+as a process-level crash that no promise-level catch can see. A genuine
+fault therefore looked like a broken test. Now caught with
+`process.on('uncaughtException')` and reported as a failure. Any
+long UI-driving test needs that guard.
+
+- [x] ~~Hand-author ONE complete game driven entirely through the UI,
+  with no state injection at all.~~ Opening kickoff through final
+  whistle. Every play type, both halves, a penalty, a muff, an onside
+  kick, a turnover, overtime.
+  The point is not coverage breadth — the hand-written suites already
+  cover each feature in isolation. The point is that nothing is
+  asserted between plays: the game state has to flow from one play to
+  the next for a full game, the way it does on a Friday night.
+  Deterministic, so a failure points at one line.
+
+---
+
+## 7. Apply the whitelist pattern to the other hiding behaviours
+
+`fake_kick_check.js` asserts that ONLY the allowed controls are live on a
+fake, rather than listing the ones to hide. That inversion found a fifth
+stray immediately and would have prevented four round trips.
+
+The same shape exists elsewhere and can drift the same way:
+
+- [ ] **Phase gating after a score** — only a kickoff should be offerable.
+  Currently enumerated; a play type added later would be live by default.
+- [ ] **The guided kickoff flow** — touchback, muffed and onside each hide
+  a different set of fields.
+- [ ] **Correction mode** — Delete controls must be absent outside it.
+- [ ] The punt and kickoff panels' own outcome toggles, which already hide
+  fields by enumeration.
+
+Each is a small test: enumerate the live controls, compare to a
+whitelist, fail by name on anything unexpected.
+
+---
+
+## 8. Live data feed for vMix (and the shared engine it needs)
+
+Raised Aug 10, 2026. Andy's broadcast setup is **vMix**, and he wants it
+to pull live game data from StatChat for on-screen graphics. Nothing is
+built. This section is the whole design so it can be picked up cold.
+
+### 8a. Why this needs the engine extraction first
+
+vMix needs COMPUTED state — score, down, distance, possession — not raw
+play rows. That computation is ~666 lines (`computeState`,
+`computeBoxScore`, `findDriveStarts`, `countPossessions` and friends),
+currently duplicated inline across **five** HTML files. Nothing outside a
+browser page can produce a feed today.
+
+So the feed forces the fix that has been outstanding all along, and pays
+for it twice.
+
+- [ ] **Extract the engine to a single `engine.js`.** Same file loaded by
+  the browser pages AND by Node, using the standard dual export:
+
+      if (typeof module !== 'undefined' && module.exports) {
+        module.exports = { computeState, computeBoxScore, findDriveStarts,
+                           countPossessions, parseInput, /* ... */ };
+      }
+
+  Browsers get the globals as now; `require()` works server-side.
+- [ ] Replace the inline copies in `game.html`, `view.html`, `recap.html`,
+  `stat_package.html`, `season_report.html` with `<script src="engine.js">`.
+- [ ] **`engine_parity.js` becomes trivial or unnecessary** — it exists
+  only to detect drift between the five copies. Keep it until the
+  extraction is proven, then retire it deliberately rather than deleting
+  it by accident.
+- [ ] Re-run the NFL harness (`node tests/nfl/run_week.js 1 2 3`) after
+  the extraction. 48 games with zero issues is the baseline to match; it
+  is the strongest evidence available that nothing was lost in the move.
+
+**Risk to respect:** this touches the most-exercised code in the app
+across five files at once. Do it in a quiet session, not the week of a
+game. The 18 suites plus three clean NFL weeks are what makes it
+survivable.
+
+### 8b. The feed endpoint
+
+- [ ] **`/api/feed`** — a Vercel serverless function beside the existing
+  `manage-users.js` and `invite-user.js`.
+
+      GET /api/feed?game=<id>&view=score&format=xml
+
+  Reads the plays for that game from Supabase, runs the shared engine,
+  renders the requested view in the requested format. Roughly 80 lines
+  once `engine.js` exists.
+
+**Format: XML.** Confirmed against vMix's own documentation Aug 10, 2026.
+vMix's spreadsheet source (CSV/XLSX) is oriented at files on disk —
+"browse for the file on your computer or network" — whereas XML is
+explicitly the URL one: "Select any XML compliant web site or file to
+use as a data source", with an XPath setting to choose the element. JSON
+also works and appears in vMix forum threads, but XML has the clearest
+documented path. Build XML first; `format=json` is a cheap extra.
+
+**Structure — vMix treats a data source as a TABLE and a title binds to a
+ROW.** So repeated elements, flat attributes:
+
+    <feed updated="2026-08-10T20:14:03Z">
+      <game home="Neville" homeScore="21" away="Ruston" awayScore="14"
+            quarter="3" down="2" distance="6" spot="own 34"
+            possession="Neville" homeTimeouts="2" awayTimeouts="3" />
+    </feed>
+
+**Separate endpoint per graphic**, because each needs a different number
+of rows:
+
+| view | rows | for |
 |---|---|---|
-| Sack yardage | off team PASSING | off team RUSHING |
-| QB kneel | individual QB rush | TEAM rush |
+| `score` | 1 | the scoreboard bug |
+| `drive` | 1 | plays / yards / TOP on the current drive |
+| `lastplay` | 1 | ticker text |
+| `rushing` | one per player | leaders graphic |
+| `passing` | one per player | leaders graphic |
+| `receiving` | one per player | leaders graphic |
+| `defense` | one per player | leaders graphic |
+| `teamstats` | 2 (one per team) | side-by-side comparison |
 
-**That adjustment layer is the main risk in this whole design** -- a
-wrong "adjustment" can hide a real bug. Hence the tiering below.
+### 8c. The failure mode to design against
 
-### Assertion tiers -- build 1 and 3 first
-- [ ] **Tier 1, convention-independent, must match exactly.** Final
-  score, per-player rushing yards, receiving yards, individual passing
-  yards, touchdowns, interceptions, total plays. No adjustment applies,
-  so any mismatch is unambiguous.
-- [ ] **Tier 3, signal rather than comparison.** `validateGame()` must
-  report ZERO issues on every game. Across 150 real plays that is a
-  strong check on down continuity, impossible gains and touchdown
-  distances, and it needs no reference data at all.
-- [ ] Tier 2 (team rushing/passing totals, compared after normalising)
-  only once tiers 1 and 3 are clean.
+- [ ] **Send no-cache headers.** There is a recurring vMix complaint of
+  data sources fetching once and then never updating, and it is almost
+  always HTTP caching between the host and vMix:
 
-### Cost and limits
-- ~30-60s per game in jsdom; 10 games is roughly 10 minutes. A nightly
-  or pre-release run, not part of the normal suite.
-- Cannot cover layout or rendering (no layout engine in jsdom),
-  realtime, RLS, or the offline queue.
-- No nflverse equivalent for the high-school-specific paths: muffed
-  punts and kickoffs, the guided kickoff flow, timeouts.
+      Cache-Control: no-store, no-cache, must-revalidate
+      Pragma: no-cache
+
+  Get this wrong and it works perfectly in testing and freezes on game
+  night. Worth an explicit test that the header is present.
+
+### 8d. Decisions still open
+
+- [ ] **Authentication.** The feed cannot require a login or vMix cannot
+  read it. A live scoreboard is public information, but the endpoint
+  would expose any game by id. Either accept that, or add a per-game
+  feed token (`&token=...`) generated on the game row.
+- [ ] **Staleness signalling.** The feed is only as live as the entry. If
+  the scorer is three plays behind, so is the broadcast — and if their
+  device sleeps, the feed silently freezes. Include `updated` and a
+  `secondsSinceLastPlay` attribute so a graphic can grey itself out or a
+  producer can notice.
+- [ ] **Polling cost.** At 1-2s over a two-hour game that is ~5,000
+  invocations. Fine on Vercel's free tier, but consider a short
+  `s-maxage` so bursts are absorbed — balanced against 8c above.
+
+### 8e. What the feed can expose (verified against the engine Aug 10)
+
+Everything `view.html` computes:
+
+- **Situation:** possession, quarter, scores, down, distance, fieldPos,
+  timeouts, possessionTime (per team), drive direction
+- **Team:** total/rush/pass yards, completions and attempts, total plays,
+  possessions, turnovers, penalties (count and yards), 3rd and 4th down
+  conversions and percentages, explosive plays
+- **Passing:** att, comp, yds, long, td, int, sacks
+- **Rushing:** att, yds, long, td (including the TEAM bucket)
+- **Receiving:** tgt, rec, yds, long, td
+- **Defense:** int, fumRec, sacks, team TFL
+- **Special teams:** fgAtt/fgMade, patAtt/patMade, punts and average,
+  kickoffs and TB%
+- **Branding:** team names, logos, colours, so a graphic can style itself
+- **Play text** for a ticker
 
 ---
 
