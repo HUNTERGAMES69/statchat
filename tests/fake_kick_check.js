@@ -177,6 +177,87 @@ async function run() {
     h.close();
   }
 
+  // --- WHITELIST: nothing kick-related may survive a fake --------------
+  //
+  // This assertion exists because the same bug was reported four times in
+  // a row. Each fix hid the control that had just been spotted -- the
+  // calculator, then the takeover spot, then a duplicate Touchdown, then
+  // Good/Missed -- which is a BLACKLIST: anything not on the list stays
+  // visible, and the list only grows when someone notices.
+  //
+  // Inverted here. The test enumerates every live control on the panel
+  // and compares against what is ALLOWED. Anything else fails, including
+  // a control added months from now that nobody thought to hide. The
+  // failure message names it, so the fix is to classify it rather than
+  // to go hunting.
+  const ALLOWED = {
+    punt: [
+      '.pp_punter_pick', 'pp_punter_manual',        // who is on the field
+      'pp_punt_touchback_toggle', 'pp_blocked_toggle', 'pp_muffed_toggle',
+      'pp_punt_fake_toggle',                        // the outcome row itself
+      'pp_puntfake_rush_btn', 'pp_puntfake_pass_btn',
+      '.pp_carrier_pick', 'pp_carrier_manual',
+      '.pp_passer_pick', 'pp_passer_manual',
+      '.pp_receiver_pick', 'pp_receiver_manual',
+      'pp_puntfake_yards', '.lossToggle',
+      'pp_puntfake_incomplete_toggle', 'pp_puntfake_td_toggle',
+      // NOT pp_credit_* -- on the punt panel those are the RETURNER
+      // fields ("Returned by"), not a tackler. Allowing them here is how
+      // this test passed while "Returned by (optional)" sat at the foot
+      // of every fake punt. A whitelist catches controls nobody thought
+      // about; it cannot catch one that was thought about and filed under
+      // the wrong heading.
+      'pp_review', 'pp_clear'
+    ],
+    fg: [
+      '.pp_kicker_pick', 'pp_kicker_manual',
+      'pp_fg_blocked_cb_toggle', 'pp_fg_muffhold_toggle', 'pp_fg_fake_toggle',
+      'pp_fgfake_rush_btn', 'pp_fgfake_pass_btn',
+      '.pp_carrier_pick', 'pp_carrier_manual',
+      '.pp_passer_pick', 'pp_passer_manual',
+      '.pp_receiver_pick', 'pp_receiver_manual',
+      'pp_fgfake_yards', '.lossToggle',
+      'pp_fgfake_incomplete_toggle', 'pp_fgfake_td_toggle',
+      'pp_review', 'pp_clear'
+    ]
+  };
+
+  for (const kind of ['punt', 'fg']) {
+    const h = await bootGamePage();
+    const { window: win, document: doc } = h;
+    setDrive(h, { down: 4, distance: 3, side: 'own', yardline: 40 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="' + kind + '"]'));
+    const panel = doc.getElementById('playPanel');
+    click(win, panel.querySelector(kind === 'punt'
+      ? '.pp_punter_pick[data-num="15"]' : '.pp_kicker_pick[data-num="3"]'));
+    click(win, doc.getElementById((kind === 'punt' ? 'pp_punt_fake' : 'pp_fg_fake') + '_toggle'));
+
+    const visible = el => {
+      let e = el;
+      while (e && e !== panel) {
+        if (e.style && e.style.display === 'none') return false;
+        e = e.parentElement;
+      }
+      return true;
+    };
+    const live = [...new Set([...panel.querySelectorAll('input,button,select')]
+      .filter(e => e.type !== 'hidden' && visible(e))
+      .map(e => e.id || ('.' + String(e.className || '?').split(' ')[0])))];
+
+    const unexpected = live.filter(id => ALLOWED[kind].indexOf(id) === -1);
+    if (unexpected.length) {
+      fail(kind + ' fake whitelist',
+        'these are still live on a fake and should not be (or belong in ALLOWED): ' +
+        unexpected.join(', '));
+    }
+    // Both sub-panels must be reachable, or the whitelist is passing
+    // because half the panel failed to render.
+    if (live.indexOf(kind === 'punt' ? 'pp_puntfake_yards' : 'pp_fgfake_yards') === -1) {
+      fail(kind + ' fake whitelist', 'the fake yardage field is missing entirely');
+    }
+    h.close();
+  }
+
   return failures;
 }
 

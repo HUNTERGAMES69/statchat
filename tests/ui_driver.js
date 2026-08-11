@@ -120,13 +120,28 @@ function enterPlay(h, spec) {
     if (!b) throw new UnreachableByUI('no penalty team button');
     click(win, b);
     typeInto(win, q(doc, 'pen_yds'), spec.yards);
+    // Automatic first down and dead-ball are real coach decisions on this
+    // panel; without them the driver could only enter the plain case.
+    if (spec.firstDown) toggle(win, doc, 'pen_first_down_toggle');
+    if (spec.deadBall) toggle(win, doc, 'pen_no_down_toggle');
     click(win, q(doc, 'pen_review'));
     return finish(h, spec);
   }
 
   if (t === 'rush') {
     P('carrier', spec.carrier);
+    // "Tackled by" on an ordinary rush. The driver only ever wired credit
+    // for the FUMBLE path, so no suite had entered a plain tackler --
+    // which is why the tackler's position in the play text went unchecked.
+    if (spec.credit && !spec.fumbled) P('credit', spec.credit);
     if (spec.yards !== undefined) typeInto(win, q(doc, 'pp_yards'), spec.yards);
+    // spec.loss taps the LOSS toggle. Without it a negative gain had to
+    // be expressed as a positive number and silently became one -- which
+    // is exactly what the NFL harness hit on its first run.
+    if (spec.loss) {
+      const lb = doc.getElementById('playPanel').querySelector('.lossToggle');
+      if (lb) click(win, lb);
+    }
     if (spec.fumbled) {
       toggle(win, doc, 'pp_rush_fumbled_toggle');
       radio(win, doc, 'pp_rush_fumrec', spec.fumrec || 'opp');
@@ -147,6 +162,14 @@ function enterPlay(h, spec) {
     } else {
       P('receiver', spec.receiver);
       if (spec.yards !== undefined) typeInto(win, q(doc, 'pp_yards'), spec.yards);
+      if (spec.loss) {
+        const lb2 = doc.getElementById('playPanel').querySelector('.lossToggle');
+        if (lb2) click(win, lb2);
+      }
+      // "Tackled by" on a completed pass. Applies to the completion only:
+      // an incompletion has no tackler, and the fumble path below wires
+      // credit to its own field.
+      if (spec.credit && !spec.fumbled) P('credit', spec.credit);
       if (spec.fumbled) {
         toggle(win, doc, 'pp_pass_fumbled_toggle');
         radio(win, doc, 'pp_pass_fumrec', spec.fumrec || 'opp');
