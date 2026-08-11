@@ -3754,8 +3754,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             });
           }
           box.style.display = e.target.checked ? 'block' : 'none';
+          // Hidden, not merely disabled. A greyed-out box still reads as
+          // something you were supposed to fill in.
           const kickRow = document.getElementById('pp_yards');
-          if (kickRow) kickRow.disabled = e.target.checked;
+          if (kickRow){
+            kickRow.disabled = e.target.checked;
+            const wrap = kickRow.closest('div');
+            if (wrap) wrap.style.display = e.target.checked ? 'none' : '';
+          }
           // Everything that describes the KICK goes away. The yardage
           // calculator measures where a kick came down, and the takeover
           // spot only applies when the ball changes hands -- neither has
@@ -3779,7 +3785,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const fgres = document.getElementById('pp_fgres_wrap');
           if (fgres) fgres.style.display = e.target.checked ? 'none' : '';
           // ...and the returner fields, for the same reason.
-          ['pp_ret_wrap', 'pp_retyds_container', 'pp_ko_ret_wrap', 'pp_ret_yds_wrap2']
+          // pp_punt_normal wraps the punt's returner picker AND its return
+          // yards. Missing it left "Returned by (optional)" at the foot of
+          // a fake -- and the whitelist test did not catch that, because
+          // its controls are pp_credit_* and I had classified those as the
+          // TACKLER field. A whitelist catches controls nobody thought
+          // about; it cannot catch one that was thought about and filed
+          // wrong.
+          ['pp_ret_wrap', 'pp_retyds_container', 'pp_ko_ret_wrap',
+           'pp_ret_yds_wrap2', 'pp_punt_normal']
             .forEach(id => {
               const el = document.getElementById(id);
               if (el) el.style.display = e.target.checked ? 'none' : '';
