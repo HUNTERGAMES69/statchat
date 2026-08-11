@@ -1434,11 +1434,20 @@ function computeState(playsList){
       const d3 = own.d3Pct !== null ? own.d3conv + ' of ' + own.d3att + ' (' + own.d3Pct + '%)' : '—';
       const pen = penState.penalties[teamKey];
 
+      // Completions and attempts alongside the yardage: 180 passing yards
+      // reads very differently at 12 of 18 than at 12 of 34, and the
+      // number alone hid that. Same for rushing -- yards per carry is the
+      // number a coach actually reacts to, and it needs the attempts.
+      const sumOf = (bucket, key) =>
+        Object.keys(bucket).reduce((t, n) => t + (bucket[n][key] || 0), 0);
+      const passLine = sumOf(s.passing, 'comp') + '/' + passYds;
+      const rushLine = sumOf(s.rushing, 'att') + '/' + rushYds;
+
       const tiles = [
         [possessions[teamKey] || 0, 'Possessions'],
         [totalYds, 'Total Yards'],
-        [passYds, 'Passing Yards'],
-        [rushYds, 'Rushing Yards'],
+        [passLine, 'Comp / Pass Yds'],
+        [rushLine, 'Att / Rush Yds'],
         [playsFor(teamKey), 'Total Plays'],
         [turnovers[teamKey] || 0, 'Turnovers'],
         [pen.count + '-' + pen.yds, 'Penalties'],
