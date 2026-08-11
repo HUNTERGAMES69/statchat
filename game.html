@@ -3304,7 +3304,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       'padding:7px 10px; margin-top:10px;"></div>';
 
     const yardsBlockRet = () => '<div id="pp_retyds_container"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Return yards (optional)</p><input autocomplete="off" type="text" id="pp_retyds" style="width:80px;"></div>';
-    const tdBlock = '<div style="margin-top:10px;">' +
+    // Given an id so a fake can hide it. The punt and field goal panels
+    // carry their own Touchdown button for a RETURN score; the fake
+    // sub-panel has its own for the runner. Both were on screen at once.
+    const tdBlock = '<div id="pp_td_wrap_main" style="margin-top:10px;">' +
       '<input autocomplete="off" type="checkbox" id="pp_td" style="display:none;">' +
       '<button type="button" id="pp_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button>' +
       '</div>';
@@ -3480,7 +3483,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_muffhold', 'Muffed hold') + '</div>' +
         '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_fake', 'Fake') + '</div></div>' +
         fakeBlockHtml('pp_fgfake', 'field goal') +
-        '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="g" checked> Good</label>' +
+        '<div id="pp_fgres_wrap" style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="g" checked> Good</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="x"> Missed</label></div>' +
         '<div id="pp_fg_blocked" style="display:none;">' + defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + tdBlock + '</div>' +
         // A missed or blocked field goal hands the ball over, and without
@@ -3764,6 +3767,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           if (readout) readout.style.display = e.target.checked ? 'none' : '';
           const spotWrap = document.getElementById('pp_spot_wrap');
           if (spotWrap) spotWrap.style.display = e.target.checked ? 'none' : '';
+          // The panel's own Touchdown button belongs to the KICK -- a punt
+          // or field goal returned for a score. The fake sub-panel has its
+          // own for the runner, so both appeared together.
+          const mainTd = document.getElementById('pp_td_wrap_main');
+          if (mainTd) mainTd.style.display = e.target.checked ? 'none' : '';
+          // Good / Missed describes a KICK. On a fake there is no kick to
+          // be good or missed, and leaving the pair on screen -- with
+          // "Good" pre-selected -- invited an answer to a question that
+          // does not apply.
+          const fgres = document.getElementById('pp_fgres_wrap');
+          if (fgres) fgres.style.display = e.target.checked ? 'none' : '';
+          // ...and the returner fields, for the same reason.
+          ['pp_ret_wrap', 'pp_retyds_container', 'pp_ko_ret_wrap', 'pp_ret_yds_wrap2']
+            .forEach(id => {
+              const el = document.getElementById(id);
+              if (el) el.style.display = e.target.checked ? 'none' : '';
+            });
           if (!e.target.checked) refreshSpotCalcContext(panel);
         });
       });
