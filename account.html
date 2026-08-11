@@ -38,7 +38,9 @@
   .set-password-inline input { width:auto; flex:1; min-width:140px; }
   .badge-admin { display:inline-block; font-size:10px; font-weight:700; color:#a37a00; background:#fff3cd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
   .badge-gameentry { display:inline-block; font-size:10px; font-weight:700; color:#1a7a4c; background:#e3f7ec; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
-  .badge-invited { display:inline-block; font-size:10px; font-weight:700; color:#1565c0; background:#e3f2fd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+.badge-disabled { display:inline-block; margin-left:8px; padding:2px 7px; border-radius:4px;
+                    background:#8a3a12; color:#fff; font-size:11px; font-weight:700; letter-spacing:0.04em; }
+    .badge-invited { display:inline-block; font-size:10px; font-weight:700; color:#1565c0; background:#e3f2fd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
   @media (min-width: 640px) { body { padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); } .card { padding:24px; } }
 </style>
 </head>
@@ -336,13 +338,18 @@
       const roleBadge = u.role === 'admin' ? '<span class="badge-admin">ADMIN</span>'
         : u.role === 'game_entry' ? '<span class="badge-gameentry">GAME ENTRY</span>' : '';
       const isSelf = u.id === currentUserId;
+      // A disabled account keeps its role and its history -- it simply
+      // cannot sign in. Shown as a badge rather than by hiding the row,
+      // because an admin needs to see who is disabled at a glance and be
+      // able to put them back.
+      const disabledBadge = u.disabled ? '<span class="badge-disabled">DISABLED</span>' : '';
       const roleSelectHtml = '<select data-action="setRole" ' + (isSelf ? 'disabled title="You can\'t change your own role here."' : '') + '>' +
         ['view', 'game_entry', 'admin'].map(r =>
           '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>' +
           (r === 'view' ? 'View' : r === 'game_entry' ? 'Game entry' : 'Admin') + '</option>'
         ).join('') + '</select>';
       return '<div class="user-row" data-user-id="' + u.id + '" data-email="' + u.email + '">' +
-        '<div class="user-row-head"><span class="user-row-name">' + name + roleBadge + (pending ? '<span class="badge-invited">INVITED</span>' : '') + '</span></div>' +
+        '<div class="user-row-head"><span class="user-row-name">' + name + roleBadge + disabledBadge + (pending ? '<span class="badge-invited">INVITED</span>' : '') + '</span></div>' +
         '<div class="user-row-email">' + u.email + '</div>' +
         '<div class="user-row-meta">Joined ' + formatDate(u.createdAt) + ' &middot; Last sign-in: ' + formatDate(u.lastSignInAt) + (pending ? ' &middot; invite pending' : '') + '</div>' +
         '<div class="user-row-actions">' +
@@ -350,6 +357,9 @@
         '<button class="secondary" data-action="showSetPassword">Set password</button>' +
         '<button class="secondary" data-action="sendReset">Send reset email</button>' +
         (pending ? '<button class="secondary" data-action="resendInvite">Resend invite</button>' : '') +
+        '<button class="secondary" data-action="toggleDisabled"' +
+          (isSelf ? ' disabled title="You can\'t disable your own account."' : '') + '>' +
+          (u.disabled ? 'Enable' : 'Disable') + '</button>' +
         '<button class="danger" data-action="delete">Delete</button>' +
         '</div>' +
         '<div class="set-password-inline hidden" data-role="setPasswordBlock">' +
@@ -428,6 +438,22 @@
         showMsg('userMgmtMsg', err.message, 'error');
       }
       btn.disabled = false;
+      return;
+    }
+    if (action === 'toggleDisabled'){
+      const row = btn.closest('.user-row');
+      const turningOff = btn.textContent.trim() === 'Disable';
+      if (turningOff && !window.confirm('Disable ' + email +
+          '? They will not be able to sign in until you enable them again.')) return;
+      btn.disabled = true;
+      try {
+        await callManageUsers('setDisabled', { userId, disabled: turningOff });
+        showMsg('userMgmtMsg', (turningOff ? 'Disabled ' : 'Enabled ') + email + '.', 'success');
+        loadUsers();
+      } catch (err){
+        showMsg('userMgmtMsg', err.message, 'error');
+        btn.disabled = false;
+      }
       return;
     }
     if (action === 'delete'){
