@@ -32,6 +32,9 @@
   .team-summary-row { display:flex; gap:28px; flex:1; min-height:0; }
   .team-summary-col { flex:1; display:flex; flex-direction:column; min-width:0; }
   .team-summary-header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:8px; font-weight:800; font-size:20px; margin-bottom:10px; }
+  /* Small enough not to compete with the team name, large enough to read
+     from the back of a room. */
+  .poss-ball { font-size:18px; line-height:1; margin-left:-2px; }
   .team-summary-logo { height:36px; width:36px; object-fit:contain; border-radius:6px; background:rgba(255,255,255,0.85); flex-shrink:0; }
   .stat-tile-grid { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr 1fr; gap:8px; flex:1; min-height:0; }
   .stat-tile { background:#f5f7fa; border-radius:8px; padding:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
@@ -1209,9 +1212,13 @@ function computeState(playsList){
       qEl.style.fontSize = '';
       qEl.style.fontWeight = '';
       qEl.style.letterSpacing = '';
+      // No "— X ball" here any more. Possession is shown by a football
+      // against the team's own name in the row below, which says the same
+      // thing in a glance instead of a phrase, and gives the down and
+      // distance the width it needs to be readable across a room.
       document.getElementById('downText').textContent = state.down
-        ? (ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabel(state.fieldPos) + ' — ' + TEAMS[state.possession].name + ' ball')
-        : ('no active drive — ' + TEAMS[state.possession].name + ' ball');
+        ? (ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabel(state.fieldPos))
+        : 'no active drive';
       // Just the quarter, matching game.html. Which half it belongs to is
       // obvious from the number and only crowded the banner.
       document.getElementById('quarterText').textContent =
@@ -1417,6 +1424,9 @@ function computeState(playsList){
 
   function renderTeamSummary(){
     const box = computeBoxScore(plays);
+    // Needed for the possession marker on each team's header. This
+    // function did not previously care who had the ball.
+    const liveState = computeState(plays);
     const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
     const playsFor = (teamKey) => plays.filter(p => p.team === teamKey && p.roles && scrimmageTypes.includes(p.roles.playType)).length;
     const possessions = countPossessions(plays);
@@ -1473,6 +1483,12 @@ function computeState(playsList){
         '<div class="team-summary-header" style="background:' + team.bg + '; color:' + safeTextColor(team.bg, team.text) + ';">' +
         (team.logo ? '<img class="team-summary-logo" src="' + team.logo + '">' : '') +
         '<span>' + team.name + '</span>' +
+        // The possession marker. Rendered for BOTH teams and hidden on
+        // the one without the ball, so the header width does not jump
+        // every time possession changes.
+        '<span class="poss-ball" style="visibility:' +
+          (liveState.possession === teamKey && liveState.down ? 'visible' : 'hidden') +
+          ';" title="has the ball">\uD83C\uDFC8</span>' +
         // Right-justified via margin-left:auto so it sits hard against
         // the end of the coloured bar regardless of how long the team
         // name or logo is.
