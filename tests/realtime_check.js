@@ -9,13 +9,20 @@
 // changing. On air that is worse than an obvious failure, because nobody
 // notices until the score is visibly wrong.
 //
-// THE DELETE CASE IS THE FRAGILE ONE. Postgres Changes cannot filter
-// deletes by game_id server-side, so the page listens to EVERY delete on
-// the plays table and checks game_id itself when the event arrives. That
-// only works because the migration set REPLICA IDENTITY FULL — without
-// it a delete event carries only the row id and `payload.old.game_id` is
-// undefined, so the check silently fails and Undo stops propagating.
-// Nothing in the app would tell you.
+// THE DELETE CASE, and what real use taught us on 12 Aug 2026: Supabase
+// Realtime strips non-key columns from DELETE events when RLS is enabled
+// — it cannot evaluate a policy against a row that no longer exists, so
+// it sends the primary key and nothing else. REPLICA IDENTITY FULL does
+// not override that. A browser subscription printed:
+//
+//     EVENT: DELETE {id: 'ff81c957-...'} {}
+//
+// So the old `payload.old.game_id === currentGameId` check could never
+// have been true, and undos never propagated. It stayed hidden because
+// the next entered play triggered a reload that covered the gap.
+//
+// The page therefore reloads on ANY delete, and — more importantly —
+// reconciles on a timer, so a missed event of any kind self-corrects.
 //
 // The harness gained realtime recording for this: the old stub swallowed
 // every subscription and returned itself, so the page could have been
