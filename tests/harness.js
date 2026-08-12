@@ -125,6 +125,20 @@ function makeMockSupabase(db) {
     // meant realtime could be wired to the wrong table, the wrong event
     // or the wrong game and no test could tell -- the page would simply
     // stop updating live, mid-broadcast, with nothing in the console.
+    // Database functions. The broadcast flag is set through one, because
+    // exclusivity must be enforced in a single transaction -- two laptops
+    // doing "clear all, then set mine" can interleave. Recorded here so a
+    // test can assert WHICH function was called with what.
+    rpc(fn, args) {
+      db.rpcCalls.push({ fn, args });
+      if (db.rpcError) return Promise.resolve({ data: null, error: { message: db.rpcError } });
+      if (fn === 'set_broadcast_game') {
+        db.game.is_broadcast = (db.game.id === (args || {}).p_game_id);
+      } else if (fn === 'clear_broadcast_game') {
+        if (db.game.id === (args || {}).p_game_id) db.game.is_broadcast = false;
+      }
+      return Promise.resolve({ data: null, error: null });
+    },
     channel(name) {
       const ch = {
         _name: name,
@@ -205,6 +219,8 @@ async function bootPage(file, opts = {}) {
     existingPlays: opts.existingPlays || [],
     plays: [],
     failNext: opts.failNext || null,   // see builder().insert
+    rpcCalls: [],                      // see makeMockSupabase().rpc
+    rpcError: opts.rpcError || null,
     // Realtime bookkeeping. `emit` replays a postgres_changes event the
     // way Supabase would, so a test can prove the page reacts.
     realtime: {
