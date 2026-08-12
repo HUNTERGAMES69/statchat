@@ -28,10 +28,34 @@ function makeMockSupabase(db) {
       _op: op,
       _payload: payload,
       _filters: {},
-      select() { if (this._op === null) this._op = 'select'; return this; },
+      // The second argument carries { count, head } for a count-only
+      // query. view.html's reconciliation poll uses one, and without
+      // support here it would silently return undefined and the poll
+      // would appear to work while never reconciling anything.
+      select(cols, opts) {
+        if (this._op === null) this._op = 'select';
+        if (opts && opts.count) this._countOnly = true;
+        return this;
+      },
       insert(rows) {
         this._op = 'insert';
         const arr = Array.isArray(rows) ? rows : [rows];
+        // db.failNext lets a test simulate the server being unreachable,
+        // or rejecting a row. Without it the offline queue cannot be
+        // tested at all: it only does anything interesting when an insert
+        // FAILS, and a mock that always succeeds never exercises it.
+        //   db.failNext = 'offline'   -> a network-style error
+        //   db.failNext = 'duplicate' -> a 23505 unique violation
+        //   db.failNext = 'final'     -> the "game is final" refusal
+        //   db.failNext = n           -> fail the next n inserts, then stop
+        if (db.failNext) {
+          this._insertError = db.failNext;
+          if (typeof db.failNext === 'number') {
+            db.failNext = db.failNext > 1 ? db.failNext - 1 : null;
+            this._insertError = 'offline';
+          }
+          return this;
+        }
         arr.forEach(r => db.inserted.push({ table, row: r }));
         if (table === 'plays') arr.forEach(r => db.plays.push(r));
         return this;
@@ -47,6 +71,23 @@ function makeMockSupabase(db) {
       order() { return this; },
       limit() { return this; },
       then(resolve, reject) {
+        if (this._insertError) {
+          const messages = {
+            offline:   'TypeError: Failed to fetch',
+            duplicate: 'duplicate key value violates unique constraint (23505)',
+            final:     'This game is final and cannot be modified'
+          };
+          return Promise.resolve({
+            data: null,
+            error: { message: messages[this._insertError] || String(this._insertError) }
+          }).then(resolve, reject);
+        }
+        if (this._countOnly) {
+          const rows = table === 'plays'
+            ? db.existingPlays.concat(db.plays) : [];
+          return Promise.resolve({ data: null, count: rows.length, error: null })
+            .then(resolve, reject);
+        }
         let data = [];
         if (this._op === 'select') {
           if (table === 'profiles') data = [{ role: 'admin' }];
@@ -79,10 +120,26 @@ function makeMockSupabase(db) {
       getUser() { return Promise.resolve({ data: { user: { id: 'test-user-id' } }, error: null }); },
       signOut() { return Promise.resolve({ error: null }); }
     },
-    channel() {
-      return { on() { return this; }, subscribe() { return this; } };
+    // Records what the page subscribed to, and lets a test FIRE an event
+    // back. The old stub swallowed everything and returned `this`, which
+    // meant realtime could be wired to the wrong table, the wrong event
+    // or the wrong game and no test could tell -- the page would simply
+    // stop updating live, mid-broadcast, with nothing in the console.
+    channel(name) {
+      const ch = {
+        _name: name,
+        _handlers: [],
+        on(type, cfg, cb) {
+          this._handlers.push({ type, cfg, cb });
+          db.realtime.handlers.push({ channel: name, type, cfg, cb });
+          return this;
+        },
+        subscribe() { db.realtime.subscribed.push(name); return this; }
+      };
+      db.realtime.channels.push(ch);
+      return ch;
     },
-    removeChannel() {}
+    removeChannel() { db.realtime.removed++; }
   };
 }
 
@@ -147,6 +204,22 @@ async function bootPage(file, opts = {}) {
     roster: opts.roster || defaultRoster(),
     existingPlays: opts.existingPlays || [],
     plays: [],
+    failNext: opts.failNext || null,   // see builder().insert
+    // Realtime bookkeeping. `emit` replays a postgres_changes event the
+    // way Supabase would, so a test can prove the page reacts.
+    realtime: {
+      channels: [], handlers: [], subscribed: [], removed: 0,
+      emit(event, payload) {
+        let fired = 0;
+        this.handlers.forEach(h => {
+          const cfg = h.cfg || {};
+          if (cfg.event && cfg.event !== event) return;
+          h.cb(payload || {});
+          fired++;
+        });
+        return fired;
+      }
+    },
     inserted: [],
     updated: [],
     gameFields: {}
@@ -243,7 +316,23 @@ async function bootPage(file, opts = {}) {
   // undefined but window.eval('TEAMS') works.
   const evalIn = code => window.eval(code);
 
-  return { dom, window, document: window.document, db, evalIn, alerts, close: () => dom.window.close() };
+  // Clear pending timers before tearing the window down. view.html now
+  // runs a reconciliation poll on setInterval, and a tick that fires
+  // after close() finds `document` undefined and throws a
+  // process-level error that no test can catch -- a passing suite
+  // followed by a stack trace and a non-zero exit.
+  const close = () => {
+    try {
+      const maxId = dom.window.setTimeout(() => {}, 0);
+      for (let i = 0; i <= maxId; i++) {
+        dom.window.clearTimeout(i);
+        dom.window.clearInterval(i);
+      }
+    } catch (e) { /* already gone */ }
+    dom.window.close();
+  };
+
+  return { dom, window, document: window.document, db, evalIn, alerts, close };
 }
 
 const bootGamePage = (opts = {}) => bootPage('game.html', opts);
