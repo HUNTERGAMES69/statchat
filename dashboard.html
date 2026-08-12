@@ -90,6 +90,9 @@
           <a class="button-link secondary" id="helpLink" href="help.html">How to use</a>
           <a class="button-link secondary" id="rosterLink" href="roster.html">Team Roster</a>
           <a class="button-link secondary" id="customizeLink" href="customize.html">Customize team</a>
+          <!-- In the header, not the avatar menu. The production team needs
+               this and should not have to hunt for it behind an avatar. -->
+          <a class="button-link secondary" id="broadcastLink" href="broadcast_setup.html" style="display:none;">Broadcast</a>
           <div style="position:relative; margin-left:auto;">
             <button id="accountBtn" class="secondary" style="border-radius:50%; width:36px; height:36px; padding:0; display:inline-flex; align-items:center; justify-content:center; overflow:hidden;">
               <img id="accountAvatarImg" style="display:none; width:100%; height:100%; object-fit:cover;">
@@ -203,6 +206,8 @@
     // accounts. Scorers get it because the crew sets up the day before.
     const bsLink = document.getElementById('broadcastSetupLink');
     if (bsLink) bsLink.style.display = currentCanEnterGames ? 'block' : 'none';
+    const bsHeader = document.getElementById('broadcastLink');
+    if (bsHeader) bsHeader.style.display = currentCanEnterGames ? '' : 'none';
     document.getElementById('newGameLink').classList.toggle('hidden', !currentIsAdmin);
     document.getElementById('rosterLink').classList.toggle('hidden', !currentIsAdmin);
     document.getElementById('customizeLink').classList.toggle('hidden', !currentIsAdmin);
@@ -516,7 +521,12 @@
           showMsg('dashboardMsg',
             isOn ? ('Taken off air: ' + label)
                  : ('Now ON AIR: ' + label), 'success');
-          loadGames();
+          // refreshGames(), NOT loadGames(). loadGames takes a default
+          // season year; called bare it unshifts `undefined` into the
+          // season list, selects it, and the page renders
+          // "undefined season" with no games at all. refreshGames keeps
+          // whatever season is selected.
+          await refreshGames();
         } catch (err) {
           showMsg('dashboardMsg', 'Could not change the broadcast game: ' +
                   (err.message || err), 'error');
