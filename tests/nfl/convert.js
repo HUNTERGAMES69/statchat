@@ -88,7 +88,29 @@ function convertRow(row, numberFor, teamAbbrForA) {
 
   const jersey = id => (id && id !== 'NA') ? numberFor.get(id) : null;
   const gained = num(row.yards_gained);
-  const td = truthy(row.touchdown);
+
+  // A touchdown on the row is NOT necessarily a touchdown by the player
+  // who carried or caught it. Week 4 of 2023 turned up:
+  //
+  //   B.Robinson left end to PHI 1 for no gain. FUMBLES,
+  //   recovered by WAS-17-T.McLaurin at PHI -4. TOUCHDOWN.
+  //
+  //   rusher B.Robinson, yards_gained 0, touchdown 1,
+  //   td_player T.McLaurin, td_team WAS == posteam
+  //
+  // The old test -- touchdown AND td_team === posteam -- was true, so the
+  // converter entered it as a RUSHING touchdown by Robinson. StatChat then
+  // did exactly the right thing for a rushing TD and filled in the yardage
+  // to reach the end zone, giving him one yard he never gained. The app
+  // was correct; the harness handed it the wrong play.
+  //
+  // So: credit the touchdown only when the SCORER is the player being
+  // credited with the play.
+  const scoredIt = (playerId) =>
+    truthy(row.touchdown) &&
+    row.td_team === row.posteam &&
+    (!row.td_player_id || row.td_player_id === 'NA' ||
+     row.td_player_id === playerId);
 
   if (type === 'run') {
     const carrier = jersey(row.rusher_player_id);
@@ -97,7 +119,7 @@ function convertRow(row, numberFor, teamAbbrForA) {
       type: 'rush', carrier,
       yards: String(Math.abs(gained)),
       loss: gained < 0,
-      td: td && row.td_team === row.posteam,
+      td: scoredIt(row.rusher_player_id),
       fumble: truthy(row.fumble_lost) ? 'lost' : null
     } };
   }
@@ -127,7 +149,10 @@ function convertRow(row, numberFor, teamAbbrForA) {
       type: 'pass', passer, receiver,
       yards: String(Math.abs(gained)),
       loss: gained < 0,
-      td: td && row.td_team === row.posteam
+      // The RECEIVER scores on a completed pass, so that is whose id must
+      // match -- a pass caught and then fumbled into the end zone by a
+      // team-mate is not a receiving touchdown.
+      td: scoredIt(row.receiver_player_id)
     } };
   }
 
