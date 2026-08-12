@@ -23,8 +23,13 @@
 const { bootPage } = require('./harness');
 const { click } = require('./ui_driver');
 
-const GAME = { id: 'g1', opponent: 'Ruston', status: 'final',
-               game_date: '2026-08-24', season_year: 2026 };
+// home_team_name / away_team_name — there is NO `opponent` column. The
+// first version of this fixture invented one, so the filename assertion
+// below passed against a field the real database does not have, and the
+// live app was quietly naming every backup "statchat-game-<date>.json".
+// A fixture that is kinder than reality tests nothing.
+const GAME = { id: 'g1', home_team_name: 'Neville', away_team_name: 'Ruston',
+               status: 'final', game_date: '2026-08-24', season_year: 2026 };
 
 const PLAYS = [
   { id: 1, game_id: 'g1', sequence_number: 1, text: 'rush for 6',
@@ -93,7 +98,7 @@ async function run() {
     if (!data.exportedAt) {
       fail('export', 'no exportedAt — a backup with no date is hard to trust later');
     }
-    if (!data.game || data.game.opponent !== 'Ruston') {
+    if (!data.game || data.game.away_team_name !== 'Ruston') {
       fail('export', 'the game row is missing or wrong');
     }
 
@@ -121,9 +126,11 @@ async function run() {
     }
 
     // A filename someone can identify in six months.
-    if (!/statchat-Ruston-2026-08-24\.json/.test(cap.filename || '')) {
-      fail('filename', 'expected the opponent and date in the name, got "' +
-           cap.filename + '"');
+    if (!/Neville/.test(cap.filename || '') || !/Ruston/.test(cap.filename || '') ||
+        !/2026-08-24/.test(cap.filename || '')) {
+      fail('filename', 'expected both team names and the date, got "' +
+           cap.filename + '". A backup you cannot identify in six months ' +
+           'is barely a backup');
     }
     p.close();
   }
