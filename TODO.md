@@ -874,6 +874,67 @@ which point real use will have shown whether the crew actually needs it.
 
 ---
 
+## 12. Entry is laptop-only — decided 12 Aug 2026
+
+Andy will never enter game data from a phone. **Laptop only.** Worth
+recording, because several open items were scoped around mobile risk
+that does not apply.
+
+**What this removes from the risk list:**
+
+- iOS suspending a background tab mid-game
+- Android killing the page under memory pressure
+- Mobile Safari clearing localStorage, which would take the offline
+  queue with it
+- Touch-target sizing on the entry panels
+
+**What it does NOT remove:** stadium wifi still drops, on any device. The
+offline queue matters just as much; it is only the device-level hazards
+that are gone.
+
+- [ ] Consider whether the entry pages should be laptop-optimised rather
+  than responsive. Nothing is broken today — this is about whether
+  effort spent on small-screen layout is effort wasted.
+- [ ] The VIEW page is a different question: it may well be watched on a
+  phone by someone not entering data, and `broadcast.html` runs inside
+  vMix on a desktop. Neither is affected by this decision.
+
+---
+
+## 13. Season stats must come from ENDED games only
+
+Raised by Andy 12 Aug 2026. **Currently correct, but untested** — which
+is the reason to write it down rather than tick it off.
+
+`season_report.html` line ~501 filters `.eq('status', 'final')`, and
+`reports.html` does the same when listing seasons. So today an
+in-progress game does not pollute season totals.
+
+**Why it needs a test rather than trust.** The consequence of losing that
+filter is subtle and one-directional: a game in progress would fold its
+partial numbers into season averages, per-game charts, and every player's
+season line. Nothing would look broken. Yards per game would just be
+quietly wrong all season, and the error would grow as the game went on
+and then vanish when it finalised — so it would be maddening to
+reproduce after the fact.
+
+- [ ] **A test asserting the season report ignores non-final games.**
+  Seed one `final` game and one `in_progress` game in the same season,
+  and assert every season total, chart series and player line reflects
+  ONLY the final one. Mutation-test it by removing the filter.
+- [ ] Check the same for `reports.html`'s season list — a season
+  containing only in-progress games should not offer a report at all.
+- [ ] Decide the edge case: a game that was finalised, then UNLOCKED for
+  correction, reverts to in-progress. Its stats then disappear from the
+  season report until it is re-finalised. That is probably right, but it
+  will look like data loss to anyone who does not know why, so it should
+  at least be documented in `help.html`.
+
+Related: the vMix feed (section 8) reads a LIVE game deliberately, which
+is the opposite requirement. Do not let a fix for one break the other.
+
+---
+
 ## BEFORE GOING TO PRODUCTION
 
 Everything here is fine for a test app and **not** fine once real users
