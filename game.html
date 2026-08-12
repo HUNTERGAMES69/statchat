@@ -228,6 +228,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="team-icon.js"></script>
+<script src="engine.js"></script>
 <script>
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
@@ -492,74 +493,7 @@ function isAdminMarker(p){
   if (e.isReset) return false;
   return !!(e.clockEvent || e.setQuarter || e.forcePossession || p.isDivider);
 }
-function findDriveStarts(playsList){
-  // A drive must never START on an administrative marker. Doing so
-  // produces a one-play "drive" whose every counter is zero, and
-  // because only the last two drives are ever shown, it silently
-  // pushes the real drive out of the "previous drive" slot. That is
-  // what made a completed scoring drive display as
-  // "Clock - 5:00 at change of possession" with 0/0 tiles: the
-  // kickoff flipped possession, so the drive began on the clock
-  // line that happened to follow it.
-  const firstRealPlayFrom = from => {
-    for (let j = from; j < playsList.length; j++){
-      if (!isAdminMarker(playsList[j])) return j;
-    }
-    return -1;
-  };
-  const starts = [];
-  // Start indices are produced in non-decreasing order, so checking
-  // only the last entry is enough to stop a detected possession
-  // change and an explicit reset marker from both claiming the same
-  // play (which they often do, since skipping markers lands the
-  // possession change exactly on the reset marker that follows it).
-  const pushStart = idx => {
-    if (idx !== -1 && starts[starts.length - 1] !== idx) starts.push(idx);
-  };
-  let priorPoss = startingPossession;
-  for (let i = 0; i < playsList.length; i++){
-    if (playsList[i].effect && playsList[i].effect.isReset){
-      // A reset marker only OPENS the game's first drive. Every later
-      // drive begins at a real possession change, which is detected
-      // below and already lands on the reset marker that follows it.
-      // "Adjust down / distance" writes a reset marker purely to
-      // correct the chains, so using it mid-drive -- or twice in a row
-      // -- must not register another drive, and therefore another
-      // possession, for a team that never gave the ball up.
-      // ...unless the marker says a new POSSESSION began. An onside kick
-      // recovered by the kicking team hands them the ball without any
-      // change of possession for the detector below to notice, so
-      // without this the drive is invisible: no possession counted, no
-      // per-drive stats, and the previous drive stays on screen.
-      if (!starts.length || playsList[i].effect.newPossession) pushStart(i);
-      priorPoss = computeState(playsList.slice(0, i + 1)).possession;
-      continue;
-    }
-    // A half ends every drive in progress, even when the same team gets
-    // the ball back to start the next one. Only a change of possession
-    // was treated as a boundary, so a team that finished the first half
-    // with the ball and received to open the second had both halves
-    // counted as ONE continuous drive -- the Current Drive panel still
-    // listed its Q2 kneels, and the drive tiles totalled plays from
-    // before the interval.
-    // The interval and the start of overtime both end whatever drive
-    // was in progress, even when the same team keeps the ball. Only a
-    // change of possession counted as a boundary, so a team that
-    // finished a period with the ball and got it back to open the
-    // next had both counted as ONE drive.
-    const endsPeriod = (playsList[i].isDivider && /end of (1st|first) half/i.test(playsList[i].text || '')) ||
-      (playsList[i].effect && playsList[i].effect.setQuarter >= 5);
-    if (endsPeriod){
-      pushStart(firstRealPlayFrom(i + 1));
-      priorPoss = computeState(playsList.slice(0, i + 1)).possession;
-      continue;
-    }
-    const possAfter = computeState(playsList.slice(0, i + 1)).possession;
-    if (possAfter !== priorPoss) pushStart(firstRealPlayFrom(i + 1));
-    priorPoss = possAfter;
-  }
-  return starts;
-}
+
 // Jersey numbers resolve across ALL THREE roster units, not just the one
 // the play type implies. High-school rosters routinely list a player
 // under a single unit even though they play several, and a dedicated
@@ -569,16 +503,7 @@ function findDriveStarts(playsList){
 // A fallback can only ever turn "#25" into a name; it can never change a
 // name that already resolved, because the expected unit is always
 // searched first. This mirrors playerName() in the report pages.
-function rosterName(teamKey, num, order){
-  if (num === 'TEAM') return 'TEAM';
-  const t = TEAMS[teamKey];
-  const buckets = { offense: t.rosterOffense, defense: t.rosterDefense, special: t.rosterSpecialTeams };
-  for (const unit of order){
-    const roster = buckets[unit];
-    if (roster && roster[num]) return roster[num];
-  }
-  return null;
-}
+
 // Every distinct player wearing this number for this team, across all
 // three units. Two units listing the same name is one player who plays
 // both ways; two DIFFERENT names is a genuine shared number, and the
@@ -593,18 +518,9 @@ function playerCandidates(teamKey, num){
   });
   return out;
 }
-function nameInOffense(teamKey, num){
-  const n = rosterName(teamKey, num, ['offense','special','defense']);
-  return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
-}
-function nameInDefense(teamKey, num){
-  const n = rosterName(teamKey, num, ['defense','special','offense']);
-  return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
-}
-function nameInSpecialTeams(teamKey, num){
-  const n = rosterName(teamKey, num, ['special','offense','defense']);
-  return (n || ('#' + num)) + ' (' + TEAMS[teamKey].name + ')';
-}
+
+
+
 function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':n===4?'4th':(n+'th'); }
 // Coaches are allowed to type a clock without the colon ("1156" for
 // "11:56"), because that's faster to enter mid-game. But every DISPLAY
@@ -745,160 +661,7 @@ function extractNameTag(rawName){
   const cleanName = String(rawName).slice(0, m.index).trim();
   return { cleanName, explicitUnit: tag.toLowerCase() };
 }
-function computeState(playsList){
-  const list = playsList || plays;
-  const state = {
-    possession: startingPossession,
-    quarter: 1,
-    scores: { teamA: 0, teamB: 0 },
-    possessionTime: { teamA: 0, teamB: 0 },
-    down: null, distance: null, fieldPos: null, startSpot: null, statYards: 0,
-    penalties: { teamA: { count: 0, yds: 0 }, teamB: { count: 0, yds: 0 } },
-    // NFHS: three timeouts per team per half, and they do NOT carry
-    // over -- both teams get a fresh three at the start of the second
-    // half regardless of what was left.
-    timeouts: { teamA: TIMEOUTS_PER_HALF, teamB: TIMEOUTS_PER_HALF },
-    // Which physical end of the field a team attacks. Recorded once and
-    // alternated by quarter, because teams change ends after Q1, Q2 and
-    // Q3. Everything else in this engine is possession-relative, so this
-    // is the only place the app knows anything about actual direction.
-    dirTeam: null, dirValue: null, dirQuarter: 1
-  };
-  const pendingClockStart = { teamA: null, teamB: null };
-  for (const p of list){
-    const e = p.effect;
-    if (!e) continue;
-    if (e.isReset){
-      state.down = e.down; state.distance = e.distance; state.fieldPos = e.fieldPos;
-      state.startSpot = e.fieldPos; state.statYards = 0;
-    }
-    if (e.isStat){
-      if (state.fieldPos !== null){
-        state.fieldPos += e.fieldDelta;
-        state.fieldPos = Math.max(0, Math.min(100, state.fieldPos));
-      }
-      state.statYards += e.statYds;
-      if (e.td){
-        state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
-      } else {
-        if (e.converts){
-          state.down = 1;
-          state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
-        }
-        else if (e.turnoverOnDowns && e.flipApplied){
-          state.possession = otherTeam(state.possession);
-          // The ball does not move on a turnover on downs -- it is spotted
-          // exactly where the play ended, and the team taking over starts
-          // 1st & 10 from there. fieldPos is possession-RELATIVE (0 is the
-          // possessing team's own goal line), so keeping the same physical
-          // spot means mirroring it to 100 - fieldPos for the new offense.
-          // Clearing it instead used to force the coach to re-enter a spot
-          // the app already knew.
-          state.fieldPos = state.fieldPos !== null ? 100 - state.fieldPos : null;
-          state.down = 1;
-          state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
-          state.startSpot = state.fieldPos; state.statYards = 0;
-        } else if (!e.turnoverOnDowns){
-          state.down = (state.down || 1) + 1;
-          state.distance = Math.max((state.distance || 10) - e.statYds, 1);
-        }
-      }
-    }
-    if (e.endsDrive && !e.isStat){
-      state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
-    }
-    if (e.penaltyTeam){
-      state.penalties[e.penaltyTeam].count += 1;
-      state.penalties[e.penaltyTeam].yds += e.penaltyYds;
-      if (state.fieldPos !== null){
-        state.fieldPos += e.fieldDelta;
-        state.fieldPos = Math.max(0, Math.min(100, state.fieldPos));
-      }
-      if (state.distance !== null){
-        if (e.noDownChange){
-          // Dead-ball foul, or one assessed after a kick or change of
-          // possession: it is walked off before the series begins, so
-          // the ball moves but the down and distance-to-go stay put.
-          // Adjusting distance here would measure against a
-          // line-to-gain that no longer exists -- which is how a
-          // 10-yard foul against a team that had just taken over at
-          // 1st & 10 used to become "1st & 20".
-          if (state.fieldPos !== null){
-            state.distance = Math.max(1, Math.min(state.distance, 100 - state.fieldPos));
-          }
-        } else if (e.autoFirstDown){
-          // Defensive holding, roughing, pass interference and the like
-          // award a first down whatever the yardage -- a 5-yard foul on
-          // 3rd & 20 still moves the chains, so the distance maths below
-          // must not get a say.
-          state.down = 1;
-          state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
-        } else {
-          state.distance -= e.fieldDelta;
-          if (state.distance <= 0){
-            // Penalty yardage alone reached or passed the marker --
-            // an automatic first down, regardless of what down it was.
-            state.down = 1;
-            state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
-          }
-        }
-      }
-    }
-    if (e.score){ state.scores[e.score.team] += e.score.points; }
-    if (e.scoreAdjust){ state.scores[e.scoreAdjust.team] += e.scoreAdjust.pts; }
-    if (e.flip && e.flipApplied && !e.isStat){
-      state.possession = e.flipTo;
-      state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
-    }
-    if (e.forcePossession){ state.possession = e.forcePossession; }
-    if (e.setQuarter){
-      // Crossing into the second half (or into overtime) resets the
-      // allowance. Guarded on the quarter actually changing so that
-      // re-entering a Q3 marker cannot hand out a second fresh set.
-      if (e.setQuarter >= 3 && state.quarter < 3) state.timeouts = { teamA: TIMEOUTS_PER_HALF, teamB: TIMEOUTS_PER_HALF };
-      if (e.setQuarter >= 5 && state.quarter < 5) state.timeouts = { teamA: TIMEOUTS_PER_OT, teamB: TIMEOUTS_PER_OT };
-      state.quarter = e.setQuarter;
-    }
-    if (e.setDirection){
-      state.dirTeam = e.setDirection.team;
-      state.dirValue = e.setDirection.dir;
-      state.dirQuarter = state.quarter;
-    }
-    if (e.timeout && state.timeouts[e.timeout.team] !== undefined){
-      // Floored at zero: the log is a record of what the coach called,
-      // and a fourth timeout should not read as -1 remaining.
-      state.timeouts[e.timeout.team] = Math.max(0, state.timeouts[e.timeout.team] - 1);
-    }
-    if (e.clockEvent){
-      const ce = e.clockEvent;
-      if (ce.type === 'start'){ pendingClockStart[ce.team] = ce.absSec; }
-      if (ce.type === 'end' && pendingClockStart[ce.team] !== null){
-        state.possessionTime[ce.team] += Math.max(0, ce.absSec - pendingClockStart[ce.team]);
-        pendingClockStart[ce.team] = null;
-      }
-      if (ce.type === 'transition'){
-        if (pendingClockStart[ce.outgoingTeam] !== null){
-          state.possessionTime[ce.outgoingTeam] += Math.max(0, ce.absSec - pendingClockStart[ce.outgoingTeam]);
-          pendingClockStart[ce.outgoingTeam] = null;
-        }
-        pendingClockStart[ce.incomingTeam] = ce.absSec;
-      }
-    }
-    if (e.setScores){ state.scores.teamA = e.setScores.teamA; state.scores.teamB = e.setScores.teamB; }
-  }
-  // Direction the team WITH THE BALL is currently driving. Derived, not
-  // stored: ends alternate every quarter, so one recorded answer covers
-  // the whole game, and re-recording it mid-game just re-bases the
-  // alternation from that quarter.
-  state.driveDir = null;
-  if (state.dirValue && state.possession){
-    const flipped = Math.abs((state.quarter || 1) - state.dirQuarter) % 2 === 1;
-    let d = flipped ? (state.dirValue === 'right' ? 'left' : 'right') : state.dirValue;
-    if (state.possession !== state.dirTeam) d = (d === 'right' ? 'left' : 'right');
-    state.driveDir = d;
-  }
-  return state;
-}
+
 
 function parseInput(raw, state){
   const trimmed = raw.trim();

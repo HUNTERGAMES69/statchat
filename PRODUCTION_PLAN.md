@@ -134,7 +134,22 @@ pure deduplication: the same bytes loaded from one place instead of five.
       `stat_package.html`, `season_report.html` with `<script src>`.
 - [ ] Regenerate `broadcast.html` against the shared engine and delete
       the generator's duplication.
-- [ ] Retire `engine_parity.js` deliberately — do not let it rot.
+- [x] Retired `engine_parity.js` — left as a passing no-op with an
+      explanation rather than deleted, so anyone running it by name gets
+      a reason instead of a missing-file error.
+
+**What actually changed:** 13 functions, 501 lines, extracted to
+`engine.js` and removed from five pages (58 removals in total). The
+engine set was determined by MEASUREMENT, not judgement — only functions
+that were top-level AND byte-identical across all four report pages were
+moved. `bucket` and `keyFor` were correctly left behind: they are nested
+inside `computeBoxScore` and extracting them would have broken the
+closure. `buildTeams`, `init` and `showView` stayed because they
+legitimately differ per page.
+
+Two tests needed updating, both scraping rather than logic:
+`drive_boundary_check` pulled `findDriveStarts` out of the page HTML,
+and the harness had to inline `engine.js` the way a browser fetches it.
 
 ### The one real risk
 
