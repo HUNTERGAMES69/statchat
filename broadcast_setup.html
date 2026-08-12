@@ -37,6 +37,9 @@
   .copy { background:var(--green); color:#fff; border:none; border-radius:5px;
           padding:5px 11px; font-size:12px; font-weight:700; white-space:nowrap; }
   .copy.done { background:#1a7a4c; }
+  .send { background:#1a1a2e; color:#fff; border:none; border-radius:5px;
+          padding:6px 13px; font-size:12px; font-weight:700; }
+  .send.done { background:#1a7a4c; }
   .fmt { background:none; border:1px solid var(--line); border-radius:5px;
          padding:4px 10px; font-size:12px; font-weight:600; color:var(--muted); }
   .fmt.on { background:var(--ink); color:#fff; border-color:var(--ink); }
@@ -69,10 +72,17 @@
         week</strong> &mdash; it follows whichever game is set ON AIR, so nothing
         needs changing on game day.
       </p>
-      <div style="margin-bottom:12px;">
-        Format:
+      <div style="margin-bottom:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <span>Format:</span>
         <button class="fmt on" data-fmt="xml">XML</button>
         <button class="fmt" data-fmt="json">JSON</button>
+        <span style="flex:1;"></span>
+        <!-- So Andy does not have to transcribe eight addresses. Sending
+             them beats giving the crew accounts: the only role that could
+             see this page is game_entry, which can also enter and DELETE
+             plays -- far more than a production team needs. -->
+        <button class="send" id="copyAllBtn">Copy all for the crew</button>
+        <button class="send" id="emailBtn">Email to the crew</button>
       </div>
       <table>
         <thead><tr><th>Graphic</th><th>What it gives you</th><th>Address</th><th></th></tr></thead>
@@ -210,6 +220,95 @@
       ov.appendChild(tr);
     });
   }
+
+  // One block of text carrying everything the crew needs: the addresses,
+  // which graphic each drives, and the one setting people forget.
+  function crewText(){
+    const lines = [];
+    lines.push('StatChat broadcast feed \u2014 setup details');
+    lines.push('');
+    lines.push('These addresses NEVER CHANGE. Set them up once and leave them.');
+    lines.push('They follow whichever game is marked ON AIR in StatChat, so');
+    lines.push('nothing needs editing on game day.');
+    lines.push('');
+    lines.push('IMPORTANT: set the refresh interval to 1-2 seconds. A data source');
+    lines.push('that fetches once looks exactly like a frozen feed \u2014 the numbers');
+    lines.push('are right at first and then never change. This is the usual cause');
+    lines.push('of a graphic going stale mid-game.');
+    lines.push('');
+    lines.push('--- DATA FEEDS (' + format.toUpperCase() + ') ---');
+    lines.push('');
+    FEEDS.forEach(([view, label, desc]) => {
+      lines.push(label);
+      lines.push('  ' + String(desc).replace(/&amp;/g, '&'));
+      lines.push('  ' + feedUrl(view));
+      lines.push('');
+    });
+    lines.push('--- READY-MADE OVERLAY ---');
+    lines.push('');
+    lines.push('A finished transparent scoreboard, if you would rather not build');
+    lines.push('graphics. Add as a web browser input at 1920x1080.');
+    lines.push('  Full scoreboard: ' + ORIGIN + '/broadcast.html');
+    lines.push('  Score only:      ' + ORIGIN + '/broadcast.html?layout=bug');
+    lines.push('');
+    lines.push('--- IN VMIX ---');
+    lines.push('');
+    lines.push('Add Input > Data Sources > ' + format.toUpperCase() + ', paste an address,');
+    lines.push('set the refresh interval, then map the columns onto your title.');
+    lines.push('Other software works the same way \u2014 it is a plain web address');
+    lines.push('returning ' + format.toUpperCase() + '.');
+    lines.push('');
+    lines.push('--- IF A GRAPHIC STOPS UPDATING ---');
+    lines.push('');
+    lines.push('1. Open the address in a browser. Current data means the feed is');
+    lines.push('   fine and the problem is in the broadcast software.');
+    lines.push('2. Check the refresh interval is set. This is usually it.');
+    lines.push('3. "No game is on air" means nobody has marked a game yet.');
+    lines.push('');
+    lines.push('Full guide: ' +
+      'https://github.com/HUNTERGAMES69/statchat/blob/main/BROADCAST_GUIDE.md');
+    return lines.join('\n');
+  }
+
+  async function copyText(text, btn, label){
+    try { await navigator.clipboard.writeText(text); }
+    catch (e) {
+      const t = document.createElement('textarea');
+      t.value = text; document.body.appendChild(t); t.select();
+      document.execCommand('copy'); t.remove();
+    }
+    const was = btn.textContent;
+    btn.textContent = label; btn.classList.add('done');
+    setTimeout(() => { btn.textContent = was; btn.classList.remove('done'); }, 2000);
+  }
+
+  document.getElementById('copyAllBtn').addEventListener('click', (e) => {
+    copyText(crewText(), e.target, 'Copied \u2014 paste into an email');
+  });
+
+  document.getElementById('emailBtn').addEventListener('click', (e) => {
+    const body = crewText();
+    const url = 'mailto:?subject=' +
+      encodeURIComponent('StatChat broadcast feed \u2014 setup details') +
+      '&body=' + encodeURIComponent(body);
+    // mailto has a length limit and some clients silently open an EMPTY
+    // draft when it is exceeded, which looks like the button did nothing.
+    // Always copy to the clipboard too, so there is a way to get the text
+    // regardless.
+    //
+    // The threshold is 7000, not the 2000 often quoted -- that figure is
+    // old Internet Explorer. Gmail, Outlook and Apple Mail all handle
+    // several thousand, and this text runs to about 3500 encoded, so
+    // warning at 2000 would fire every single time and train people to
+    // dismiss it.
+    copyText(body, e.target, 'Opening email\u2026');
+    if (url.length > 7000){
+      window.alert('That is a lot of text for an email link, and some mail ' +
+        'apps will open an empty draft.\n\nIt has been copied to your ' +
+        'clipboard as well \u2014 if the draft is blank, just paste.');
+    }
+    window.location.href = url;
+  });
 
   document.querySelectorAll('.fmt').forEach(b => {
     b.addEventListener('click', () => {
