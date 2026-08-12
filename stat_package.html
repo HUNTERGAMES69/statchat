@@ -645,6 +645,28 @@ function isAdminMarker(p){
         '<td>' + (defOwn.d3Pct !== null ? defOwn.d3Pct+'%' : '—') + '</td><td>' + (defOwn.d4Pct !== null ? defOwn.d4Pct+'%' : '—') + '</td><td>' + defOwn.explosive + '</td></tr></table>'
       : '<p class="no-stats">No defensive stats recorded.</p>';
 
+    // Per-player tackles, in their OWN table below the team row. Not
+    // merged, because the two TFL numbers legitimately differ: the team
+    // figure counts every play for a loss (a ceiling), while per-player
+    // needs a named tackler and naming is optional (a floor). One table
+    // would make the package look like it contradicts itself.
+    const tacklers = Object.keys(box.teamA.defense || {})
+      .filter(n => n !== 'TEAM' && (box.teamA.defense[n].tackles || 0) > 0)
+      .map(n => ({ name: n, d: box.teamA.defense[n] }))
+      .sort((a, b) => (b.d.tackles || 0) - (a.d.tackles || 0));
+    if (tacklers.length){
+      html += '<div class="section-title">' + TEAMS.teamA.name + ' — Tackles</div>' +
+        '<table class="stat-table"><tr><th></th><th>Tackles</th><th>TFL</th>' +
+        '<th>Sacks</th><th>Int</th><th>Fum Rec</th></tr>' +
+        tacklers.map(p => '<tr><td>' + p.name + '</td><td>' + (p.d.tackles || 0) +
+          '</td><td>' + (p.d.tfl || 0) + '</td><td>' + (p.d.sacks || 0) +
+          '</td><td>' + (p.d.int || 0) + '</td><td>' + (p.d.fumRec || 0) +
+          '</td></tr>').join('') +
+        '</table><p class="no-stats" style="margin-top:4px; font-size:11px;">' +
+        'Counts only plays where a tackler was named. The team TFL above ' +
+        'counts every play for a loss, so it may be higher.</p>';
+    }
+
     const koNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].kickoffs);
     const puntNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].punts);
     const kickNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].fgAtt || box.teamA.specialTeams[n].patAtt);

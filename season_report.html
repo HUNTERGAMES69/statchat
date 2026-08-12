@@ -250,6 +250,7 @@ function isAdminMarker(p){
   const seasonAgg = {
     rushing: {}, passing: {}, receiving: {}, specialTeams: {},
     defense: { int: 0, fumRec: 0, sacks: 0, tfl: 0 },
+      tacklers: {},   // per-player: tackles, tfl, sacks, int, fumRec
     perGame: [],
     totals: { rushAtt:0, rushYds:0, rushTd:0, passAtt:0, passComp:0, passYds:0, passTd:0, sacked:0, totalPlays:0, possessions:0, turnovers:0, penCount:0, penYds:0,
       oppD3att:0, oppD3conv:0, oppD4att:0, oppD4conv:0, explosiveFor:0,
@@ -277,6 +278,14 @@ function isAdminMarker(p){
     Object.keys(box.teamA.specialTeams).forEach(n => {
       mergeInto(seasonAgg.specialTeams, n, box.teamA.specialTeams[n]);
     });
+    // Per-player defence, accumulated by name like every other category.
+    // The team totals below stay as they are -- they answer a different
+    // question and must not be replaced by these (see the note by the
+    // table).
+    Object.keys(box.teamA.defense || {}).forEach(n => {
+      if (n !== 'TEAM') mergeInto(seasonAgg.tacklers, n, box.teamA.defense[n]);
+    });
+
     seasonAgg.defense.int += sumStat(box.teamA.defense, 'int');
     seasonAgg.defense.fumRec += sumStat(box.teamA.defense, 'fumRec');
     seasonAgg.defense.sacks += sumStat(box.teamA.defense, 'sacks');
@@ -667,6 +676,31 @@ function isAdminMarker(p){
       (seasonAgg.defense.int || seasonAgg.defense.fumRec || seasonAgg.defense.sacks || seasonAgg.defense.tfl
         ? '<table class="stat-table"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th><th>TFL</th></tr><tr><td>Defense</td><td>'+seasonAgg.defense.int+'</td><td>'+seasonAgg.defense.fumRec+'</td><td>'+seasonAgg.defense.sacks+'</td><td>'+seasonAgg.defense.tfl+'</td></tr></table>'
         : '<p class="no-stats">No defensive stats recorded.</p>') + '</div>';
+
+    // Per-player tackles across the season, in their own section. The
+    // team TFL above counts every play for a loss with no tackler needed
+    // (a ceiling); these need a name and naming is optional (a floor).
+    // Separate tables, because one number cannot be both.
+    const seasonTacklers = Object.keys(seasonAgg.tacklers || {})
+      .filter(n => (seasonAgg.tacklers[n].tackles || 0) > 0)
+      .sort((a, b) => (seasonAgg.tacklers[b].tackles || 0) -
+                      (seasonAgg.tacklers[a].tackles || 0));
+    if (seasonTacklers.length){
+      html += '<div class="section"><div class="section-title">' +
+        TEAMS.teamA.name + ' \u2014 Tackles</div>' +
+        '<table class="stat-table"><tr><th></th><th>Tackles</th><th>TFL</th>' +
+        '<th>Sacks</th><th>Int</th><th>Fum Rec</th></tr>' +
+        seasonTacklers.map(n => {
+          const d = seasonAgg.tacklers[n];
+          return '<tr><td>' + n + '</td><td>' + (d.tackles || 0) + '</td><td>' +
+                 (d.tfl || 0) + '</td><td>' + (d.sacks || 0) + '</td><td>' +
+                 (d.int || 0) + '</td><td>' + (d.fumRec || 0) + '</td></tr>';
+        }).join('') +
+        '</table><p class="no-stats" style="margin-top:4px; font-size:11px;">' +
+        'Counts only plays where a tackler was named, so these are a minimum. ' +
+        'The team TFL above counts every play for a loss and may be higher.</p>' +
+        '</div>';
+    }
 
     const koNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].kickoffs);
     const puntNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].punts);

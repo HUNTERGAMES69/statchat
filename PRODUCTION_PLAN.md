@@ -375,9 +375,15 @@ is a ONE-file engine change**, which is part of why it sits here.
       a sack.
 - [x] Per-player TFL falls out for free: a credited tackle on a play with
       negative yardage.
-- [ ] Add the columns to `view.html`, `recap.html`, `stat_package.html`
-      and `season_report.html`, and to the XLS export.
-- [ ] Add them to the vMix `defense` feed view (Phase 3).
+- [x] `view.html`, `recap.html`, `stat_package.html` and
+      `season_report.html` all show a Tackles section, each in its OWN
+      table beside the existing team row — not merged, because the two
+      TFL numbers legitimately differ and merging would make the report
+      look like it contradicts itself.
+      `season_report` aggregates by NAME across games, a different code
+      path from displaying one box score; mutation-tested by removing
+      the aggregation.
+- [ ] Still to add: the XLS export.
 - [ ] A test suite, mutation-tested like the others.
 
 ### The honest caveat, which must reach the reports
