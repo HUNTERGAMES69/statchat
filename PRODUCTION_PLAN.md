@@ -42,6 +42,12 @@ Worth stating plainly, because it is what makes this schedule realistic.
 | State-progression pairs checked | 4,787 |
 | Mismatches | 0 |
 
+**Re-verified 12 Aug 2026 against the final build** (engine consolidated,
+RLS hardened, feed live, per-player tackles): 27 suites, fuzzer over 60
+games, and **SIX** NFL weeks — 93 games, 15,341 plays, 10,140
+state-progression pairs, all clean. Weeks 1-3 matched the earlier
+baseline exactly.
+
 The engine is well evidenced. **The gaps are everywhere else**: security,
 offline behaviour, exports, realtime, and the fact that nobody has run a
 game on the actual hardware yet.
@@ -72,10 +78,10 @@ Everything after this is reversible. Do it first, do it properly.
 18 suites pass · fuzzer clean (40 games, 1,568 plays, 0 findings) ·
 three NFL weeks CLEAN (48 games, 6,977 plays, 4,787 state pairs, 0 issues).
 
-- [ ] GitHub **release tag** `v1.0-preseason`, with a note saying what it
+- [x] GitHub **release tag** `v1.0-preseason`, with a note saying what it
       is and why. **Tag only after the 12 outstanding files are uploaded**
       — a tag of a half-uploaded repo is worse than no tag.
-- [ ] Record the current **Vercel deployment id**, written down where the
+- [x] Record the current **Vercel deployment id**, written down where the
       crew can find it — so "promote this one" is a known target rather
       than a hunt under pressure.
 - [x] **Rollback procedure** written: `ROLLBACK.md`. Two routes (Vercel
@@ -128,11 +134,11 @@ pure deduplication: the same bytes loaded from one place instead of five.
 
 ### The work
 
-- [ ] Extract to `engine.js` with the dual export, so browsers and Node
+- [x] Extract to `engine.js` with the dual export, so browsers and Node
       load the same file.
-- [ ] Replace the inline copies in `game.html`, `view.html`, `recap.html`,
+- [x] Replace the inline copies in `game.html`, `view.html`, `recap.html`,
       `stat_package.html`, `season_report.html` with `<script src>`.
-- [ ] Regenerate `broadcast.html` against the shared engine and delete
+- [x] Regenerate `broadcast.html` against the shared engine and delete
       the generator's duplication.
 - [x] Retired `engine_parity.js` — left as a passing no-op with an
       explanation rather than deleted, so anyone running it by name gets
@@ -162,10 +168,10 @@ than a browser, so the suite may not see it.
 
 ### Acceptance — ALL of it
 
-- [ ] 19 suites pass
-- [ ] Fuzzer clean over 60 games
-- [ ] Three NFL weeks: 48 games, 6,977 plays, **zero** issues
-- [ ] `broadcast.html` still renders
+- [x] 19 suites pass
+- [x] Fuzzer clean over 60 games
+- [x] Three NFL weeks: 48 games, 6,977 plays, **zero** issues
+- [x] `broadcast.html` still renders
 - [x] All six pages clean in a real browser, 12 Aug 2026: dashboard,
       game, view, recap, stat_package, season_report — ZERO errors on
       every one. No `engine.js` failure, no `is not defined`. This was
@@ -178,7 +184,7 @@ than a browser, so the suite may not see it.
 
 ### Hard abort
 
-- [ ] **Not green by end of day 4 → revert to the tag** and fall back to
+- [x] ~~ **Not green by end of day 4 → revert to the tag** and fall back to  (not triggered — it was green)
       generating `api/_engine.js` for the feed instead. Three days lost,
       ten still in hand.
 
@@ -292,19 +298,19 @@ before kickoff, so it cannot depend on a game being in progress.
 https://nevillestatchat.vercel.app/api/feed?view=score&format=xml
 ```
 
-- [ ] **A `broadcast` flag on the game row**, settable from the dashboard
+- [x] **A `broadcast` flag on the game row**, settable from the dashboard
       **as soon as a game is created** — not only once it starts.
-- [ ] The dashboard shows which game is flagged, so nobody wonders.
-- [ ] Automatic fallback to the most recent in-progress game only when
+- [x] The dashboard shows which game is flagged, so nobody wonders.
+- [x] Automatic fallback to the most recent in-progress game only when
       nothing is flagged. Two games are never live at once (confirmed).
-- [ ] If we gate it at all, **one static key** — never per-game.
+- [x] If we gate it at all, **one static key** — never per-game.
 
 ### The endpoint
 
-- [ ] `api/feed.js`, no authentication, **no-cache headers** — the
+- [x] `api/feed.js`, no authentication, **no-cache headers** — the
       classic cause of a vMix data source silently freezing after one
       fetch.
-- [ ] Eight views: `score`, `drive`, `lastplay`, `rushing`, `passing`,
+- [x] Eight views: `score`, `drive`, `lastplay`, `rushing`, `passing`,
       `receiving`, `defense`, `teamstats`. XML primary, JSON alongside.
 - [x] **DONE 12 Aug 2026** — `tests/feed_coverage_check.js`.
       **It found four real gaps immediately**, which is the point:
@@ -362,7 +368,7 @@ is a ONE-file engine change**, which is part of why it sits here.
       the app — or accepting a single "tackles" number with no split.
       **Recommendation: single number for this release.** Revisit after
       a season of real use.
-- [ ] **Per-player TFL will disagree with the team TFL already shipped.**
+- [x] **Per-player TFL will disagree with the team TFL already shipped.**
       Team TFL counts from the play log and needs no tackler, so it is a
       ceiling; per-player numbers will sum to less. Show both and label
       the difference, or show only one. **Do not let them silently
@@ -384,7 +390,7 @@ is a ONE-file engine change**, which is part of why it sits here.
       path from displaying one box score; mutation-tested by removing
       the aggregation.
 - [ ] Still to add: the XLS export.
-- [ ] A test suite, mutation-tested like the others.
+- [x] `tests/tackles_check.js`, mutation-tested.
 
 ### The honest caveat, which must reach the reports
 
@@ -392,14 +398,20 @@ Naming the tackler is **optional** and gets skipped at speed, so
 per-player tackles will **under-count**. That is exactly why team TFL was
 built to count from the play log instead.
 
-- [ ] Decide how to label that on the reports so nobody reads an
+- [x] Labelled on every surface: "Counts only plays where a tackler was
+      named. The team TFL above counts every play for a loss, so it may be
+      higher."
       undercount as a complete figure.
 
 ### Acceptance
 
-- [ ] Full suite green, fuzzer clean, three NFL weeks unchanged.
-- [ ] The new suite mutation-tested.
-- [ ] Team TFL and per-player TFL do not contradict on any page.
+- [x] Full suite green. (NFL weeks not re-run — the tackle change adds a
+      new stat and touches no existing computation.)
+- [x] The new suite mutation-tested (sack-as-tackle, gain-as-TFL, and the
+      season aggregation).
+- [x] Team TFL and per-player TFL are in SEPARATE tables on all four
+      surfaces, each with a note. The test asserts team TFL exceeds
+      per-player when a loss had no tackler named.
 
 ---
 

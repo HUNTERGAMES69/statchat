@@ -347,6 +347,28 @@ be a mutation that never applied — the string did not exist in the file
 - [ ] **Model own-recovered fumbles in the converter** rather than
   excluding them, if tier 0 coverage is ever wanted on those ~8 pairs
   per game. Low value: tier 1 already proves the yardage is right.
+- [x] **SIX WEEKS run Aug 12: 93 games, 15,341 plays, 10,140 state pairs,
+  all clean.** Weeks 1-3 matched the earlier baseline exactly after the
+  engine consolidation AND the per-player tackle work, which is the
+  strongest evidence available that neither changed existing behaviour.
+
+  **Week 4 found a real converter bug that three weeks never had.**
+  A rusher was one yard out:
+
+      B.Robinson left end to PHI 1 for no gain. FUMBLES,
+      recovered by WAS-17-T.McLaurin at PHI -4. TOUCHDOWN.
+
+  The converter tested `touchdown && td_team === posteam` -- both true --
+  so it entered a RUSHING touchdown by Robinson. StatChat then correctly
+  filled the yardage to reach the end zone, giving him a yard he never
+  gained. The app was right; the harness handed it the wrong play. Now
+  checks `td_player_id` matches the player being credited.
+
+  **The lesson: new weeks keep finding things.** Three clean weeks did not
+  mean the harness was correct, only that those three weeks contained no
+  fumble-recovered-for-a-touchdown. Widening the data is worth more than
+  re-running the same games.
+
 - [x] ~~Run more than five games.~~ **Full week run Aug 10: 16 games,
   2,307 plays, clean.** It found one more harness bug on the way (see
   below). Next step if wanted is a full season, which is ~285 games and
@@ -1011,6 +1033,37 @@ and TRANSPORT, both handled by one query parameter:
   make it serve both purposes.
 - [ ] CSV is worth adding when something needs it — several suites take
   it, and it is trivial once the views exist. Not before.
+
+---
+
+## 15. Five stray files in the repo — left deliberately
+
+Noted 12 Aug 2026. **Harmless, and deleting them fought the GitHub web UI**
+(a delete reported success but never reached `main`, probably committing to
+a new branch instead), so they stay for now.
+
+| File | What it is |
+|---|---|
+| `feed.js` *(root)* | Copy of `api/feed.js`, uploaded to the wrong place. Now STALE — still contains the abbreviation fields that were removed 12 Aug. |
+| `api/engine.js` | Copy of the root `engine.js`, same story, also stale. |
+| `API/invite-user.js` | The old uppercase folder. Only lowercase `api/` is live on Vercel. |
+| `test` | Empty leftover directory. |
+| `BROADCAST_GUIDE.md` | Superseded by `help.html#broadcast`, which is public and gets updated with the app. |
+
+**Nothing loads any of them.** `api/feed.js` requires `./_engine.js` which
+points at the root `engine.js`; the root `feed.js` is not in `api/` so
+Vercel never treats it as a function.
+
+**The one real cost:** grepping the repo for something like `homeAbbr` now
+finds hits in stale copies, which will make someone think a change did not
+land when it did.
+
+- [ ] Delete them at some point. If the web UI keeps refusing, the likely
+  cause is the delete committing to a new branch rather than `main` —
+  check the Pull requests tab and the branch dropdown for stray
+  `patch-N` branches.
+- [ ] When deleting, do the files individually; git tracks files, not
+  folders, so `API/` and `test` disappear once empty.
 
 ---
 
