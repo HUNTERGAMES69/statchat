@@ -831,6 +831,49 @@ real error harder to spot.
 
 ---
 
+## 11. A "Game Supervisor" role — scoped 12 Aug 2026, NOT scheduled
+
+Andy asked how big a job this is. Answer: **2-3 hours, mostly testing.**
+Deliberately not scheduled before the first game — see the timing note.
+
+**What it would be:** a tier between `game_entry` and `admin` that can
+create games, upload opponent rosters and edit the team roster, but
+cannot manage users or change roles. Effectively "admin minus account
+management".
+
+**Why it is small:** the codebase already uses a ROLE_RANK ladder rather
+than scattered `=== 'admin'` checks, so a new tier slots in:
+
+    const ROLE_RANK = { view: 0, game_entry: 1, supervisor: 2, admin: 3 };
+
+Every existing `guardMinRoleOrRedirect(..., 'game_entry')` call keeps
+working unchanged, because a supervisor outranks a scorer automatically.
+
+- [ ] `ROLE_RANK` in six files: `create_game.html`, `customize.html`,
+  `game.html`, `recap.html`, `roster.html`, and any other copy.
+- [ ] `api/manage-users.js` — add `'supervisor'` to `validRoles`.
+- [ ] `account.html` — role badge, dropdown option, label (3 small edits).
+- [ ] `dashboard.html` — the New Game button is gated on
+  `currentIsAdmin`; it needs a `currentCanManageGames` that includes
+  supervisors.
+- [ ] RLS: `in ('admin','supervisor')` on `games` insert (and delete, if
+  decided), and on the `game_rosters`, `players` and `teams` write
+  policies.
+
+**The design question to settle first:** can a supervisor DELETE a game?
+Creating one implies being able to fix a mistake, and if they cannot,
+the admin is back in the loop for exactly the case this role exists to
+solve. Recommendation: yes for games they can create, no for anything
+else.
+
+**Timing — why not now.** This is a permissions change days after
+permissions were carefully hardened and verified, touching six files
+plus the policies we just proved correct. That is how careful work gets
+quietly undone. Pick it up after Phase 3 or after the rehearsal, by
+which point real use will have shown whether the crew actually needs it.
+
+---
+
 ## BEFORE GOING TO PRODUCTION
 
 Everything here is fine for a test app and **not** fine once real users
@@ -879,9 +922,32 @@ There is no role enforcement in the database at all.
   `profiles_role_guard` and makes Unlock to edit admin-only in the
   database. Two minutes, low risk, but only closes one path; not a
   substitute for real policies.
-- [ ] **Confirm no other self-write path to `profiles.role`.** The
-  self-promotion hole is closed by a trigger; worth re-checking there is
-  no second route once more policies change.
+- [x] ~~Confirm no other self-write path to `profiles.role`.~~ **Verified
+  12 Aug 2026.** The trigger `profiles_role_guard` runs
+  `prevent_self_role_change()`: it blocks ANY role change unless the
+  caller is already an admin. It is SECURITY DEFINER and tests
+  `auth.uid() is not null`, so a service-key call bypasses it — which is
+  how `api/manage-users.js` legitimately changes roles.
+
+- [ ] **An admin can DEMOTE THEMSELVES, and nothing stops it.** The
+  trigger only guards against non-admins changing roles; it happily
+  allows an admin to set their own role to `view`. The account page
+  greys out the self-row, but the UI is not a security boundary — a
+  direct API call would go through.
+
+  **Why it matters:** with a small number of admins, a self-demotion
+  leaves nobody able to promote anyone back. The app itself offers no
+  way out; it would need SQL against the database. A second admin
+  account exists as of 12 Aug, which reduces this from fatal to
+  annoying — but it is still a hole.
+
+  **The fix** is a few lines added to `prevent_self_role_change()`:
+  refuse when `new.id = auth.uid()` and the role is changing, so nobody
+  alters their own role by any route, admin or not. Role changes then
+  always come from someone else, or from the service key.
+
+  Worth doing in the same session as the RLS work, since it is the same
+  trigger and the same testing.
 
 ### Two-factor authentication for admin accounts
 
