@@ -557,6 +557,123 @@ function computeBoxScore(playsList){
   return stats;
 }
 
+
+// ---------------------------------------------------------------------
+// Helpers the engine depends on, for NODE ONLY.
+//
+// Every page already defines these itself, and engine.js loads BEFORE the
+// page script -- so declaring them unconditionally here collided:
+//   SyntaxError: Identifier 'TIMEOUTS_PER_HALF' has already been declared
+// which killed the whole page. `const` at top level cannot be
+// redeclared, and a syntax error is fatal to the entire script.
+//
+// So they are attached to globalThis only when `module` exists, i.e. in
+// Node. In a browser this block does nothing at all and the page's own
+// definitions are the only ones. That asymmetry is deliberate: adding
+// them to the pages instead would mean editing six files to no benefit.
+// ---------------------------------------------------------------------
+if (typeof module !== 'undefined' && module.exports) {
+  if (typeof globalThis.isAdminMarker !== 'function') {
+    globalThis.isAdminMarker = function isAdminMarker(p){
+      if (!p) return true;
+      const e = p.effect || {};
+      if (e.isReset) return false;
+      return !!(e.clockEvent || e.setQuarter || e.forcePossession || p.isDivider);
+    };
+  }
+  if (typeof globalThis.otherTeam !== 'function') {
+    globalThis.otherTeam = function otherTeam(t){
+      return t === 'teamA' ? 'teamB' : 'teamA';
+    };
+  }
+  if (globalThis.TIMEOUTS_PER_HALF === undefined) globalThis.TIMEOUTS_PER_HALF = 3;
+  if (globalThis.TIMEOUTS_PER_OT === undefined) globalThis.TIMEOUTS_PER_OT = 1;
+  if (typeof globalThis.clockToAbsSeconds !== 'function') {
+    globalThis.clockToAbsSeconds = function clockToAbsSeconds(quarter, clockStr){
+      const m = String(clockStr || '').match(/^(\d{1,2}):(\d{2})$/);
+      let mins, secs;
+      if (m){ mins = parseInt(m[1], 10); secs = parseInt(m[2], 10); }
+      else {
+        const digits = String(clockStr || '').replace(/\D/g, '');
+        if (digits.length < 2) return null;
+        secs = parseInt(digits.slice(-2), 10);
+        mins = parseInt(digits.slice(0, -2) || '0', 10);
+      }
+      if (isNaN(mins) || isNaN(secs)) return null;
+      const q = quarter || 1;
+      const len = globalThis.quarterLengthSec || 720;
+      return (q - 1) * len + (len - (mins * 60 + secs));
+    };
+  }
+}
+
+// ---------------------------------------------------------------------
+// Server-side context builder.
+//
+// The browser pages keep engine state in module-level globals -- TEAMS,
+// plays, startingPossession, quarterLengthSec -- because a page shows
+// exactly one game. A serverless function may handle any game on any
+// request, so globals are wrong there: two concurrent requests would
+// share them.
+//
+// buildContext() takes raw database rows and returns everything computed
+// for ONE game, with nothing left behind. Same engine, no shared state.
+// Browser-only, so it is defined but unused there.
+// ---------------------------------------------------------------------
+function buildContext(game, rosterRows, playRows, ourBranding){
+  const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
+  const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+  const b = ourBranding || {};
+
+  const mkTeam = (name, bg, text, logo) => ({
+    name: name || '', abbr: (name || '').split(/\s+/)[0] || '',
+    bg, text, logo: logo || null,
+    rosterOffense: {}, rosterDefense: {}, rosterSpecialTeams: {}, posOffense: {}
+  });
+
+  const teams = {
+    teamA: mkTeam(ourName, b.primary_color || '#1a1a2e',
+                  b.secondary_color || '#ffffff', b.logo_url),
+    teamB: mkTeam(oppName, game.opponent_primary_color || '#8B0000',
+                  game.opponent_secondary_color || '#ffffff', game.opponent_logo_url)
+  };
+
+  (rosterRows || []).forEach(r => {
+    const t = teams[r.team_side];
+    if (!t) return;
+    if (r.unit === 'offense'){ t.rosterOffense[r.jersey_number] = r.player_name;
+                               t.posOffense[r.jersey_number] = r.position; }
+    else if (r.unit === 'defense'){ t.rosterDefense[r.jersey_number] = r.player_name; }
+    else if (r.unit === 'special'){ t.rosterSpecialTeams[r.jersey_number] = r.player_name; }
+  });
+
+  const plays = (playRows || []).map(p => ({
+    id: p.id, seq: p.sequence_number, text: p.text,
+    effect: p.effect || {}, roles: p.roles || null,
+    team: p.team_side, quarter: p.quarter,
+    isDivider: !!p.is_divider, unresolved: !!p.unresolved,
+    isOverride: !!p.is_override
+  }));
+
+  // computeState and computeBoxScore read TEAMS and the other globals
+  // from their enclosing scope. In Node that scope is this module, so
+  // they are set here for the duration of the call. Safe because a
+  // serverless invocation handles one request at a time; if that ever
+  // stops being true, these must become parameters.
+  if (typeof globalThis !== 'undefined') {
+    globalThis.TEAMS = teams;
+    globalThis.startingPossession = game.starting_possession || 'teamA';
+    globalThis.quarterLengthSec = game.quarter_length_seconds || 720;
+    globalThis.TIMEOUTS_PER_HALF = 3;
+  }
+
+  return {
+    game, teams, plays,
+    state: computeState(plays),
+    box: computeBoxScore(plays)
+  };
+}
+
 // Dual export. Browsers get the globals above; Node gets a module.
 // The guard matters -- without it the browser throws on `module`.
 if (typeof module !== 'undefined' && module.exports) {
@@ -573,6 +690,7 @@ if (typeof module !== 'undefined' && module.exports) {
     countPossessions,
     countTurnovers,
     computeState,
-    computeBoxScore
+    computeBoxScore,
+    buildContext
   };
 }
