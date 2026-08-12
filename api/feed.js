@@ -22,6 +22,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const engine = require('./_engine.js');
+const { countPossessions, countTurnovers } = engine;
 
 // ---------------------------------------------------------------- utils
 
@@ -101,7 +102,22 @@ function buildViews(ctx) {
       interceptions: sumOf(s.defense, 'int'),
       fumbleRec: sumOf(s.defense, 'fumRec'),
       timeouts: (state.timeouts || {})[k] || 0,
-      timeOfPossession: mmss((state.possessionTime || {})[k])
+      timeOfPossession: mmss((state.possessionTime || {})[k]),
+      // Added 12 Aug after the coverage test found them missing. All
+      // three are on the view page's per-team tiles, so a production
+      // team looking at the app would reasonably expect them -- and
+      // nothing would have told us they were absent.
+      possessions: (countPossessions(plays) || {})[k] || 0,
+      turnovers: (countTurnovers(plays) || {})[k] || 0,
+      penaltyCount: ((state.penalties || {})[k] || {}).count || 0,
+      penaltyYards: ((state.penalties || {})[k] || {}).yds || 0,
+      // Pre-formatted the way the view page shows it ("4-35"), so a
+      // single text field can bind straight to it.
+      penalties: (((state.penalties || {})[k] || {}).count || 0) + '-' +
+                 (((state.penalties || {})[k] || {}).yds || 0),
+      totalPlays: plays.filter(p => p.team === k && p.roles &&
+        ['rush','pass','incomplete','sack','int','fumble']
+          .includes(p.roles.playType)).length
     };
   };
 
@@ -110,7 +126,13 @@ function buildViews(ctx) {
     const b = (box[teamKey] || {})[cat] || {};
     return Object.keys(b)
       .map(name => Object.assign({ player: name, team: sideName(teamKey) }, b[name]))
-      .filter(r => (r[sortKey] || 0) !== 0 || (r.att || r.rec || r.tgt))
+      // Keep anyone with ANY stat in the category, not just the one being
+      // sorted on. The old filter tested the sort key plus att/rec/tgt,
+      // which meant a defender with a sack and no tackles was dropped --
+      // and the whole `defense` view returned zero rows for a game that
+      // contained a sack and an interception. The coverage test found it.
+      .filter(r => Object.keys(r).some(k =>
+        k !== 'player' && k !== 'team' && (r[k] || 0) !== 0))
       .sort((a, b2) => (b2[sortKey] || 0) - (a[sortKey] || 0));
   };
   const bothTeams = (cat, sortKey) =>
