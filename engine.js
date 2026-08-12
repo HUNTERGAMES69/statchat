@@ -586,6 +586,17 @@ if (typeof module !== 'undefined' && module.exports) {
       return t === 'teamA' ? 'teamB' : 'teamA';
     };
   }
+  // Which roster positions catch rather than carry. computeBoxScore uses
+  // it to decide whether a pass credit lands in `receiving` or
+  // `rushing`. Missed when the helpers were first added, because I
+  // listed the ones I remembered instead of searching for undefined
+  // references -- the feed's first real request returned
+  // {"error":"RECEIVE_POS is not defined"}.
+  // tests/engine_standalone_check.js searches now, so the next one
+  // cannot hide.
+  if (globalThis.RECEIVE_POS === undefined) {
+    globalThis.RECEIVE_POS = new Set(['WR','TE','SE','FL','SLOT']);
+  }
   if (globalThis.TIMEOUTS_PER_HALF === undefined) globalThis.TIMEOUTS_PER_HALF = 3;
   if (globalThis.TIMEOUTS_PER_OT === undefined) globalThis.TIMEOUTS_PER_OT = 1;
   if (typeof globalThis.clockToAbsSeconds !== 'function') {
