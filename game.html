@@ -2031,7 +2031,45 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
   }
 
+  // THE phase, worked out from the play log rather than remembered.
+  //
+  // `game_phase` used to be authoritative and stored on the game row,
+  // which meant it could disagree with the plays. That produced THREE
+  // separate lockups: undoing across the interval left it at
+  // 'secondHalf' with no second-half plays; undoing past the divider
+  // left it at 'halftime' with no divider, hiding both half buttons and
+  // disabling entry; and a stale `guided_state` kept a kickoff "active"
+  // after its plays were undone. Each was patched with a self-heal, and
+  // each patch was a symptom of the same design fault.
+  //
+  // The log cannot disagree with itself. Rules, in order:
+  //   final game status   -> ended        (a genuine game-row property)
+  //   no real plays       -> notStarted
+  //   no half divider     -> firstHalf
+  //   divider, none after -> halftime
+  //   divider, plays after-> secondHalf
+  //
+  // "Real play" means non-admin: clock events, quarter markers and
+  // direction markers do not start a half. Undoing back across the
+  // interval therefore returns to halftime on its own, with no repair
+  // logic anywhere.
+  function derivePhase(){
+    if (currentGameStatus === 'final') return 'ended';
+    const real = plays.filter(p => !isAdminMarker(p));
+    if (!real.length) return 'notStarted';
+    const divIdx = plays.findIndex(p =>
+      p.isDivider && /end of (1st|first) half/i.test(p.text || ''));
+    if (divIdx === -1) return 'firstHalf';
+    return plays.slice(divIdx + 1).some(p => !isAdminMarker(p))
+      ? 'secondHalf' : 'halftime';
+  }
+
   function updatePhaseUI(){
+    // Recomputed on every render. The stored column is now a cache that
+    // is always overwritten, kept only so an older page reading the game
+    // row still sees something sensible.
+    gamePhase = derivePhase();
+
     const disable = guided.active || !!clockPrompt || gamePhase === 'notStarted' || gamePhase === 'halftime' || gamePhase === 'ended';
     // Undo is blocked on a finalized game. The database refuses to delete
     // a play from a final game, so the button would drop it locally, look
@@ -2110,20 +2148,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // An active guided flow disables every control and hides both half
     // buttons, so the game looks locked with no way forward. If the flow
     // is waiting on a half that the log says never ended, it is stale.
+    // The PHASE self-heal that used to live here is gone: derivePhase()
+    // above cannot produce a stranded phase, because it reads the log.
+    // The GUIDED self-heal stays -- guided_state is still stored, so a
+    // kickoff can still be left "active" after its plays are undone, and
+    // an active flow disables every control.
     const halfDividerPresent = plays.some(p => p.isDivider && /end of (1st|first) half/i.test(p.text || ''));
-    const strandedGuided = guided.active && guided.targetPhase === 'secondHalf' && !halfDividerPresent;
-    const strandedPhase = !halfDividerPresent && (gamePhase === 'halftime' || gamePhase === 'secondHalf');
-    if (strandedGuided || strandedPhase){
-      // Both halves of the same repair. Clearing the guided flow alone
-      // still left the phase claiming halftime with no half-end marker in
-      // the log -- entry disabled, both half buttons hidden. The log is
-      // the source of truth: no divider means the first half is still on.
-      if (strandedGuided){
-        guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
-        const gp = document.getElementById('guidedPanel');
-        if (gp) gp.style.display = 'none';
-      }
-      if (strandedPhase) gamePhase = 'firstHalf';
+    if (guided.active && guided.targetPhase === 'secondHalf' && !halfDividerPresent){
+      guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
+      const gp = document.getElementById('guidedPanel');
+      if (gp) gp.style.display = 'none';
       persistUiState();
     }
     document.getElementById('endFirstHalfBtn').style.display = (gamePhase === 'firstHalf' && !guided.active) ? 'inline-block' : 'none';
@@ -4853,29 +4887,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       plays.findIndex(q => q.isDivider && /end of (1st|first) half/i.test(q.text || '')) !== -1 &&
       !isAdminMarker(p));
     const halfEnded = plays.some(p => p.isDivider && /end of (1st|first) half/i.test(p.text || ''));
-    // Undoing back PAST the divider itself has to return to the first
-    // half, or the game sits at halftime with no half-end marker and no
-    // way to enter a play.
-    // Derived from the log, not from whatever the phase happened to be.
-    // Keying off gamePhase === 'halftime' meant undoing the divider while
-    // still in 'secondHalf' left the game there: no End 1st half button,
-    // no Start 2nd half, and every control disabled -- stuck with no way
-    // forward except Reset game.
-    if (!halfEnded && gamePhase !== 'firstHalf' && gamePhase !== 'ended' && gamePhase !== 'notStarted'){
-      gamePhase = 'firstHalf';
+    // The two phase repairs that used to be here are GONE. derivePhase()
+    // reads the log on every render, so undoing across the interval --
+    // or past the divider itself -- lands on the right phase with no
+    // repair needed. Three separate lockups came from patching stored
+    // state; this is the design that makes them impossible rather than
+    // the fourth patch.
+    //
+    // The guided flow is still stored, so it still needs clearing: an
+    // "active" kickoff whose plays have been undone disables every
+    // control. The idle SHAPE, not null -- updatePhaseUI reads
+    // guided.active unguarded and nulling it takes the page down.
+    const phaseNow = derivePhase();
+    if (guided.active && phaseNow !== 'halftime' && phaseNow !== 'notStarted'){
       guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
       await persistUiState();
-      updatePhaseUI();
+    }
+    if (!halfEnded && afterHalf === false && phaseNow === 'firstHalf'){
       showMsg('gameMsg', 'Back in the first half.', 'info');
-    } else if (halfEnded && !afterHalf && gamePhase !== 'halftime'){
-      gamePhase = 'halftime';
-      // The idle shape, not null -- updatePhaseUI reads guided.active
-      // unguarded and nulling it takes the whole page down.
-      guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
-      await persistUiState();
-      updatePhaseUI();
+    } else if (halfEnded && !afterHalf){
       showMsg('gameMsg', 'Back to halftime. Use "Start 2nd half" to run the kickoff again.', 'info');
     }
+    updatePhaseUI();
     renderAll();
     // The game isn't finalized, so the database allows this delete -- but
     // only bother if this play actually made it to the server in the

@@ -227,14 +227,36 @@ lose data permanently.
       the stadium when something looks wrong.
       Covered by `tests/game_export_check.js`, mutation-tested including
       a check that removing the role gate fails the suite.
-- [ ] **Test the offline queue — and rehearse it.** Confirmed working by
-      hand, **no automated test**, and it fails *silently*: you find out
-      plays are missing after the game. Airplane mode mid-drive, then
-      reconnect, and verify every play landed.
-- [ ] **Derive game phase from the log** rather than the stored column.
-      Three separate lockups came from stored phase. All self-heal now,
-      but a fourth variant locks the UI mid-game with Reset as the only
-      exit.
+- [x] **Automated test written 12 Aug 2026** —
+      `tests/offline_queue_check.js`, six scenarios, mutation-tested.
+      The queue turned out to be genuinely well built: dedup against
+      server state before pushing, duplicate-key errors treated as
+      "already landed", and permanent refusals discarded with an
+      explanation rather than retried forever. All of that is now
+      protected rather than merely true.
+      Needed a new harness capability (`db.failNext`) — a mock that
+      always succeeds cannot exercise a queue.
+- [ ] **STILL TO DO: the offline rehearsal, ON A LAPTOP.** Andy confirmed
+      12 Aug: **entry is laptop only, never mobile.** That removes the
+      worst offline risks — iOS suspending a background tab, Android
+      killing the page, mobile Safari clearing localStorage under memory
+      pressure. A laptop browser keeps the tab alive and keeps
+      localStorage.
+      Still worth rehearsing, because wifi at a stadium drops regardless
+      of the device: turn wifi off mid-drive, enter three plays, reload
+      while still offline, reconnect, confirm all three landed.
+- [x] **DONE 12 Aug 2026.** `derivePhase()` reads the log on every
+      render: final status → ended; no real plays → notStarted; no half
+      divider → firstHalf; divider with nothing after → halftime;
+      otherwise secondHalf. The stored column is now a cache that is
+      always overwritten.
+      **Two self-heal blocks deleted**, not added to — undoing across the
+      interval, or past the divider, now lands correctly with no repair
+      logic at all. The guided-flow repair stays, because guided_state is
+      genuinely not derivable ("kickoff in progress" and "kickoff never
+      started" look identical in the log).
+      Covered by `tests/phase_derivation_check.js`, mutation-tested:
+      reverting to the stored phase reproduces a lockup immediately.
 - [ ] **One automated test for realtime sync.** If the view page stops
       live-updating, the broadcast freezes and nobody knows why.
 - [ ] **Verify the season report charts.** Chart.js is STUBBED in the
