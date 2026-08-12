@@ -34,7 +34,13 @@ const ROSTER = [
   { team_side: 'teamA', unit: 'offense', jersey_number: '7',  player_name: 'Robinson', position: 'QB' },
   { team_side: 'teamA', unit: 'offense', jersey_number: '80', player_name: 'Young',    position: 'WR' },
   { team_side: 'teamB', unit: 'defense', jersey_number: '99', player_name: 'Frank',    position: 'DL' },
-  { team_side: 'teamB', unit: 'defense', jersey_number: '55', player_name: 'Carter',   position: 'LB' }
+  { team_side: 'teamB', unit: 'defense', jersey_number: '55', player_name: 'Carter',   position: 'LB' },
+  // OUR defenders, and OUR opponent's ball carrier. stat_package and
+  // season_report report Neville only, so a fixture whose tacklers are
+  // all on the opposing side proves nothing about them -- the pages
+  // correctly showed an empty section and the test blamed the pages.
+  { team_side: 'teamA', unit: 'defense', jersey_number: '44', player_name: 'Sledge',   position: 'LB' },
+  { team_side: 'teamB', unit: 'offense', jersey_number: '30', player_name: 'Doyle',    position: 'RB' }
 ];
 
 let n = 0;
@@ -69,7 +75,20 @@ function scenario() {
         roles: { carrier: { team: 'teamA', num: '22', yards: 4 }, playType: 'rush' } }),
     // a LOSS with nobody named -- team TFL counts it, per-player does not
     P({ text: 'rush -2', effect: { isStat: true, statYds: -2, fieldDelta: -2 },
-        roles: { carrier: { team: 'teamA', num: '22', yards: -2 }, playType: 'rush' } })
+        roles: { carrier: { team: 'teamA', num: '22', yards: -2 }, playType: 'rush' } }),
+
+    // --- Ruston with the ball, so OUR defence records something -------
+    P({ text: 'possession', team_side: 'teamB',
+        effect: { isReset: true, down: 1, distance: 10, fieldPos: 30,
+                  newPossession: true } }),
+    P({ text: 'Doyle rush 5', team_side: 'teamB',
+        effect: { isStat: true, statYds: 5, fieldDelta: 5 },
+        roles: { carrier: { team: 'teamB', num: '30', yards: 5 },
+                 defense: { team: 'teamA', num: '44' }, playType: 'rush' } }),
+    P({ text: 'Doyle rush -4', team_side: 'teamB',
+        effect: { isStat: true, statYds: -4, fieldDelta: -4 },
+        roles: { carrier: { team: 'teamB', num: '30', yards: -4 },
+                 defense: { team: 'teamA', num: '44' }, playType: 'rush' } })
   ];
 }
 
@@ -175,15 +194,41 @@ async function run() {
   }
   v.close();
 
-  // --- and the recap ------------------------------------------------------
-  {
-    const r = await bootPage('recap.html', {
-      existingPlays: plays, roster: ROSTER,
-      game: { status: 'final', season_year: 2026, game_date: '2026-08-24' }
-    });
+  // --- every post-game surface -------------------------------------------
+  // All four, because the numbers existing in the engine says nothing
+  // about whether anyone can see them. season_report additionally has to
+  // AGGREGATE by name across games, which is a different code path from
+  // simply displaying one game's box score.
+  for (const [page, opts] of [
+    ['recap.html', {}],
+    ['stat_package.html', {}],
+    ['season_report.html', { query: '?season=2026' }]
+  ]) {
+    let r;
+    try {
+      r = await bootPage(page, Object.assign({
+        existingPlays: plays, roster: ROSTER,
+        game: { status: 'final', season_year: 2026, game_date: '2026-08-24' }
+      }, opts));
+    } catch (e) {
+      fail('display', page + ' failed to load: ' + e.message.split('\n')[0]);
+      continue;
+    }
+    await new Promise(res => setTimeout(res, 300));
     const text = r.document.body.textContent.replace(/\s+/g, ' ');
-    if (!/Tackles/i.test(text) || !/Frank/.test(text)) {
-      fail('display', 'recap.html does not show per-player tackles');
+    if (!/Tackles/i.test(text)) {
+      fail('display', page + ' shows no Tackles section');
+    }
+    // Sledge is OURS; Frank plays for the opposition and correctly does
+    // not appear on a Neville-only report.
+    const wanted = page === 'recap.html' ? 'Frank' : 'Sledge';
+    if (!new RegExp(wanted).test(text)) {
+      fail('display', page + ' does not name the leading tackler (' +
+           wanted + ')');
+    }
+    if (!/tackler was named/i.test(text)) {
+      fail('display', page + ' has no note that only named tackles are ' +
+           'counted. Without it an under-count reads as a complete figure');
     }
     r.close();
   }
