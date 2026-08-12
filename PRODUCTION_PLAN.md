@@ -218,9 +218,15 @@ lose data permanently.
 
 ### The rest
 
-- [ ] **Export a game to JSON** — a download button on the dashboard. If
-      anything goes wrong you still have the plays. Small, and it is the
-      thing you will wish you had.
+- [x] **Export a game to JSON — DONE 12 Aug 2026.** "Download backup" on
+      each dashboard row: the game row, its rosters and every play,
+      exactly as stored. **Admin and scorers only** — Andy's rule: a
+      `view` account views. Exporting is technically a read, but a backup
+      is the whole game in one file, and "view" should not mean "can walk
+      off with everything". Scorers keep it because they are the ones at
+      the stadium when something looks wrong.
+      Covered by `tests/game_export_check.js`, mutation-tested including
+      a check that removing the role gate fails the suite.
 - [ ] **Test the offline queue — and rehearse it.** Confirmed working by
       hand, **no automated test**, and it fails *silently*: you find out
       plays are missing after the game. Airplane mode mid-drive, then

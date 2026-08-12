@@ -378,6 +378,13 @@
               (g.status === 'final' ? '<a href="view.html?id=' + g.id + '&mode=results" style="display:block; padding:8px 12px; color:#1565c0; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Live results</a>' : '') +
               (g.status === 'final' ? '<a href="recap.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:#1a7a4c; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game recap</a>' : '') +
               (g.status === 'final' ? '<a href="stat_package.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:#0f6e56; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Stat package</a>' : '') +
+              // Admin and scorers only. A `view` account views -- Andy's
+              // rule, 12 Aug. Exporting is technically a read, but a
+              // backup file is the entire game in one download, and
+              // "view" should not mean "can walk off with everything".
+              // Scorers keep it because they are the ones at the stadium
+              // when something looks wrong.
+              (currentCanEnterGames ? '<button class="exportGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#444; font-weight:600; font-size:13px; border-bottom:1px solid #eee;">Download backup</button>' : '') +
               (currentIsAdmin ? '<button class="resetGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a05a00; font-weight:600; font-size:13px; border-bottom:1px solid #eee;">Reset game</button>' : '') +
               (currentIsAdmin ? '<button class="deleteGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a32d2d; font-weight:600; font-size:13px;">Delete game</button>' : '') +
             '</div>' +
@@ -398,6 +405,66 @@
         }
       });
     });
+    // Download a whole game as JSON: the game row, its rosters and every
+    // play, exactly as stored. This is the safety net for the case where
+    // something has gone wrong and nobody yet knows what -- the plays are
+    // the irreplaceable part, and a code rollback does not restore them.
+    //
+    // Everything is fetched fresh rather than reusing what the dashboard
+    // already has, because the dashboard holds a summary and a backup
+    // needs the real rows.
+    body.querySelectorAll('.exportGameBtn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const gameId = btn.dataset.id;
+        const original = btn.textContent;
+        btn.textContent = 'Preparing…';
+        btn.disabled = true;
+        try {
+          const [gameRes, rosterRes, playsRes] = await Promise.all([
+            supabaseClient.from('games').select('*').eq('id', gameId).limit(1),
+            supabaseClient.from('game_rosters').select('*').eq('game_id', gameId),
+            supabaseClient.from('plays').select('*').eq('game_id', gameId)
+              .order('sequence_number', { ascending: true })
+          ]);
+          if (gameRes.error) throw gameRes.error;
+          const game = (gameRes.data || [])[0];
+          if (!game) throw new Error('Game not found.');
+
+          const payload = {
+            exportedAt: new Date().toISOString(),
+            exportedBy: currentUserId || null,
+            schema: 'statchat-game-backup-v1',
+            game,
+            rosters: rosterRes.data || [],
+            plays: playsRes.data || []
+          };
+
+          // A filename that means something in six months: the teams and
+          // the date, not just an id.
+          const safe = (x) => String(x || '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          const stamp = (game.game_date || new Date().toISOString().slice(0, 10));
+          const name = 'statchat-' + safe(game.opponent || 'game') + '-' + stamp + '.json';
+
+          const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = name;
+          document.body.appendChild(a); a.click(); a.remove();
+          URL.revokeObjectURL(url);
+
+          btn.textContent = (payload.plays.length) + ' plays saved';
+          setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 2500);
+        } catch (err) {
+          // Say what failed. A backup that silently does nothing is worse
+          // than no backup button at all.
+          window.alert('Could not download the backup: ' + (err.message || err));
+          btn.textContent = original;
+          btn.disabled = false;
+        }
+      });
+    });
+
     body.querySelectorAll('.rowMenuBtn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
