@@ -21,7 +21,7 @@
          font-weight:800; }
   .side { display:flex; align-items:center; gap:14px; padding:14px 22px; }
   .side img { height:44px; width:auto; display:block; }
-  .abbr { font-size:34px; }
+  .name { font-size:34px; }
   .pts  { font-size:44px; min-width:64px; text-align:right; font-variant-numeric:tabular-nums; }
   .poss { font-size:26px; }
   #situation { background:rgba(12,12,14,0.92); color:#fff; padding:14px 26px; font-size:30px;
@@ -618,7 +618,10 @@ function extractNameTag(rawName){
       const has = state.possession === teamKey && state.down;
       return '<span class="poss" style="visibility:' + (has ? 'visible' : 'hidden') + ';">\uD83C\uDFC8</span>' +
              (t.logo ? '<img src="' + t.logo + '" alt="">' : '') +
-             '<span class="abbr">' + (t.abbr || t.name) + '</span>' +
+             // Full team name. `t.abbr` was removed from the engine --
+             // it only ever returned the first word, which for
+             // single-word names was the whole name anyway.
+             '<span class="name">' + t.name + '</span>' +
              '<span class="pts">' + (state.scores[teamKey] || 0) + '</span>';
     };
     const paint = (id, teamKey) => {

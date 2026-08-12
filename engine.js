@@ -637,7 +637,7 @@ function buildContext(game, rosterRows, playRows, ourBranding){
   const b = ourBranding || {};
 
   const mkTeam = (name, bg, text, logo) => ({
-    name: name || '', abbr: (name || '').split(/\s+/)[0] || '',
+    name: name || '',
     bg, text, logo: logo || null,
     rosterOffense: {}, rosterDefense: {}, rosterSpecialTeams: {}, posOffense: {}
   });
