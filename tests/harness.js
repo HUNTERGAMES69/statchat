@@ -35,6 +35,21 @@ function makeMockSupabase(db) {
       select(cols, opts) {
         if (this._op === null) this._op = 'select';
         if (opts && opts.count) this._countOnly = true;
+        // REMEMBER THE COLUMN LIST, and honour it below.
+        //
+        // This mock used to return every column whatever was asked for,
+        // which made it KINDER THAN THE REAL DATABASE -- and that hid a
+        // real bug: dashboard.html selects an explicit column list, and
+        // `is_broadcast` was missing from it. The ON AIR badge read
+        // `undefined` in production while every test passed.
+        //
+        // A mock that answers questions the real thing would not is worse
+        // than no mock. If a page forgets to request a column, the test
+        // must fail the same way the app does.
+        if (typeof cols === 'string' && cols !== '*' && cols.trim()) {
+          this._cols = cols.split(',').map(c => c.trim().split(/\s+/)[0])
+            .filter(c => c && c !== '*');
+        }
         return this;
       },
       insert(rows) {
@@ -89,6 +104,15 @@ function makeMockSupabase(db) {
             .then(resolve, reject);
         }
         let data = [];
+        // Narrow every row to the columns actually requested.
+        const narrow = (rows) => {
+          if (!this._cols || !this._cols.length) return rows;
+          return rows.map(r => {
+            const o = {};
+            this._cols.forEach(c => { if (c in r) o[c] = r[c]; });
+            return o;
+          });
+        };
         if (this._op === 'select') {
           if (table === 'profiles') data = [{ role: 'admin' }];
           else if (table === 'games') data = [db.game];
@@ -102,7 +126,7 @@ function makeMockSupabase(db) {
             data = db.existingPlays.concat(db.plays);
           }
         }
-        return Promise.resolve({ data, error: null }).then(resolve, reject);
+        return Promise.resolve({ data: narrow(data), error: null }).then(resolve, reject);
       }
     };
     return b;
