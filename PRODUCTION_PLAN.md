@@ -257,15 +257,26 @@ lose data permanently.
       started" look identical in the log).
       Covered by `tests/phase_derivation_check.js`, mutation-tested:
       reverting to the stored phase reproduces a lockup immediately.
-- [ ] **One automated test for realtime sync.** If the view page stops
-      live-updating, the broadcast freezes and nobody knows why.
-- [ ] **Verify the season report charts.** Chart.js is STUBBED in the
-      test harness, so the numbers behind the charts are checked and the
-      charts themselves have never rendered in any test. Open the season
-      report in a real browser with real multi-game data and confirm
-      every chart draws, is labelled, and matches the tables beside it.
-      This cannot be done in jsdom — it needs a browser and more than one
-      game of data.
+- [x] **DONE 12 Aug 2026** — `tests/realtime_check.js`, mutation-tested.
+      The most valuable assertion turned out to be a negative one: the
+      DELETE handler must NOT have a server-side filter. Postgres Changes
+      cannot filter deletes, so adding one — which looks exactly like
+      tidying up — stops the events arriving and Undo silently stops
+      propagating to the broadcast. Nothing in the app would say so.
+      Also covers a delete event with no `game_id`, which is what a
+      missing REPLICA IDENTITY FULL looks like in practice.
+- [x] **DONE 12 Aug 2026, in two halves.**
+      **Andy, by eye, in a real browser:** all 15 charts draw and have
+      data. That rules out the crude failures a test cannot see.
+      **`tests/chart_data_check.js`:** covers the half eyes are worst at.
+      The harness now records every Chart.js config rather than
+      discarding it, so the test inspects what each chart was actually
+      handed — no NaN or undefined, no undefined labels, and series
+      lengths matching the labels and each other.
+      Its first finding was its OWN bug: it flagged the `null` values in
+      the 3rd/4th-down charts, which are correct — a game with zero
+      third-down attempts has no percentage, and plotting 0% would state
+      something false. `null` is now allowed on line charts only.
 
 ---
 
