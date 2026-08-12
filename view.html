@@ -1096,12 +1096,62 @@ function extractNameTag(rawName){
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'plays', filter: 'game_id=eq.' + currentGameId }, () => {
         reloadPlaysAndRender();
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'plays' }, (payload) => {
-        if (payload.old && payload.old.game_id === currentGameId){
-          reloadPlaysAndRender();
-        }
+      // Reload on ANY delete, without checking game_id.
+      //
+      // This used to check `payload.old.game_id === currentGameId`, which
+      // depends on the delete event carrying non-key columns. That needs
+      // REPLICA IDENTITY FULL -- which IS set here, and the table IS in
+      // the supabase_realtime publication, and undos still did not
+      // propagate. Rather than keep chasing it, the check is gone: the
+      // cost of reloading when another game is edited is one query, and
+      // in practice two games are never live at once.
+      //
+      // A missed undo is the WORST failure mode this page has. The
+      // spectator keeps seeing a play that no longer exists, and nothing
+      // says so.
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'plays' }, () => {
+        reloadPlaysAndRender();
       })
       .subscribe();
+
+    startReconciliationPoll();
+  }
+
+  // A backstop for everything realtime can silently miss: a dropped
+  // websocket, a throttled background tab, an event the server never
+  // sent. Every few seconds, ask how many plays the game has and compare
+  // it with what is on screen.
+  //
+  // This is the pattern broadcast.html already uses, and the reason that
+  // page never had this problem -- it polls and simply cannot go stale.
+  // A missed event here is INVISIBLE: the page looks fine and is wrong.
+  //
+  // Deliberately a count, not a full fetch. It is one small query every
+  // few seconds and only pulls the plays when something has actually
+  // changed.
+  function startReconciliationPoll(){
+    const POLL_MS = 4000;
+    setInterval(async () => {
+      if (document.hidden) return;          // a hidden tab reconciles on wake
+      try {
+        const { count, error } = await supabaseClient
+          .from('plays')
+          .select('id', { count: 'exact', head: true })
+          .eq('game_id', currentGameId);
+        if (error || count === null || count === undefined) return;
+        // AWAITED. Left unawaited, a failure inside the reload escapes
+        // this catch entirely and surfaces as an unhandled rejection --
+        // the poll would look like it was handling errors while actually
+        // ignoring the only ones that matter.
+        if (count !== plays.length) await reloadPlaysAndRender();
+      } catch (e) { /* offline or asleep -- try again on the next tick */ }
+    }, POLL_MS);
+
+    // Coming back to the tab is the most likely moment to be stale, so
+    // reconcile immediately rather than waiting for the next tick.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) reloadPlaysAndRender().catch(() => {});
+    });
   }
 </script>
 </body>
