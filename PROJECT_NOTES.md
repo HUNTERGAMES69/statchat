@@ -889,6 +889,50 @@ from a memory exercise into a failing assertion that names the answer.
 
 ---
 
+## Realtime DELETE events carry only the primary key (August 12, 2026)
+
+Reported from real use: undoing a play on the game page did not update
+the view page until the next play was entered.
+
+**Diagnosed from the browser, not guessed.** A raw subscription printed:
+
+    EVENT: DELETE {id: 'ff81c957-...'} {}
+
+The event arrives. `payload.old` contains ONLY the id — no `game_id` —
+even though `plays` has `REPLICA IDENTITY FULL` and is in the
+`supabase_realtime` publication. Both were verified in SQL.
+
+**Why:** Supabase Realtime strips non-key columns from DELETE events when
+RLS is enabled on the table. It cannot evaluate a row-level policy
+against a row that no longer exists, so it sends the primary key and
+nothing else. Replica identity does not override this — the restriction
+is in Realtime, not in Postgres.
+
+So `if (payload.old.game_id === currentGameId)` could NEVER have been
+true. Undos have never propagated. It stayed invisible because the next
+entered play triggered a reload that hid the gap.
+
+**Fixed two ways, deliberately:**
+
+1. The delete handler no longer checks `game_id` — it reloads on any
+   delete to `plays`. One wasted reload if another game is edited, which
+   in practice never happens.
+2. **A reconciliation poll on the view page**, every 4 seconds: compare
+   the server's play count with what is on screen and reload on a
+   mismatch. This is the pattern `broadcast.html` already used, and the
+   reason that page never had the problem.
+
+**The general lesson.** Realtime failures are INVISIBLE — the page looks
+fine and is simply wrong, which on a broadcast is worse than an obvious
+error. Anything that depends on every event arriving needs a backstop
+that does not. Treat realtime as an optimisation for responsiveness, not
+as the source of truth.
+
+Also observed: one undo emits THREE delete events — the play plus its
+clock and marker rows.
+
+---
+
 ## GameID
 
 There's no dedicated GameID column in the database — it's parsed out
