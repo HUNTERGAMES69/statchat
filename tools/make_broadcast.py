@@ -130,7 +130,9 @@ OVERLAY = r'''
   }
 
   async function fetchAndRender(){
-    const r = await fetch('/api/gamedata?id=' + encodeURIComponent(currentGameId), { cache: 'no-store' });
+    const r = await fetch('/api/gamedata' +
+      (currentGameId ? '?id=' + encodeURIComponent(currentGameId) : ''),
+      { cache: 'no-store' });
     if (!r.ok){
       const body = await r.json().catch(() => ({}));
       throw new Error(body.error || ('HTTP ' + r.status));
@@ -150,8 +152,12 @@ OVERLAY = r'''
 
   async function initOverlay(){
     const params = new URLSearchParams(window.location.search);
-    currentGameId = params.get('id');
-    if (!currentGameId){ showFatal('No game id \u2014 use broadcast.html?id=&lt;gameId&gt;'); return; }
+    // An id is OPTIONAL now. Without one, /api/gamedata resolves the game
+    // set ON AIR -- which is the whole point of the flag, and means the
+    // overlay address never needs editing. The old behaviour was a
+    // leftover from before the flag existed, and produced
+    // "No game id" for anyone who used the address as given.
+    currentGameId = params.get('id') || '';
     try {
       await fetchAndRender();
     } catch (e){
