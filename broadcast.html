@@ -2,705 +2,404 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>StatChat broadcast overlay</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Broadcast setup — StatChat</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
 <script src="team-icon.js"></script>
-<script src="engine.js"></script>
 <style>
-  /* TRANSPARENT. vMix's Web Browser input keys this out, so anything not
-     explicitly painted shows the programme feed through. Do not give
-     html or body a background colour. */
-  html, body { background:transparent !important; margin:0; padding:0; overflow:hidden;
-               font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-               -webkit-font-smoothing:antialiased; }
-
-  /* Sized for a 1920x1080 browser input, anchored bottom-left where a
-     score bug normally lives. */
-  #bug { position:absolute; left:60px; bottom:60px; display:none; align-items:stretch;
-         border-radius:8px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,0.55);
-         font-weight:800; }
-  .side { display:flex; align-items:center; gap:14px; padding:14px 22px; }
-  .side img { height:44px; width:auto; display:block; }
-  .abbr { font-size:34px; }
-  .pts  { font-size:44px; min-width:64px; text-align:right; font-variant-numeric:tabular-nums; }
-  .poss { font-size:26px; }
-  #situation { background:rgba(12,12,14,0.92); color:#fff; padding:14px 26px; font-size:30px;
-               display:flex; align-items:center; gap:22px; }
-  .dim { opacity:0.6; font-weight:600; font-size:24px; }
-
-  body.layout-bug #situation { display:none; }   /* ?layout=bug  */
-  body.debug { background:#123 !important; }     /* ?debug=1     */
+  :root { --ink:#1a1a1a; --muted:#666; --line:#e0e0e0; --green:#0f6e56; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#f7f7f5; color:var(--ink);
+         font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
+  .wrap { max-width:900px; margin:0 auto; padding:24px 20px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 20px; font-size:14px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px;
+          padding:18px 20px; margin-bottom:16px; }
+  h2 { font-size:15px; margin:0 0 10px; letter-spacing:0.02em; }
+  .onair { background:#b00020; color:#fff; padding:14px 18px; border-radius:10px;
+           margin-bottom:16px; font-weight:700; }
+  .offair { background:#5a5a5a; color:#fff; padding:14px 18px; border-radius:10px;
+            margin-bottom:16px; font-weight:700; }
+  .onair .what, .offair .what { font-size:20px; display:block; margin-top:4px; }
+  .onair .note, .offair .note { font-weight:500; font-size:13px; opacity:0.9;
+                                display:block; margin-top:6px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:var(--muted); font-weight:600; padding:6px 8px;
+       border-bottom:2px solid var(--line); font-size:12px; }
+  td { padding:8px; border-bottom:1px solid #f0f0f0; vertical-align:top; }
+  td.what { font-weight:700; white-space:nowrap; }
+  td.desc { color:var(--muted); }
+  code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:11px;
+         background:#f4f4f2; padding:2px 5px; border-radius:3px; word-break:break-all; }
+  button { font-family:inherit; cursor:pointer; }
+  .copy { background:var(--green); color:#fff; border:none; border-radius:5px;
+          padding:5px 11px; font-size:12px; font-weight:700; white-space:nowrap; }
+  .copy.done { background:#1a7a4c; }
+  .send { background:#1a1a2e; color:#fff; border:none; border-radius:5px;
+          padding:6px 13px; font-size:12px; font-weight:700; }
+  .send.done { background:#1a7a4c; }
+  .fmt { background:none; border:1px solid var(--line); border-radius:5px;
+         padding:4px 10px; font-size:12px; font-weight:600; color:var(--muted); }
+  .fmt.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .hint { font-size:13px; color:var(--muted); line-height:1.6; }
+  .hint strong { color:var(--ink); }
+  .warn { background:#fff8e1; border-left:3px solid #a37a00; padding:10px 14px;
+          border-radius:4px; font-size:13px; margin-top:12px; }
+  a.back { color:var(--green); font-weight:600; text-decoration:none; font-size:13px; }
+  #gate { padding:40px 20px; text-align:center; color:var(--muted); }
 </style>
 </head>
 <body>
-  <div id="bug">
-    <div class="side" id="sideA"></div>
-    <div id="situation">
-      <span id="downText"></span>
-      <span id="quarterText" class="dim"></span>
+<div class="wrap">
+  <a class="back" href="dashboard.html">&larr; Dashboard</a>
+  <h1 style="margin-top:12px;">Broadcast setup</h1>
+  <p class="sub">Feed addresses for the production team. These never change &mdash;
+     set them up once.</p>
+
+  <div id="gate">Checking your access&hellip;</div>
+
+  <div id="main" style="display:none;">
+    <div id="airBox"></div>
+
+    <div class="warn" id="keyNote" style="display:none;"></div>
+
+    <div class="card">
+      <h2>Feed addresses</h2>
+      <p class="hint" style="margin:0 0 12px;">
+        Each one is a separate data source. <strong>The address is the same every
+        week</strong> &mdash; it follows whichever game is set ON AIR, so nothing
+        needs changing on game day.
+      </p>
+      <div style="margin-bottom:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <span>Format:</span>
+        <button class="fmt on" data-fmt="xml">XML</button>
+        <button class="fmt" data-fmt="json">JSON</button>
+        <span style="flex:1;"></span>
+        <!-- So Andy does not have to transcribe eight addresses. Sending
+             them beats giving the crew accounts: the only role that could
+             see this page is game_entry, which can also enter and DELETE
+             plays -- far more than a production team needs. -->
+        <button class="send" id="copyAllBtn">Copy all for the crew</button>
+        <button class="send" id="emailBtn">Email to the crew</button>
+      </div>
+      <table>
+        <thead><tr><th>Graphic</th><th>What it gives you</th><th>Address</th><th></th></tr></thead>
+        <tbody id="feedRows"></tbody>
+      </table>
     </div>
-    <div class="side" id="sideB"></div>
+
+    <div class="card">
+      <h2>Setting it up</h2>
+      <p class="hint" style="margin:0 0 10px;">
+        Full written guide for the production team:
+        <a href="https://github.com/HUNTERGAMES69/statchat/blob/main/BROADCAST_GUIDE.md"
+           style="color:var(--green); font-weight:600;">BROADCAST_GUIDE.md</a>
+        &mdash; setup steps, troubleshooting, and what to check when a graphic
+        goes stale.
+      </p>
+      <p class="hint">
+        <strong>vMix:</strong> Add Input &rarr; Data Sources &rarr; XML, paste the
+        address, set the refresh interval to 1&ndash;2 seconds. Then map each column
+        onto a field in your title.<br>
+        <strong>Anything else:</strong> the feed is a plain web address returning XML
+        or JSON, so any software that can poll a URL will read it. Switch the format
+        above to whichever your package prefers.
+      </p>
+      <div class="warn">
+        <strong>One row per record.</strong> The scoreboard, drive and last-play feeds
+        return a single row. The leader feeds return one row per player, best first
+        &mdash; so a &ldquo;top rusher&rdquo; graphic can simply use row 1.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Screen overlay</h2>
+      <p class="hint">
+        A ready-made transparent scoreboard, if you would rather not build your own.
+        Add it as a <strong>web browser input</strong> at 1920&times;1080 &mdash; the
+        background is transparent, so it keys straight over the programme feed.
+      </p>
+      <table><tbody id="overlayRows"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>If the graphics stop updating</h2>
+      <p class="hint">
+        Open one of the addresses in a browser. If it shows current data, the feed is
+        fine and the problem is in the broadcast software &mdash; check the refresh
+        interval is set, since a data source that never refreshes looks exactly like a
+        frozen feed.<br><br>
+        If it says <code>No game is on air</code>, nobody has set a game ON AIR on the
+        dashboard yet.
+      </p>
+    </div>
   </div>
+</div>
 
 <script>
-// ===================================================================
-// BROADCAST OVERLAY -- GENERATED FILE, do not hand-edit.
-//   regenerate: python3 tools/make_broadcast.py
-//
-// TEMPORARY BY DESIGN. The engine below is copied from view.html,
-// making this the SIXTH copy in the repo -- the duplication TODO 8a
-// exists to remove. Taken this way so an overlay could be in vMix
-// today rather than after the extraction. Fold it into engine.js when
-// 8a is done; do not let it drift.
-//
-// VMIX SETUP
-//   Add Input -> Web Browser
-//   URL   https://nevillestatchat.vercel.app/broadcast.html?id=<gameId>
-//   Size  1920 x 1080
-//   The background is transparent, so it keys straight over video.
-//
-//   ?layout=bug   score only, no down and distance
-//   ?debug=1      solid background, to see the edges while positioning
-// ===================================================================
-
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
-  // A passive viewer (as opposed to whoever's actively typing plays) is
-  // far more likely to lock their screen or background the tab between
-  // checks -- and browsers, especially iOS, aggressively throttle JS
-  // timers in that state. That silently breaks the realtime connection's
-  // heartbeat with no visible error and no automatic recovery, which is
-  // exactly what was reported: it looked like an admin-vs-viewer
-  // permissions issue, but was actually just who happens to keep their
-  // device active. Both mitigations below are Supabase's own documented
-  // fix for this exact failure mode -- see
-  // https://supabase.com/docs/guides/troubleshooting/realtime-handling-silent-disconnections-in-backgrounded-applications-592794
-  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    realtime: {
-      worker: true,
-      heartbeatCallback: (status) => {
-        if (status === 'disconnected'){
-          supabaseClient.realtime.connect();
-        }
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  // The static feed key, fetched from the server once we know who is
+  // asking. It used to come from this page's own URL (?key=...), which
+  // meant arriving any other way -- such as the Broadcast button in the
+  // dashboard header -- produced a page of keyless addresses that all
+  // returned {"error":"Invalid or missing key"}.
+  //
+  // Requiring a secret in the URL to reach the page that exists to hand
+  // out that secret was circular. ?key= is still honoured as an override,
+  // so old bookmarks keep working.
+  let feedKey = new URLSearchParams(location.search).get('key') || '';
+
+  const ORIGIN = location.origin;
+  let format = 'xml';
+
+  // Deliberately describes FOOTBALL, not any particular software. The
+  // same list serves vMix, OBS, Singular, CasparCG or anything else that
+  // can read a URL.
+  const FEEDS = [
+    ['score',      'Scoreboard bug',  'Score, quarter, down &amp; distance, ball on, possession, timeouts'],
+    ['drive',      'Current drive',   'Plays, yards and time of possession on the drive in progress'],
+    ['lastplay',   'Play ticker',     'The text of the most recent play'],
+    ['teamstats',  'Team comparison', 'Two rows, one per team: yards, first downs, third downs, turnovers'],
+    ['rushing',    'Rushing leaders', 'One row per player, most yards first'],
+    ['passing',    'Passing leaders', 'One row per player, most yards first'],
+    ['receiving',  'Receiving leaders','One row per player, most yards first'],
+    ['defense',    'Defensive leaders','One row per player: tackles, sacks, interceptions']
+  ];
+
+  const feedUrl = (view) =>
+    ORIGIN + '/api/feed?view=' + view + '&format=' + format +
+    (feedKey ? '&key=' + encodeURIComponent(feedKey) : '');
+
+  function copyBtn(url){
+    const b = document.createElement('button');
+    b.className = 'copy'; b.textContent = 'Copy';
+    b.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(url); }
+      catch (e) {
+        const t = document.createElement('textarea');
+        t.value = url; document.body.appendChild(t); t.select();
+        document.execCommand('copy'); t.remove();
       }
-    }
-  });
-
-  // The display is designed against a fixed 1920x1080 canvas so every font
-  // size and tile dimension throughout stays correct relative to every
-  // other -- rather than rewriting all of that in relative units, the
-  // whole canvas is scaled up or down as a single unit to fit whatever
-  // viewport is actually available, so nothing is ever clipped or forced
-  // to scroll regardless of the real screen/browser size. Skipped
-  // entirely below the mobile breakpoint, where the layout is already
-  // its own natural, responsive, scrolling design.
-  function applyDisplayScale(){
-    if (window.innerWidth <= 700){
-      document.querySelector('.wrap').style.transform = '';
-      return;
-    }
-    // Scale X and Y independently -- rather than one uniform scale
-    // (which forces the fixed 1920x1080 (16:9) aspect ratio and always
-    // leaves wasted space on whichever axis doesn't match the actual
-    // screen), this stretches the whole canvas to exactly fill
-    // whatever viewport is actually available, since every real screen
-    // has a different ratio. The very slight non-uniform distortion
-    // this can introduce is far less noticeable than the wasted-space
-    // gaps it replaces, since almost everything on this page is text,
-    // tables, and tiles rather than shapes where aspect ratio matters.
-    const scaleX = window.innerWidth / 1920;
-    const scaleY = window.innerHeight / 1080;
-    document.querySelector('.wrap').style.transform = 'scale(' + scaleX + ', ' + scaleY + ')';
-  }
-  // resize handler removed: fixed canvas.
-  // Logos and webfonts land after first paint and change measured
-  // heights, so the first fit is made on stale numbers. Re-fit once
-  // everything has actually loaded.
-  window.addEventListener('load', () => { if (plays.length) renderBoxScore(); });
-  // applyDisplayScale() removed: no .wrap on the overlay, and vMix
-  // renders at a fixed size.
-
-  function showView(name){
-    ['loading','errorView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
-  }
-  function showMsg(elId, text, type){
-    document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+      b.textContent = 'Copied'; b.classList.add('done');
+      setTimeout(() => { b.textContent = 'Copy'; b.classList.remove('done'); }, 1600);
+    });
+    return b;
   }
 
-  let currentGameId = null;
-  let isResultsMode = false;
-  let currentGameStatus = null;
-  let TEAMS = { teamA: {}, teamB: {} };
-  let plays = [], startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
+  function renderFeeds(){
+    const body = document.getElementById('feedRows');
+    body.innerHTML = '';
+    FEEDS.forEach(([view, label, desc]) => {
+      const url = feedUrl(view);
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="what">' + label + '</td>' +
+                     '<td class="desc">' + desc + '</td>' +
+                     '<td><code>' + url + '</code></td>';
+      const td = document.createElement('td');
+      td.appendChild(copyBtn(url));
+      tr.appendChild(td);
+      body.appendChild(tr);
+    });
 
-  // auth gate removed: an overlay cannot sign in. See TODO 8d.
-
-
-  // A logo's two detected colors can both be dark and saturated (navy
-  // and red, for instance) -- using one directly as banner text on the
-  // other as background then reads as low-contrast, hard to read text,
-  // even though each color individually looks fine. Checks the actual
-  // luminance gap between this specific background/text pairing, and
-  // only overrides to black/white when that gap is too small to read
-  // comfortably -- a light background with intentionally dark text
-  // stays untouched, since that's already good contrast.
-
-
-  function buildTeams(game, rosterRows, ourBranding){
-    const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
-    const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
-    TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null };
-    const oppPrimary = game.opponent_primary_color || '#8B0000', oppSecondary = game.opponent_secondary_color || '#ffffff';
-    TEAMS.teamB = { name: oppName, bg: oppPrimary, text: oppSecondary,
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null };
-    // Each team's color is set independently -- nothing checks that
-    // they're actually distinguishable from each other, and two
-    // different schools can genuinely share a similar accent color.
-    // Only the opponent's displayed color adjusts here, never our own,
-    // since our identity should stay put -- first try swapping to their
-    // own secondary color, since that's still genuinely their color, and
-    // only fall back to a neutral tone if even that's too close.
-    if (colorDistance(TEAMS.teamA.bg, TEAMS.teamB.bg) < 60){
-      if (colorDistance(TEAMS.teamA.bg, oppSecondary) >= 60){
-        TEAMS.teamB.bg = oppSecondary;
-        TEAMS.teamB.text = oppPrimary;
-      } else {
-        TEAMS.teamB.bg = luminance(TEAMS.teamA.bg) > 0.5 ? '#3a3a3a' : '#c8c8c8';
-        TEAMS.teamB.text = luminance(TEAMS.teamB.bg) > 0.55 ? '#1a1a1a' : '#ffffff';
-      }
-    }
-    rosterRows.forEach(r => {
-      const team = TEAMS[r.team_side];
-      if (!team) return;
-      if (r.unit === 'offense'){ team.rosterOffense[r.jersey_number] = r.player_name; team.posOffense[r.jersey_number] = r.position; }
-      else if (r.unit === 'defense'){ team.rosterDefense[r.jersey_number] = r.player_name; }
-      else if (r.unit === 'special'){ team.rosterSpecialTeams[r.jersey_number] = r.player_name; }
+    const ov = document.getElementById('overlayRows');
+    ov.innerHTML = '';
+    [['Full scoreboard', ORIGIN + '/broadcast.html'],
+     ['Score only', ORIGIN + '/broadcast.html?layout=bug']
+    ].forEach(([label, url]) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="what">' + label + '</td>' +
+                     '<td><code>' + url + '</code></td>';
+      const td = document.createElement('td');
+      td.appendChild(copyBtn(url));
+      tr.appendChild(td);
+      ov.appendChild(tr);
     });
   }
 
-  // --- Proven read-only engine core, extracted verbatim from game.html ---
-function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
-const TIMEOUTS_PER_HALF = 3;
-const TIMEOUTS_PER_OT = 1;
-// Administrative entries -- clock markers, quarter/half dividers, manual
-// possession flips -- are announcements, not football plays. They carry
-// no roles and no yardage, so anything reasoning about "what actually
-// happened on this drive" has to skip them.
-//
-// isReset markers are deliberately NOT administrative: they are explicit
-// "new drive" announcements and are valid drive starts.
-//
-// Lives in the engine core (top level) rather than inside
-// findDriveStarts because computeDriveSummary needs it too, from a
-// different scope.
-// Bookkeeping the drive tiles do not need. These are entries the app
-// writes to keep its own state straight -- clock events, chain
-// corrections, the direction arrow -- rather than things that happened on
-// the field. The tiles are for reading at a glance, so they are dropped
-// there; the ALL PLAYS list is the audit trail and keeps everything.
-//
-// Deliberately KEPT: penalties and timeouts (real events), quarter
-// markers, overtime markers, dividers, and "New series" -- which looks
-// like "New drive" but means something different: a muffed kick
-// recovered by the kicking team, a fresh set of downs with no change of
-// possession. Manual entry NOTEs are kept too; a coach typed those on
-// purpose. Only the two "Manual ..." state overrides are dropped.
-function isDriveTileNoise(p){
-  if (!p || p.isDivider) return false;
-  const e = p.effect || {};
-  if (e.clockEvent) return true;
-  if (e.setDirection) return true;
-  const t = (p.text || '').trim();
-  if (t.indexOf('Down & distance adjusted') === 0) return true;
-  if (t.indexOf('New drive') === 0) return true;
-  if (t.indexOf('Manual flip') === 0) return true;
-  if (t.indexOf('Manual score adjust') === 0) return true;
-  return false;
-}
-function isAdminMarker(p){
-  if (!p) return true;
-  const e = p.effect || {};
-  if (e.isReset) return false;
-  return !!(e.clockEvent || e.setQuarter || e.forcePossession || p.isDivider);
-}
-
-// Jersey numbers resolve across ALL THREE roster units, not just the one
-// the play type implies. High-school rosters routinely list a player
-// under a single unit even though they play several, and a dedicated
-// kick/punt returner is normally rostered on special teams only -- which
-// is why returners used to render in the log as a bare "#25".
-//
-// A fallback can only ever turn "#25" into a name; it can never change a
-// name that already resolved, because the expected unit is always
-// searched first. This mirrors playerName() in the report pages.
-
-
-
-
-function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':n===4?'4th':(n+'th'); }
-function clockToAbsSeconds(quarter, clockStr){
-  let m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
-  let mins, secs;
-  if (m){
-    mins = parseInt(m[1]); secs = parseInt(m[2]);
-  } else {
-    // Colon-less entry: last two digits are seconds, everything
-    // before that is minutes -- e.g. "1156" reads the same as
-    // "11:56" would, "56" alone reads as "0:56". Requires at least
-    // two digits so this split is never ambiguous.
-    m = clockStr.match(/^(\d*)(\d{2})$/);
-    if (!m) return null;
-    mins = m[1] ? parseInt(m[1]) : 0; secs = parseInt(m[2]);
+  // One block of text carrying everything the crew needs: the addresses,
+  // which graphic each drives, and the one setting people forget.
+  function crewText(){
+    const lines = [];
+    lines.push('StatChat broadcast feed \u2014 setup details');
+    lines.push('');
+    lines.push('These addresses NEVER CHANGE. Set them up once and leave them.');
+    lines.push('They follow whichever game is marked ON AIR in StatChat, so');
+    lines.push('nothing needs editing on game day.');
+    lines.push('');
+    lines.push('IMPORTANT: set the refresh interval to 1-2 seconds. A data source');
+    lines.push('that fetches once looks exactly like a frozen feed \u2014 the numbers');
+    lines.push('are right at first and then never change. This is the usual cause');
+    lines.push('of a graphic going stale mid-game.');
+    lines.push('');
+    lines.push('--- DATA FEEDS (' + format.toUpperCase() + ') ---');
+    lines.push('');
+    FEEDS.forEach(([view, label, desc]) => {
+      lines.push(label);
+      lines.push('  ' + String(desc).replace(/&amp;/g, '&'));
+      lines.push('  ' + feedUrl(view));
+      lines.push('');
+    });
+    lines.push('--- READY-MADE OVERLAY ---');
+    lines.push('');
+    lines.push('A finished transparent scoreboard, if you would rather not build');
+    lines.push('graphics. Add as a web browser input at 1920x1080.');
+    lines.push('  Full scoreboard: ' + ORIGIN + '/broadcast.html');
+    lines.push('  Score only:      ' + ORIGIN + '/broadcast.html?layout=bug');
+    lines.push('');
+    lines.push('--- IN VMIX ---');
+    lines.push('');
+    lines.push('Add Input > Data Sources > ' + format.toUpperCase() + ', paste an address,');
+    lines.push('set the refresh interval, then map the columns onto your title.');
+    lines.push('Other software works the same way \u2014 it is a plain web address');
+    lines.push('returning ' + format.toUpperCase() + '.');
+    lines.push('');
+    lines.push('--- IF A GRAPHIC STOPS UPDATING ---');
+    lines.push('');
+    lines.push('1. Open the address in a browser. Current data means the feed is');
+    lines.push('   fine and the problem is in the broadcast software.');
+    lines.push('2. Check the refresh interval is set. This is usually it.');
+    lines.push('3. "No game is on air" means nobody has marked a game yet.');
+    lines.push('');
+    lines.push('Full guide: ' +
+      'https://github.com/HUNTERGAMES69/statchat/blob/main/BROADCAST_GUIDE.md');
+    return lines.join('\n');
   }
-  if (secs > 59) return null;
-  const remaining = mins * 60 + secs;
-  // A clock value can never show more time than the quarter itself
-  // holds -- e.g. "15:00" is meaningless in a 12-minute quarter.
-  if (remaining > quarterLengthSec) return null;
-  return (quarter - 1) * quarterLengthSec + (quarterLengthSec - remaining);
-}
-function formatDuration(sec){
-  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
-  return m + ':' + String(s).padStart(2, '0');
-}
-function markerLabel(fp){
-  if (fp === null || fp === undefined) return '';
-  return fp <= 50 ? ('own ' + fp) : ('opp ' + (100 - fp));
-}
 
-function readFileAsDataURL(file){
-  return new Promise(resolve => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.readAsDataURL(file);
+  async function copyText(text, btn, label){
+    try { await navigator.clipboard.writeText(text); }
+    catch (e) {
+      const t = document.createElement('textarea');
+      t.value = text; document.body.appendChild(t); t.select();
+      document.execCommand('copy'); t.remove();
+    }
+    const was = btn.textContent;
+    btn.textContent = label; btn.classList.add('done');
+    setTimeout(() => { btn.textContent = was; btn.classList.remove('done'); }, 2000);
+  }
+
+  document.getElementById('copyAllBtn').addEventListener('click', (e) => {
+    copyText(crewText(), e.target, 'Copied \u2014 paste into an email');
   });
-}
 
-const OFFENSE_POS = new Set(['QB','RB','FB','HB','WR','TE','OL','OT','OG','C']);
-const DEFENSE_POS = new Set(['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE']);
-const SPECIAL_POS = new Set(['K','P','LS','H','KR','PR']);
-function posToUnit(pos){
-  if (!pos) return null;
-  const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
-  if (SPECIAL_POS.has(first)) return 'st';
-  if (OFFENSE_POS.has(first)) return 'o';
-  if (DEFENSE_POS.has(first)) return 'd';
-  return null;
-}
-function extractNameTag(rawName){
-  const m = String(rawName).match(/\(\s*(O|D|ST)\s*\)\s*$/i);
-  if (!m) return { cleanName: String(rawName).trim(), explicitUnit: null };
-  const tag = m[1].toUpperCase();
-  const cleanName = String(rawName).slice(0, m.index).trim();
-  return { cleanName, explicitUnit: tag.toLowerCase() };
-}
+  document.getElementById('emailBtn').addEventListener('click', (e) => {
+    const body = crewText();
+    const url = 'mailto:?subject=' +
+      encodeURIComponent('StatChat broadcast feed \u2014 setup details') +
+      '&body=' + encodeURIComponent(body);
+    // mailto has a length limit and some clients silently open an EMPTY
+    // draft when it is exceeded, which looks like the button did nothing.
+    // Always copy to the clipboard too, so there is a way to get the text
+    // regardless.
+    //
+    // The threshold is 7000, not the 2000 often quoted -- that figure is
+    // old Internet Explorer. Gmail, Outlook and Apple Mail all handle
+    // several thousand, and this text runs to about 3500 encoded, so
+    // warning at 2000 would fire every single time and train people to
+    // dismiss it.
+    copyText(body, e.target, 'Opening email\u2026');
+    if (url.length > 7000){
+      window.alert('That is a lot of text for an email link, and some mail ' +
+        'apps will open an empty draft.\n\nIt has been copied to your ' +
+        'clipboard as well \u2014 if the draft is blank, just paste.');
+    }
+    window.location.href = url;
+  });
 
+  document.querySelectorAll('.fmt').forEach(b => {
+    b.addEventListener('click', () => {
+      format = b.dataset.fmt;
+      document.querySelectorAll('.fmt').forEach(x => x.classList.toggle('on', x === b));
+      renderFeeds();
+    });
+  });
 
-  // --- End engine core ---
-
-  const RUSH_POS = new Set(['QB','RB','FB','HB','TB']);
-  const RECEIVE_POS = new Set(['WR','TE','SE','FL','SLOT']);
-
-
-
-
-
-  function statRow(cells){
-    return '<tr>' + cells.map(c => '<td>' + c + '</td>').join('') + '</tr>';
-  }
-
-  function renderTeamBoxScore(teamKey, box){
-      const team = TEAMS[teamKey];
-      const s = box[teamKey];
-      // Built into named holders rather than appended straight to the
-      // columns, because the display order is not the order the sections
-      // are computed in -- rushing is calculated before receiving but
-      // has to appear after it. Assembling at the end keeps the layout
-      // decision in one readable place instead of depending on which
-      // block happens to run first.
-      let passHtml = '', recHtml = '', rushHtml = '', defHtml = '', stHtml = '';
-      let leftHtml = '', rightHtml = '';
-
-      const sum = (nums, obj, key) => nums.reduce((t, n) => t + ((obj[n] && obj[n][key]) || 0), 0);
-      const tile = (label, inner) => '<div class="stat-category-tile"><div class="stat-category-label">' + label + '</div>' + inner + '</div>';
-      // Sorts jersey numbers by a yardage-like field, descending, so the
-      // category leader always sorts first.
-      // TEAM is a bucket, not a player -- kneels, bad snaps and sack
-      // yardage. Its total is usually negative, so ranking by yards put a
-      // bookkeeping row above the actual runners. Pinned last.
-      const teamLast = (a, b) => (a === 'TEAM' ? 1 : 0) - (b === 'TEAM' ? 1 : 0);
-      const sortByYds = (nums, obj, key) => nums.slice().sort((a, b) =>
-        teamLast(a, b) || (((obj[b] && obj[b][key]) || 0) - ((obj[a] && obj[a][key]) || 0)));
-      // Caps a sorted list at 5 entries -- except anyone with a touchdown
-      // stays in regardless of rank, since a scorer never just vanishes
-      // even if their overall yardage was modest.
-      // The touchdown exception exists so a scorer is never dropped just
-      // for having low yardage, but it was unbounded: EVERY remaining
-      // player with a TD got a row, so five scoring receivers meant ten
-      // rows in one tile. The page cannot scroll (body and .quad are both
-      // overflow:hidden) and the auto-fit stops shrinking at 0.5, so past
-      // that the extra rows are silently clipped -- present in the data,
-      // invisible on screen. Capped so the tile height is bounded.
-      const MAX_TD_EXTRAS = 3;
-      const capWithTdException = (sortedNums, obj, tdKey) => {
-        const top5 = sortedNums.slice(0, 5);
-        const extras = sortedNums.slice(5)
-          .filter(n => (obj[n] && obj[n][tdKey]) > 0)
-          .slice(0, MAX_TD_EXTRAS);
-        return top5.concat(extras);
-      };
-      // A row whose every displayed value is zero says nothing, and this
-      // panel auto-shrinks to fit -- an empty row costs font size on the
-      // rows that matter. They arise legitimately: a sack-fumble creates
-      // a rushing bucket holding only { fum: 1 }, and the live rushing
-      // table has no Fum column, so the quarterback appeared as 0/0/0.
-      // Filtering on the DISPLAYED values rather than the bucket keeps
-      // the rule general -- the same player still shows up in recap,
-      // which does have a Fum column and therefore a reason to list him.
-      const rowHasValue = r => (r.values || []).some(v => {
-        if (v === null || v === undefined) return false;
-        const t = String(v).trim();
-        if (t === '' || t === '—' || t === '-') return false;
-        const n = parseFloat(t);
-        return isNaN(n) ? true : n !== 0;
-      });
-      const table = (headers, rows) => {
-        let h = '<table class="player-stat-table"><tr><th></th>' + headers.map(x => '<th>' + x + '</th>').join('') + '</tr>';
-        rows.forEach(r => {
-          // No leader highlight. The rows are already sorted with the
-          // leader first, so the colour was saying something the order
-          // already said -- and a tinted row on a panel that is also
-          // colour-coded by team read as if it meant something else.
-          h += '<tr><td>' + r.name + '</td>' + r.values.map(v => '<td>' + v + '</td>').join('') + '</tr>';
-        });
-        return h + '</table>';
-      };
-
-      const passSorted = sortByYds(Object.keys(s.passing), s.passing, 'yds');
-      const passNums = capWithTdException(passSorted, s.passing, 'td');
-      if (passNums.length){
-        // Sacks belong on the passing line -- recap and stat_package both
-        // show them and view did not, so the live page was the only one
-        // where you could not see a quarterback being got at.
-        passHtml += tile('Passing', table(['Att','Comp','%','Yds','TD','Int','Sack'], passNums.map((n, i) => {
-          const d = s.passing[n];
-          const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
-          return { name: n, values: [d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0, d.sacked||0] };
-        }).filter(rowHasValue)));
-      }
-      const rushSorted = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
-      const rushNums = capWithTdException(rushSorted, s.rushing, 'td');
-      if (rushNums.length){
-        rushHtml += tile('Rushing', table(['Att','Yds','TD'], rushNums.map((n, i) => {
-          const d = s.rushing[n];
-          return { name: n, values: [d.att||0, d.yds||0, d.td||0] };
-        }).filter(rowHasValue)));
-      }
-      // A target alone does not earn a row on the live view. Adding targets
-      // meant anyone thrown at once appeared with 0 catches and 0 yards,
-      // padding the tile with players who have not caught anything -- and
-      // this panel auto-shrinks to fit, so every wasted row costs size on
-      // the rows that matter. The full-detail reports still list them.
-      const recSorted = sortByYds(
-        Object.keys(s.receiving).filter(n => (s.receiving[n].rec || 0) > 0),
-        s.receiving, 'yds');
-      const recNums = capWithTdException(recSorted, s.receiving, 'td');
-      if (recNums.length){
-        // Tgt before Rec: the throw comes before the catch, and reading
-        // "3 targets, 1 catch" left to right is how it is said out loud.
-        recHtml += tile('Receiving', table(['Tgt','Rec','Yds','TD'], recNums.map((n, i) => {
-          const d = s.receiving[n];
-          return { name: n, values: [d.tgt||0, d.rec||0, d.yds||0, d.td||0] };
-        }).filter(rowHasValue)));
-      }
-      // kickoffs belongs in this gate too -- without it a pure kickoff
-      // specialist never entered the loop at all, so the kickoff table
-      // could never be built no matter what the box score held.
-      const stNums = Object.keys(s.specialTeams).filter(n => {
-        const d = s.specialTeams[n];
-        return d.fgAtt || d.patAtt || d.punts || d.kickoffs;
-      });
-      const stKicking = [], stPunting = [], stKickoffs = [];
-      stNums.forEach(n => {
-        const d = s.specialTeams[n];
-        const name = n;
-        if (d.fgAtt || d.patAtt){
-          // A dash, not a zero, for a category the kicker never attempted.
-          // "0 for 0" reads as a failure; on a PAT-only kicker it looked
-          // like he had missed field goals he was never asked to take.
-          // Long is also dashed on an 0-for-N day -- a missed 45 is not
-          // a "long" of 45, and nor is it a long of 0.
-          const fg = d.fgAtt
-            ? [d.fgAtt, d.fgMade || 0, d.fgMade ? (d.fgLong || 0) : '—']
-            : ['—', '—', '—'];
-          const xp = d.patAtt ? [d.patAtt, d.patMade || 0] : ['—', '—'];
-          stKicking.push({ yds: d.fgLong || 0, name, values: fg.concat(xp) });
-        }
-        if (d.kickoffs){
-          const tbPct = Math.round(100 * (d.touchbacks || 0) / d.kickoffs);
-          stKickoffs.push({ name, values: [d.kickoffs, tbPct + '%'] });
-        }
-        if (d.punts){
-          const avg = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
-          // Total punt yardage is not a stat anyone reads -- it is just
-          // punts x average. Longest is the one that gets talked about,
-          // and computeBoxScore already tracks it.
-          stPunting.push({ yds: d.puntYds||0, name, values: [d.punts||0, avg, d.puntLong||0] });
-        }
-      });
-      stKicking.sort((a, b) => b.yds - a.yds);
-      stPunting.sort((a, b) => b.yds - a.yds);
-      const stTotalEntries = stKicking.length + stPunting.length + stKickoffs.length;
-      if (stTotalEntries){
-        // Three separate tables share this tile, and concatenated flush
-        // they read as one run-on block: a header row lands directly
-        // under the previous table's data row, so "Punts Avg Long" looks
-        // like more numbers for the kicker above it. A rule and a gap
-        // between sections makes each one legible on its own.
-        const stSections = [];
-        const pushIfRows = (hdrs, rows) => { if (rows.length) stSections.push(table(hdrs, rows)); };
-        pushIfRows(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, 5).filter(rowHasValue));
-        pushIfRows(['Punts','Avg','Long'], stPunting.slice(0, 5).filter(rowHasValue));
-        // Kickoffs: just the count and how many stayed in the end zone.
-        // Individual kickoff distance is not reported anywhere and the
-        // panel does not even ask for it, so a per-kicker yardage table
-        // would be all zeroes.
-        pushIfRows(['Kickoffs','TB %'], stKickoffs.filter(rowHasValue));
-        const stInner = stSections.map((sec, i) => i === 0 ? sec :
-          '<div style="border-top:1px solid #dde3ea; margin-top:calc(9px * var(--stat-scale, 1)); ' +
-          'padding-top:calc(7px * var(--stat-scale, 1));">' + sec + '</div>').join('');
-        stHtml += tile('Special Teams', stInner);
-      }
-      // Counted from the play log, not from named defenders. Naming the
-      // tackler, interceptor or recoverer is optional, and summing
-      // s.defense meant a sack with nobody credited recorded no sack at
-      // all -- the Defense tile simply did not render. The event
-      // happened whether or not anyone was identified.
-      const opp = otherTeam(teamKey);
-      const defTotals = plays.reduce((acc, p) => {
-        const r = p.roles; if (!r) return acc;
-        const e = p.effect || {};
-        if (r.playType === 'sack' && r.passer && r.passer.team === opp) acc.sacks++;
-        if (r.playType === 'int' && r.passer && r.passer.team === opp) acc.int++;
-        if (r.playType === 'fumble' && r.carrier && r.carrier.team === opp && (r.lost || r.defense)) acc.fumRec++;
-        // Tackles for loss, counted from the PLAY rather than from a named
-        // tackler. Naming the tackler is optional and often skipped at
-        // speed, so requiring one would undercount a team stat that the
-        // play log already knows for certain: a scrimmage snap by the
-        // other team that lost yardage was a tackle for loss, whoever
-        // made it. Sacks are included -- NFHS and NCAA both treat a sack
-        // as a tackle behind the line -- and shown alongside the sack
-        // count so the two can be read separately.
-        const TFL_TYPES = ['rush', 'pass', 'sack'];
-        const byOpp = (r.carrier && r.carrier.team === opp) ||
-                      (r.passer && r.passer.team === opp);
-        if (byOpp && TFL_TYPES.indexOf(r.playType) !== -1 &&
-            typeof e.statYds === 'number' && e.statYds < 0) acc.tfl++;
-        return acc;
-      }, { int: 0, fumRec: 0, sacks: 0, tfl: 0 });
-      const hasDef = defTotals.int || defTotals.fumRec || defTotals.sacks || defTotals.tfl;
-      if (hasDef){
-        defHtml += tile('Defense', table(['Int','Fum Rec','Sacks','TFL'],
-          [{ name: 'Team', values: [defTotals.int, defTotals.fumRec, defTotals.sacks, defTotals.tfl] }]));
-      }
-      const defNums = hasDef ? ['team'] : [];
-      if (!rushNums.length && !passNums.length && !recNums.length && !stTotalEntries && !defNums.length){
-        passHtml += '<p class="hint">No stats yet for ' + team.name + '.</p>';
-      }
-      const totalRows = passNums.length + rushNums.length + recNums.length + Math.min(stKicking.length, 5) + Math.min(stPunting.length, 5) + (defNums.length ? 1 : 0);
-      // Left: the passing game top to bottom, then rushing.
-      // Right: defense, then special teams.
-      leftHtml = passHtml + recHtml + rushHtml;
-      rightHtml = defHtml + stHtml;
-      // Early in a game a team can easily have defensive or special-teams
-      // stats and no offensive ones -- the opening play being a punt or a
-      // sack does it. That left the first column empty and the content
-      // stranded in the right half with a gap beside it. Reading order is
-      // left to right, so a lone column belongs on the left.
-      if (!leftHtml && rightHtml){
-        leftHtml = rightHtml;
-        rightHtml = '';
-      }
-      return { html: '<div class="stat-category-grid"><div class="stat-category-col">' + leftHtml + '</div><div class="stat-category-col">' + rightHtml + '</div></div>', totalRows };
-  }
-
-  function renderBoxScore(){
-    const box = computeBoxScore(plays);
-    const a = renderTeamBoxScore('teamA', box);
-    const b = renderTeamBoxScore('teamB', box);
-    const quadBL = document.getElementById('quadBL'), quadBR = document.getElementById('quadBR');
-    quadBL.style.setProperty('--stat-scale', 1);
-    quadBR.style.setProperty('--stat-scale', 1);
-    document.getElementById('boxScoreTeamA').innerHTML = a.html;
-    document.getElementById('boxScoreTeamB').innerHTML = b.html;
-
-    // Measure real rendered height at scale 1, then compute the scale
-    // that actually fills the available space -- growing when there's
-    // room to spare (a team with modest stats shouldn't render small
-    // and leave the rest of the quadrant empty), shrinking when there's
-    // more content than fits. Both sides use the same scale so neither
-    // panel looks visually denser or sparser than its sibling.
-    // offsetHeight, NOT getBoundingClientRect(). The whole page sits
-    // inside a `transform: scale()` wrapper, and getBoundingClientRect
-    // returns the VISUAL box -- already multiplied by that transform --
-    // while clientHeight and scrollHeight return the unscaled layout
-    // box. Mixing the two made availableHeight too generous by exactly
-    // the display scale factor, so --stat-scale came out too large and
-    // the content overflowed its quadrant. At 1920x1080 the transform
-    // is 1:1 and the bug is invisible, which is why it looked like it
-    // "sometimes worked".
-    const availableHeight = (quad) => {
-      const header = quad.querySelector('h2');
-      const headerH = header ? header.offsetHeight + 10 : 0;
-      return quad.clientHeight - headerH - 16;
-    };
-    const contentHeight = (id) => document.getElementById(id).scrollHeight;
-    // A 4% safety margin. The fit is computed from measurements taken
-    // before the browser has finished reflowing at the new scale, so
-    // landing exactly on the available height reliably overshoots by a
-    // pixel or two -- which is all it takes to get a scrollbar.
-    const FIT_MARGIN = 0.96;
-    // Growth is allowed but capped well below the old 2.2. Enlarging a
-    // table does not increase its height proportionally -- columns
-    // re-wrap and rows gain padding -- so a scale derived from
-    // measurements taken at 1.0 overshoots, and the error compounds the
-    // further it grows. At 2.2 that overshoot produced scrollbars and
-    // clipped rows; a modest ceiling keeps the prediction close enough
-    // for the refinement loop below to correct the remainder.
-    const MAX_GROW = 1.5;
-    const scaleFor = (avail, content) => {
-      if (content <= 0) return 1;
-      return Math.min(MAX_GROW, Math.max(0.5, (avail / content) * FIT_MARGIN));
-    };
-    const availA = availableHeight(quadBL), availB = availableHeight(quadBR);
-    let scale = Math.min(scaleFor(availA, contentHeight('boxScoreTeamA')),
-                         scaleFor(availB, contentHeight('boxScoreTeamB')));
-    quadBL.style.setProperty('--stat-scale', scale);
-    quadBR.style.setProperty('--stat-scale', scale);
-
-    // Scaling text does not change height linearly -- lines re-wrap and
-    // line heights round to whole pixels -- so one pass can still
-    // overshoot. Re-measure and back off until it genuinely fits.
-    for (let i = 0; i < 8; i++){
-      // Measure against the margin, not the raw height, so the loop
-      // stops slightly short of the edge rather than flush against it.
-      const targetA = availA * FIT_MARGIN, targetB = availB * FIT_MARGIN;
-      const overA = contentHeight('boxScoreTeamA') - targetA;
-      const overB = contentHeight('boxScoreTeamB') - targetB;
-      if (overA <= 0 && overB <= 0) break;
-      const worst = Math.max(overA / targetA, overB / targetB);
-      scale = Math.max(0.5, scale * (1 - Math.min(0.2, worst)));
-      quadBL.style.setProperty('--stat-scale', scale);
-      quadBR.style.setProperty('--stat-scale', scale);
+  // What is on air right now. A crew member checking their setup on
+  // Friday afternoon should see the answer, not have to ask.
+  async function renderAir(){
+    const box = document.getElementById('airBox');
+    const { data } = await supabaseClient.from('games')
+      .select('home_team_name, away_team_name, game_date, status, is_broadcast')
+      .eq('is_broadcast', true).limit(1);
+    const g = (data || [])[0];
+    if (g){
+      box.className = 'onair';
+      box.innerHTML = '&#9679; ON AIR<span class="what">' +
+        [g.home_team_name, g.away_team_name].filter(Boolean).join(' vs ') +
+        '</span><span class="note">' + (g.game_date || '') +
+        ' &middot; ' + (g.status === 'in_progress' ? 'in progress'
+                      : g.status === 'final' ? 'finished' : 'not started yet') +
+        ' &middot; the feeds below are showing this game</span>';
+    } else {
+      box.className = 'offair';
+      box.innerHTML = 'Nothing on air<span class="what">No game selected</span>' +
+        '<span class="note">Set a game ON AIR from the dashboard. Until then the ' +
+        'feeds fall back to the most recent game in progress, or return nothing ' +
+        'at all.</span>';
     }
   }
 
-  // ---- overlay rendering (NOT copied from view.html) ----------------
-  function safeText(bg, fallback){
-    try { return safeTextColor(bg, fallback); } catch (e) { return fallback || '#fff'; }
-  }
-
-  // view.html's init() paints into elements this page does not have.
-  // Stubbed so the shared boot path runs unchanged.
-  function showView(){}
-  function showMsg(){}
-  function renderTeamSummary(){}
-  function renderBoxScore(){}
-  function applyDisplayScale(){}
-
-  function renderAll(){
-    const state = computeState(plays);
-    document.getElementById('bug').style.display = 'flex';
-
-    const sideHtml = (teamKey) => {
-      const t = TEAMS[teamKey];
-      const has = state.possession === teamKey && state.down;
-      return '<span class="poss" style="visibility:' + (has ? 'visible' : 'hidden') + ';">\uD83C\uDFC8</span>' +
-             (t.logo ? '<img src="' + t.logo + '" alt="">' : '') +
-             '<span class="abbr">' + (t.abbr || t.name) + '</span>' +
-             '<span class="pts">' + (state.scores[teamKey] || 0) + '</span>';
-    };
-    const paint = (id, teamKey) => {
-      const el = document.getElementById(id), t = TEAMS[teamKey];
-      el.style.background = t.bg || '#1a1a2e';
-      el.style.color = safeText(t.bg, t.text);
-      el.innerHTML = sideHtml(teamKey);
-    };
-    paint('sideA', 'teamA');
-    paint('sideB', 'teamB');
-
-    const dist = (state.down && state.fieldPos !== null &&
-                  state.fieldPos + state.distance >= 100) ? 'Goal' : state.distance;
-    document.getElementById('downText').textContent = state.down
-      ? (ordinal(state.down) + ' & ' + dist + ' at ' + markerLabel(state.fieldPos))
-      : '';
-    document.getElementById('quarterText').textContent =
-      state.quarter >= 5 ? 'OT' : ('Q' + state.quarter);
-
-    const p = new URLSearchParams(window.location.search);
-    document.body.classList.toggle('layout-bug', p.get('layout') === 'bug');
-    document.body.classList.toggle('debug', p.get('debug') === '1');
-  }
-
-  // ---- boot ---------------------------------------------------------
-  // Everything comes from /api/gamedata, which reads server-side with the
-  // service key. The overlay cannot query Supabase directly: it has no
-  // session, and every RLS policy requires one.
-  //
-  // POLLING, not realtime. Supabase realtime also needs a session, so the
-  // overlay re-fetches on an interval instead. Two seconds is well inside
-  // what a scoreboard needs and is trivial load for one game.
-  const POLL_MS = 2000;
-
-  function showFatal(msg){
-    document.body.innerHTML =
-      '<p style="position:absolute;left:40px;bottom:40px;margin:0;color:#fff;' +
-      'background:#8a1414;padding:14px 20px;border-radius:6px;' +
-      'font:500 20px sans-serif;">' + msg + '</p>';
-  }
-
-  async function fetchAndRender(){
-    const r = await fetch('/api/gamedata' +
-      (currentGameId ? '?id=' + encodeURIComponent(currentGameId) : ''),
-      { cache: 'no-store' });
-    if (!r.ok){
-      const body = await r.json().catch(() => ({}));
-      throw new Error(body.error || ('HTTP ' + r.status));
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)){
+      window.location.href = '/'; return;
     }
-    const d = await r.json();
-    startingPossession = d.game.starting_possession || 'teamA';
-    quarterLengthSec   = d.game.quarter_length_seconds || 720;
-    buildTeams(d.game, d.roster || [], d.ourBranding || {});
-    plays = (d.plays || []).map(p => ({
-      id: p.id, seq: p.sequence_number, text: p.text,
-      effect: p.effect || {}, roles: p.roles || null,
-      team: p.team_side, quarter: p.quarter,
-      isDivider: !!p.is_divider, unresolved: !!p.unresolved
-    }));
-    renderAll();
-  }
+    if (event !== 'INITIAL_SESSION') return;
 
-  async function initOverlay(){
-    const params = new URLSearchParams(window.location.search);
-    // An id is OPTIONAL now. Without one, /api/gamedata resolves the game
-    // set ON AIR -- which is the whole point of the flag, and means the
-    // overlay address never needs editing. The old behaviour was a
-    // leftover from before the flag existed, and produced
-    // "No game id" for anyone who used the address as given.
-    currentGameId = params.get('id') || '';
-    try {
-      await fetchAndRender();
-    } catch (e){
-      showFatal('Could not load the game: ' + e.message);
+    // Admin and game_entry. The page shows the static key, so it is not
+    // for view accounts -- and the crew sets up the day before, when Andy
+    // may not be around.
+    const { data } = await supabaseClient.from('profiles')
+      .select('role').eq('id', session.user.id).limit(1);
+    const role = ((data || [])[0] || {}).role || 'view';
+    if (role !== 'admin' && role !== 'game_entry'){
+      document.getElementById('gate').textContent =
+        'This page is for admin and game entry accounts.';
       return;
     }
-    // A later failure must not blank a working scoreboard -- keep showing
-    // the last good state and try again on the next tick.
-    setInterval(() => { fetchAndRender().catch(() => {}); }, POLL_MS);
-  }
-  initOverlay();
 
+    // Fetch the key BEFORE rendering, or the addresses render keyless
+    // and the copy buttons hand out broken URLs.
+    if (!feedKey){
+      try {
+        const r = await fetch('/api/feedkey', {
+          headers: { Authorization: 'Bearer ' + session.access_token },
+          cache: 'no-store'
+        });
+        if (r.ok){
+          const j = await r.json();
+          feedKey = j.key || '';
+          if (!j.configured){
+            document.getElementById('keyNote').innerHTML =
+              '<strong>No feed key is set.</strong> The addresses below work ' +
+              'without one, which means anyone who knows them can read the ' +
+              'feed. To lock it down, set a <code>FEED_KEY</code> environment ' +
+              'variable in Vercel and redeploy.';
+            document.getElementById('keyNote').style.display = 'block';
+          }
+        } else {
+          document.getElementById('keyNote').innerHTML =
+            '<strong>Could not read the feed key.</strong> The addresses below ' +
+            'are missing it and will be refused. Try reloading.';
+          document.getElementById('keyNote').style.display = 'block';
+        }
+      } catch (e) {
+        document.getElementById('keyNote').innerHTML =
+          '<strong>Could not reach the server for the feed key.</strong>';
+        document.getElementById('keyNote').style.display = 'block';
+      }
+    }
+
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    renderFeeds();
+    renderAir();
+    // Cheap, and means a page left open on Friday afternoon stays honest.
+    setInterval(renderAir, 15000);
+  });
 </script>
 </body>
 </html>
