@@ -764,7 +764,49 @@ three NFL weeks match 48 games / 6,977 plays / zero issues ·
   as soon as a game is CREATED. Dashboard shows which game is flagged so
   nobody has to wonder. Automatic fallback (most recent in-progress) only
   when nothing is flagged. Two games are never live at once (confirmed).
-- [ ] One **static** key if we want any gate at all — never per-game.
+
+  **DECIDED 12 Aug: admin AND game_entry can set it** — the crew sets up
+  the day before and Andy may not be there.
+
+  **But it must be hard to change by accident.** This flag decides what
+  the whole broadcast is showing. Toggling it mid-game points every vMix
+  graphic at a different game, live on air, and the person who did it may
+  not realise. Protections to build:
+
+  - [ ] **Not a toggle.** A confirm step naming the game:
+    "Broadcast Neville vs Ruston, 24 Aug? This is what the vMix graphics
+    will show." A single tap must not be able to do it.
+  - [ ] **Exclusive by construction.** Setting it clears the flag on
+    every other game in the same transaction, so two games can never
+    both claim it. Do this in SQL, not in the page — two people on two
+    laptops would otherwise race.
+  - [ ] **Much harder once the game has started.** Before kickoff a
+    mistake is harmless; during play it is a live failure. Require a
+    second, differently-worded confirmation if the flagged game has any
+    plays entered — or refuse outright and make them clear it first.
+  - [ ] **Visible everywhere it matters.** A clear "ON AIR" marker on the
+    dashboard row and in the game page header. The most likely accident
+    is someone not realising which game is flagged.
+  - [ ] **Log who changed it and when.** One row, or a column on the
+    game. When the wrong game is on air at 19:30, the first question is
+    who changed it — and there is currently no audit trail anywhere in
+    the app.
+  - [ ] Consider whether clearing the flag needs protection too. A game
+    accidentally UNflagged mid-broadcast means the feed falls back to
+    "most recent in-progress", which may well be the same game — or may
+    be nothing at all.
+
+- [x] **A single STATIC key — decided 12 Aug.** Never per-game, so the
+  vMix URL is set up once and never touched. Notes for building it:
+  - [ ] Store it as a Vercel environment variable, NOT in the repo.
+  - [ ] `api/feed.js` compares `?key=` against it and returns 401
+    otherwise. The vMix Data Source URL simply carries the key.
+  - [ ] It is a shared secret in a URL, which is weak — it will sit in
+    vMix config and possibly in a browser history. It stops casual
+    discovery, not a determined person. Acceptable: the data is a live
+    scoreboard, and RLS still protects everything that matters.
+  - [ ] Write down how to rotate it, and remember that rotating means
+    editing every vMix data source. Rotate between seasons, not during.
 - [ ] The eight views from 8b, XML and JSON.
 - [ ] **No-cache headers** (8c) — the classic vMix "stopped updating".
 - [ ] **A test asserting every field the view page shows appears in some
@@ -932,6 +974,43 @@ reproduce after the fact.
 
 Related: the vMix feed (section 8) reads a LIVE game deliberately, which
 is the opposite requirement. Do not let a fix for one break the other.
+
+---
+
+## 14. Keep the broadcast feed vendor-neutral
+
+Andy, 12 Aug 2026: **this will eventually feed multiple broadcast
+suites, not just vMix.** Decided then rather than discovered later.
+
+**No per-app code is needed, and none should be written.** The ON AIR
+flag is a database column saying "this is the game to broadcast". It
+knows nothing about who reads it. What varies between suites is FORMAT
+and TRANSPORT, both handled by one query parameter:
+
+| Suite | Typical consumption |
+|---|---|
+| vMix | XML or JSON over HTTP, Data Source |
+| OBS | browser source, or a text file |
+| Singular.live | JSON over HTTP |
+| CasparCG | XML, or a template push |
+| Wirecast | JSON |
+
+**One flag, one feed, several renderings** — `?format=xml|json|csv`.
+
+- [x] User-facing wording says "the broadcast graphics", never "vMix"
+  (done 12 Aug, dashboard prompts and the game-page banner).
+- [ ] **Never name a field after a vendor.** No `vmix_score`, no
+  `obs_ticker`. The feed describes FOOTBALL; each suite maps it to its
+  own template. A vendor name in the data is how a format becomes
+  impossible to change later.
+- [ ] Keep `?format=` the only thing that varies. If a suite ever seems
+  to need special-case logic, that is a signal the data shape is wrong,
+  not that it needs a branch.
+- [ ] `broadcast.html` is the exception and should stay one: it is a
+  rendered overlay for a browser-source input, not data. Do not try to
+  make it serve both purposes.
+- [ ] CSV is worth adding when something needs it — several suites take
+  it, and it is trivial once the views exist. Not before.
 
 ---
 

@@ -443,8 +443,14 @@
     // needs the real rows.
     // ON AIR. Everything protective is here, because this one flag
     // decides what the entire broadcast is showing. Getting it wrong
-    // mid-game repoints every vMix graphic, live, and the person who did
-    // it may not realise.
+    // mid-game repoints every broadcast graphic, live, and the person
+    // who did it may not realise.
+    //
+    // Deliberately vendor-neutral. vMix is what Andy uses today, but the
+    // feed is a URL and anything that can read one -- OBS, Singular,
+    // CasparCG, Wirecast -- consumes the same data. The flag knows
+    // nothing about who is reading it, and the wording should not
+    // either.
     body.querySelectorAll('.broadcastBtn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -460,7 +466,7 @@
           // to prevent that.
           if (!window.confirm(
                 'Put this game ON AIR?\n\n    ' + label + '\n\n' +
-                'The vMix graphics will show this game. Any game ' +
+                'The broadcast graphics will show this game. Any game ' +
                 'currently on air will be taken off.')) return;
 
           // A live game is the dangerous case: a mistake here is not a
@@ -476,7 +482,7 @@
           // nothing at all -- so the graphics can simply go blank.
           if (!window.confirm(
                 'Take this game OFF AIR?\n\n    ' + label + '\n\n' +
-                'The vMix graphics will stop showing it. If no other ' +
+                'The broadcast graphics will stop showing it. If no other ' +
                 'game is live they may show nothing at all.')) return;
 
           if (started) {
@@ -545,7 +551,14 @@
           // the date, not just an id.
           const safe = (x) => String(x || '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
           const stamp = (game.game_date || new Date().toISOString().slice(0, 10));
-          const name = 'statchat-' + safe(game.opponent || 'game') + '-' + stamp + '.json';
+          // There is no `opponent` column — the teams are home_team_name
+          // and away_team_name. Using game.opponent silently produced
+          // "statchat-game-<date>.json" for every backup, which is
+          // exactly the kind of filename you cannot identify six months
+          // later. The || fallback hid it: no error, just a useless name.
+          const teams = [game.home_team_name, game.away_team_name]
+            .filter(Boolean).join('-vs-');
+          const name = 'statchat-' + (safe(teams) || 'game') + '-' + stamp + '.json';
 
           const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
