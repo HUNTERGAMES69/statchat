@@ -306,9 +306,14 @@ https://nevillestatchat.vercel.app/api/feed?view=score&format=xml
       fetch.
 - [ ] Eight views: `score`, `drive`, `lastplay`, `rushing`, `passing`,
       `receiving`, `defense`, `teamstats`. XML primary, JSON alongside.
-- [ ] **A test asserting every field the view page displays appears in
-      some feed view.** This turns "ALL data is available" from an
-      assumption into a check.
+- [x] **DONE 12 Aug 2026** — `tests/feed_coverage_check.js`.
+      **It found four real gaps immediately**, which is the point:
+      `possessions`, `turnovers` and `penalties` were missing from
+      teamstats, and the entire `defense` view returned ZERO rows because
+      its filter kept only players with tackles — so a defender with a
+      sack and an interception was dropped. All four are fixed.
+      The requirement had felt satisfied; the feed has a lot of fields and
+      nothing was obviously absent.
 
 ---
 
