@@ -192,13 +192,26 @@ Ranked by what can actually ruin a game night.
 
 ### Highest value: RLS role enforcement
 
-- [ ] Every policy today is `auth.role() = 'authenticated'` — "are you
-      signed in". **A `view` account can delete plays** by calling the API
-      directly. So can anyone who ever had an account.
-- [ ] Write a `current_user_role()` SECURITY DEFINER helper, then
-      role-aware policies: view reads; scorer writes plays; only admin
-      deletes games or changes roles.
-- [ ] Confirm there is no second self-write path to `profiles.role`.
+- [x] **DONE 12 Aug 2026.** Every table is role-aware; a final check for
+      any surviving `auth.role()` policy returns ZERO rows. Verified at
+      the API in a browser console, not just through the UI: a `view`
+      account's INSERT is refused outright, and a `game_entry` DELETE
+      against a real game id removed 0 rows.
+      See `sql/rls_hardening.sql` for what was run and why.
+
+      Two things the draft got wrong, both caught by listing the real
+      state first: the drops used invented policy names and would have
+      silently done nothing, and it rewrote `profiles`, which was already
+      correct and was the one step that could have locked the only admin
+      out.
+- [x] `current_user_role()` written, SECURITY DEFINER, falling back to
+      `view` so a failed lookup loses access rather than granting it.
+- [x] Role-aware policies on plays, games, game_rosters, players, teams.
+      **Scorers keep DELETE on plays** — Undo is a delete, and admin-only
+      would have broken it mid-game.
+- [x] Confirmed: `profiles_role_guard` blocks role changes by non-admins.
+      It does NOT stop an admin demoting themselves — logged in TODO, and
+      a second admin account was created as mitigation.
 
 **Do this even if everything else slips.** It is the only item that can
 lose data permanently.
