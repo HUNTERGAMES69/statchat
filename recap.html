@@ -412,7 +412,27 @@ function isAdminMarker(p){
         ? '<table class="player-table"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th><th>TFL</th></tr>' +
           '<tr><td>Team</td><td>' + sumStat(box[teamKey].defense,'int') + '</td><td>' + sumStat(box[teamKey].defense,'fumRec') + '</td><td>' + sumStat(box[teamKey].defense,'sacks') + '</td><td>' + teamTflFor(plays, teamKey) + '</td></tr></table>'
         : '<p class="no-stats">No defensive stats recorded.</p>';
-      out += '<div class="section player-section"><h2>' + teamName + ' — Defense</h2>' + defTable + '</div>';
+      // Per-player tackles, in their own table. Team TFL above counts
+      // from the play log and needs no named tackler (a ceiling);
+      // per-player comes from the optional "tackled by" field (a floor).
+      // Merging them would make the report contradict itself.
+      const tacklers = Object.keys(box[teamKey].defense || {})
+        .filter(n => n !== 'TEAM' && (box[teamKey].defense[n].tackles || 0) > 0)
+        .map(n => ({ name: n, d: box[teamKey].defense[n] }))
+        .sort((a, b) => (b.d.tackles || 0) - (a.d.tackles || 0));
+      const tackleTable = tacklers.length
+        ? '<table class="player-table"><tr><th></th><th>Tackles</th><th>TFL</th>' +
+          '<th>Sacks</th><th>Int</th></tr>' +
+          tacklers.map(p => '<tr><td>' + p.name + '</td><td>' + (p.d.tackles || 0) +
+            '</td><td>' + (p.d.tfl || 0) + '</td><td>' + (p.d.sacks || 0) +
+            '</td><td>' + (p.d.int || 0) + '</td></tr>').join('') +
+          '</table><p class="no-stats" style="margin-top:6px;">Only plays where a ' +
+          'tackler was named. The team TFL above counts every play for a loss, so ' +
+          'it may be higher.</p>'
+        : '';
+
+      out += '<div class="section player-section"><h2>' + teamName + ' — Defense</h2>' +
+             defTable + tackleTable + '</div>';
 
       const koNums = Object.keys(box[teamKey].specialTeams).filter(n => box[teamKey].specialTeams[n].kickoffs);
       const puntNums = Object.keys(box[teamKey].specialTeams).filter(n => box[teamKey].specialTeams[n].punts);

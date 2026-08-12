@@ -460,8 +460,42 @@ function computeBoxScore(playsList){
         s.intThrown = (s.intThrown||0) + 1;
       }
     }
+    // TACKLES. The app has always captured "tackled by" -- it is stored in
+    // roles.defense and used to rank the tackler picker -- and then thrown
+    // it away: only int, sack and fumRec were ever counted, so an ordinary
+    // tackle produced no stat at all.
+    //
+    // Counted on any SCRIMMAGE play with a credited defender. A sack is a
+    // tackle as well as a sack, which is how stat sheets treat it. Kicks
+    // and returns are excluded: the credit field means something different
+    // there, and lumping them in would inflate the number quietly.
+    //
+    // SINGLE NUMBER, no solo/assisted split. The panel takes ONE tackler,
+    // so every tackle is implicitly solo today; splitting would need a
+    // second field on the fastest-moving entry in the app. Revisit after a
+    // season of real use.
+    //
+    // TFL falls out for free: a credited tackle on a play that lost
+    // yardage. Note this will NOT match the team TFL already reported --
+    // team TFL counts from the play log and needs no named tackler, so it
+    // is a ceiling and this is a floor. Both are correct; they answer
+    // different questions. Do not "fix" one to match the other.
+    const TACKLE_TYPES = ['rush', 'pass', 'sack', 'fumble'];
+    if (r.defense && TACKLE_TYPES.includes(type)){
+      const s = bucket(r.defense.team, 'defense', r.defense.num, r.defense.name);
+      if (s){
+        s.tackles = (s.tackles||0) + 1;
+        // Yardage on the play, from whoever had the ball.
+        const gained = (r.carrier && typeof r.carrier.yards === 'number') ? r.carrier.yards
+                     : (r.receiver && typeof r.receiver.yards === 'number') ? r.receiver.yards
+                     : (type === 'sack' && r.passer && typeof r.passer.yards === 'number') ? r.passer.yards
+                     : null;
+        if (gained !== null && gained < 0) s.tfl = (s.tfl||0) + 1;
+      }
+    }
+
     if (r.defense && (type === 'int' || type === 'sack' || type === 'fumble')){
-      const s = bucket(r.defense.team, 'defense', r.defense.num);
+      const s = bucket(r.defense.team, 'defense', r.defense.num, r.defense.name);
       if (s){
         if (type === 'int') s.int = (s.int||0) + 1;
         if (type === 'sack') s.sacks = (s.sacks||0) + 1;

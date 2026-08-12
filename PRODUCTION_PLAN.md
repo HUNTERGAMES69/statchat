@@ -331,7 +331,7 @@ The part no test can replace.
 
 ---
 
-## PHASE 4b — Per-player tackles (days 12–13)
+## PHASE 4b — Per-player tackles — DONE 12 Aug 2026
 
 Added at Andy's request, 10 August. Sequenced **last of the build work**
 so it can be dropped without disturbing anything else if earlier phases
@@ -352,7 +352,11 @@ is a ONE-file engine change**, which is part of why it sits here.
 
 ### Two decisions to settle before writing code
 
-- [ ] **Solo versus assisted.** The panel takes ONE tackler, so every
+- [x] **Solo versus assisted** — SINGLE NUMBER this release, as
+      recommended. The panel takes one tackler, so every tackle is
+      implicitly solo; splitting needs a second field on the
+      fastest-moving screen in the app.
+- [x] ~~Solo versus assisted.~~ The panel takes ONE tackler, so every
       tackle is implicitly solo today. Real stat sheets split them, which
       means either a second field — slowing the fastest-moving entry in
       the app — or accepting a single "tackles" number with no split.
@@ -366,8 +370,10 @@ is a ONE-file engine change**, which is part of why it sits here.
 
 ### The work
 
-- [ ] Count tackles per player in `computeBoxScore` from `roles.defense`.
-- [ ] Per-player TFL falls out for free: a credited tackle on a play with
+- [x] Counted in `computeBoxScore` from `roles.defense`, on any scrimmage
+      play with a credited defender. A sack counts as a tackle as well as
+      a sack.
+- [x] Per-player TFL falls out for free: a credited tackle on a play with
       negative yardage.
 - [ ] Add the columns to `view.html`, `recap.html`, `stat_package.html`
       and `season_report.html`, and to the XLS export.
