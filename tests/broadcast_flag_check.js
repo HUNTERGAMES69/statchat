@@ -255,6 +255,41 @@ async function run() {
     p.close();
   }
 
+  // --- a link from the game page --------------------------------------
+  // Andy asked for this: mid-game, checking a feed address should not
+  // mean navigating away from a half-entered play. Hence a new tab,
+  // exactly like the HELP pill beside it.
+  {
+    for (const role of ['admin', 'game_entry']) {
+      const h = await bootGamePage({ role });
+      const fab = h.document.getElementById('broadcastFab');
+      if (!fab) {
+        fail('game page link', 'no BROADCAST pill on the game page for ' + role);
+      } else {
+        if (fab.style.display === 'none') {
+          fail('game page link', 'the BROADCAST pill is hidden for ' + role);
+        }
+        if (fab.target !== '_blank') {
+          fail('game page link', 'the BROADCAST pill does not open in a new ' +
+               'tab. Navigating away mid-entry could lose a half-entered play');
+        }
+        if (!/noopener/.test(fab.getAttribute('rel') || '')) {
+          fail('game page link', 'target=_blank without rel="noopener"');
+        }
+      }
+      // It must not cover the HELP pill, which sits bottom-right.
+      const help = h.document.getElementById('helpFab');
+      if (help && fab && fab.style.right === help.style.right) {
+        fail('game page link', 'the BROADCAST and HELP pills are at the same ' +
+             'position and would overlap');
+      }
+      h.close();
+    }
+    // A `view` account never reaches game.html at all --
+    // guardMinRoleOrRedirect sends it to the dashboard, so the pill's own
+    // gate is a second line rather than the only one.
+  }
+
   // --- the Broadcast setup link is reachable --------------------------
   // It was only in the avatar menu at first, which is not where anyone
   // looks for something the production team needs.

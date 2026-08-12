@@ -114,7 +114,11 @@ function makeMockSupabase(db) {
           });
         };
         if (this._op === 'select') {
-          if (table === 'profiles') data = [{ role: 'admin' }];
+          // Configurable via opts.role. It was hardcoded to 'admin',
+          // which meant NO role gate could be tested -- a test asking
+          // "is this hidden from a view account?" was silently always
+          // asking about an admin, and passed regardless.
+          if (table === 'profiles') data = [{ role: db.role, id: 'test-user-id' }];
           else if (table === 'games') data = [db.game];
           else if (table === 'game_rosters') data = db.roster;
           else if (table === 'teams') data = [db.branding];
@@ -243,6 +247,7 @@ async function bootPage(file, opts = {}) {
     existingPlays: opts.existingPlays || [],
     plays: [],
     failNext: opts.failNext || null,   // see builder().insert
+    role: opts.role || 'admin',        // the signed-in user's role
     rpcCalls: [],                      // see makeMockSupabase().rpc
     rpcError: opts.rpcError || null,
     // Realtime bookkeeping. `emit` replays a postgres_changes event the
