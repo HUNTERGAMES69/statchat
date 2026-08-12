@@ -264,7 +264,19 @@ async function bootPage(file, opts = {}) {
       // which jsdom never fetches, and jsdom has no canvas backend
       // either. Stub both: the charts are presentation, but the page's
       // NUMBERS are exactly what these tests need to reach.
-      window.Chart = function Chart() {
+      // RECORDS every chart's config instead of discarding it. The old
+      // stub threw the config away, so nothing could check what the
+      // charts were actually handed -- and "the chart drew" says nothing
+      // about whether it drew the right numbers. A chart plotting the
+      // wrong series looks completely convincing.
+      db.charts = [];
+      window.Chart = function Chart(canvas, config) {
+        db.charts.push({
+          id: canvas && canvas.id ? canvas.id : '(no canvas)',
+          type: (config || {}).type,
+          data: (config || {}).data || {},
+          options: (config || {}).options || {}
+        });
         return { destroy() {}, update() {}, resize() {}, data: {}, options: {} };
       };
       window.Chart.register = () => {};
