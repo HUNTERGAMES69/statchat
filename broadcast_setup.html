@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Broadcast setup — StatChat</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
+<script src="team-icon.js"></script>
+<style>
+  :root { --ink:#1a1a1a; --muted:#666; --line:#e0e0e0; --green:#0f6e56; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#f7f7f5; color:var(--ink);
+         font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
+  .wrap { max-width:900px; margin:0 auto; padding:24px 20px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 20px; font-size:14px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px;
+          padding:18px 20px; margin-bottom:16px; }
+  h2 { font-size:15px; margin:0 0 10px; letter-spacing:0.02em; }
+  .onair { background:#b00020; color:#fff; padding:14px 18px; border-radius:10px;
+           margin-bottom:16px; font-weight:700; }
+  .offair { background:#5a5a5a; color:#fff; padding:14px 18px; border-radius:10px;
+            margin-bottom:16px; font-weight:700; }
+  .onair .what, .offair .what { font-size:20px; display:block; margin-top:4px; }
+  .onair .note, .offair .note { font-weight:500; font-size:13px; opacity:0.9;
+                                display:block; margin-top:6px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:var(--muted); font-weight:600; padding:6px 8px;
+       border-bottom:2px solid var(--line); font-size:12px; }
+  td { padding:8px; border-bottom:1px solid #f0f0f0; vertical-align:top; }
+  td.what { font-weight:700; white-space:nowrap; }
+  td.desc { color:var(--muted); }
+  code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:11px;
+         background:#f4f4f2; padding:2px 5px; border-radius:3px; word-break:break-all; }
+  button { font-family:inherit; cursor:pointer; }
+  .copy { background:var(--green); color:#fff; border:none; border-radius:5px;
+          padding:5px 11px; font-size:12px; font-weight:700; white-space:nowrap; }
+  .copy.done { background:#1a7a4c; }
+  .fmt { background:none; border:1px solid var(--line); border-radius:5px;
+         padding:4px 10px; font-size:12px; font-weight:600; color:var(--muted); }
+  .fmt.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .hint { font-size:13px; color:var(--muted); line-height:1.6; }
+  .hint strong { color:var(--ink); }
+  .warn { background:#fff8e1; border-left:3px solid #a37a00; padding:10px 14px;
+          border-radius:4px; font-size:13px; margin-top:12px; }
+  a.back { color:var(--green); font-weight:600; text-decoration:none; font-size:13px; }
+  #gate { padding:40px 20px; text-align:center; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="dashboard.html">&larr; Dashboard</a>
+  <h1 style="margin-top:12px;">Broadcast setup</h1>
+  <p class="sub">Feed addresses for the production team. These never change &mdash;
+     set them up once.</p>
+
+  <div id="gate">Checking your access&hellip;</div>
+
+  <div id="main" style="display:none;">
+    <div id="airBox"></div>
+
+    <div class="card">
+      <h2>Feed addresses</h2>
+      <p class="hint" style="margin:0 0 12px;">
+        Each one is a separate data source. <strong>The address is the same every
+        week</strong> &mdash; it follows whichever game is set ON AIR, so nothing
+        needs changing on game day.
+      </p>
+      <div style="margin-bottom:12px;">
+        Format:
+        <button class="fmt on" data-fmt="xml">XML</button>
+        <button class="fmt" data-fmt="json">JSON</button>
+      </div>
+      <table>
+        <thead><tr><th>Graphic</th><th>What it gives you</th><th>Address</th><th></th></tr></thead>
+        <tbody id="feedRows"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Setting it up</h2>
+      <p class="hint">
+        <strong>vMix:</strong> Add Input &rarr; Data Sources &rarr; XML, paste the
+        address, set the refresh interval to 1&ndash;2 seconds. Then map each column
+        onto a field in your title.<br>
+        <strong>Anything else:</strong> the feed is a plain web address returning XML
+        or JSON, so any software that can poll a URL will read it. Switch the format
+        above to whichever your package prefers.
+      </p>
+      <div class="warn">
+        <strong>One row per record.</strong> The scoreboard, drive and last-play feeds
+        return a single row. The leader feeds return one row per player, best first
+        &mdash; so a &ldquo;top rusher&rdquo; graphic can simply use row 1.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Screen overlay</h2>
+      <p class="hint">
+        A ready-made transparent scoreboard, if you would rather not build your own.
+        Add it as a <strong>web browser input</strong> at 1920&times;1080 &mdash; the
+        background is transparent, so it keys straight over the programme feed.
+      </p>
+      <table><tbody id="overlayRows"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>If the graphics stop updating</h2>
+      <p class="hint">
+        Open one of the addresses in a browser. If it shows current data, the feed is
+        fine and the problem is in the broadcast software &mdash; check the refresh
+        interval is set, since a data source that never refreshes looks exactly like a
+        frozen feed.<br><br>
+        If it says <code>No game is on air</code>, nobody has set a game ON AIR on the
+        dashboard yet.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  // The static feed key. Read from the page URL so this file can live in
+  // the repo without carrying the secret:
+  //     broadcast_setup.html?key=...
+  // Bookmark it once with the key and every address below is complete.
+  const feedKey = new URLSearchParams(location.search).get('key') || '';
+
+  const ORIGIN = location.origin;
+  let format = 'xml';
+
+  // Deliberately describes FOOTBALL, not any particular software. The
+  // same list serves vMix, OBS, Singular, CasparCG or anything else that
+  // can read a URL.
+  const FEEDS = [
+    ['score',      'Scoreboard bug',  'Score, quarter, down &amp; distance, ball on, possession, timeouts'],
+    ['drive',      'Current drive',   'Plays, yards and time of possession on the drive in progress'],
+    ['lastplay',   'Play ticker',     'The text of the most recent play'],
+    ['teamstats',  'Team comparison', 'Two rows, one per team: yards, first downs, third downs, turnovers'],
+    ['rushing',    'Rushing leaders', 'One row per player, most yards first'],
+    ['passing',    'Passing leaders', 'One row per player, most yards first'],
+    ['receiving',  'Receiving leaders','One row per player, most yards first'],
+    ['defense',    'Defensive leaders','One row per player: tackles, sacks, interceptions']
+  ];
+
+  const feedUrl = (view) =>
+    ORIGIN + '/api/feed?view=' + view + '&format=' + format +
+    (feedKey ? '&key=' + encodeURIComponent(feedKey) : '');
+
+  function copyBtn(url){
+    const b = document.createElement('button');
+    b.className = 'copy'; b.textContent = 'Copy';
+    b.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(url); }
+      catch (e) {
+        const t = document.createElement('textarea');
+        t.value = url; document.body.appendChild(t); t.select();
+        document.execCommand('copy'); t.remove();
+      }
+      b.textContent = 'Copied'; b.classList.add('done');
+      setTimeout(() => { b.textContent = 'Copy'; b.classList.remove('done'); }, 1600);
+    });
+    return b;
+  }
+
+  function renderFeeds(){
+    const body = document.getElementById('feedRows');
+    body.innerHTML = '';
+    FEEDS.forEach(([view, label, desc]) => {
+      const url = feedUrl(view);
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="what">' + label + '</td>' +
+                     '<td class="desc">' + desc + '</td>' +
+                     '<td><code>' + url + '</code></td>';
+      const td = document.createElement('td');
+      td.appendChild(copyBtn(url));
+      tr.appendChild(td);
+      body.appendChild(tr);
+    });
+
+    const ov = document.getElementById('overlayRows');
+    ov.innerHTML = '';
+    [['Full scoreboard', ORIGIN + '/broadcast.html'],
+     ['Score only', ORIGIN + '/broadcast.html?layout=bug']
+    ].forEach(([label, url]) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="what">' + label + '</td>' +
+                     '<td><code>' + url + '</code></td>';
+      const td = document.createElement('td');
+      td.appendChild(copyBtn(url));
+      tr.appendChild(td);
+      ov.appendChild(tr);
+    });
+  }
+
+  document.querySelectorAll('.fmt').forEach(b => {
+    b.addEventListener('click', () => {
+      format = b.dataset.fmt;
+      document.querySelectorAll('.fmt').forEach(x => x.classList.toggle('on', x === b));
+      renderFeeds();
+    });
+  });
+
+  // What is on air right now. A crew member checking their setup on
+  // Friday afternoon should see the answer, not have to ask.
+  async function renderAir(){
+    const box = document.getElementById('airBox');
+    const { data } = await supabaseClient.from('games')
+      .select('home_team_name, away_team_name, game_date, status, is_broadcast')
+      .eq('is_broadcast', true).limit(1);
+    const g = (data || [])[0];
+    if (g){
+      box.className = 'onair';
+      box.innerHTML = '&#9679; ON AIR<span class="what">' +
+        [g.home_team_name, g.away_team_name].filter(Boolean).join(' vs ') +
+        '</span><span class="note">' + (g.game_date || '') +
+        ' &middot; ' + (g.status === 'in_progress' ? 'in progress'
+                      : g.status === 'final' ? 'finished' : 'not started yet') +
+        ' &middot; the feeds below are showing this game</span>';
+    } else {
+      box.className = 'offair';
+      box.innerHTML = 'Nothing on air<span class="what">No game selected</span>' +
+        '<span class="note">Set a game ON AIR from the dashboard. Until then the ' +
+        'feeds fall back to the most recent game in progress, or return nothing ' +
+        'at all.</span>';
+    }
+  }
+
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)){
+      window.location.href = '/'; return;
+    }
+    if (event !== 'INITIAL_SESSION') return;
+
+    // Admin and game_entry. The page shows the static key, so it is not
+    // for view accounts -- and the crew sets up the day before, when Andy
+    // may not be around.
+    const { data } = await supabaseClient.from('profiles')
+      .select('role').eq('id', session.user.id).limit(1);
+    const role = ((data || [])[0] || {}).role || 'view';
+    if (role !== 'admin' && role !== 'game_entry'){
+      document.getElementById('gate').textContent =
+        'This page is for admin and game entry accounts.';
+      return;
+    }
+
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    renderFeeds();
+    renderAir();
+    // Cheap, and means a page left open on Friday afternoon stays honest.
+    setInterval(renderAir, 15000);
+  });
+</script>
+</body>
+</html>
