@@ -52,11 +52,20 @@ const mmss = (secs) => {
 // software; a title binds to a row, so the shape matters as much as the
 // numbers.
 
+// NO ABBREVIATION FIELDS. There used to be homeAbbr / awayAbbr /
+// possessionAbbr, derived by taking the first word of the team name --
+// which for "Neville" and "Ruston" returned the full name unchanged. A
+// field called `abbr` that returns the whole name is worse than no
+// field: bind a narrow scoreboard slot to it expecting "RUS" and you get
+// "Ruston" with nothing to explain why.
+//
+// Andy uses full names, so they were removed rather than faked. If short
+// codes are ever wanted they need a STORED field per team -- deriving
+// them guesses badly ("St. Aloysius" -> "St.").
 function buildViews(ctx) {
   const { state, box, teams, plays, game } = ctx;
 
   const sideName = k => (teams[k] || {}).name || '';
-  const sideAbbr = k => (teams[k] || {}).abbr || sideName(k);
 
   const distanceLabel = (state.down && state.fieldPos !== null &&
     state.fieldPos + state.distance >= 100) ? 'Goal' : state.distance;
@@ -75,7 +84,7 @@ function buildViews(ctx) {
     const rush = sumOf(s.rushing, 'yds');
     const pass = sumOf(s.passing, 'yds');
     return {
-      team: sideName(k), abbr: sideAbbr(k),
+      team: sideName(k),
       score: (state.scores || {})[k] || 0,
       rushYards: rush, passYards: pass, totalYards: rush + pass,
       rushAtt: sumOf(s.rushing, 'att'),
@@ -113,9 +122,9 @@ function buildViews(ctx) {
   return {
     // One row: the scoreboard bug.
     score: [{
-      homeTeam: sideName('teamA'), homeAbbr: sideAbbr('teamA'),
+      homeTeam: sideName('teamA'),
       homeScore: (state.scores || {}).teamA || 0,
-      awayTeam: sideName('teamB'), awayAbbr: sideAbbr('teamB'),
+      awayTeam: sideName('teamB'),
       awayScore: (state.scores || {}).teamB || 0,
       quarter: state.quarter >= 5 ? 'OT' : ('Q' + state.quarter),
       quarterNumber: state.quarter,
@@ -126,7 +135,6 @@ function buildViews(ctx) {
         ? (['', '1st', '2nd', '3rd', '4th'][state.down] + ' & ' + distanceLabel) : '',
       ballOn: markerLabel(state.fieldPos),
       possession: sideName(state.possession),
-      possessionAbbr: sideAbbr(state.possession),
       homeHasBall: state.possession === 'teamA' && state.down ? 'true' : 'false',
       awayHasBall: state.possession === 'teamB' && state.down ? 'true' : 'false',
       homeTimeouts: (state.timeouts || {}).teamA || 0,
