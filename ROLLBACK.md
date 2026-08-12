@@ -29,19 +29,39 @@ the deployment.
 5. Click the **⋯** menu on that row → **Promote to Production**
 6. Confirm, then hard-refresh the game page (Ctrl-Shift-R)
 
-### Last known good deployment
+### Last known good deployment  —  TRY THIS FIRST
 
-**Direct link — click this, it lands on the right row:**
+**Direct link — click it, it lands on the right row:**
+
+https://vercel.com/andy-martin-fitness/statchat/CTyiMXvnfC2c7FBnQCkWbyHWQTdi
+
+> **Deployment id:** `CTyiMXvnfC2c7FBnQCkWbyHWQTdi`
+> **Tag:** `v1.1-consolidated`
+> **Date:** 12 August 2026
+> **Verified on this build:** 18 suites · fuzzer (40 games, 1,568 plays)
+> · 3 NFL weeks (48 games, 6,977 plays, 0 issues) · all six pages clean
+> in a real browser · rush entry, view and recap checked by hand
+
+### Second fallback — one step further back
+
+If v1.1 is itself the problem, go back to the state before the engine
+was consolidated into `engine.js`:
 
 https://vercel.com/andy-martin-fitness/statchat/4jat5dUzYBEoFe1maKPf6P9asrqN
 
 > **Deployment id:** `4jat5dUzYBEoFe1maKPf6P9asrqN`
-> **Date promoted:** 10 August 2026
-> **Verified:** 18 suites, fuzzer, and 3 NFL weeks all clear on this build
+> **Tag:** `v1.0-preseason`
+> **Date:** 10 August 2026
+> **Verified on this build:** 18 suites · fuzzer · 3 NFL weeks, 0 issues
+
+Both are fully verified builds. v1.1 is newer and preferred; v1.0 exists
+because a fault could have been introduced BEFORE the consolidation, in
+which case rolling back to v1.1 would not help.
 
 **Keep this current.** Every time a new version is verified and promoted,
-replace the link above. A stale entry here is worse than none — it sends
-someone confidently back to the wrong build.
+move v1.1 down to the second slot and put the new one on top. A stale
+entry here is worse than none — it sends someone confidently back to the
+wrong build.
 
 ---
 
@@ -49,7 +69,7 @@ someone confidently back to the wrong build.
 
 1. Go to **github.com/HUNTERGAMES69/statchat**
 2. Click **Releases**
-3. Open **`v1.0-preseason`**
+3. Open **`v1.1-consolidated`** (or `v1.0-preseason` for the older one)
 4. **Download the source ZIP**
 5. Upload those files over the current ones, replacing them
 6. Vercel redeploys automatically; wait for it to go green
@@ -90,11 +110,14 @@ a game without StatChat live.
 
 ## What "known good" means
 
-The snapshot tagged `v1.0-preseason` passed, on the day it was tagged:
+Both tagged snapshots passed, on the day each was tagged:
 
 - 18 automated suites
 - The property fuzzer: 40 games, 1,568 generated plays, zero findings
 - Three full NFL weeks replayed through the real UI:
   **48 games, 6,977 plays, 4,787 state-progression pairs, ZERO issues**
+- (v1.1 additionally) all six pages opened in a real browser with zero
+  console errors, and rush entry / view / recap checked by hand
 
-That is the bar any future release must also clear.
+That is the bar any future release must also clear. **Nothing gets
+promoted to production without all of it green.**
