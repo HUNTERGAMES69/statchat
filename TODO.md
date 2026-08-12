@@ -811,6 +811,26 @@ three NFL weeks match 48 games / 6,977 plays / zero issues ·
 
 ---
 
+## 10. Cosmetic tidy-ups for the freeze week
+
+Found while checking browser consoles on 12 Aug. None affect function;
+all three appear on every page and clutter the console, which makes a
+real error harder to spot.
+
+- [ ] **Add a `favicon.ico`** to the repo root. Currently a 404 on every
+  page load — harmless, but it is a red error in the console and red
+  errors should mean something.
+- [ ] **Add `<meta name="mobile-web-app-capable" content="yes">`**
+  alongside the Apple one. Apple renamed it; the old tag is deprecated
+  and warns on every page.
+- [ ] **Supabase "Multiple GoTrueClient instances"** — `createClient` runs
+  more than once per tab. Supabase says outright it is not an error, but
+  it warns that concurrent use under the same storage key can produce
+  undefined behaviour. Worth understanding before the season rather than
+  wondering about it during one.
+
+---
+
 ## BEFORE GOING TO PRODUCTION
 
 Everything here is fine for a test app and **not** fine once real users

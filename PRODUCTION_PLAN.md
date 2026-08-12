@@ -157,7 +157,7 @@ and the harness had to inline `engine.js` the way a browser fetches it.
 it, the page breaks. It breaks *loudly* — but jsdom is more forgiving
 than a browser, so the suite may not see it.
 
-- [ ] **Open all five pages in a real browser and check the console.**
+- [x] **Opened all six pages in a real browser, 12 Aug 2026 — clean.**
       This is not optional and cannot be delegated to the test suite.
 
 ### Acceptance — ALL of it
@@ -166,7 +166,15 @@ than a browser, so the suite may not see it.
 - [ ] Fuzzer clean over 60 games
 - [ ] Three NFL weeks: 48 games, 6,977 plays, **zero** issues
 - [ ] `broadcast.html` still renders
-- [ ] All five pages clean in a real browser, console included
+- [x] All six pages clean in a real browser, 12 Aug 2026: dashboard,
+      game, view, recap, stat_package, season_report — ZERO errors on
+      every one. No `engine.js` failure, no `is not defined`. This was
+      the one check the suite could not make, because jsdom is more
+      forgiving about script load order than Chrome is.
+      Only pre-existing warnings remain, none related to the
+      consolidation: a missing favicon, Supabase's "multiple
+      GoTrueClient instances" notice (which states outright it is not
+      an error), and Apple's renamed meta tag.
 
 ### Hard abort
 
