@@ -31,10 +31,17 @@ the deployment.
 
 ### Last known good deployment
 
-> Fill this in and keep it current:
->
-> **Deployment id:** ______________________________
-> **Date promoted:** ______________________________
+**Direct link — click this, it lands on the right row:**
+
+https://vercel.com/andy-martin-fitness/statchat/4jat5dUzYBEoFe1maKPf6P9asrqN
+
+> **Deployment id:** `4jat5dUzYBEoFe1maKPf6P9asrqN`
+> **Date promoted:** 10 August 2026
+> **Verified:** 18 suites, fuzzer, and 3 NFL weeks all clear on this build
+
+**Keep this current.** Every time a new version is verified and promoted,
+replace the link above. A stale entry here is worse than none — it sends
+someone confidently back to the wrong build.
 
 ---
 
@@ -73,8 +80,11 @@ to edit** on the game page to correct plays.
 
 ## Who to call
 
-> **Name:** ______________________________
-> **Phone:** _____________________________
+Andy — he built it and he is the one entering plays.
+
+If Andy is the one with the problem, the app is not required to run the
+game: record on paper and enter it afterwards. Nothing is lost by playing
+a game without StatChat live.
 
 ---
 
