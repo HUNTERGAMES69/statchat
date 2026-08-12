@@ -60,6 +60,8 @@
   <div id="main" style="display:none;">
     <div id="airBox"></div>
 
+    <div class="warn" id="keyNote" style="display:none;"></div>
+
     <div class="card">
       <h2>Feed addresses</h2>
       <p class="hint" style="margin:0 0 12px;">
@@ -131,11 +133,16 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-  // The static feed key. Read from the page URL so this file can live in
-  // the repo without carrying the secret:
-  //     broadcast_setup.html?key=...
-  // Bookmark it once with the key and every address below is complete.
-  const feedKey = new URLSearchParams(location.search).get('key') || '';
+  // The static feed key, fetched from the server once we know who is
+  // asking. It used to come from this page's own URL (?key=...), which
+  // meant arriving any other way -- such as the Broadcast button in the
+  // dashboard header -- produced a page of keyless addresses that all
+  // returned {"error":"Invalid or missing key"}.
+  //
+  // Requiring a secret in the URL to reach the page that exists to hand
+  // out that secret was circular. ?key= is still honoured as an override,
+  // so old bookmarks keep working.
+  let feedKey = new URLSearchParams(location.search).get('key') || '';
 
   const ORIGIN = location.origin;
   let format = 'xml';
@@ -253,6 +260,38 @@
       document.getElementById('gate').textContent =
         'This page is for admin and game entry accounts.';
       return;
+    }
+
+    // Fetch the key BEFORE rendering, or the addresses render keyless
+    // and the copy buttons hand out broken URLs.
+    if (!feedKey){
+      try {
+        const r = await fetch('/api/feedkey', {
+          headers: { Authorization: 'Bearer ' + session.access_token },
+          cache: 'no-store'
+        });
+        if (r.ok){
+          const j = await r.json();
+          feedKey = j.key || '';
+          if (!j.configured){
+            document.getElementById('keyNote').innerHTML =
+              '<strong>No feed key is set.</strong> The addresses below work ' +
+              'without one, which means anyone who knows them can read the ' +
+              'feed. To lock it down, set a <code>FEED_KEY</code> environment ' +
+              'variable in Vercel and redeploy.';
+            document.getElementById('keyNote').style.display = 'block';
+          }
+        } else {
+          document.getElementById('keyNote').innerHTML =
+            '<strong>Could not read the feed key.</strong> The addresses below ' +
+            'are missing it and will be refused. Try reloading.';
+          document.getElementById('keyNote').style.display = 'block';
+        }
+      } catch (e) {
+        document.getElementById('keyNote').innerHTML =
+          '<strong>Could not reach the server for the feed key.</strong>';
+        document.getElementById('keyNote').style.display = 'block';
+      }
     }
 
     document.getElementById('gate').style.display = 'none';
