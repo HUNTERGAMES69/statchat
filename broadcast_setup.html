@@ -171,9 +171,12 @@
     ['defense',    'Defensive leaders','One row per player: tackles, sacks, interceptions']
   ];
 
-  const feedUrl = (view) =>
-    ORIGIN + '/api/feed?view=' + view + '&format=' + format +
+  const feedUrlFor = (view, fmt) =>
+    ORIGIN + '/api/feed?view=' + view + '&format=' + fmt +
     (feedKey ? '&key=' + encodeURIComponent(feedKey) : '');
+  // The on-screen table follows the toggle; the email does not, so it
+  // takes the format explicitly.
+  const feedUrl = (view) => feedUrlFor(view, format);
 
   function copyBtn(url){
     const b = document.createElement('button');
@@ -223,51 +226,81 @@
 
   // One block of text carrying everything the crew needs: the addresses,
   // which graphic each drives, and the one setting people forget.
+  //
+  // BOTH FORMATS ARE INCLUDED, deliberately. It used to send only the
+  // one selected by the toggle, which meant switching to JSON, sending,
+  // then switching back left you looking at XML having emailed JSON --
+  // with nothing to indicate it. Sending both removes the trap, costs a
+  // few lines, and lets the crew use whichever their software prefers.
+  // The setup instructions sit directly above each set, since the vMix
+  // input type differs between them.
   function crewText(){
-    const lines = [];
-    lines.push('StatChat broadcast feed \u2014 setup details');
-    lines.push('');
-    lines.push('These addresses NEVER CHANGE. Set them up once and leave them.');
-    lines.push('They follow whichever game is marked ON AIR in StatChat, so');
-    lines.push('nothing needs editing on game day.');
-    lines.push('');
-    lines.push('IMPORTANT: set the refresh interval to 1-2 seconds. A data source');
-    lines.push('that fetches once looks exactly like a frozen feed \u2014 the numbers');
-    lines.push('are right at first and then never change. This is the usual cause');
-    lines.push('of a graphic going stale mid-game.');
-    lines.push('');
-    lines.push('--- DATA FEEDS (' + format.toUpperCase() + ') ---');
-    lines.push('');
-    FEEDS.forEach(([view, label, desc]) => {
-      lines.push(label);
-      lines.push('  ' + String(desc).replace(/&amp;/g, '&'));
-      lines.push('  ' + feedUrl(view));
-      lines.push('');
-    });
-    lines.push('--- READY-MADE OVERLAY ---');
-    lines.push('');
-    lines.push('A finished transparent scoreboard, if you would rather not build');
-    lines.push('graphics. Add as a web browser input at 1920x1080.');
-    lines.push('  Full scoreboard: ' + ORIGIN + '/broadcast.html');
-    lines.push('  Score only:      ' + ORIGIN + '/broadcast.html?layout=bug');
-    lines.push('');
-    lines.push('--- IN VMIX ---');
-    lines.push('');
-    lines.push('Add Input > Data Sources > ' + format.toUpperCase() + ', paste an address,');
-    lines.push('set the refresh interval, then map the columns onto your title.');
-    lines.push('Other software works the same way \u2014 it is a plain web address');
-    lines.push('returning ' + format.toUpperCase() + '.');
-    lines.push('');
-    lines.push('--- IF A GRAPHIC STOPS UPDATING ---');
-    lines.push('');
-    lines.push('1. Open the address in a browser. Current data means the feed is');
-    lines.push('   fine and the problem is in the broadcast software.');
-    lines.push('2. Check the refresh interval is set. This is usually it.');
-    lines.push('3. "No game is on air" means nobody has marked a game yet.');
-    lines.push('');
-    lines.push('Full guide: ' +
+    const L = [];
+    const feedBlock = (fmt) => {
+      const F = fmt.toUpperCase();
+      L.push('=================================================');
+      L.push('  ' + F + ' FEEDS');
+      L.push('=================================================');
+      L.push('');
+      L.push('IN VMIX');
+      L.push('  Add Input > Data Sources > ' + F + ', paste an address,');
+      L.push('  set the refresh interval to 1-2 seconds, then map the');
+      L.push('  columns onto the text fields in your title.');
+      L.push('');
+      L.push('OTHER SOFTWARE');
+      L.push('  It is a plain web address returning ' + F + ', so anything');
+      L.push('  that can poll a URL will read it.');
+      L.push('');
+      FEEDS.forEach(([view, label, desc]) => {
+        L.push(label);
+        L.push('  ' + String(desc).replace(/&amp;/g, '&'));
+        L.push('  ' + feedUrlFor(view, fmt));
+        L.push('');
+      });
+    };
+
+    L.push('StatChat broadcast feed \u2014 setup details');
+    L.push('');
+    L.push('These addresses NEVER CHANGE. Set them up once and leave them.');
+    L.push('They follow whichever game is marked ON AIR in StatChat, so');
+    L.push('nothing needs editing on game day.');
+    L.push('');
+    L.push('IMPORTANT: set the refresh interval to 1-2 seconds. A data source');
+    L.push('that fetches once looks exactly like a frozen feed \u2014 the numbers');
+    L.push('are right at first and then never change. This is the usual cause');
+    L.push('of a graphic going stale mid-game.');
+    L.push('');
+    L.push('Both formats are below. Use whichever your software prefers \u2014');
+    L.push('they carry identical data. For vMix, use XML.');
+    L.push('');
+
+    feedBlock('xml');
+    feedBlock('json');
+
+    L.push('=================================================');
+    L.push('  READY-MADE OVERLAY');
+    L.push('=================================================');
+    L.push('');
+    L.push('A finished transparent scoreboard, if you would rather not build');
+    L.push('graphics yourself. Add as a WEB BROWSER INPUT at 1920x1080 \u2014');
+    L.push('the background is transparent so it keys straight over the');
+    L.push('programme feed. No data mapping needed.');
+    L.push('');
+    L.push('  Full scoreboard: ' + ORIGIN + '/broadcast.html');
+    L.push('  Score only:      ' + ORIGIN + '/broadcast.html?layout=bug');
+    L.push('');
+    L.push('=================================================');
+    L.push('  IF A GRAPHIC STOPS UPDATING');
+    L.push('=================================================');
+    L.push('');
+    L.push('1. Open the address in a browser. Current data means the feed is');
+    L.push('   fine and the problem is in the broadcast software.');
+    L.push('2. Check the refresh interval is set. This is usually it.');
+    L.push('3. "No game is on air" means nobody has marked a game yet.');
+    L.push('');
+    L.push('Full guide: ' +
       'https://github.com/HUNTERGAMES69/statchat/blob/main/BROADCAST_GUIDE.md');
-    return lines.join('\n');
+    return L.join('\n');
   }
 
   async function copyText(text, btn, label){
@@ -289,7 +322,7 @@
   document.getElementById('emailBtn').addEventListener('click', (e) => {
     const body = crewText();
     const url = 'mailto:?subject=' +
-      encodeURIComponent('StatChat broadcast feed \u2014 setup details') +
+      encodeURIComponent('StatChat broadcast feed \u2014 setup details (XML and JSON)') +
       '&body=' + encodeURIComponent(body);
     // mailto has a length limit and some clients silently open an EMPTY
     // draft when it is exceeded, which looks like the button did nothing.

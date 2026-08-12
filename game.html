@@ -328,6 +328,12 @@
     gameLabel = game.designator;
     quarterLengthSec = game.quarter_length_seconds || 720;
     currentGameStatus = game.status;
+    // Only for accounts that could set a game on air anyway. A `view`
+    // account should not see the feed key.
+    const bcFab = document.getElementById('broadcastFab');
+    if (bcFab && (currentUserRole === 'admin' || currentUserRole === 'game_entry')){
+      bcFab.style.display = 'block';
+    }
     // The scorer must know their typing is going out live rather than
     // merely being recorded. Read once at load: the flag is changed from
     // the dashboard, not from here.
@@ -5245,6 +5251,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 <!-- Fixed bottom-right so it is reachable without scrolling, whatever
      panel is open. Opens in a new tab: losing a half-entered play to
      read the guide would be its own small disaster. -->
+<!-- Broadcast setup, beside HELP. Same reasoning: a new tab, because
+     losing a half-entered play to check a feed address would be its own
+     small disaster. Hidden for view accounts, since the page shows the
+     feed key. -->
+<a href="broadcast_setup.html" target="_blank" rel="noopener" id="broadcastFab"
+   title="Broadcast setup — feed addresses for the production team"
+   style="display:none; position:fixed; right:104px; bottom:16px; z-index:95;
+          background:#1a1a2e; color:#fff; border-radius:999px; padding:11px 18px;
+          font-size:15px; font-weight:700; text-decoration:none;
+          box-shadow:0 3px 10px rgba(0,0,0,0.25);">BROADCAST</a>
+
 <a href="help.html" target="_blank" rel="noopener" id="helpFab"
    title="How to use StatChat"
    style="position:fixed; right:16px; bottom:16px; z-index:95; background:#1a7a4c; color:#fff;
