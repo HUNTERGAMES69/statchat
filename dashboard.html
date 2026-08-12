@@ -291,7 +291,13 @@
     // is instant and never requires a fresh query.
     const { data, error } = await supabaseClient
       .from('games')
-      .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status, final_score_us, final_score_opp')
+      // is_broadcast IS REQUIRED HERE. This is an explicit column list,
+      // not select('*'), so a new column is invisible until it is named.
+      // The ON AIR badge and the Set/Take-off-air button both read
+      // g.is_broadcast -- without it they silently read `undefined`, the
+      // badge never appears and the button always says "Set as ON AIR"
+      // even for the game that is already on air.
+      .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status, final_score_us, final_score_opp, is_broadcast')
       .order('game_date', { ascending: false });
     if (error){
       showMsg('dashboardMsg', 'Could not load games: ' + error.message, 'error');
