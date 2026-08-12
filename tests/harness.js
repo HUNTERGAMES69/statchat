@@ -139,7 +139,7 @@ function defaultRoster() {
  * @param {object} opts    { game, branding, roster, existingPlays, query, readyWhen }
  */
 async function bootPage(file, opts = {}) {
-  const html = fs.readFileSync(path.join(REPO, file), 'utf8');
+  let html = fs.readFileSync(path.join(REPO, file), 'utf8');
 
   const db = {
     game: Object.assign({}, DEFAULT_GAME, opts.game || {}),
@@ -154,6 +154,19 @@ async function bootPage(file, opts = {}) {
 
   const alerts = [];
   const query = opts.query || '?id=test-game-1';
+
+  // Inline engine.js in place of its <script src>. jsdom does not fetch
+  // local files, so without this the pages load with no engine at all --
+  // every computeState call is undefined. A browser fetches it normally;
+  // this just makes the harness behave the same way.
+  //
+  // Deliberately a TEXTUAL substitution rather than loading the module
+  // separately: it preserves script ORDER, which is the thing most likely
+  // to break after the extraction and the thing we most need tested.
+  const engineSrc = fs.readFileSync(path.join(REPO, 'engine.js'), 'utf8');
+  html = html.replace('<script src="engine.js"></script>',
+                      '<script>' + engineSrc + '</script>');
+
   const dom = new JSDOM(html, {
     url: 'https://nevillestatchat.vercel.app/' + file + query,
     runScripts: 'dangerously',

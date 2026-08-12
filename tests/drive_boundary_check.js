@@ -28,16 +28,13 @@ function rowsOf(h) {
 
 // Pull findDriveStarts out of a page and expose it callable -- it is
 // normally scoped inside the render function.
-function exposeFindDriveStarts(page, src) {
-  const i = src.indexOf('function findDriveStarts');
-  let depth = 0, j = src.indexOf('{', i);
-  for (; j < src.length; j++) {
-    if (src[j] === '{') depth++;
-    else if (src[j] === '}') { depth--; if (depth === 0) { j++; break; } }
-  }
-  const fn = src.slice(i, j).replace('function findDriveStarts', 'function');
-  page.evalIn('window.__fds = ' + fn);
-  return () => JSON.parse(page.evalIn('JSON.stringify(window.__fds(plays))'));
+// Since the Aug 2026 consolidation findDriveStarts lives in engine.js and
+// is a plain global on the page, so it can just be called. This used to
+// scrape the function text out of the page HTML, which stopped working
+// the moment the engine moved out of the inline script -- the scrape
+// found nothing and produced "Unexpected end of input".
+function exposeFindDriveStarts(page) {
+  return () => JSON.parse(page.evalIn('JSON.stringify(findDriveStarts(plays))'));
 }
 
 // --- Scenario builders (all driven through the real UI) -------------
@@ -130,7 +127,7 @@ async function run() {
     g.close();
 
     const v = await bootPage('view.html', { existingPlays: rows });
-    const starts = exposeFindDriveStarts(v, viewSrc)();
+    const starts = exposeFindDriveStarts(v)();
     assertNoAdminStarts('kickoff', starts, rows);
 
     const prev = v.document.getElementById('prevDriveLogScroll').textContent.replace(/\s+/g, ' ');
@@ -154,7 +151,7 @@ async function run() {
     g.close();
 
     const v = await bootPage('view.html', { existingPlays: rows });
-    const starts = exposeFindDriveStarts(v, viewSrc)();
+    const starts = exposeFindDriveStarts(v)();
     assertNoAdminStarts('punt', starts, rows);
 
     const prev = v.document.getElementById('prevDriveLogScroll').textContent.replace(/\s+/g, ' ');
@@ -182,7 +179,7 @@ async function run() {
     g.close();
 
     const v = await bootPage('view.html', { existingPlays: rows });
-    const starts = exposeFindDriveStarts(v, viewSrc)();
+    const starts = exposeFindDriveStarts(v)();
     assertNoAdminStarts('manual-flip', starts, rows);
 
     const current = v.document.getElementById('driveLogScroll').textContent.replace(/\s+/g, ' ');
