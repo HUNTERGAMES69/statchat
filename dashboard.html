@@ -51,6 +51,14 @@
   .status-win { color:#1a7a4c; font-size:13px; }
   .status-loss { color:#a32d2d; font-size:13px; }
   .status-live { color:#a37a00; font-size:13px; }
+  /* Loud on purpose. The likeliest accident is somebody not realising
+     which game is flagged, so this sits on the row rather than in a
+     menu, and pulses so it reads at a glance. */
+  .onair-badge { display:inline-block; margin-left:10px; padding:2px 9px; border-radius:4px;
+                 background:#b00020; color:#fff; font-size:11px; font-weight:800;
+                 letter-spacing:0.08em; vertical-align:middle;
+                 animation:onairPulse 2s ease-in-out infinite; }
+  @keyframes onairPulse { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
   .status-loss { color:#a32d2d; font-size:13px; }
   .status-notstarted { color:#999; font-weight:600; }
   .empty-state { color:#999; padding:16px 0; }
@@ -366,7 +374,11 @@
       return '<div class="game-row" data-id="' + g.id + '" data-designator="' + g.designator + '" data-status="' + g.status + '">' +
         '<div class="game-left">' +
         '<span class="game-num">' + g.designator + '</span>' +
-        '<div><div class="game-matchup">' + matchup + '</div><div class="game-meta">' + homeAway + ' · ' + dateStr + '</div></div>' +
+        '<div><div class="game-matchup">' + matchup +
+          // On the ROW, not in a menu. The likeliest accident is somebody
+          // not realising which game is flagged.
+          (g.is_broadcast ? '<span class="onair-badge">\u25CF ON AIR</span>' : '') +
+          '</div><div class="game-meta">' + homeAway + ' \u00b7 ' + dateStr + '</div></div>' +
         '</div>' +
         '<div class="game-right">' + rightHtml + '</div>' +
         (currentIsAdmin || g.status === 'in_progress' || g.status === 'final'
@@ -384,6 +396,22 @@
               // "view" should not mean "can walk off with everything".
               // Scorers keep it because they are the ones at the stadium
               // when something looks wrong.
+              // ON AIR control. Admin and scorers both: the crew sets up
+              // the day before and Andy may not be there. Everything that
+              // makes this hard to do by accident lives in the handler --
+              // the button only carries the context the confirmations
+              // need.
+              (currentCanEnterGames
+                ? '<button class="broadcastBtn" data-id="' + g.id +
+                  '" data-on="' + (g.is_broadcast ? '1' : '0') +
+                  '" data-label="' + String(matchup).replace(/"/g, '&quot;') +
+                  '" data-status="' + g.status +
+                  '" style="display:block; width:100%; text-align:left; padding:8px 12px; ' +
+                  'background:none; border:none; font-weight:700; font-size:13px; ' +
+                  'border-bottom:1px solid #eee; color:' +
+                  (g.is_broadcast ? '#b00020' : '#0f6e56') + ';">' +
+                  (g.is_broadcast ? '\u25CF Take OFF AIR' : 'Set as ON AIR') + '</button>'
+                : '') +
               (currentCanEnterGames ? '<button class="exportGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#444; font-weight:600; font-size:13px; border-bottom:1px solid #eee;">Download backup</button>' : '') +
               (currentIsAdmin ? '<button class="resetGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a05a00; font-weight:600; font-size:13px; border-bottom:1px solid #eee;">Reset game</button>' : '') +
               (currentIsAdmin ? '<button class="deleteGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a32d2d; font-weight:600; font-size:13px;">Delete game</button>' : '') +
@@ -413,6 +441,79 @@
     // Everything is fetched fresh rather than reusing what the dashboard
     // already has, because the dashboard holds a summary and a backup
     // needs the real rows.
+    // ON AIR. Everything protective is here, because this one flag
+    // decides what the entire broadcast is showing. Getting it wrong
+    // mid-game repoints every vMix graphic, live, and the person who did
+    // it may not realise.
+    body.querySelectorAll('.broadcastBtn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const gameId  = btn.dataset.id;
+        const isOn    = btn.dataset.on === '1';
+        const label   = btn.dataset.label || 'this game';
+        const started = btn.dataset.status === 'in_progress';
+
+        if (!isOn) {
+          // --- putting a game ON AIR --------------------------------
+          // Named, never a bare "are you sure". The whole risk is
+          // choosing the wrong game, and a generic prompt does nothing
+          // to prevent that.
+          if (!window.confirm(
+                'Put this game ON AIR?\n\n    ' + label + '\n\n' +
+                'The vMix graphics will show this game. Any game ' +
+                'currently on air will be taken off.')) return;
+
+          // A live game is the dangerous case: a mistake here is not a
+          // setup error, it is a visible failure during a broadcast.
+          if (started && !window.confirm(
+                'This game is IN PROGRESS.\n\n' +
+                'Switching now changes what is on screen immediately, ' +
+                'while people are watching.\n\nGo ahead?')) return;
+        } else {
+          // --- taking a game OFF AIR --------------------------------
+          // Deliberately harder than putting one on. Off air means the
+          // feed falls back to "most recent in-progress", which may be
+          // nothing at all -- so the graphics can simply go blank.
+          if (!window.confirm(
+                'Take this game OFF AIR?\n\n    ' + label + '\n\n' +
+                'The vMix graphics will stop showing it. If no other ' +
+                'game is live they may show nothing at all.')) return;
+
+          if (started) {
+            // Typed confirmation, not a click. During a live game this
+            // must not be possible to do by reflex.
+            const typed = window.prompt(
+              'This game is IN PROGRESS and ON AIR right now.\n\n' +
+              'Taking it off air will change what viewers see ' +
+              'immediately.\n\nType  OFF AIR  to confirm:');
+            if (String(typed || '').trim().toUpperCase() !== 'OFF AIR') {
+              showMsg('dashboardMsg', 'Left on air \u2014 not confirmed.', 'info');
+              return;
+            }
+          }
+        }
+
+        btn.disabled = true;
+        try {
+          // Through a database function, not an UPDATE from here. Exactly
+          // one game may be flagged, and "clear all then set mine" from
+          // two laptops can interleave and leave two flagged, or none.
+          const { error } = await supabaseClient.rpc(
+            isOn ? 'clear_broadcast_game' : 'set_broadcast_game',
+            { p_game_id: gameId });
+          if (error) throw error;
+          showMsg('dashboardMsg',
+            isOn ? ('Taken off air: ' + label)
+                 : ('Now ON AIR: ' + label), 'success');
+          loadGames();
+        } catch (err) {
+          showMsg('dashboardMsg', 'Could not change the broadcast game: ' +
+                  (err.message || err), 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+
     body.querySelectorAll('.exportGameBtn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
