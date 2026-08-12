@@ -35,6 +35,12 @@ tail = ''
 
 head_scripts = ''.join('<script src="%s"></script>\n' % m
                        for m in re.findall(r'<script src="([^"]+)"></script>', src))
+# Since the Aug 2026 consolidation the engine is no longer inline in
+# view.html, so the slice above no longer contains it. The overlay loads
+# engine.js like every other page -- which is the point of the exercise:
+# this file is no longer a copy of anything.
+if 'engine.js' not in head_scripts:
+    head_scripts += '<script src="engine.js"></script>\n'
 
 # view.html's page-fitting code scales a .wrap element and re-renders the
 # box score on resize. The overlay has neither, and vMix gives it a fixed
