@@ -220,6 +220,58 @@ async function run() {
     p.close();
   }
 
+  // --- the page must not reset itself afterwards ----------------------
+  // Reported from real use, 12 Aug: setting a 2025 game ON AIR worked,
+  // then dumped the dashboard to "undefined season" with no games listed.
+  // Cause: the handler called `loadGames()` with no argument. loadGames
+  // takes a default season year, and bare it unshifted `undefined` into
+  // the season list and selected it. `refreshGames()` keeps whatever
+  // season is selected, which is what a refresh after an action should do.
+  {
+    const { p, calls } = await boot(
+      { status: 'in_progress', is_broadcast: false, season_year: 2025,
+        game_date: '2025-08-15' }, { confirm: [true, true] });
+    const picker = p.document.getElementById('seasonPicker');
+    picker.value = '2025';
+    picker.dispatchEvent(new p.window.Event('change', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 150));
+    const gamesBefore = p.document.querySelectorAll('.game-row').length;
+
+    click(p.window, p.document.querySelector('.broadcastBtn'));
+    await new Promise(r => setTimeout(r, 400));
+
+    const after = p.document.getElementById('seasonPicker');
+    if (after.value !== '2025') {
+      fail('season reset', 'the season became "' + after.value + '" after ' +
+           'setting a game ON AIR. A past season must stay selected — ' +
+           'otherwise the page appears to lose every game');
+    }
+    if (p.document.querySelectorAll('.game-row').length !== gamesBefore) {
+      fail('season reset', 'the game list changed length after setting ON ' +
+           'AIR: ' + gamesBefore + ' -> ' +
+           p.document.querySelectorAll('.game-row').length);
+    }
+    if (!calls.length) fail('season reset', 'setup failed — no rpc was made');
+    p.close();
+  }
+
+  // --- the Broadcast setup link is reachable --------------------------
+  // It was only in the avatar menu at first, which is not where anyone
+  // looks for something the production team needs.
+  {
+    const p = await bootPage('dashboard.html', {
+      game: Object.assign({}, GAME, { status: 'in_progress' }),
+      readyWhen: w => (w.document.getElementById('gamesBody') || {}).innerHTML
+    });
+    const hdr = p.document.getElementById('broadcastLink');
+    if (!hdr) {
+      fail('discoverability', 'no Broadcast button in the dashboard header');
+    } else if (hdr.style.display === 'none') {
+      fail('discoverability', 'the Broadcast button is hidden for an admin');
+    }
+    p.close();
+  }
+
   // --- it goes through the database function --------------------------
   // Not an UPDATE from the page: two laptops doing "clear all, then set
   // mine" can interleave and leave two games flagged, or none.
