@@ -179,6 +179,13 @@ HTML = '''<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <title>StatChat broadcast overlay</title>
+<!-- Without these every page load logs a 404 for /favicon.ico. Harmless,
+     but a red console error should MEAN something -- and in vMix the
+     console is the only place a problem shows up at all.
+     These were hand-added to broadcast.html and would have been silently
+     deleted the next time this script ran; they belong here instead. -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
 ''' + head_scripts + '''<style>
   /* TRANSPARENT. vMix's Web Browser input keys this out, so anything not
      explicitly painted shows the programme feed through. Do not give
