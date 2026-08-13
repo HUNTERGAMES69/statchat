@@ -131,6 +131,11 @@ The two items here look similar and are not. Reviewed Aug 7, 2026.
   Mid-game the workaround is fine: enter the play now, then Adjust
   Down/Distance. Post-game there is no workaround at all — the yardage
   is simply lost from the box score.
+  **KEPT ON THE LIST LONG-TERM, Andy 12 Aug 2026.** Not before the
+  season: the mid-game workaround (enter it now, then Adjust
+  Down/Distance) is adequate, and the post-game case has no workaround
+  but also no evidence yet of how often it happens.
+
   **How often this matters is unknown.** It depends entirely on how
   often a play gets missed during live entry, which real games will
   answer. Worth watching for during the season rather than building
@@ -215,32 +220,37 @@ fixing a wrong jersey number. The workaround is to type the number,
 which records the play correctly but shows `#21` instead of a name for
 the rest of the game and in every report.
 
-- [ ] **Decide whether this is worth building.** The workaround is not
-  terrible — the stats are right, only the display is bare. Weigh that
-  against a real piece of work before starting.
-- [ ] If yes, the scope is: a panel on the game page that writes to
-  `game_rosters` for this game, plus a decision on the awkward part —
-  **what happens to plays already logged against a number whose meaning
-  changes.** Renaming #5 from Reddick to Powell silently rewrites the
-  history of every #5 play already entered, because the log resolves
-  names at render time rather than storing them. That is fine when
-  correcting a typo and wrong when the number genuinely changed hands.
-  Options: allow renames only for numbers with no plays yet; or store
-  the resolved name on the play at entry so history is immutable (a
-  bigger change, and it would also fix the same latent issue for the
-  existing shared-number picker).
-- [x] ~~The opponent roster upload does not warn about duplicate
-  numbers.~~ **Fixed Aug 7:** it no longer needs to. Setup keeps every
-  player sharing a number instead of making the coach pick one, and the
-  game page offers each of them per play. A shared number is a fact
-  about the team, not a conflict.
+- [x] **DECIDED 12 Aug 2026: allow it, and warn loudly.** Andy's call —
+  cheap, and it trusts the scorer.
 
-**One consequence worth knowing.** Games created BEFORE this fix have
-only the chosen player in `game_rosters` — the other was never written.
-Re-uploading the roster on the setup page will now save both. For a game
-already in progress, inserting the missing row directly into
-`game_rosters` also works: the game page re-reads that table on every
-load rather than working from a snapshot.
+  The rejected alternatives, so nobody re-litigates them: snapshotting
+  the name onto every play as it is entered would be *correct*, but it
+  changes the shape of every play record for a problem that has a
+  workaround. Additions-only would be safe and solve half of it. Neither
+  is worth the cost when the person doing the editing is the person who
+  knows what they meant.
+
+- [ ] **BUILD: a roster panel on the game page**, writing to
+  `game_rosters` for this game only.
+
+  **The warning is the important half, not the form.** Plays store JERSEY
+  NUMBERS and resolve them to names at display time, so renaming #5 from
+  Reddick to Powell rewrites the history of every #5 play already
+  entered — including the ones that really were Reddick. The dialog must
+  say exactly that, with the count:
+
+      "#5 already has 7 plays logged. Renaming it to Powell will show
+       Powell on all of them, including plays that were really Reddick.
+       Continue?"
+
+  A generic "are you sure?" is no use here: the whole risk is not
+  realising the change is retroactive.
+
+- [ ] ADDING a number nobody has used carries no such risk and needs no
+  warning. Only renaming or renumbering an in-use number does. Count the
+  plays first and stay quiet when the count is zero — over-warning
+  teaches people to click through.
+
 
 ---
 
@@ -1081,6 +1091,81 @@ land when it did.
   `patch-N` branches.
 - [x] ~~ When deleting, do the files individually; git tracks files, not~~ (Andy: inconsequential)
   folders, so `API/` and `test` disappear once empty.
+
+---
+
+## 16. Multi-tenant, if this is ever sold — DISCUSSION ONLY
+
+Raised 12 Aug 2026. **Nothing to build. Do not act on any of this before
+a season has been run.**
+
+### The wall is not where you would expect
+
+Storage is a non-issue: a play row is ~525 bytes, a team-season ~3 MB, so
+Supabase Pro's 8 GB holds roughly **2,700 team-seasons**.
+
+**Vercel function invocations are the wall**, and Pro's 1,000,000/month
+is a HARD CAP with no overage — unlike every other line on the bill.
+
+    per game, 2s refresh          51,300 invocations
+     1 school                    205,200 / month
+     5 schools                 1,026,000 / month   OVER
+    20 schools                 1,026,000 IN ONE FRIDAY NIGHT
+
+**It breaks at about five customers.** And the shape is brutal: high
+school football is all on Friday night, so an entire month's load arrives
+in three hours. Serverless bills for exactly that pattern.
+
+### Three fixes, cheapest first
+
+1. **Edge cache with a 1-second TTL.** Eight data sources hitting one URL
+   get served from cache; only one request per second reaches the
+   function. ~8x, for a header change. It bends the no-cache rule, but a
+   1s TTL is invisible at a 2s refresh.
+2. **A `view=all` endpoint** returning every view in one response.
+   Another ~8x, and it composes with the above.
+3. **Stop using serverless for the feed.** One always-on container
+   (Fly.io, Railway, ~$5/month) polling Supabase and serving from memory.
+   Fixed cost, unlimited requests. **This is the one that actually
+   scales** — marginal cost per school drops to about zero.
+
+### A separate free environment per school: NO
+
+Andy's suggestion, and the instinct is sound — the app is already
+single-tenant, which is exactly what a silo needs. Three things kill it:
+
+- **Vercel Hobby prohibits commercial use.** Selling this means every
+  school needs Pro at $20/month, which is worse than sharing.
+- **Supabase free allows two projects per org** and pauses after 7 days.
+  Twenty schools means ten orgs, and every database sleeps during a bye
+  week. Zero backup retention too.
+- **Deployment.** We hit stale-file problems repeatedly with ONE
+  deployment in a single session. Twenty means a Thursday bug fix is
+  twenty uploads, and you learn which ones you got wrong on Friday night.
+
+### The hybrid, which IS good
+
+**One shared frontend, one Supabase project per school.** Deploy once;
+each school selects its database by subdomain (`neville.statchat.app`).
+
+- Data isolation by construction — no RLS tenant bugs are possible
+- A school leaving is a project you delete
+- Does NOT fix invocations; combine with fix 1 or 3 above
+
+~$25/month per school in Supabase Pro plus a fixed frontend. At $200 a
+season that works.
+
+### The parts that are not about cost
+
+- **The schema has single-tenant assumptions baked in** —
+  `teams.is_our_team = true`, and the feed resolving "the on-air game"
+  globally rather than per tenant.
+- **RLS is role-based, not tenant-based.** Every signed-in user can read
+  every game. Correct for one school; a data breach for many.
+- **Support.** Twenty schools is twenty scorers ringing on a Friday
+  night. That is the real cost of the business and it is on no invoice.
+
+**Summary: silo the DATA, share the CODE.**
 
 ---
 
