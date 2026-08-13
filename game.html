@@ -906,16 +906,31 @@ function parseInput(raw, state){
     }
     const downDistanceText = (newDown !== null && newDistance !== null) ? (' — ' + ordinal(newDown) + ' & ' + togoLabel(newFieldPos, newDistance)) : '';
     return {
-      // "PENALTY, Holding, on West Monroe, 10 yards". The old line read
-      // "Penalty on X — 10 yds", which buried the one thing a coach scans
-      // the log for -- WHAT the foul was -- behind the team. Leading with
-      // PENALTY also makes these lines findable at a glance in a log that
-      // is otherwise all plays.
+      // "PENALTY, Holding, on West Monroe, -10 yards". The yardage is
+      // SIGNED for the same reason the sack line is: an unsigned number
+      // reads as a gain, and half of these are not.
       //
-      // The type is optional, so with nothing selected the clause is
-      // simply absent rather than reading "PENALTY, , on ...".
+      // The sign comes from fieldDelta -- which way the BALL moved,
+      // relative to the direction the drive is going -- not from which
+      // team was penalised. So a foul on the offence is negative and a
+      // foul on the defence is POSITIVE, because the ball advances toward
+      // the offence's goal even though the defence is the team being
+      // punished.
+      //
+      // The alternative (always negative, signed against the penalised
+      // team) was tried first and is wrong: it made every line in the log
+      // describe a different frame of reference from the down and distance
+      // sitting right beside it, so "-25 yards — 1st & 10" claimed a loss
+      // on a play that gained twenty-five and a first down.
+      //
+      // Zero stays unsigned: "+0" and "-0" both read like a typo, and a
+      // 0-yard penalty is a real entry when a foul walks off to the same
+      // spot.
       text: 'PENALTY, ' + (penName ? penName + ', ' : '') +
-        'on ' + TEAMS[team].name + ', ' + yds + (yds === 1 ? ' yard' : ' yards') +
+        'on ' + TEAMS[team].name + ', ' +
+        (fieldDelta === 0 ? '0 yards'
+          : (fieldDelta > 0 ? '+' : '') + fieldDelta +
+            (Math.abs(fieldDelta) === 1 ? ' yard' : ' yards')) +
         (noDownChange ? ' (no down change)' : '') +
         (autoFirstDown ? ' (automatic first down)' : '') + downDistanceText,
       effect: Object.assign({ penaltyTeam: team, penaltyYds: yds, fieldDelta },
