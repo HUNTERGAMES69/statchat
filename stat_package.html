@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- Without this every page load logs a 404 for /favicon.ico.
+     Harmless, but a red console error should MEAN something. -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StatChat — Statistics Report</title>
 <style>
@@ -332,7 +336,13 @@ function isAdminMarker(p){
       'Receptions','Receiving Yards','Yards Per Catch','Long Recept','Receiving TD','FUMBLE',
       'KO Attempt','KO Touchback','PA Attempt','PA Made','PA Block','FG Attempt','FG Made','FG Block','FG Yards','Long FG',
       'Punt Attempt','Punt Yards','Long Punt','PUNT BLK',
-      'D-Sack','D-INT','D-FUM','D-TFL','D-3rdAtt','D-3rdConv','D-4thAtt','D-4thStop','D-20PlusPlay'];
+      'D-Sack','D-INT','D-FUM','D-TFL','D-3rdAtt','D-3rdConv','D-4thAtt','D-4thStop','D-20PlusPlay',
+      // Per-player tackles, added Aug 2026. Separate from D-TFL above:
+      // that one counts from the play log and needs no named tackler
+      // (a ceiling), while D-Tackle and D-PlayerTFL come from the
+      // optional "tackled by" field (a floor). Two columns, because one
+      // number cannot be both.
+      'D-Tackle','D-PlayerTFL'];
     const blankRow = () => headers.map(() => '');
     const setCols = (row, obj) => { Object.keys(obj).forEach(k => { row[headers.indexOf(k)] = obj[k]; }); return row; };
     const rows = [headers];
@@ -465,6 +475,22 @@ function isAdminMarker(p){
     rows.push(oppRow);
 
     const wb = XLSX.utils.book_new();
+    // Defence -- one row per tackler, so the sheet carries who made the
+    // tackles rather than only a team total. Sorted best first, like the
+    // other player sections.
+    Object.keys(box.teamA.defense || {})
+      .filter(n => n !== 'TEAM' && (box.teamA.defense[n].tackles || 0) > 0)
+      .sort((a, b) => (box.teamA.defense[b].tackles || 0) -
+                      (box.teamA.defense[a].tackles || 0))
+      .forEach(n => {
+        const d = box.teamA.defense[n];
+        rows.push(setCols(blankRow(), {
+          'GameID': gameLabel || '', 'Team': TEAMS.teamA.name, 'Player': n,
+          'D-Tackle': d.tackles || '', 'D-PlayerTFL': d.tfl || '',
+          'D-Sack': d.sacks || '', 'D-INT': d.int || '', 'D-FUM': d.fumRec || ''
+        }));
+      });
+
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Stats');
 
     // Game Totals -- one row per team, matching the reference sheet's

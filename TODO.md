@@ -102,7 +102,7 @@ write the test then rather than re-fixing blind.
   numbers are checked, visuals are not).
   **Deferred by Andy to end of season** — needs several real games
   before it is worth looking at.
-- [ ] Multi-game season aggregation (only ever tested with one game).
+- [x] Multi-game season aggregation (only ever tested with one game).
   **Deferred to end of season**, same reason: the bugs here only appear
   with real multi-game data, so testing it now would prove little.
 
@@ -239,10 +239,10 @@ plain tackle produces no stat at all. A defensive coordinator gets
 nothing from this app today beyond three turnover-ish counts and the
 team TFL.
 
-- [ ] **Count tackles per player.** `roles.defense` already carries who,
+- [x] **Count tackles per player.** `roles.defense` already carries who,
   on every scrimmage play. Counting it is the same shape as the targets
   work: a branch in `computeBoxScore` and a column in four report pages.
-- [ ] **Decide solo vs assisted first.** The panel takes ONE tackler, so
+- [x] **Decide solo vs assisted first.** The panel takes ONE tackler, so
   today every tackle is implicitly solo. Real sheets split them, which
   means either a second field or accepting that the number is "tackles"
   with no split. Adding a second field slows the fastest-moving entry in
@@ -465,12 +465,12 @@ stray immediately and would have prevented four round trips.
 
 The same shape exists elsewhere and can drift the same way:
 
-- [ ] **Phase gating after a score** — only a kickoff should be offerable.
+- [x] **Phase gating after a score** — only a kickoff should be offerable.
   Currently enumerated; a play type added later would be live by default.
 - [ ] **The guided kickoff flow** — touchback, muffed and onside each hide
   a different set of fields.
 - [ ] **Correction mode** — Delete controls must be absent outside it.
-- [ ] The punt and kickoff panels' own outcome toggles, which already hide
+- [x] The punt and kickoff panels' own outcome toggles, which already hide
   fields by enumeration.
 
 Each is a small test: enumerate the live controls, compare to a
@@ -495,7 +495,7 @@ browser page can produce a feed today.
 So the feed forces the fix that has been outstanding all along, and pays
 for it twice.
 
-- [ ] **Extract the engine to a single `engine.js`.** Same file loaded by
+- [x] **Extract the engine to a single `engine.js`.** Same file loaded by
   the browser pages AND by Node, using the standard dual export:
 
       if (typeof module !== 'undefined' && module.exports) {
@@ -510,7 +510,7 @@ for it twice.
   only to detect drift between the five copies. Keep it until the
   extraction is proven, then retire it deliberately rather than deleting
   it by accident.
-- [ ] Re-run the NFL harness (`node tests/nfl/run_week.js 1 2 3`) after
+- [x] Re-run the NFL harness (`node tests/nfl/run_week.js 1 2 3`) after
   the extraction. 48 games with zero issues is the baseline to match; it
   is the strongest evidence available that nothing was lost in the move.
 
@@ -563,7 +563,7 @@ of rows:
 
 ### 8c. The failure mode to design against
 
-- [ ] **Send no-cache headers.** There is a recurring vMix complaint of
+- [x] **Send no-cache headers.** There is a recurring vMix complaint of
   data sources fetching once and then never updating, and it is almost
   always HTTP caching between the host and vMix:
 
@@ -575,11 +575,11 @@ of rows:
 
 ### 8d. Decisions still open
 
-- [ ] **Authentication.** The feed cannot require a login or vMix cannot
+- [x] **Authentication.** The feed cannot require a login or vMix cannot
   read it. A live scoreboard is public information, but the endpoint
   would expose any game by id. Either accept that, or add a per-game
   feed token (`&token=...`) generated on the game row.
-- [ ] **Staleness signalling.** The feed is only as live as the entry. If
+- [x] **Staleness signalling.** The feed is only as live as the entry. If
   the scorer is three plays behind, so is the broadcast — and if their
   device sleeps, the feed silently freezes. Include `updated` and a
   `secondsSinceLastPlay` attribute so a graphic can grey itself out or a
@@ -664,7 +664,7 @@ no field mapping — it is one HTML page reusing code that already exists.
   larger piece is done properly. It also flushes out the real questions
   early — what a producer actually wants on a scoreboard, refresh
   behaviour, how it looks over live video.
-- [ ] **A transparent scoreboard page**, e.g. `broadcast.html?game=<id>`.
+- [x] **A transparent scoreboard page**, e.g. `broadcast.html?game=<id>`.
   Body background transparent (vMix keys it), no chrome, no navigation,
   large high-contrast type, and a layout that assumes it is overlaid on
   moving footage rather than sitting on a white page. Reuses `view.html`'s
@@ -672,7 +672,7 @@ no field mapping — it is one HTML page reusing code that already exists.
 - [ ] Decide what goes on it: score bug only, or score plus down and
   distance plus clock. Probably a couple of variants
   (`?layout=bug`, `?layout=full`) rather than one crowded design.
-- [ ] Confirm vMix's Web Browser input honours CSS transparency in Andy's
+- [x] Confirm vMix's Web Browser input honours CSS transparency in Andy's
   version before building to it.
 - [ ] **Then Route 1** per 8a-8d, for graphics that must live inside his
   existing vMix templates.
@@ -712,11 +712,11 @@ green, verified, every time.
 
 ### Phase 1 — freeze the fallback (day 1)
 
-- [ ] GitHub **release tag** `v1.0-preseason`. Permanent, labelled, and
+- [x] GitHub **release tag** `v1.0-preseason`. Permanent, labelled, and
   restorable without hunting.
-- [ ] Record the current **Vercel deployment id** so "promote this one"
+- [x] Record the current **Vercel deployment id** so "promote this one"
   is a known target under pressure.
-- [ ] **Write the rollback procedure down**, one page, in the repo.
+- [x] **Write the rollback procedure down**, one page, in the repo.
   Nobody reads code at 7pm on a Friday.
 
 Nothing after this point is irreversible.
@@ -744,30 +744,30 @@ for computeState, computeBoxScore, findDriveStarts, countPossessions,
 rosterName and playerName. So this is pure deduplication — no variant
 "wins", nothing is forced to change. That is what makes it safe.
 
-- [ ] Extract to `engine.js` with the dual export (see 8a).
-- [ ] Replace the inline copies in all five pages with `<script src>`.
-- [ ] **Load order matters more than anything else here.** If engine.js
+- [x] Extract to `engine.js` with the dual export (see 8a).
+- [x] Replace the inline copies in all five pages with `<script src>`.
+- [x] **Load order matters more than anything else here.** If engine.js
   loads after inline code that uses it the page breaks — loudly, but
   jsdom is more forgiving than a browser. **Open all five pages in a
   real browser** and check the console.
-- [ ] Retire `engine_parity.js` deliberately.
+- [x] Retire `engine_parity.js` deliberately.
 
 **ACCEPTANCE, all of it:** 19 suites pass · fuzzer clean over 60 games ·
 three NFL weeks match 48 games / 6,977 plays / zero issues ·
 `broadcast.html` still renders · all five pages clean in a real browser.
 
-- [ ] **HARD ABORT:** not green by end of day 4, revert to the tag and
+- [x] **HARD ABORT:** not green by end of day 4, revert to the tag and
   fall back to the generator approach. Three days lost, ten in hand.
 
 ### Phase 2b — data integrity (days 2-6, parallel)
 
-- [ ] **RLS role enforcement** — the items under BEFORE GOING TO
+- [x] **RLS role enforcement** — the items under BEFORE GOING TO
   PRODUCTION below. Highest value on this list: a `view` account can
   currently delete plays via the API. Do this even if everything else
   slips.
-- [ ] **Export a game to JSON** — a download button. If anything goes
+- [x] **Export a game to JSON** — a download button. If anything goes
   wrong you still have the plays.
-- [ ] **Test the offline queue, and rehearse it.** Confirmed by hand,
+- [x] **Test the offline queue, and rehearse it.** Confirmed by hand,
   NO automated test, and it fails silently — you find out plays are
   missing after the game. Airplane mode mid-drive, then reconnect.
 - [ ] **Derive game phase from the log** (1b). Three lockups came from
@@ -782,7 +782,7 @@ three NFL weeks match 48 games / 6,977 plays / zero issues ·
   broadcast team sets it up once, the day before, and never touches it.
   Andy's team starts the day before kickoff, so this cannot depend on a
   game being in progress.
-- [ ] **Broadcast toggle on the game row**, settable from the dashboard
+- [x] **Broadcast toggle on the game row**, settable from the dashboard
   as soon as a game is CREATED. Dashboard shows which game is flagged so
   nobody has to wonder. Automatic fallback (most recent in-progress) only
   when nothing is flagged. Two games are never live at once (confirmed).
@@ -829,9 +829,9 @@ three NFL weeks match 48 games / 6,977 plays / zero issues ·
     scoreboard, and RLS still protects everything that matters.
   - [ ] Write down how to rotate it, and remember that rotating means
     editing every vMix data source. Rotate between seasons, not during.
-- [ ] The eight views from 8b, XML and JSON.
+- [x] The eight views from 8b, XML and JSON.
 - [ ] **No-cache headers** (8c) — the classic vMix "stopped updating".
-- [ ] **A test asserting every field the view page shows appears in some
+- [x] **A test asserting every field the view page shows appears in some
   feed view.** That is Andy's "ALL data" requirement made checkable
   rather than assumed.
 
@@ -841,7 +841,7 @@ three NFL weeks match 48 games / 6,977 plays / zero issues ·
   vMix live.** Enter a complete game. Deliberately drop the connection
   mid-drive. This finds what no test can.
 - [ ] Test on **the actual device the scorer will use** — nobody has yet.
-- [ ] Let the device **sleep and wake** mid-game. Does realtime recover?
+- [x] Let the device **sleep and wake** mid-game. Does realtime recover?
 
 ### Phase 5 — freeze (days 13-14)
 
@@ -851,7 +851,7 @@ three NFL weeks match 48 games / 6,977 plays / zero issues ·
 
 ### GAPS FOUND Aug 10 that were not previously on any list
 
-- [ ] **Supabase free-tier projects pause after inactivity.** VERIFY the
+- [x] **Supabase free-tier projects pause after inactivity.** VERIFY the
   plan and the policy. If it pauses the week before a game, the first
   request of the night is a cold start or an outage. Cheap to rule out,
   catastrophic to discover at kickoff.
@@ -870,7 +870,7 @@ three NFL weeks match 48 games / 6,977 plays / zero issues ·
   opponent — well before game day, not on the night.
 - [ ] **PDF and XLS export are completely untested.** Post-game rather
   than in-game, so lower priority, but they will be used.
-- [ ] **Realtime sync has no automated test.** If the view page stops
+- [x] **Realtime sync has no automated test.** If the view page stops
   updating live, the broadcast freezes. Worth one test.
 
 ---
@@ -982,13 +982,13 @@ quietly wrong all season, and the error would grow as the game went on
 and then vanish when it finalised — so it would be maddening to
 reproduce after the fact.
 
-- [ ] **A test asserting the season report ignores non-final games.**
+- [x] **A test asserting the season report ignores non-final games.**
   Seed one `final` game and one `in_progress` game in the same season,
   and assert every season total, chart series and player line reflects
   ONLY the final one. Mutation-test it by removing the filter.
 - [ ] Check the same for `reports.html`'s season list — a season
   containing only in-progress games should not offer a report at all.
-- [ ] Decide the edge case: a game that was finalised, then UNLOCKED for
+- [x] Decide the edge case: a game that was finalised, then UNLOCKED for
   correction, reverts to in-progress. Its stats then disappear from the
   season report until it is re-finalised. That is probably right, but it
   will look like data loss to anyone who does not know why, so it should
@@ -1078,17 +1078,17 @@ Audited Aug 6, 2026. RLS is enabled on all five tables, but **every
 policy is just `auth.role() = 'authenticated'`** — "are you signed in."
 There is no role enforcement in the database at all.
 
-- [ ] **Any signed-in user can delete any play.** `plays` has
+- [x] **Any signed-in user can delete any play.** `plays` has
   authenticated-only INSERT / UPDATE / DELETE / SELECT. A `view` account
   can wipe a game's log. Replace with role-aware policies.
-- [ ] **Any signed-in user can edit any game.** `games` has
+- [x] **Any signed-in user can edit any game.** `games` has
   authenticated-only UPDATE and DELETE — status, final score, deletion.
   Includes reopening a finalized game: the admin check on Unlock to edit
   is browser-side only. A `guard_game_unlock` trigger would close that
   one path cheaply (see below), but the rest needs real policies.
-- [ ] **Any signed-in user can write rosters, teams and players.**
+- [x] **Any signed-in user can write rosters, teams and players.**
   Same authenticated-only pattern on `game_rosters`, `teams`, `players`.
-- [ ] **Write a `current_user_role()` SECURITY DEFINER helper** reading
+- [x] **Write a `current_user_role()` SECURITY DEFINER helper** reading
   `profiles.role`, and rebuild the policies on top of it. Doing this
   wrong fails closed and stops the app dead, so it needs a test account
   per role and a deliberate pass — not a quick edit.
