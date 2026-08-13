@@ -980,6 +980,10 @@ function parseInput(raw, state){
   if (td) rest.pop();
   const isSafety = rest[rest.length - 1] === 'sf';
   if (isSafety) rest.pop();
+  // Stripped before anything reads positional tokens, exactly as 'tb' is
+  // below -- left in place it would be parsed as a returner number.
+  const oobIdx = rest.indexOf('oob');
+  if (oobIdx !== -1) rest.splice(oobIdx, 1);
   const isTouchback = rest[rest.length - 1] === 'tb';
   if (isTouchback) rest.pop();
   const O = n => nameInOffense(off, n), D = n => nameInDefense(def, n), ST = n => nameInSpecialTeams(off, n);
@@ -1190,8 +1194,14 @@ function parseInput(raw, state){
   }
   if (type === 'ko'){
     const yds = rest[0], ret = rest[1], retyds = rest[2];
+    // A kick that goes out of bounds untouched. NFHS gives the receiving
+    // team the ball at their own 35, and there is no return to record --
+    // nobody ever touched it. Treated like a touchback in shape: a fixed
+    // spot, no returner, no return yardage.
+    const isOob = oobIdx !== -1;
     let t = ST(p1) + ' kicks off';
-    if (isTouchback) t += ' — TOUCHBACK';
+    if (isOob) t += ' — OUT OF BOUNDS';
+    else if (isTouchback) t += ' — TOUCHBACK';
     else if (ret) t += ', returned' + (ret === '?' ? '' : ' by ' + D(ret)) + (retyds ? ' for ' + retyds : '');
     let score = null;
     if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
@@ -1767,6 +1777,21 @@ const PICKED_BG = 'var(--bg-accent, #e6f1fb)';
 function prefillTouchbackSpot(panel, idPrefix){
   const yl = document.getElementById(idPrefix + '_yardline');
   if (yl && !yl.value) yl.value = '20';
+  const own = panel.querySelector('.' + idPrefix + '_side[data-side="own"]');
+  if (own) own.click();
+}
+// A free kick out of bounds untouched: NFHS awards the receiving team the
+// ball at their own 35. "own" here is the SPOT WIDGET's own -- the widget
+// on a kickoff is labelled for the team taking over, so own 35 is the
+// receiving team's 35, which is what the rule says and what a coach means.
+//
+// Overwrites an existing value, unlike the touchback prefill. The two are
+// mutually exclusive outcomes, so switching from Touchback to Out of
+// bounds must move the 20 to a 35 -- leaving the 20 in place would save a
+// spot the scorer did not choose and could not see was wrong.
+function prefillOobSpot(panel, idPrefix){
+  const yl = document.getElementById(idPrefix + '_yardline');
+  if (yl) yl.value = '35';
   const own = panel.querySelector('.' + idPrefix + '_side[data-side="own"]');
   if (own) own.click();
 }
@@ -3083,6 +3108,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '<input autocomplete="off" type="checkbox" id="gr_touchback" style="display:none;">' +
             '<button type="button" id="gr_touchback_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:13px; font-weight:600; cursor:pointer;">Touchback</button>' +
           '</div>' +
+          '<div id="gr_oob_wrap" style="margin-bottom:6px;">' +
+            '<input autocomplete="off" type="checkbox" id="gr_oob" style="display:none;">' +
+            '<button type="button" id="gr_oob_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:13px; font-weight:600; cursor:pointer;">Out of bounds</button>' +
+          '</div>' +
           '<div id="gr_muff_wrap" style="margin-bottom:6px;">' +
             '<input autocomplete="off" type="checkbox" id="gr_muffed" style="display:none;">' +
             '<button type="button" id="gr_muffed_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:13px; font-weight:600; cursor:pointer;">Muffed / fumbled catch</button>' +
@@ -3181,7 +3210,50 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
         if (!tb) refreshGrMuff();
       };
-      grTbBtn.addEventListener('click', () => { grTbCb.checked = !grTbCb.checked; refreshGrTb(); });
+      // OUT OF BOUNDS -- same shape as the touchback: nobody touched the
+      // ball, so no returner and no return yardage, and the spot is fixed
+      // by rule. NFHS puts the receiving team on their own 35.
+      const grOobBtn = document.getElementById('gr_oob_toggle'), grOobCb = document.getElementById('gr_oob');
+      const refreshGrOob = () => {
+        const oob = grOobCb.checked;
+        document.getElementById('gr_muff_wrap').style.display = oob ? 'none' : '';
+        if (oob) document.getElementById('gr_muff_box').style.display = 'none';
+        grReturnFields().forEach(el => { if (el) el.style.display = oob ? 'none' : ''; });
+        document.getElementById('gr_spot_recv').style.display = oob ? 'block' : '';
+        if (oob) document.getElementById('gr_spot_kick').style.display = 'none';
+        grOobBtn.textContent = oob ? '\u2713 Out of bounds' : 'Out of bounds';
+        grOobBtn.style.background = oob ? '#1a7a4c' : '#fff';
+        grOobBtn.style.color = oob ? '#fff' : '#555';
+        grOobBtn.style.borderColor = oob ? '#1a7a4c' : '#ccc';
+        if (oob){
+          // Overwrites, unlike the touchback prefill: switching from
+          // Touchback to Out of bounds has to move the 20 to a 35, or the
+          // saved spot is one the scorer never chose.
+          const yl = document.getElementById('gr_spot_yardline');
+          if (yl) yl.value = '35';
+          const own = content.querySelector('.gr_spot_side[data-side="own"]');
+          if (own) own.click();
+        }
+        if (!oob) refreshGrMuff();
+      };
+      grOobBtn.addEventListener('click', () => {
+        grOobCb.checked = !grOobCb.checked;
+        if (grOobCb.checked){
+          // One outcome at a time. Each of these repaints its own button,
+          // so clearing through their refresh functions keeps the display
+          // honest -- setting .checked alone would leave a tick behind.
+          if (grTbCb.checked){ grTbCb.checked = false; refreshGrTb(); }
+          if (grMuffCb.checked){ grMuffCb.checked = false; }
+          if (grOnsideCb && grOnsideCb.checked){ grOnsideCb.checked = false; }
+          refreshGrMuff();
+        }
+        refreshGrOob();
+      });
+      grTbBtn.addEventListener('click', () => {
+        grTbCb.checked = !grTbCb.checked;
+        if (grTbCb.checked && grOobCb.checked){ grOobCb.checked = false; refreshGrOob(); }
+        refreshGrTb();
+      });
       grMuffBtn.addEventListener('click', () => {
         grMuffCb.checked = !grMuffCb.checked;
         if (grMuffCb.checked && grTbCb.checked){ grTbCb.checked = false; refreshGrTb(); }
@@ -3234,7 +3306,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // recovered where it lies, and demanding return yardage silently
         // refused to save the play at all.
         const grOnsideNow = document.getElementById('gr_onside');
-        const noReturnExpected = touchback ||
+        const grOobNow = document.getElementById('gr_oob');
+        const oob = !!(grOobNow && grOobNow.checked);
+        const noReturnExpected = touchback || oob ||
           document.getElementById('gr_muffed').checked ||
           !!(grOnsideNow && grOnsideNow.checked);
         const q = guided.quarter;
@@ -3307,6 +3381,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           text = TEAMS[guided.receivingTeam].name + ' MUFFED the catch, recovered by ' + recName;
           if (parseInt(yds, 10)) text += ' for ' + yds;
           effect = kickingRecovers ? {} : { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
+        } else if (oob){
+          text = TEAMS[guided.kickingTeam].name + ' kicks off — OUT OF BOUNDS';
+          effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
         } else if (touchback){
           text = TEAMS[guided.receivingTeam].name + ' — TOUCHBACK';
           effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
@@ -3820,6 +3897,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_touchback', 'Touchback') + '</div>' +
           '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_muffed', 'Muffed / fumbled catch') + '</div>' +
           '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_onside', 'Onside kick') + '</div>' +
+          '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_oob', 'Out of bounds') + '</div>' +
         '</div>' +
         // An onside kick is a deliberate call, not a mistake, so it gets
         // its own control rather than being filed under Muffed. The
@@ -4623,12 +4701,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const muffed = document.getElementById('pp_ko_muffed').checked;
         const onsideEl = document.getElementById('pp_ko_onside');
         const onside = !!(onsideEl && onsideEl.checked);
+        const oobEl = document.getElementById('pp_ko_oob');
+        const oob = !!(oobEl && oobEl.checked);
         // An onside kick has no return and no touchback, so its fields go
         // away exactly as they do for the other two outcomes.
         const oBox = document.getElementById('pp_ko_onside_box');
         if (oBox) oBox.style.display = onside ? 'block' : 'none';
-        document.getElementById('pp_ko_ret_wrap').style.display = (tb || muffed || onside) ? 'none' : 'block';
-        document.getElementById('pp_ret_yds_wrap').style.display = (tb || muffed || onside) ? 'none' : 'block';
+        // Out of bounds has no returner and no return yardage for the
+        // same reason a touchback does not: nobody touched the ball.
+        document.getElementById('pp_ko_ret_wrap').style.display = (tb || muffed || onside || oob) ? 'none' : 'block';
+        document.getElementById('pp_ret_yds_wrap').style.display = (tb || muffed || onside || oob) ? 'none' : 'block';
         document.getElementById('pp_ko_muff').style.display = muffed ? 'block' : 'none';
         const kickingRecovers = muffed &&
           document.querySelector('input[name=pp_ko_muffrec]:checked').value === 'k';
@@ -4639,49 +4721,53 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const genSpotKo = document.getElementById('pp_spot_wrap');
         if (genSpotKo) genSpotKo.style.display = (kickingRecovers || onside) ? 'none' : 'block';
         if (tb) prefillTouchbackSpot(panel, 'pp_spot');
+        // NFHS: a free kick out of bounds untouched gives the receiving
+        // team the ball at their own 35. Pre-filled rather than merely
+        // suggested, because the spot is mandatory on kickoffs and this
+        // one is fixed by rule -- but still editable, since the receiving
+        // team may instead take it at the inbounds spot.
+        if (oob) prefillOobSpot(panel, 'pp_spot');
         currentSpotGetter = onside ? koOnsideSpotGetter
           : (kickingRecovers ? koMuffSpotGetter : koSpotGetter);
       };
       const koOnsideSpotGetter = wireStartingSpot(panel, 'pp_koonsidespot');
-      const koOnsideCb = document.getElementById('pp_ko_onside');
-      if (koOnsideCb){
-        koOnsideCb.addEventListener('change', (e) => {
-          // An onside kick is a deliberate call; a touchback and a muff
-          // are different plays. Only one can be true.
-          if (e.target.checked){
-            ['pp_ko_touchback', 'pp_ko_muffed'].forEach(id => {
-              const o = document.getElementById(id);
-              if (o && o.checked){ o.checked = false; o.dispatchEvent(new Event('change')); }
-            });
+      // ONE EXCLUSIVE GROUP, not a web of pairwise rules.
+      // ------------------------------------------------------------
+      // Each outcome used to clear the others by name, so the rules were
+      // spread across three handlers and adding a fourth meant editing
+      // all of them -- the blacklist shape PROJECT_NOTES.md warns about.
+      // Listing the group once means a fifth outcome is one array entry.
+      //
+      // It also fixes a real bug. Clearing another toggle set its hidden
+      // checkbox to false and fired 'change', but nothing repainted the
+      // BUTTON -- the paint lives in the click handler. So picking Onside
+      // after Touchback left "✓ Touchback" lit in gold next to
+      // "✓ Onside kick": two outcomes apparently selected, one of them a
+      // lie, and the saved play silently followed the checkbox.
+      const KO_OUTCOMES = ['pp_ko_touchback', 'pp_ko_muffed', 'pp_ko_onside', 'pp_ko_oob'];
+      const koClearOthers = (keepId) => {
+        KO_OUTCOMES.forEach(id => {
+          if (id === keepId) return;
+          const cb = document.getElementById(id);
+          if (!cb || !cb.checked) return;
+          cb.checked = false;
+          const btn = document.getElementById(id + '_toggle');
+          if (btn){
+            btn.classList.remove('picked');
+            btn.textContent = btn.dataset.label || 'Blocked';
           }
+        });
+      };
+      KO_OUTCOMES.forEach(id => {
+        const cb = document.getElementById(id);
+        if (!cb) return;
+        cb.addEventListener('change', (e) => {
+          if (e.target.checked) koClearOthers(id);
           refreshKoMode();
         });
-        panel.querySelectorAll('input[name=pp_ko_onsiderec]').forEach(r =>
-          r.addEventListener('change', refreshKoMode));
-      }
-      const koTouchbackCb = document.getElementById('pp_ko_touchback');
-      if (koTouchbackCb){
-        koTouchbackCb.addEventListener('change', (e) => {
-          // A touchback and a muff are different plays.
-          if (e.target.checked){
-            const m = document.getElementById('pp_ko_muffed');
-            if (m.checked){ m.checked = false; m.dispatchEvent(new Event('change')); }
-            const os = document.getElementById('pp_ko_onside');
-            if (os && os.checked){ os.checked = false; os.dispatchEvent(new Event('change')); }
-          }
-          refreshKoMode();
-        });
-      }
-      const koMuffCb = document.getElementById('pp_ko_muffed');
-      if (koMuffCb){
-        koMuffCb.addEventListener('change', (e) => {
-          if (e.target.checked){
-            const t = document.getElementById('pp_ko_touchback');
-            if (t.checked){ t.checked = false; t.dispatchEvent(new Event('change')); }
-          }
-          refreshKoMode();
-        });
-      }
+      });
+      panel.querySelectorAll('input[name=pp_ko_onsiderec]').forEach(r =>
+        r.addEventListener('change', refreshKoMode));
       panel.querySelectorAll('input[name=pp_ko_muffrec]').forEach(r =>
         r.addEventListener('change', refreshKoMode));
       attachNameConfirm('pp_ko_muff_rec',
@@ -5064,7 +5150,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const isTouchback = document.getElementById('pp_ko_touchback').checked;
       const koMuffed = document.getElementById('pp_ko_muffed') && document.getElementById('pp_ko_muffed').checked;
       const koOnside = document.getElementById('pp_ko_onside') && document.getElementById('pp_ko_onside').checked;
-      if (koOnside){
+      const koOob = document.getElementById('pp_ko_oob') && document.getElementById('pp_ko_oob').checked;
+      if (koOob){
+        // No returner and no return yardage: the ball was never touched.
+        // The kicker still gets his kick distance, and the spot comes from
+        // the general spot widget, prefilled to the receiving team's 35.
+        code = sel.kicker + 'ko ' + yds + ' oob';
+        roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds) || 0 } };
+      } else if (koOnside){
         const recTok = document.querySelector('input[name=pp_ko_onsiderec]:checked').value;
         const recRaw = (document.getElementById('pp_ko_onside_rec') || {}).value;
         const recNum = (recRaw || '').trim() || '?';
