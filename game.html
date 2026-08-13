@@ -427,6 +427,7 @@
       if (document.hidden) return;
       try {
         if (pendingQueue.length) await drainPendingQueue();
+        if (pendingGameFields) await writeGameFields({}, 'Game state');
         await reloadPlaysFromServer();
       } catch (e) {
         // Never let a wake-up take the page down -- the next play entry
@@ -1758,6 +1759,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // Coming back: push anything waiting immediately rather than
         // waiting out the sync interval.
         if (isOnline && pendingQueue.length) drainPendingQueue();
+        if (isOnline && pendingGameFields) writeGameFields({}, 'Game state');
       }
     };
     check();
@@ -2317,6 +2319,52 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   }
 
+  // Writes to the GAME ROW -- status, phase, guided state, final score.
+  //
+  // These used to fire once and give up. Plays were queued and retried;
+  // these were not, so pressing End game while offline left the game
+  // showing as finished on screen and still in-progress in the database.
+  // The recap would not open and the season report would not include it,
+  // with only a one-line message at the moment of failure to explain why.
+  //
+  // Not the play queue: that is a LIST of things that each happened once.
+  // This is one row's current state, so only the LATEST value matters --
+  // queuing four status changes would just replay history. Instead the
+  // pending fields are merged and re-sent until they land.
+  //
+  // Deliberately not persisted to localStorage. The game row is rebuilt
+  // from the log on load anyway (derivePhase), and status is corrected by
+  // pressing End game again. A stale flag, never lost data.
+  let pendingGameFields = null;
+  let gameFieldRetry = null;
+
+  async function writeGameFields(fields, label){
+    pendingGameFields = Object.assign(pendingGameFields || {}, fields);
+    const attempt = Object.assign({}, pendingGameFields);
+    const { error } = await supabaseClient.from('games')
+      .update(attempt).eq('id', currentGameId);
+    if (!error){
+      // Only clear what we actually sent -- something may have been added
+      // while the request was in flight.
+      Object.keys(attempt).forEach(k => {
+        if (pendingGameFields && pendingGameFields[k] === attempt[k]) delete pendingGameFields[k];
+      });
+      if (pendingGameFields && !Object.keys(pendingGameFields).length) pendingGameFields = null;
+      if (!pendingGameFields && gameFieldRetry){
+        clearInterval(gameFieldRetry); gameFieldRetry = null;
+      }
+      return true;
+    }
+    showMsg('gameMsg', (label || 'Change') + ' saved here, but not yet on the ' +
+      'server. It will keep retrying \u2014 the game is safe.', 'error');
+    if (!gameFieldRetry){
+      gameFieldRetry = setInterval(() => {
+        if (pendingGameFields) writeGameFields({}, label);
+      }, 5000);
+    }
+    return false;
+  }
+
   async function setGameStatus(status, finalScore){
     currentGameStatus = status;
     const updateFields = { status };
@@ -2324,8 +2372,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       updateFields.final_score_us = finalScore.us;
       updateFields.final_score_opp = finalScore.opp;
     }
-    const { error } = await supabaseClient.from('games').update(updateFields).eq('id', currentGameId);
-    if (error) showMsg('gameMsg', 'Phase changed here, but failed to sync to the server: ' + error.message, 'error');
+    return writeGameFields(updateFields, 'Game status');
   }
 
   // Persists exactly where we are in the live flow -- including any
@@ -2333,10 +2380,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // navigating away and back resumes exactly here instead of guessing
   // from play history, which can silently drop an incomplete kickoff.
   async function persistUiState(){
-    const { error } = await supabaseClient.from('games')
-      .update({ game_phase: gamePhase, guided_state: guided })
-      .eq('id', currentGameId);
-    if (error) showMsg('gameMsg', 'State changed here, but failed to sync to the server: ' + error.message, 'error');
+    return writeGameFields({ game_phase: gamePhase, guided_state: guided }, 'Game state');
   }
 
   function showClockPrompt(ctx, thenFn){

@@ -264,7 +264,7 @@ team TFL.
   means either a second field or accepting that the number is "tackles"
   with no split. Adding a second field slows the fastest-moving entry in
   the app — worth weighing against how often anyone reads the split.
-- [ ] **Per-player TFL** falls out for free once tackles are counted:
+- [x] **Per-player TFL** falls out for free once tackles are counted:
   a credited tackle on a play with negative yardage. Note this WILL
   disagree with the team TFL already shipped, which counts from the play
   and needs no tackler — the team number is a ceiling, the per-player
@@ -484,7 +484,7 @@ The same shape exists elsewhere and can drift the same way:
 
 - [x] **Phase gating after a score** — only a kickoff should be offerable.
   Currently enumerated; a play type added later would be live by default.
-- [ ] **The guided kickoff flow** — touchback, muffed and onside each hide
+- [x] **The guided kickoff flow** — touchback, muffed and onside each hide  (tests/whitelist_check.js)
   a different set of fields.
 - [ ] **Correction mode** — Delete controls must be absent outside it.
 - [x] The punt and kickoff panels' own outcome toggles, which already hide
@@ -904,7 +904,7 @@ real error harder to spot.
 - [x] **Add `<meta name="mobile-web-app-capable" content="yes">`**
   alongside the Apple one. Apple renamed it; the old tag is deprecated
   and warns on every page.
-- [ ] **Supabase "Multiple GoTrueClient instances"** — `createClient` runs
+- [x] ~~ **Supabase "Multiple GoTrueClient instances"** — `createClient` runs~~ (Andy: not worth acting on — Supabase says it is not an error)
   more than once per tab. Supabase says outright it is not an error, but
   it warns that concurrent use under the same storage key can produce
   undefined behaviour. Worth understanding before the season rather than
@@ -1075,11 +1075,11 @@ Vercel never treats it as a function.
 finds hits in stale copies, which will make someone think a change did not
 land when it did.
 
-- [ ] Delete them at some point. If the web UI keeps refusing, the likely
+- [x] ~~ Delete them at some point. If the web UI keeps refusing, the likely~~ (Andy: inconsequential)
   cause is the delete committing to a new branch rather than `main` —
   check the Pull requests tab and the branch dropdown for stray
   `patch-N` branches.
-- [ ] When deleting, do the files individually; git tracks files, not
+- [x] ~~ When deleting, do the files individually; git tracks files, not~~ (Andy: inconsequential)
   folders, so `API/` and `test` disappear once empty.
 
 ---
@@ -1109,7 +1109,7 @@ There is no role enforcement in the database at all.
   `profiles.role`, and rebuild the policies on top of it. Doing this
   wrong fails closed and stops the app dead, so it needs a test account
   per role and a deliberate pass — not a quick edit.
-- [ ] **Game-status and phase writes are not covered by the sync
+- [x] **Game-status and phase writes are not covered by the sync **DONE 12 Aug: game-row writes now merge pending fields and retry every 5s, and flush on wake/reconnect. Handled differently from plays on purpose — the play queue is a LIST of events, the game row is one record where only the LATEST value matters.**
   queue.** `games.update` (one call site, reached from `persistUiState`
   and `setGameStatus`) fails silently offline. Nothing destructive —
   plays are already protected, so stats and score are never at risk —
@@ -1128,7 +1128,7 @@ There is no role enforcement in the database at all.
   the page itself cannot be fetched, so a coach who refreshes at the
   wrong moment is locked out until the connection returns. Queued plays
   survive, but entry stops.
-- [ ] **Optional quick win: `guard_game_unlock` trigger** — mirrors
+- [x] ~~ **Optional quick win: `guard_game_unlock` trigger** — mirrors~~ (Andy: RLS already restricts games UPDATE to admin and scorer)
   `profiles_role_guard` and makes Unlock to edit admin-only in the
   database. Two minutes, low risk, but only closes one path; not a
   substitute for real policies.
@@ -1139,7 +1139,7 @@ There is no role enforcement in the database at all.
   `auth.uid() is not null`, so a service-key call bypasses it — which is
   how `api/manage-users.js` legitimately changes roles.
 
-- [ ] **An admin can DEMOTE THEMSELVES, and nothing stops it.** The
+- [x] ~~ **An admin can DEMOTE THEMSELVES, and nothing stops it.** The~~ **Closed 12 Aug: the UI greys out your own role dropdown, and the threat here is accident rather than malice. With two admins it is recoverable. Andy judged the UI the right level for an accident-only risk, and he is right.**
   trigger only guards against non-admins changing roles; it happily
   allows an admin to set their own role to `view`. The account page
   greys out the self-row, but the UI is not a security boundary — a
@@ -1176,6 +1176,9 @@ There is no role enforcement in the database at all.
 
   Enrolment on the account page, challenge on the login page. See
   `sql/MFA_SETUP.md` for the procedure and the recovery command.
+
+  **Enabled and tested 12 Aug 2026** — both admin accounts enrolled,
+  sign-out/sign-in confirmed prompting for a code.
 
   **The ordering is the whole point.** Every policy today is
   "are you signed in", so any authenticated account can already delete
