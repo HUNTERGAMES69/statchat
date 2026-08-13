@@ -154,6 +154,84 @@ async function run(){
     h.close();
   }
 
+  // --- SEEDING A SHARED NUMBER ------------------------------------------
+  // Added 13 Aug 2026. Two separate things, both about a starters list
+  // that names a jersey number two people wear.
+  //
+  // 1. THE SEED MUST REACH A NARROW ROLE. Passer, kicker and punter
+  //    refuse unpositioned players on purpose -- otherwise every nameless
+  //    entry in an opponent roster lands in the quarterback picker. The
+  //    seed is the coach's explicit override of that, and for UNSHARED
+  //    numbers it always worked. For a shared number it did not: an
+  //    ambiguous number is dropped from the resolved list before the seed
+  //    check is reached, and the ambiguous branch never consulted the
+  //    seed. Seeding QB to a shared number therefore did nothing at all
+  //    and the passer picker came up EMPTY -- which reads as broken.
+  //
+  //    Opponent rosters typed from a programme have no positions, so this
+  //    is the ordinary case, not a corner.
+  //
+  // 2. RECENCY OUTRANKS THE SEED ONCE SOMEONE HAS PLAYED. A starters list
+  //    is a guess made before kickoff; a carry is a fact. If the backup
+  //    has taken over, he belongs at the front of the picker even though
+  //    the coach named someone else in August.
+  {
+    const roster = defaultRoster().filter(r => r.team_side === 'teamB').concat([
+      { team_side: 'teamA', unit: 'offense', jersey_number: '7',  player_name: 'Alpha Ates',  position: '' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '7',  player_name: 'Bravo Boone', position: '' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '40', player_name: 'Cody Carr',   position: 'RB' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '40', player_name: 'Dell Doss',   position: 'RB' },
+      // Shared and NOT seeded -- the control for the ordering assertion.
+      { team_side: 'teamA', unit: 'offense', jersey_number: '55', player_name: 'Earl Eames',  position: 'RB' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '55', player_name: 'Fred Frank',  position: 'RB' }
+    ]);
+    const h = await bootGamePage({ roster,
+      game: { seed_starters: { teamA: { QB: '7', RB1: '40' } } } });
+    const { window: win, document: doc } = h;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+
+    // (1) a seeded shared number reaches the passer picker
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    const passers = [...doc.querySelectorAll('.pp_passer_pick')].map(b => b.textContent);
+    if (!passers.length) {
+      fail('seeded shared number', 'seeding QB to a shared number left the passer picker ' +
+           'EMPTY — the seed never reached the ambiguous branch');
+    } else if (!passers.some(t => /Alpha/.test(t)) || !passers.some(t => /Bravo/.test(t))) {
+      fail('seeded shared number', 'both players wearing the seeded number must be offered — ' +
+           'the seed is keyed by NUMBER and cannot say which one. Got: ' + passers.join(' , '));
+    }
+
+    // (2) before anyone plays, SEEDED numbers lead un-seeded ones.
+    // Asserted that way round rather than naming one number: seedOrder is
+    // role-ordered (QB, RB1, RB2, WR1...), so the seeded QB sorts ahead of
+    // the seeded RB1 even in the carrier picker. That is not new and not
+    // this change -- the resolved list has always sorted by
+    // seed.indexOf() -- so pinning "#40 first" would be pinning an
+    // accident of which slot was filled in.
+    click(win, doc.querySelector('.ptypeBtn[data-type="rush"]'));
+    const before = [...doc.querySelectorAll('.pp_carrier_pick')].map(b => b.dataset.num);
+    const lastSeeded = Math.max(before.lastIndexOf('7'), before.lastIndexOf('40'));
+    const firstUnseeded = before.indexOf('55');
+    if (firstUnseeded !== -1 && lastSeeded > firstUnseeded) {
+      fail('seeded shared number', 'before any carry, every seeded number should sort ahead of ' +
+           'the un-seeded #55. Order: ' + before.join(','));
+    }
+
+    // ...and once the OTHER number carries, recency takes over
+    click(win, [...doc.querySelectorAll('.pp_carrier_pick')].find(b => /Bravo/.test(b.textContent)));
+    typeInto(win, doc.getElementById('pp_yards'), '8');
+    click(win, doc.getElementById('pp_review'));
+    click(win, doc.getElementById('saveBtn'));
+    click(win, doc.querySelector('.ptypeBtn[data-type="rush"]'));
+    const after = [...doc.querySelectorAll('.pp_carrier_pick')];
+    if (!after.length || !/Bravo/.test(after[0].textContent)) {
+      fail('seeded shared number', 'after Bravo Boone carried he should lead the carrier picker — ' +
+           'a carry is a fact and outranks the starters list. Got: ' +
+           after.map(b => b.textContent.trim()).join(' , '));
+    }
+    h.close();
+  }
+
   return failures;
 }
 
