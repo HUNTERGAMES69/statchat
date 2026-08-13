@@ -77,6 +77,14 @@ function makeMockSupabase(db) {
       },
       update(fields) {
         this._op = 'update';
+        // db.failUpdates lets a test simulate the server refusing an
+        // update. Without it the retry logic on game-row writes could not
+        // be exercised at all -- a mock that always succeeds never
+        // reaches the code that exists for failure.
+        if (db.failUpdates) {
+          this._insertError = db.failUpdates === true ? 'offline' : db.failUpdates;
+          return this;
+        }
         db.updated.push({ table, fields });
         Object.assign(db.gameFields, fields);
         return this;
@@ -247,6 +255,7 @@ async function bootPage(file, opts = {}) {
     existingPlays: opts.existingPlays || [],
     plays: [],
     failNext: opts.failNext || null,   // see builder().insert
+    failUpdates: opts.failUpdates || null,  // see builder().update
     role: opts.role || 'admin',        // the signed-in user's role
     rpcCalls: [],                      // see makeMockSupabase().rpc
     rpcError: opts.rpcError || null,

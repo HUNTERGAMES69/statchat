@@ -295,6 +295,68 @@ async function run() {
     h.close();
   }
 
+  // --- GAME-ROW writes retry too -----------------------------------
+  // Status, phase, guided state and the final score all live on the game
+  // row, and used to fire once and give up. Pressing End game offline
+  // left the game showing as finished on screen and still in-progress in
+  // the database: the recap would not open, and the season report would
+  // exclude it.
+  //
+  // Handled differently from plays, deliberately. The play queue is a
+  // LIST of things that each happened once. The game row is one record's
+  // current state, so only the LATEST value matters -- replaying four
+  // status changes in order would be re-enacting history rather than
+  // catching up. The pending fields are merged and re-sent instead.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '6' });
+    await settle();
+
+    h.db.failUpdates = true;
+    const before = h.db.updated.filter(u => u.table === 'games').length;
+    await h.evalIn('setGameStatus("final", {us:7, opp:0})');
+    await settle();
+
+    if (h.db.updated.filter(u => u.table === 'games').length !== before) {
+      fail('game row', 'a game-row write appeared to land while the server ' +
+           'was refusing updates');
+    }
+    const held = h.evalIn('pendingGameFields ? Object.keys(pendingGameFields).length : 0');
+    if (!Number(held)) {
+      fail('game row', 'End game failed and nothing was held for retry. The ' +
+           'game would stay in-progress in the database with only a ' +
+           'one-line message to explain why');
+    }
+    const msg = h.document.getElementById('gameMsg');
+    if (msg && !/retry/i.test(msg.textContent)) {
+      fail('game row', 'the failure message does not say it will retry: "' +
+           msg.textContent.slice(0, 70) + '"');
+    }
+
+    // Back online, tab wakes.
+    h.db.failUpdates = null;
+    Object.defineProperty(h.document, 'hidden', { value: false, configurable: true });
+    h.document.dispatchEvent(new h.window.Event('visibilitychange'));
+    await new Promise(r => setTimeout(r, 600));
+
+    if (Number(h.evalIn('pendingGameFields ? 1 : 0'))) {
+      fail('game row', 'game-row fields were still pending after the ' +
+           'connection returned');
+    }
+    const last = h.db.updated.filter(u => u.table === 'games').slice(-1)[0];
+    if (!last || last.fields.status !== 'final') {
+      fail('game row', 'the retry did not write status=final: ' +
+           JSON.stringify(last && last.fields));
+    }
+    // The score must survive the retry, not just the status.
+    if (!last || last.fields.final_score_us !== 7) {
+      fail('game row', 'the final score was lost on retry: ' +
+           JSON.stringify(last && last.fields));
+    }
+    h.close();
+  }
+
   // --- the scorer can see there is a problem --------------------------
   {
     const h = await bootGamePage();
