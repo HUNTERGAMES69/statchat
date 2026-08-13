@@ -543,7 +543,7 @@ for it twice.
 
 **Risk to respect:** this touches the most-exercised code in the app
 across five files at once. Do it in a quiet session, not the week of a
-game. The 18 suites plus three clean NFL weeks are what makes it
+game. The suite (25 as of 13 Aug 2026) plus three clean NFL weeks are what makes it
 survivable.
 
 ### 8b. The feed endpoint
@@ -1406,3 +1406,88 @@ Recorded so the reasoning is not re-argued. Details in PROJECT_NOTES.
 - **Play correction is post-game only.** Delete controls appear solely
   after an admin unlocks a finalized game — never during live entry,
   where a mis-tap could destroy a play.
+
+---
+
+## 15. Session of 13 August 2026 — what changed and what it left open
+
+A working session, not a planned phase. Recorded here because several
+items closed and a few new ones opened.
+
+### Closed
+
+- [x] **Sack never produced a tackle for loss.** A real, shipped bug:
+  every sack credited a tackle and a sack but no TFL. The TFL check read
+  `roles.passer.yards`, which is a POSITIVE loss magnitude, and concluded
+  a seven-yard sack gained seven yards. It now reads `effect.statYds`,
+  which is signed by definition and is already what the team TFL counts
+  from — so the per-player floor and the team ceiling finally measure the
+  same thing.
+- [x] **`tackles_check.js` rewritten to drive the real UI.** It passed
+  against the bug above. See `PROJECT_NOTES.md`.
+- [x] **Colour helpers consolidated.** `game.html` was shadowing the
+  engine's `luminance` and `safeTextColor` with its own hardened copies
+  (its inline script loads after `engine.js`, so the duplicates won).
+  Both now live in `engine.js` behind a new `normalizeHex`, which also
+  fixes a latent white-on-white bug: `#fff` parsed as `NaN`, and
+  `NaN > 0.55` is false, so a shorthand hex silently chose white text.
+  **Not currently reachable** — every colour reaching the database comes
+  from an `<input type="color">`, which normalises to six digits — so
+  this is hardening, not a live fix.
+- [x] **`markerLabel` consolidated, and midfield renamed.** Three
+  byte-identical copies became one in `engine.js`. The 50 now reads
+  "the 50" rather than "own 50".
+- [x] **The "home/away score swap" resolved — there is no swap.** See
+  section 6 above and `PROJECT_NOTES.md`. `run_qa.js` gained a per-team
+  score assertion (Tier 1.5) so this cannot go unmeasured again.
+- [x] **`tools/make_broadcast.py` now owns the favicon links**, which had
+  been hand-added to the generated `broadcast.html` and would have been
+  silently deleted on the next regeneration. `broadcast.html` regenerated
+  and is no longer stale.
+- [x] Yardage calculator added to the Sack panel, with a guard: a spot
+  ahead of the current one is refused rather than recorded as a loss.
+- [x] Sack log wording routed through `gainPhrase` — "sacked for a loss
+  of 12". It was building its own string, which is exactly the drift
+  `gainPhrase` exists to prevent.
+- [x] Optional NFHS penalty-type dropdown, filtered by side; log line
+  reworked to `PENALTY, <type>, on <team>, <±N> yards`.
+- [x] Takeover spot now REQUIRED on kickoffs and punts, including the
+  guided half-start flow. A half-filled spot used to be discarded in
+  silence.
+- [x] Last kicker and punter pre-selected, scoped three ways (kickoff /
+  FG+PAT / punt).
+- [x] "End 1st half" confirms, with the score in the prompt.
+- [x] Quarter marker whitelisted to the one legal next quarter, and the
+  button greyed out when none is legal.
+- [x] View page: the down-and-distance slot is blank between drives
+  rather than reading "no active drive".
+
+### Opened
+
+- [ ] **`normalizeHex` has no committed test.** It was verified across
+  `#fff`, `#FFF`, `  #AbC  `, `red`, `''`, `null`, `undefined`, `42`,
+  `#ffff` during the session, but none of that is in `tests/`. It now
+  sits under every colour decision on six pages. Wants a small
+  `tests/color_check.js` plus an entry in `mutation_check.js` — a suite
+  that is not in the mutation runner is unproven.
+- [ ] **`convert.js` drops defensive/return touchdowns and two-point
+  conversions.** Documented in section 6. Tier 1.5 deducts them for now;
+  fixing the converter would be strictly better, and `ui_driver` already
+  drives a `twopt` panel, so that half is cheap.
+- [ ] **`2023_01_GB_CHI` hangs the NFL harness.** Every other game
+  finishes in ~20s; this one ran seven minutes and was killed. Unknown
+  whether it is a genuine stall or sandbox contention. A game that hangs
+  is worse than one that reports a wrong number, because a batch run just
+  looks slow.
+- [ ] **The safety clause in `expectedScore()` is unverified** — no
+  safety occurred in the eight games checked, so that branch has never
+  run. Suspect the clause before the engine if it ever fires.
+- [ ] `create_game.html` and `customize.html` each carry a local
+  `contrastingColor(hex)` with the same unguarded parsing. Neither page
+  loads `engine.js`, so wiring them up means adding a dependency they do
+  not currently have. Latent only — `toHex()` always emits six digits.
+  A decision, not a bug.
+- [ ] `tools/make_broadcast.py` still exists. Its own docstring says the
+  end state is to delete it and let `broadcast.html` be a normal
+  hand-maintained page loading `engine.js`, now that the engine has
+  landed. Deferred, not decided.

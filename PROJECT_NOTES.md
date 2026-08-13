@@ -107,6 +107,14 @@ be wrong even under the trusted `parseInput()`-direct method.
 
 ## Systematic per-team score mismatch across the NFL test dataset (found August 4, 2026)
 
+> **RESOLVED 13 August 2026 — there is no swap, and the engine was
+> never wrong.** Read the section "The score swap that wasn't" near
+> the end of this file before acting on anything below. The reading
+> recorded here — that team attribution was systematically inverted —
+> turned out to be a misdiagnosis of a HARNESS limitation. The
+> analysis of *why the combined check masked it* still stands and is
+> still worth reading; the conclusion about the cause does not.
+
 After fixing the combined-score check to compare each team's own
 score instead of just the sum (see above), re-ran all 285 games. The
 result was far larger than expected: **241 of 285 games (84.6%) have
@@ -625,7 +633,7 @@ happened. If Sack or Interception need a change in the future, they're
 still just `renderPlayPanel('sack')`/`renderPlayPanel('int')`,
 unaffected by how a coach gets there.
 
-## Why the engine is duplicated across pages, not shared yet
+## Why the engine WAS duplicated across pages (resolved 12-13 August 2026)
 
 `view.html`, `recap.html`, `stat_package.html`, and `season_report.html`
 each carry their own copy of `computeState`, `computeBoxScore`,
@@ -635,7 +643,20 @@ verbatim, don't rewrite it" — to avoid introducing subtle differences
 between pages. The trade-off is real: a fix has to be manually,
 correctly repeated in every copy, which is how both the sack-yardage
 inconsistency and an earlier `RECEIVE_POS` omission bug happened.
-Consolidating into one shared JS file is on `TODO.md`, not done yet.
+**This is now done.** All six pages load a single `engine.js`; the
+per-page copies are gone and `tests/engine_parity.js`, which existed
+only to detect drift between them, is a passing tombstone.
+
+The clean-up was not finished by the consolidation itself. Three
+helpers survived it as duplicates because they were small enough to
+look harmless -- `luminance` and `safeTextColor` in `game.html`
+(which SHADOWED the engine's, since the inline script loads after
+it), and `markerLabel` as three byte-identical copies in `game.html`,
+`view.html` and `broadcast.html`. Both were found only when something
+needed changing and the change had to be made in three places. The
+lesson is that consolidation is not complete when the big functions
+move; it is complete when a `grep` for `^function` finds each name
+once.
 
 ## Season report chart/metric layout
 
@@ -939,3 +960,191 @@ There's no dedicated GameID column in the database — it's parsed out
 of `game.designator` via regex (`/(\d+)/`) wherever the XLS exports
 need a numeric GameID. If a game's designator doesn't contain a
 number, GameID falls back to the designator string itself.
+
+---
+
+## The score swap that wasn't (resolved August 13, 2026)
+
+The finding recorded earlier in this file -- a systematic home/away
+score swap across most of the NFL replay dataset -- was **wrong**. Not
+partly wrong: there is no swap, and `teamA` tracked the home team
+correctly in every game re-checked.
+
+What is actually happening is that `tests/nfl/convert.js` DROPS POINTS,
+and it always drops them from the team that did not have the ball --
+which is exactly what an aggregate comparison reads as a swap. Two
+causes:
+
+1. **Touchdowns scored by the defence are never converted.**
+   `scoredIt()` requires `td_team === posteam`, so a fumble return,
+   interception return or punt return score is not emitted at all.
+   Six points, to the team without possession.
+2. **Successful two-point conversions are entered as ordinary plays.**
+   They arrive as `play_type` run/pass with
+   `two_point_conv_result = success`, so the converter enters a rush and
+   the two points vanish.
+
+The evidence that settles it is not that the theory explains the
+games -- the swap theory "explained" them too. It is that a model
+deducting 6 per non-offensive touchdown and 2 per conversion PREDICTED
+six of six games to the point, including one game (`2023_01_CAR_ATL`)
+with no such plays that reproduced the real score exactly as a control.
+
+**The transferable lesson is about the shape of the original mistake.**
+The audit compared a number the app produced against a number from the
+real world, and when they disagreed it blamed the app. The third
+possibility -- that the harness feeding the app was lossy -- was never
+enumerated, and it was the right one. A comparison against an
+independent source is only as trustworthy as the pipeline in between,
+and that pipeline deserves the same suspicion as the code under test.
+
+A secondary lesson: `run_qa.js` had no score assertion at all, which is
+why the finding lived in a separate uncommitted script and then
+outlived the sandbox it was written in. It has one now (Tier 1.5).
+
+## A test can pass against the bug it exists to prevent (August 13, 2026)
+
+`tests/tackles_check.js` asserted that a sack produces a tackle for
+loss. The assertion was correct, the suite was green, and the app had
+never credited a TFL on any sack in its life.
+
+The fixture hand-wrote a seven-yard sack as `passer.yards: -7`. The app
+writes `7` -- a positive loss magnitude. So the suite asserted the right
+thing about data the app does not produce. Reverting the engine fix
+still leaves it green; that was verified, not assumed.
+
+**This is the same failure as the August 3rd sack-yardage bug**, which
+also lived in the input path and also survived testing that fed the
+engine pre-built values. The rule in `tests/README.md` -- nothing may
+construct a play by hand -- existed *because* of that bug, and this
+suite quietly broke it by building play rows as object literals instead
+of calling `parseInput`. The rule was read as "don't call the parser"
+when it means "don't invent data the app would never produce."
+
+The suite now drives `game.html`'s real panels and reads back what was
+persisted, and it pins the sign convention explicitly rather than
+depending on it accidentally. Mutation-tested against five
+re-introduced bugs, all caught.
+
+## Sign conventions are load-bearing, and each one needs exactly one owner (August 13, 2026)
+
+Three separate bugs this session were one shape: a number whose sign
+meant different things to different readers.
+
+**Sack yardage** is stored as a POSITIVE magnitude -- a seven-yard sack
+is `passer.yards = 7`. Six writers and readers agree on that: the panel,
+the play code, the team-rushing charge (which SUBTRACTS it), and the
+sack-yards tiles on four report pages. One reader disagreed -- the TFL
+check read it as signed, concluded a sack gained seven yards, and
+credited nothing. The fix was not to flip the sign. It was to stop
+deriving the loss from role yardage at all and read `effect.statYds`,
+which is signed by definition and is already what the team TFL counts
+from. **When two conventions exist, prefer the field that cannot be
+misread over the field that happens to be right.**
+
+**The sack panel's yards box** is the one place the yardage calculator
+runs with no LOSS toggle beside it, because "Yards lost" is always a
+loss. That means the sign cannot be SHOWN, so a spot entered ahead of
+the current one would have silently recorded a loss of that many yards
+from an entry that plainly meant a gain. It is refused instead. The
+guard keys off play type, not off the absence of the LOSS button --
+punt and field goal also lack one, and a "gain" there is a kick
+distance.
+
+**Penalty yardage** was signed the wrong way first, and the correction
+is the useful part. Signing it against the penalised team ("always
+negative") is defensible in isolation and wrong in context: the log line
+sits next to the resulting down and distance, so `-25 yards — 1st & 10`
+claimed a loss on a play that gained twenty-five and moved the chains.
+The sign now comes from `fieldDelta` -- which way the BALL moved -- so
+the two figures on the line share a frame of reference. **A number's
+sign is not decided by what it is about; it is decided by what it will
+be read next to.**
+
+## Nobody owns the 50 (August 13, 2026)
+
+`markerLabel` rendered midfield as "own 50", because the branch was
+`fp <= 50`. It is `fp < 50` now, and 50 returns "the 50".
+
+Small, but it is the possession-relative convention leaking: the whole
+point of own/opp is to say whose half the ball is in, and the 50 is in
+neither. Claiming it for the offence contradicts the convention at the
+one yard line everybody can name on sight.
+
+Fixing it required editing three files, because `markerLabel` existed as
+three byte-identical copies. That is the real cost of leftover
+duplication -- not that the copies disagree, but that a one-character
+fix becomes a three-file change with two chances to forget one.
+
+## Required entry beats a silently discarded one (August 13, 2026)
+
+`wireStartingSpot`'s getter returns `null` if EITHER the side or the
+yard line is missing, and every caller wrote `if (reset)`. A
+half-filled spot was therefore discarded without a word: the kick saved,
+no drive marker was written, and the ball had no position.
+
+The failure surfaced several taps later, as a refusal to enter a play
+from scrimmage, with a message about the spot not being set that pointed
+nowhere near the kickoff that caused it. **A missing input that produces
+a delayed, relocated error is worse than one that produces no error at
+all, because it sends you to the wrong place.**
+
+Kickoffs and punts now refuse at Review and name which half is missing.
+Touchbacks pass automatically (the spot is prefilled), a return for a
+touchdown is exempt (there is no ensuing spot), and the check reads
+whichever spot block is VISIBLE, so onside and muff recoveries validate
+their own field rather than a hidden one.
+
+Four test suites went red on this change, and two of them reported the
+wrong cause -- `optional_players_check` said "the returner was not
+optional" and `clock_display_check` said "the confirm card did not ask
+for a clock". Both were the missing spot. Worth remembering the next
+time a fixture fails for a reason that makes no sense: a new required
+field upstream will impersonate almost any downstream failure.
+
+## Grey it out; do not let it refuse (August 13, 2026)
+
+The quarter-marker picker was first fixed by opening it and explaining
+that no quarter could be marked. That is worse than it sounds. **A
+control that is available and then refuses costs a tap to discover and
+reads as the app being broken**; one that is plainly unavailable
+communicates the same thing for free. The button is disabled now, with
+the explanation in its `title`, so it is still not a dead end.
+
+The button and the picker read the SAME whitelist, so they cannot drift
+into disagreeing about what is legal. The picker keeps its refusal as an
+unreachable backstop rather than trusting the disable to be perfect.
+
+One implementation trap worth recording: the whitelist was originally a
+`const` declared near the picker, which is far below `updatePhaseUI` in
+the file. `updatePhaseUI` runs on first render, hit the const in its
+temporal dead zone, and would have thrown on a cold page load while
+working fine in every warm test. Function declarations hoist; the tables
+are functions now.
+
+## Defaults should be scoped as narrowly as the thing they predict (August 13, 2026)
+
+Pre-selecting the last kicker is the same feature as pre-selecting the
+last quarterback, but the scoping question is different. One shared
+"kicker" memory across kickoffs, field goals and PATs would be wrong on
+every team that uses a kickoff specialist -- and **a wrong default is
+worse than none, because it looks deliberate and gets confirmed with a
+tap.**
+
+Split three ways: kickoff, FG+PAT together, punt. FG and PAT share
+because that genuinely is the same player answering the same question,
+which is the same reasoning that puts Pass, Sack, Interception and
+2PT-pass on one passer memory. The asymmetry is deliberate: splitting
+costs one extra selection the first time each kind of kick comes up,
+while sharing costs a wrong name on a real play.
+
+All of them are marked `suggested`, never `picked`. A committed pick
+would turn the coach's confirming tap into a de-select.
+
+## Confirm anything that closes a phase (August 13, 2026)
+
+"End game" had a confirmation; "End 1st half" did not, despite sitting
+in the same row as "Quarter marker", writing two rows, and changing what
+the rest of the app allows. It has one now, with the score in the
+prompt -- a missed PAT noticed at that moment is a ten-second fix, and
+noticed after the interval it is an unlock and a re-entry.

@@ -168,7 +168,7 @@ than a browser, so the suite may not see it.
 
 ### Acceptance — ALL of it
 
-- [x] 19 suites pass
+- [x] 19 suites pass  <!-- snapshot as of 12 Aug; 25 pass as of 13 Aug 2026 -->
 - [x] Fuzzer clean over 60 games
 - [x] Three NFL weeks: 48 games, 6,977 plays, **zero** issues
 - [x] `broadcast.html` still renders
@@ -551,3 +551,40 @@ Stated so nobody discovers them on the night.
 
 - [x] Andy has read this and approves the scope, the sequence and the cut list. **10 Aug 2026.**
 - [x] Phase 1 may begin.
+
+---
+
+## Status note — 13 August 2026
+
+Working session against Phases 2–4. Nothing in the phase order changed;
+this records where the plan now stands.
+
+**Test suite is 25 passing**, up from the 19 recorded in the Phase 2a
+acceptance above. That figure was a snapshot taken before several suites
+landed on 12 August and is left in place as the historical record.
+
+**Phase 3 (vMix data source)** is unchanged and still ahead of us, but
+two of its dependencies moved: `run_qa.js` now asserts the final score
+per team (Tier 1.5), and `broadcast.html` is regenerated and no longer
+stale — its generator owns the favicon links that had been hand-added to
+the output and would have been lost on the next run.
+
+**Phase 4b (per-player tackles)** is complete and its suite has been
+rebuilt to drive the real UI, after the original was found to pass
+against the exact bug it was written to prevent.
+
+**One real bug shipped and was fixed today**: no sack had ever produced a
+tackle for loss. Everything else this session was hardening, wording, or
+entry-flow gating. The detail is in `TODO.md` section 15 and
+`PROJECT_NOTES.md`.
+
+**Nothing in Phase 4's rehearsal checklist has been ticked.** Every
+remaining item there needs Andy, hardware and a field — the offline
+rehearsal, the scrimmage on venue wifi with vMix live, the mid-drive
+connection drop, device sleep/wake, and the 48-hour freeze. The code side
+is closer to done than the length of that list suggests; the rehearsal
+side has not started.
+
+The one unchecked item still squarely in code and squarely on the path to
+a first game is **PDF and XLS export, which remain completely untested**
+(`TODO.md`). The stat package is what coaches actually receive.
