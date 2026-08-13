@@ -5231,8 +5231,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // any change of possession, so the flip test never fired and the
       // clock was never asked for. The new drive then had no start event
       // and accumulated no time of possession at all.
+      // effect.flip too. The test used to miss any turnover that applies
+      // the flip ITSELF rather than offering it as a checkbox --
+      // flipEligible is "ask the coach whether possession changed",
+      // flip + flipApplied is "it definitely did, no need to ask". A bad
+      // snap recovered by the defense is the second kind, so the clock
+      // was never requested, the new drive got no start event, and it
+      // accumulated no time of possession at all. Same class of miss as
+      // the newPossession case noted above.
       const needsClock = pending.flipEligible ||
-        (pending.effect && (pending.effect.endsDrive || pending.effect.newPossession));
+        (pending.effect && (pending.effect.endsDrive || pending.effect.newPossession ||
+                            pending.effect.flip));
       document.getElementById('confirmClockRow').style.display = needsClock ? 'block' : 'none';
       // The note is the whole point of "warn but allow": the cost of
       // skipping the clock is invisible otherwise -- the play saves fine
