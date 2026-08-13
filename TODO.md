@@ -54,7 +54,7 @@ side of the trade looks much worse than the benefit:
 
 ## 1b. Derive game phase from the log, not the game row
 
-- [ ] **`gamePhase` and `guided_state` are stored, so they can disagree
+- [x] **`gamePhase` and `guided_state` are stored, so they can disagree
   with the plays.** Three separate bugs came from that in one session
   (see PROJECT_NOTES): undo stranding the phase at `secondHalf` with no
   second-half plays, undo past the divider stranding it at `halftime`
@@ -98,7 +98,7 @@ write the test then rather than re-fixing blind.
 - [ ] Anything depending on real layout measurement — `view.html`'s
   `--stat-scale` tile fitting and the `scale(scaleX, scaleY)` transform.
   jsdom has no layout engine; needs a human on a real screen.
-- [ ] `season_report.html` chart rendering (Chart.js is stubbed —
+- [x] `season_report.html` chart rendering (Chart.js is stubbed —
   numbers are checked, visuals are not).
   **Deferred by Andy to end of season** — needs several real games
   before it is worth looking at.
@@ -177,9 +177,26 @@ count** — 4 from 4 can really be 4 from 7. Not yet decided whether to
 label that in the reports or make the intended receiver required on
 incompletions, which would slow the fastest-moving entry in the app.
 
-- [ ] Decide how to handle the undercount: label it, or require the
-  field. Worth deciding after a real game shows how often the receiver
-  actually goes unnamed.
+- [x] **DECIDED 12 Aug 2026: leave it as is.** No label, no required
+  field. The receiver stays optional on completions AND incompletions,
+  and the scorer decides play by play whether it is worth capturing.
+
+  Andy's reasoning, and it is the right call: whoever is entering knows
+  what they chose to track. A caveat under the table tells them something
+  they already know, and a required field takes the decision away on the
+  fastest-moving path in the app — an incompletion is the quickest play
+  to log and the least likely moment to want an extra pick.
+
+  **The consequence, stated once so nobody rediscovers it as a bug:**
+  targets are a count of PASSES WHERE A RECEIVER WAS NAMED, not of passes
+  thrown at someone. Catch% is therefore catches over named targets. If a
+  scorer names the receiver on completions but not incompletions, catch%
+  trends towards 100%. That is a property of how it was entered, not a
+  fault in the arithmetic.
+
+  Same shape as team TFL versus per-player TFL: the number answers
+  exactly the question it was given, and the entry decides which question
+  that is.
 
 ---
 
@@ -504,9 +521,9 @@ for it twice.
       }
 
   Browsers get the globals as now; `require()` works server-side.
-- [ ] Replace the inline copies in `game.html`, `view.html`, `recap.html`,
+- [x] Replace the inline copies in `game.html`, `view.html`, `recap.html`,
   `stat_package.html`, `season_report.html` with `<script src="engine.js">`.
-- [ ] **`engine_parity.js` becomes trivial or unnecessary** — it exists
+- [x] **`engine_parity.js` becomes trivial or unnecessary** — it exists
   only to detect drift between the five copies. Keep it until the
   extraction is proven, then retire it deliberately rather than deleting
   it by accident.
@@ -521,7 +538,7 @@ survivable.
 
 ### 8b. The feed endpoint
 
-- [ ] **`/api/feed`** — a Vercel serverless function beside the existing
+- [x] **`/api/feed`** — a Vercel serverless function beside the existing
   `manage-users.js` and `invite-user.js`.
 
       GET /api/feed?game=<id>&view=score&format=xml
@@ -584,7 +601,7 @@ of rows:
   device sleeps, the feed silently freezes. Include `updated` and a
   `secondsSinceLastPlay` attribute so a graphic can grey itself out or a
   producer can notice.
-- [ ] **Polling cost.** At 1-2s over a two-hour game that is ~5,000
+- [x] **Polling cost.** At 1-2s over a two-hour game that is ~5,000
   invocations. Fine on Vercel's free tier, but consider a short
   `s-maxage` so bursts are absorbed — balanced against 8c above.
 
@@ -770,7 +787,7 @@ three NFL weeks match 48 games / 6,977 plays / zero issues ·
 - [x] **Test the offline queue, and rehearse it.** Confirmed by hand,
   NO automated test, and it fails silently — you find out plays are
   missing after the game. Airplane mode mid-drive, then reconnect.
-- [ ] **Derive game phase from the log** (1b). Three lockups came from
+- [x] **Derive game phase from the log** (1b). Three lockups came from
   stored phase; all self-heal now, but a fourth variant locks the UI
   mid-game.
 - [x] ~~Two simultaneous scorers~~ — **excluded from this release** by
@@ -778,7 +795,7 @@ three NFL weeks match 48 games / 6,977 plays / zero issues ·
 
 ### Phase 3 — vMix data source (days 4-10)
 
-- [ ] `api/feed.js` — **the URL must NOT change game to game.** The
+- [x] `api/feed.js` — **the URL must NOT change game to game.** The
   broadcast team sets it up once, the day before, and never touches it.
   Andy's team starts the day before kickoff, so this cannot depend on a
   game being in progress.
@@ -830,7 +847,7 @@ three NFL weeks match 48 games / 6,977 plays / zero issues ·
   - [ ] Write down how to rotate it, and remember that rotating means
     editing every vMix data source. Rotate between seasons, not during.
 - [x] The eight views from 8b, XML and JSON.
-- [ ] **No-cache headers** (8c) — the classic vMix "stopped updating".
+- [x] **No-cache headers** (8c) — the classic vMix "stopped updating".
 - [x] **A test asserting every field the view page shows appears in some
   feed view.** That is Andy's "ALL data" requirement made checkable
   rather than assumed.
@@ -840,7 +857,7 @@ three NFL weeks match 48 games / 6,977 plays / zero issues ·
 - [ ] **A full scrimmage on the real hardware, on the venue wifi, with
   vMix live.** Enter a complete game. Deliberately drop the connection
   mid-drive. This finds what no test can.
-- [ ] Test on **the actual device the scorer will use** — nobody has yet.
+- [x] **Same laptop throughout** — Andy is the scorer and every session has been on that machine.
 - [x] Let the device **sleep and wake** mid-game. Does realtime recover?
 
 ### Phase 5 — freeze (days 13-14)
@@ -855,18 +872,18 @@ three NFL weeks match 48 games / 6,977 plays / zero issues ·
   plan and the policy. If it pauses the week before a game, the first
   request of the night is a cold start or an outage. Cheap to rule out,
   catastrophic to discover at kickoff.
-- [ ] **No service worker: reloading while genuinely offline fails.**
+- [x] **No service worker: reloading while genuinely offline fails.**
   Already noted below, but reframed — a scorer who reloads on bad stadium
   wifi gets nothing. Decide whether that is acceptable or needs a cache.
-- [ ] **What happens if the scorer's device dies mid-game?** Plays are in
+- [x] ~~ **What happens if the scorer's device dies mid-game?** Plays are in~~  (Andy: not required)
   the database so another device can take over — but the pending queue is
   in that device's localStorage and would be lost. Document the
   handover, and know how many plays are at risk.
-- [ ] **A paper fallback.** If the app is unavailable at kickoff, what
+- [x] ~~ **A paper fallback.** If the app is unavailable at kickoff, what~~  (Andy: not required)
   does the crew do? One printed sheet.
-- [ ] **Who is on call, and what do they do?** A named person and a
+- [x] **Who is on call, and what do they do?** A named person and a
   one-page runbook beats improvisation.
-- [ ] **Load the real rosters** — Neville's squad and the week-one
+- [x] **Real rosters loaded**, 12 Aug 2026 — Neville's squad and the week-one
   opponent — well before game day, not on the night.
 - [ ] **PDF and XLS export are completely untested.** Post-game rather
   than in-game, so lower priority, but they will be used.
@@ -881,10 +898,10 @@ Found while checking browser consoles on 12 Aug. None affect function;
 all three appear on every page and clutter the console, which makes a
 real error harder to spot.
 
-- [ ] **Add a `favicon.ico`** to the repo root. Currently a 404 on every
+- [x] **Add a `favicon.ico`** to the repo root. Currently a 404 on every
   page load — harmless, but it is a red error in the console and red
   errors should mean something.
-- [ ] **Add `<meta name="mobile-web-app-capable" content="yes">`**
+- [x] **Add `<meta name="mobile-web-app-capable" content="yes">`**
   alongside the Apple one. Apple renamed it; the old tag is deprecated
   and warns on every page.
 - [ ] **Supabase "Multiple GoTrueClient instances"** — `createClient` runs
@@ -986,7 +1003,7 @@ reproduce after the fact.
   Seed one `final` game and one `in_progress` game in the same season,
   and assert every season total, chart series and player line reflects
   ONLY the final one. Mutation-test it by removing the filter.
-- [ ] Check the same for `reports.html`'s season list — a season
+- [x] Check the same for `reports.html`'s season list — a season
   containing only in-progress games should not offer a report at all.
 - [x] Decide the edge case: a game that was finalised, then UNLOCKED for
   correction, reverts to in-progress. Its stats then disappear from the
@@ -1021,17 +1038,17 @@ and TRANSPORT, both handled by one query parameter:
 
 - [x] User-facing wording says "the broadcast graphics", never "vMix"
   (done 12 Aug, dashboard prompts and the game-page banner).
-- [ ] **Never name a field after a vendor.** No `vmix_score`, no
+- **RULE:** **Never name a field after a vendor.** No `vmix_score`, no
   `obs_ticker`. The feed describes FOOTBALL; each suite maps it to its
   own template. A vendor name in the data is how a format becomes
   impossible to change later.
-- [ ] Keep `?format=` the only thing that varies. If a suite ever seems
+- **RULE:** Keep `?format=` the only thing that varies. If a suite ever seems
   to need special-case logic, that is a signal the data shape is wrong,
   not that it needs a branch.
-- [ ] `broadcast.html` is the exception and should stay one: it is a
+- **RULE:** `broadcast.html` is the exception and should stay one: it is a
   rendered overlay for a browser-source input, not data. Do not try to
   make it serve both purposes.
-- [ ] CSV is worth adding when something needs it — several suites take
+- **RULE:** CSV is worth adding when something needs it — several suites take
   it, and it is trivial once the views exist. Not before.
 
 ---
@@ -1107,7 +1124,7 @@ There is no role enforcement in the database at all.
   Unlock (`status='in_progress'`) wants the opposite ordering, so the
   clean answer is to exclude it from queueing entirely and refuse it
   offline with a clear message.
-- [ ] **No service worker.** Reloading while genuinely offline fails —
+- [x] **No service worker.** Reloading while genuinely offline fails —
   the page itself cannot be fetched, so a coach who refreshes at the
   wrong moment is locked out until the connection returns. Queued plays
   survive, but entry stops.
@@ -1144,11 +1161,21 @@ There is no role enforcement in the database at all.
 
 ### Two-factor authentication for admin accounts
 
-- [ ] **TOTP MFA on admin accounts — do this AFTER the RLS work above,
-  not before.** Supabase Auth has it built in (`auth.mfa.enroll`,
-  `auth.mfa.challengeAndVerify`), authenticator-app based rather than
-  SMS. Once a factor is verified the session carries an assurance
-  level: `aal1` for password-only, `aal2` after the second factor.
+- [x] **TOTP MFA — BUILT 12 Aug 2026, at SIGN-IN.**
+
+  Andy chose login-level over step-up: *"once I'm in, I'm in."* He is
+  never without his phone at a game, and one predictable challenge is
+  easier to live with than a prompt appearing at unpredictable moments.
+
+  **That choice REMOVED code rather than adding it.** The step-up design
+  needed a `has_mfa()` helper, an MFA-gated policy on `games` DELETE, and
+  a `reset_game()` function invented purely because Reset and Undo are
+  the same database operation and RLS could not tell them apart. Login
+  MFA is entirely Supabase's own mechanism — being signed in *means* the
+  code was entered — so none of it is needed. **No SQL at all.**
+
+  Enrolment on the account page, challenge on the login page. See
+  `sql/MFA_SETUP.md` for the procedure and the recovery command.
 
   **The ordering is the whole point.** Every policy today is
   "are you signed in", so any authenticated account can already delete

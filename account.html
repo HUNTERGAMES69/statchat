@@ -102,6 +102,56 @@
       <button id="savePasswordBtn" style="margin-top:14px;">Change password</button>
     </div>
 
+    <!-- Two-factor. Deliberately NOT required to sign in: it gates only
+         the operations that destroy data. See sql/mfa_destructive_ops.sql
+         for why, and for the escape hatch if a phone is lost. -->
+    <div class="card">
+      <h2>Two-factor authentication</h2>
+      <div id="mfaMsg"></div>
+      <p style="color:#666; font-size:13px; margin:0 0 12px;">
+        Once enabled, signing in asks for a six-digit code from your
+        authenticator app as well as your password. Nothing else changes &mdash;
+        entering plays, Undo and everything during a game work exactly as
+        before. This protects against someone getting hold of your password;
+        it is not a guard against your own mistakes.
+      </p>
+
+      <div id="mfaEnrolled" style="display:none;">
+        <p style="font-weight:700; color:#0f6e56; margin:0 0 10px;">
+          &#10003; Two-factor is set up on this account.</p>
+        <p style="color:#666; font-size:13px; margin:0 0 10px;">
+          You will be asked for a code next time you sign in.</p>
+        <button id="mfaRemoveBtn" class="danger" style="margin-top:14px;">Remove two-factor</button>
+      </div>
+
+      <div id="mfaSetup" style="display:none;">
+        <button id="mfaStartBtn">Set up two-factor</button>
+        <div id="mfaQrBox" style="display:none; margin-top:14px;">
+          <p style="font-size:13px; margin:0 0 8px;">Scan this with your
+            authenticator app, then enter the six-digit code it shows.</p>
+          <div id="mfaQr" style="background:#fff; padding:8px; display:inline-block; border:1px solid #ddd; border-radius:6px;"></div>
+          <p style="font-size:12px; color:#666; margin:8px 0 0;">
+            Cannot scan? Enter this key by hand:
+            <code id="mfaSecret" style="font-size:12px; word-break:break-all;"></code></p>
+          <label style="margin-top:12px;">Six-digit code
+            <input type="text" id="mfaCode" inputmode="numeric" maxlength="6"
+                   autocomplete="one-time-code" placeholder="000000" style="width:130px;"></label>
+          <button id="mfaConfirmBtn" style="margin-top:10px;">Confirm and enable</button>
+        </div>
+      </div>
+
+      <div class="note" style="margin-top:14px; font-size:13px;">
+        <strong>Before you enable it, read this.</strong> After enrolling,
+        <strong>sign out and sign back in</strong> to prove the code works &mdash;
+        at a desk, not at a stadium. If the phone is ever lost, an admin can clear
+        the factor from the Supabase SQL editor with
+        <code>delete from auth.mfa_factors where user_id = '&lt;uuid&gt;';</code>
+        The SQL editor never asks for a code, so you cannot be locked out
+        permanently. Enrol the second admin account too &mdash; it is your way
+        back in.
+      </div>
+    </div>
+
     <div id="userMgmtCard" class="card hidden">
       <h2>User management</h2>
       <p class="sub">Invite a new user, or view, reset, resend, and remove existing ones. Admin only.</p>
@@ -167,6 +217,9 @@
         currentUserEmail = session.user.email;
         currentAccessToken = session.access_token;
         init();
+        // Read the two-factor state after init, so the card reflects
+        // reality rather than its default hidden state.
+        refreshMfaState();
       } else {
         window.location.href = '/';
       }
@@ -245,6 +298,96 @@
       showMsg('avatarMsg', 'Photo saved.', 'success');
     } catch (err){
       showMsg('avatarMsg', err.message, 'error');
+    }
+  });
+
+  // ---- two-factor -----------------------------------------------------
+  // Supabase's own TOTP. Enrol produces a QR and a secret; verifying a
+  // code once raises the session to aal2, which is what the RLS policies
+  // and reset_game() check.
+  //
+  // Note what is NOT here: no gate on sign-in, no gate on entering plays.
+  // The session starts at aal1 and stays there until you deliberately
+  // step up, which is the whole design.
+  let mfaFactorId = null;
+
+  async function refreshMfaState(){
+    const enrolled = document.getElementById('mfaEnrolled');
+    const setup = document.getElementById('mfaSetup');
+    if (!enrolled || !setup) return;
+    try {
+      const { data, error } = await supabaseClient.auth.mfa.listFactors();
+      if (error) throw error;
+      const totp = (data && data.totp || []).find(f => f.status === 'verified');
+      mfaFactorId = totp ? totp.id : null;
+
+      enrolled.style.display = totp ? 'block' : 'none';
+      setup.style.display = totp ? 'none' : 'block';
+
+
+    } catch (e) {
+      showMsg('mfaMsg', 'Could not read two-factor status: ' + e.message, 'error');
+    }
+  }
+
+  const mfaStart = document.getElementById('mfaStartBtn');
+  if (mfaStart) mfaStart.addEventListener('click', async () => {
+    mfaStart.disabled = true;
+    try {
+      const { data, error } = await supabaseClient.auth.mfa.enroll({
+        factorType: 'totp', friendlyName: 'StatChat ' + Date.now()
+      });
+      if (error) throw error;
+      mfaFactorId = data.id;
+      document.getElementById('mfaQr').innerHTML = data.totp.qr_code;
+      document.getElementById('mfaSecret').textContent = data.totp.secret;
+      document.getElementById('mfaQrBox').style.display = 'block';
+      mfaStart.style.display = 'none';
+    } catch (e) {
+      showMsg('mfaMsg', e.message, 'error');
+      mfaStart.disabled = false;
+    }
+  });
+
+  const mfaConfirm = document.getElementById('mfaConfirmBtn');
+  if (mfaConfirm) mfaConfirm.addEventListener('click', async () => {
+    const code = (document.getElementById('mfaCode').value || '').trim();
+    if (!/^\d{6}$/.test(code)){
+      showMsg('mfaMsg', 'Enter the six-digit code from your authenticator app.', 'error');
+      return;
+    }
+    mfaConfirm.disabled = true;
+    try {
+      const { data: ch, error: chErr } =
+        await supabaseClient.auth.mfa.challenge({ factorId: mfaFactorId });
+      if (chErr) throw chErr;
+      const { error } = await supabaseClient.auth.mfa.verify({
+        factorId: mfaFactorId, challengeId: ch.id, code
+      });
+      if (error) throw error;
+      showMsg('mfaMsg', 'Two-factor is on. Save your recovery method somewhere ' +
+        'that is not this phone.', 'success');
+      document.getElementById('mfaQrBox').style.display = 'none';
+      refreshMfaState();
+    } catch (e) {
+      showMsg('mfaMsg', 'That code was not accepted: ' + e.message, 'error');
+      mfaConfirm.disabled = false;
+    }
+  });
+
+  const mfaRemove = document.getElementById('mfaRemoveBtn');
+  if (mfaRemove) mfaRemove.addEventListener('click', async () => {
+    if (!window.confirm('Remove two-factor from this account?\n\nDeleting and ' +
+        'resetting games will stop working until it is set up again.')) return;
+    try {
+      const { error } = await supabaseClient.auth.mfa.unenroll({ factorId: mfaFactorId });
+      if (error) throw error;
+      showMsg('mfaMsg', 'Two-factor removed.', 'success');
+      const st = document.getElementById('mfaStartBtn');
+      if (st){ st.style.display = ''; st.disabled = false; }
+      refreshMfaState();
+    } catch (e) {
+      showMsg('mfaMsg', e.message, 'error');
     }
   });
 
