@@ -30,20 +30,70 @@
 // copies and is retired. The engine is now covered by the suites in
 // tests/, the fuzzer, and the NFL replay harness.
 
+// COLOR HELPERS
+// -------------
+// Five pages blend a team's colours, and what reaches these functions is
+// not reliably a clean six-digit hex. The opponent's colours come from a
+// database column a human filled in, and #fff is what most colour
+// pickers hand you. Sliced as if it were six digits, #fff yields NaN --
+// and NaN poisons every comparison silently, because `NaN > 0.55` is
+// false, so a bad value quietly chose white text instead of failing
+// anywhere anyone would look.
+//
+// Three separate defences had grown up around that. game.html redefined
+// luminance and safeTextColor with length guards (silently OVERRIDING
+// these, since its inline script loads after engine.js -- so the play
+// page and the report pages were running different code). broadcast.html
+// wrapped safeTextColor in a try/catch. The pages `|| '#8B0000'` a
+// missing value, which catches null and '' but not '#fff'. Each was
+// added when a specific site misbehaved: the blacklist pattern
+// PROJECT_NOTES.md warns about, found one stray at a time.
+//
+// Consolidated 13 Aug 2026: normalise once, here, and the callers need
+// no defences at all. Note game.html's guard was not merely redundant,
+// it was wrong -- `#fff` failed its length test and returned 0, scoring
+// white as black.
+function normalizeHex(hex){
+  if (typeof hex !== 'string') return null;
+  const h = hex.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(h)) return h.toLowerCase();
+  // #abc IS #aabbcc -- the same colour, not an invalid one.
+  if (/^#[0-9a-fA-F]{3}$/.test(h)) return ('#' + h[1]+h[1] + h[2]+h[2] + h[3]+h[3]).toLowerCase();
+  return null;
+}
+
+// Genuinely unreadable input scores as black, so safeTextColor puts
+// white on it. A wrong-but-legible choice beats NaN, which produced a
+// choice that only LOOKED deliberate.
 function luminance(hex){
-  const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+  const h = normalizeHex(hex);
+  if (!h) return 0;
+  const r = parseInt(h.slice(1,3), 16), g = parseInt(h.slice(3,5), 16), b = parseInt(h.slice(5,7), 16);
   return (0.299*r + 0.587*g + 0.114*b) / 255;
 }
 
 function colorDistance(hexA, hexB){
-  const a = { r: parseInt(hexA.slice(1,3),16), g: parseInt(hexA.slice(3,5),16), b: parseInt(hexA.slice(5,7),16) };
-  const b = { r: parseInt(hexB.slice(1,3),16), g: parseInt(hexB.slice(3,5),16), b: parseInt(hexB.slice(5,7),16) };
+  const na = normalizeHex(hexA), nb = normalizeHex(hexB);
+  // A colour we cannot read is reported as maximally distant, so a
+  // caller asking "are these too similar?" keeps what it has rather
+  // than swapping on the strength of a comparison it never made.
+  if (!na || !nb) return Infinity;
+  const a = { r: parseInt(na.slice(1,3),16), g: parseInt(na.slice(3,5),16), b: parseInt(na.slice(5,7),16) };
+  const b = { r: parseInt(nb.slice(1,3),16), g: parseInt(nb.slice(3,5),16), b: parseInt(nb.slice(5,7),16) };
   return Math.sqrt((a.r-b.r)**2 + (a.g-b.g)**2 + (a.b-b.b)**2);
 }
 
 function safeTextColor(bgHex, preferredHex){
-  if (Math.abs(luminance(bgHex) - luminance(preferredHex)) > 0.35) return preferredHex;
-  return luminance(bgHex) > 0.55 ? '#1a1a1a' : '#ffffff';
+  const bg = normalizeHex(bgHex), pref = normalizeHex(preferredHex);
+  // No usable background: nothing to contrast against, so honour the
+  // preference if there is one.
+  if (!bg) return pref || '#ffffff';
+  // No usable preference: pick for legibility on the background rather
+  // than defaulting to white on a pale field, which is what the
+  // previous game.html guard did.
+  if (!pref) return luminance(bg) > 0.55 ? '#1a1a1a' : '#ffffff';
+  if (Math.abs(luminance(bg) - luminance(pref)) > 0.35) return pref;
+  return luminance(bg) > 0.55 ? '#1a1a1a' : '#ffffff';
 }
 
 function rosterName(teamKey, num, order){
@@ -741,6 +791,7 @@ function buildContext(game, rosterRows, playRows, ourBranding){
 // The guard matters -- without it the browser throws on `module`.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    normalizeHex,
     luminance,
     colorDistance,
     safeTextColor,
