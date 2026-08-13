@@ -165,6 +165,65 @@ async function run() {
     h.close();
   }
 
+  // --- WAKE FROM SLEEP -------------------------------------------------
+  // The realistic case, not an edge case: halftime is twenty minutes, and
+  // a scorer who shuts the laptop lid and reopens it for the second half
+  // is ordinary behaviour.
+  //
+  // The `online` event alone does not cover it. Closing a lid does not
+  // necessarily change the browser's network state, so on waking there
+  // may be no 'online' event at all -- while the websocket has certainly
+  // dropped and any queued play is still in localStorage. game.html had
+  // NO visibilitychange handler until 12 Aug 2026; view.html did.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    h.db.failNext = 'offline';
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '4' });
+    await settle();
+    if (!queued(h).length) {
+      fail('wake', 'setup failed — nothing queued');
+    } else {
+      // The server is reachable again, and the tab becomes visible.
+      h.db.failNext = null;
+      Object.defineProperty(h.document, 'hidden', { value: false, configurable: true });
+      h.document.dispatchEvent(new h.window.Event('visibilitychange'));
+      await new Promise(r => setTimeout(r, 600));
+
+      if (queued(h).length) {
+        fail('wake', 'a play was still queued after the tab woke up. A ' +
+             'scorer returning for the second half would carry the gap ' +
+             'through the rest of the game, and nothing would say so');
+      }
+      if (!h.db.plays.filter(p => p.text).length) {
+        fail('wake', 'nothing reached the server after waking');
+      }
+    }
+    h.close();
+  }
+
+  // --- waking with nothing queued must be harmless ---------------------
+  // It fires on every tab switch, so it has to be cheap and safe.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '6' });
+    await settle();
+    const before = Number(h.evalIn('plays.length'));
+    Object.defineProperty(h.document, 'hidden', { value: false, configurable: true });
+    for (let i = 0; i < 3; i++) {
+      h.document.dispatchEvent(new h.window.Event('visibilitychange'));
+    }
+    await new Promise(r => setTimeout(r, 400));
+    const after = Number(h.evalIn('plays.length'));
+    if (after !== before) {
+      fail('wake', 'switching tabs changed the play count from ' + before +
+           ' to ' + after + ' — waking must be idempotent, it fires ' +
+           'constantly');
+    }
+    h.close();
+  }
+
   // --- the scorer can see there is a problem --------------------------
   {
     const h = await bootGamePage();
