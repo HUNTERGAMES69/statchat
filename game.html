@@ -2893,6 +2893,31 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }));
       document.getElementById('gk_kicker_manual').addEventListener('input', e => { kickerNum = e.target.value.trim(); });
       attachNameConfirm('gk_kicker_manual', guided.kickingTeam, ['special','offense','defense']);
+      // Same pre-selection as the play panel's kickoff. Without it the
+      // second-half kickoff -- the one place this flow is used after the
+      // opening kick -- would be the only kickoff in the game that forgot
+      // who kicks, which is the sort of inconsistency that reads as a bug.
+      //
+      // kickerNum is set as well as the field, because this handler gates
+      // on `if (!kickerNum) return` and a suggestion the coach accepts
+      // without touching must still save.
+      (function seedGuidedKicker(){
+        for (let i = plays.length - 1; i >= 0; i--){
+          const r = plays[i].roles;
+          if (!r || r.playType !== 'kickoff') continue;
+          const k = r.kicker;
+          if (k && k.team === guided.kickingTeam && k.num){
+            kickerNum = k.num;
+            document.getElementById('gk_kicker_manual').value = k.num;
+            const btn = content.querySelector('.gk_kicker_pick[data-num="' + k.num + '"]');
+            if (btn){
+              btn.classList.add('suggested');
+              btn.title = 'Last player to kick off — tap to confirm, or pick/type someone else';
+            }
+            return;
+          }
+        }
+      })();
       document.getElementById('guidedKickoffSave').addEventListener('click', () => {
         if (!kickerNum) return;
         const text = nameInSpecialTeams(guided.kickingTeam, kickerNum) + ' kicks off';
@@ -4129,6 +4154,55 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (btn){
           btn.classList.add('suggested');
           btn.title = 'Last quarterback to throw — tap to confirm, or pick/type someone else';
+        }
+      }
+    }
+
+    // Pre-select the kicker or punter, for the same reason and by the same
+    // mechanism as the quarterback above: a team kicks with the same player
+    // all night, so defaulting to whoever last did it saves a tap on every
+    // kick. Suggestion only -- picking or typing someone else overrides it,
+    // and nothing is suggested until that team has actually kicked once.
+    //
+    // SCOPED BY PLAY TYPE rather than one shared "kicker" memory. A
+    // placekicker and a kickoff specialist are frequently different
+    // players, so carrying one number across all three would suggest the
+    // wrong man about as often as the right one on the teams that split the
+    // job -- and a wrong suggestion is worse than none, because it looks
+    // deliberate and gets confirmed with a tap.
+    //
+    // FG and PAT DO share, because that genuinely is the same player
+    // answering the same question -- the same reasoning that puts Pass,
+    // Sack, Interception and 2PT pass on one passer memory.
+    //
+    // The cost of splitting is one extra selection the first time each kind
+    // of kick comes up. The cost of sharing is a wrong name on a real play.
+    const KICK_DEFAULTS = {
+      kickoff: { role: 'kicker', from: ['kickoff'],      label: 'Last player to kick off' },
+      fg:      { role: 'kicker', from: ['fg', 'pat'],    label: 'Last placekicker' },
+      pat:     { role: 'kicker', from: ['fg', 'pat'],    label: 'Last placekicker' },
+      punt:    { role: 'punter', from: ['punt'],         label: 'Last punter' }
+    };
+    const kickDef = KICK_DEFAULTS[type];
+    if (kickDef && document.getElementById('pp_' + kickDef.role + '_grid')){
+      let lastNum = null;
+      for (let i = plays.length - 1; i >= 0; i--){
+        const r = plays[i].roles;
+        if (!r || !kickDef.from.includes(r.playType)) continue;
+        const who = r[kickDef.role];
+        if (who && who.team === off && who.num){ lastNum = who.num; break; }
+      }
+      if (lastNum){
+        // 'suggested', never 'picked' -- see the quarterback note above. A
+        // committed pick would turn the coach's confirming tap into a
+        // de-select.
+        const manual = document.getElementById('pp_' + kickDef.role + '_manual');
+        if (manual) manual.value = lastNum;
+        sel[kickDef.role] = lastNum;
+        const btn = panel.querySelector('.pp_' + kickDef.role + '_pick[data-num="' + lastNum + '"]');
+        if (btn){
+          btn.classList.add('suggested');
+          btn.title = kickDef.label + ' — tap to confirm, or pick/type someone else';
         }
       }
     }
