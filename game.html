@@ -308,6 +308,40 @@
     }
   });
 
+  // Read the plays from the server and merge in anything still queued on
+  // this device. Extracted from init() so the WAKE handler can call it:
+  // a laptop closed at halftime and reopened for the second half needs
+  // exactly this, and previously nothing ran.
+  async function reloadPlaysFromServer(){
+      const { data: existingPlays } = await supabaseClient
+        .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
+      plays = (existingPlays || []).map(p => ({
+        id: nextId++, text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+        roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override,
+        _seq: p.sequence_number
+      }));
+      // Plays that never reached the server last session are held on this
+      // device. Merge them back in BEFORE anything reads `plays`, or a
+      // reload silently drops them and every later play's down & distance
+      // is recomputed against a game that is missing a snap.
+      loadPendingQueue();
+      if (pendingQueue.length){
+        const onServer = new Set(plays.map(p => p._seq));
+        // Some may have landed after all -- an insert can succeed while
+        // the response is lost. Anything the server already has is done.
+        pendingQueue = pendingQueue.filter(r => !onServer.has(r.sequence_number));
+        savePendingQueue();
+        pendingQueue.forEach(r => {
+          plays.push({
+            id: nextId++, text: r.text, effect: r.effect || {}, team: r.team_side,
+            quarter: r.quarter, roles: r.roles, unresolved: r.unresolved,
+            isDivider: r.is_divider, isOverride: r.is_override, _seq: r.sequence_number
+          });
+        });
+        plays.sort((a, b) => (a._seq || 0) - (b._seq || 0));
+      }
+  }
+
   async function init(){
     const params = new URLSearchParams(window.location.search);
     currentGameId = params.get('id');
@@ -356,39 +390,37 @@
     document.getElementById('gameTitle').textContent = gameLabel + ' — ' + TEAMS.teamA.name + ' vs ' + TEAMS.teamB.name;
     document.getElementById('launchViewLink').href = 'view.html?id=' + currentGameId;
 
-    const { data: existingPlays } = await supabaseClient
-      .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
-    plays = (existingPlays || []).map(p => ({
-      id: nextId++, text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
-      roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override,
-      _seq: p.sequence_number
-    }));
-    // Plays that never reached the server last session are held on this
-    // device. Merge them back in BEFORE anything reads `plays`, or a
-    // reload silently drops them and every later play's down & distance
-    // is recomputed against a game that is missing a snap.
-    loadPendingQueue();
-    if (pendingQueue.length){
-      const onServer = new Set(plays.map(p => p._seq));
-      // Some may have landed after all -- an insert can succeed while
-      // the response is lost. Anything the server already has is done.
-      pendingQueue = pendingQueue.filter(r => !onServer.has(r.sequence_number));
-      savePendingQueue();
-      pendingQueue.forEach(r => {
-        plays.push({
-          id: nextId++, text: r.text, effect: r.effect || {}, team: r.team_side,
-          quarter: r.quarter, roles: r.roles, unresolved: r.unresolved,
-          isDivider: r.is_divider, isOverride: r.is_override, _seq: r.sequence_number
-        });
-      });
-      plays.sort((a, b) => (a._seq || 0) - (b._seq || 0));
-    }
+    await reloadPlaysFromServer();
     nextSequenceNumber = plays.length ? Math.max(...plays.map(p => p._seq || 0)) + 1 : 1;
     renderSyncStatus();
     if (pendingQueue.length){ scheduleSync(); drainPendingQueue(); }
     // Retry the moment the device says it is back online, rather than
     // waiting out the polling interval.
     window.addEventListener('online', () => { if (pendingQueue.length) drainPendingQueue(); });
+
+    // WAKE FROM SLEEP. The `online` event above is not enough: closing a
+    // laptop lid does not necessarily change the browser's network state,
+    // so on waking there may be no 'online' event at all -- while the
+    // websocket has certainly dropped and any queued play is still
+    // sitting in localStorage.
+    //
+    // Halftime is twenty minutes. A scorer who shuts the lid and reopens
+    // it for the second half is the ordinary case, not the edge case.
+    //
+    // On becoming visible again: push anything queued, then re-read the
+    // plays from the server. Re-reading matters because a second device,
+    // or a drain that completed just before sleeping, may have moved the
+    // game on.
+    document.addEventListener('visibilitychange', async () => {
+      if (document.hidden) return;
+      try {
+        if (pendingQueue.length) await drainPendingQueue();
+        await reloadPlaysFromServer();
+      } catch (e) {
+        // Never let a wake-up take the page down -- the next play entry
+        // or the next drain will try again.
+      }
+    });
 
     // Resume exactly where we left off -- read the persisted phase and
     // any in-progress guided step directly, rather than guessing from
