@@ -65,6 +65,29 @@ function normalizeHex(hex){
 // Genuinely unreadable input scores as black, so safeTextColor puts
 // white on it. A wrong-but-legible choice beats NaN, which produced a
 // choice that only LOOKED deliberate.
+// FIELD POSITION -> the way a coach says it.
+// -----------------------------------------
+// fieldPos is possession-relative: 0 is the offence's own goal line, 100
+// is the one they are attacking. So 0-49 is "own N", 51-100 is "opp N",
+// and 50 is NEITHER.
+//
+// NOBODY OWNS THE 50. It is the one yard line that belongs to both teams
+// and is named after neither: on the field, in the rule book and in the
+// press box it is just "the 50". The old form said "own 50", which is
+// wrong in a way that is easy to skim past and then jarring when noticed
+// -- and worse, it implied the 50 sits on one team's half, which is the
+// exact confusion the own/opp wording exists to prevent.
+//
+// Consolidated here 13 Aug 2026. This lived as three byte-identical
+// copies in game.html, view.html and broadcast.html; fixing "own 50"
+// would have meant three edits and left the next change free to fix two
+// of them. Same duplication class as the colour helpers above.
+function markerLabel(fp){
+  if (fp === null || fp === undefined) return '';
+  if (fp === 50) return 'the 50';
+  return fp < 50 ? ('own ' + fp) : ('opp ' + (100 - fp));
+}
+
 function luminance(hex){
   const h = normalizeHex(hex);
   if (!h) return 0;
@@ -791,6 +814,7 @@ function buildContext(game, rosterRows, playRows, ourBranding){
 // The guard matters -- without it the browser throws on `module`.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    markerLabel,
     normalizeHex,
     luminance,
     colorDistance,

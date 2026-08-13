@@ -2,11 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- Without this every page load logs a 404 for /favicon.ico.
-     Harmless, but a red console error should MEAN something. -->
+<title>StatChat broadcast overlay</title>
+<!-- Without these every page load logs a 404 for /favicon.ico. Harmless,
+     but a red console error should MEAN something -- and in vMix the
+     console is the only place a problem shows up at all.
+     These were hand-added to broadcast.html and would have been silently
+     deleted the next time this script ran; they belong here instead. -->
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="logo.png" type="image/png">
-<title>StatChat broadcast overlay</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="team-icon.js"></script>
 <script src="engine.js"></script>
@@ -268,10 +271,9 @@ function formatDuration(sec){
   const m = Math.floor(sec / 60), s = Math.round(sec % 60);
   return m + ':' + String(s).padStart(2, '0');
 }
-function markerLabel(fp){
-  if (fp === null || fp === undefined) return '';
-  return fp <= 50 ? ('own ' + fp) : ('opp ' + (100 - fp));
-}
+// markerLabel() lives in engine.js, loaded above. It was duplicated here
+// (and in view.html, and in broadcast.html) as three identical copies;
+// "own 50" had to be fixed in one place, not three. Removed 13 Aug 2026.
 
 function readFileAsDataURL(file){
   return new Promise(resolve => {
@@ -508,6 +510,27 @@ function extractNameTag(rawName){
         defHtml += tile('Defense', table(['Int','Fum Rec','Sacks','TFL'],
           [{ name: 'Team', values: [defTotals.int, defTotals.fumRec, defTotals.sacks, defTotals.tfl] }]));
       }
+      // Per-player tackles, ADDED 12 Aug 2026. Separate from the team
+      // row above, deliberately: the two answer different questions and
+      // will not agree.
+      //
+      // Team TFL counts from the play log and needs no named tackler, so
+      // it is a CEILING. Per-player tackles come from the optional
+      // "tackled by" field, so they are a FLOOR. Showing them in one
+      // table would make the app look like it was contradicting itself.
+      const defPlayers = Object.keys(box[teamKey].defense || {})
+        .filter(n => n !== 'TEAM' && (box[teamKey].defense[n].tackles || 0) > 0)
+        .map(n => ({ name: n, d: box[teamKey].defense[n] }))
+        .sort((a, b) => (b.d.tackles || 0) - (a.d.tackles || 0));
+      if (defPlayers.length){
+        defHtml += tile('Tackles', table(['Tack','TFL','Sacks','Int'],
+          defPlayers.map(p => ({ name: p.name,
+            values: [p.d.tackles || 0, p.d.tfl || 0, p.d.sacks || 0, p.d.int || 0] }))) +
+          '<p class="hint" style="margin:6px 0 0; font-size:11px;">' +
+          'Only plays where a tackler was named. The team TFL above counts ' +
+          'every play for a loss, so it may be higher.</p>');
+      }
+
       const defNums = hasDef ? ['team'] : [];
       if (!rushNums.length && !passNums.length && !recNums.length && !stTotalEntries && !defNums.length){
         passHtml += '<p class="hint">No stats yet for ' + team.name + '.</p>';
