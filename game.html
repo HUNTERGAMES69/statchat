@@ -325,12 +325,39 @@
   // a laptop closed at halftime and reopened for the second half needs
   // exactly this, and previously nothing ran.
   async function reloadPlaysFromServer(){
-      const { data: existingPlays } = await supabaseClient
+      const { data: existingPlays, error: playsError } = await supabaseClient
         .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
+      // A FAILED READ IS NOT AN EMPTY GAME.
+      // ----------------------------------------------------------------
+      // This destructured only `data` and ignored `error`. Offline, the
+      // query returns data:null with an error set, `(null || [])` became
+      // `[]`, and the whole in-memory play log was replaced with nothing.
+      //
+      // That is reachable during an ordinary outage, because the
+      // visibilitychange handler below calls this on every alt-tab: switch
+      // to another window and back with no connection and the game LOOKS
+      // ERASED. Down, distance, field position and the score all recompute
+      // from an empty log, every drive tile empties, and plays entered
+      // before the outage cannot be undone because they are no longer in
+      // the array to pop.
+      //
+      // Nothing was ever lost on the server -- the rows are still there
+      // and a reload once online brings them all back -- but a scorer
+      // watching the board go blank mid-drive has no way to know that.
+      //
+      // Keep what we have and say so. The queued plays are already in
+      // `plays` on this path (they were entered on this device), so there
+      // is nothing to merge; the drain will retry when the link returns.
+      if (playsError || !existingPlays){
+        isOnline = false;
+        renderConnStatus();
+        renderSyncStatus();
+        return false;
+      }
       plays = (existingPlays || []).map(p => ({
         id: nextId++, text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
         roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override,
-        _seq: p.sequence_number
+        _seq: p.sequence_number, _onServer: true
       }));
       // Plays that never reached the server last session are held on this
       // device. Merge them back in BEFORE anything reads `plays`, or a
@@ -352,6 +379,7 @@
         });
         plays.sort((a, b) => (a._seq || 0) - (b._seq || 0));
       }
+      return true;
   }
 
   async function init(){
@@ -2052,6 +2080,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     el.innerHTML = '\u26A0 <b>No connection to the server.</b> ' +
       'Keep entering plays &mdash; they are saved on this device and will ' +
       'upload when the connection returns.' +
+      '<br><b>Undo is limited.</b> Plays entered while offline can be undone as ' +
+      'normal; anything already saved to the server cannot, until the ' +
+      'connection is back.' +
       '<br><b>Do not refresh or close this tab.</b> Nothing is lost if you ' +
       'do, but the page cannot reload without a connection, so you would ' +
       'be unable to enter anything until it comes back.';
@@ -2172,6 +2203,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         renderSyncStatus();
         return;
       }
+      // Landed. Mark the matching play so undo knows it is on the server
+      // now -- otherwise a play that queued during an outage and drained
+      // on reconnection would still look local, and undoing it offline
+      // later would silently reverse itself.
+      const landed = plays.find(p => p._seq === row.sequence_number);
+      if (landed) landed._onServer = true;
       pendingQueue.shift();
       savePendingQueue();
     }
@@ -2215,6 +2252,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       enqueuePlay(row);
       showMsg('gameMsg', 'No connection to the server — this play is saved on this device and ' +
         'will upload automatically when the connection comes back. Keep entering plays as normal.', 'error');
+    } else {
+      // KNOWN TO BE ON THE SERVER. Undo consults this while offline: a row
+      // the server has is one whose delete cannot be applied now and is
+      // never retried, so undoing it would silently reverse itself later.
+      //
+      // Tracked here rather than inferred from pendingQueue, which is a
+      // race: for the moment between pressing Save and the insert failing,
+      // a play is in neither place, and undo refused the very play a
+      // scorer had just typed and wanted back.
+      playObj._onServer = true;
     }
   }
 
@@ -5789,6 +5836,35 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   document.getElementById('undoBtn').addEventListener('click', async () => {
     if (!plays.length) return;
+    // OFFLINE, UNDO IS ONLY SAFE FOR PLAYS THE SERVER HAS NEVER SEEN.
+    // ------------------------------------------------------------------
+    // Undo removes the play locally and then deletes the row. With no
+    // connection the delete fails, nothing retries it, and the row is
+    // still on the server -- so the next successful reload brings the
+    // undone play BACK. A silent reversion twenty minutes later, with
+    // nothing to connect it to the undo that caused it.
+    //
+    // A play entered DURING the outage is different: it never reached the
+    // server, it is sitting in this device's queue, and dropping it from
+    // that queue is the entire job. That is also the undo a scorer
+    // actually needs mid-drive -- "I just typed that wrong" -- so
+    // blocking undo outright would take away the useful half to prevent
+    // the harmful one.
+    //
+    // Refused rather than warned. A warning that says "do not press this"
+    // still leaves the button working, and under pressure it gets pressed.
+    // The correction is not lost: once the connection returns, undo works
+    // normally, and any play can be removed from the log at any time.
+    // Rows loaded FROM the server at page load are on it by definition;
+    // rows written this session are marked when their insert succeeds.
+    const last = plays[plays.length - 1];
+    if (!isOnline && last._onServer){
+      showMsg('gameMsg', 'No connection — this play is already saved on the server, ' +
+        'so it cannot be undone yet. Undoing it here would look right and then ' +
+        'reappear when the connection returns. Plays entered while offline can ' +
+        'still be undone, and this one can be undone or deleted once you are back online.', 'error');
+      return;
+    }
     const removed = plays.pop();
     // A HALF OR GAME DIVIDER AND ITS CLOCK ROW ARE ONE UNIT.
     //
