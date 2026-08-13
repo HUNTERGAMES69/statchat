@@ -255,6 +255,99 @@ async function run() {
     h.close();
   }
 
+  // --- THE CHOICE MUST SURVIVE A RELOAD ---------------------------------
+  // Added 13 Aug 2026. Picking the right player made the LOG TEXT right
+  // and nothing else: the saved play carried the jersey number alone, so
+  // every later reader resolved it back through the roster map -- which
+  // holds one name per number and keeps whichever row loaded last. The
+  // log said one man, the box score said the other, and only after a
+  // reload, so it was invisible during the game that produced it.
+  //
+  // Both entry routes are covered, because they were separately broken:
+  // tapping the grid recorded the name, TYPING the number did not. And
+  // both sides of the ball, because the carrier and the tackler are built
+  // in different places and were fixed hours apart.
+  //
+  // Asserting after bootPage('view.html', ...) is the point of the test.
+  // Checking the live page proves nothing: the temporary roster override
+  // is still in memory there, so the wrong-man bug reads as correct right
+  // up until the page is reloaded.
+  {
+    const roster = defaultRoster().filter(r => r.team_side === 'teamA').concat([
+      { team_side: 'teamA', unit: 'offense', jersey_number: '7',  player_name: 'Alpha Ates',  position: 'RB' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '7',  player_name: 'Bravo Boone', position: 'RB' },
+      { team_side: 'teamB', unit: 'defense', jersey_number: '55', player_name: 'Dane Dorsey', position: 'LB' },
+      { team_side: 'teamB', unit: 'defense', jersey_number: '55', player_name: 'Earl Eady',   position: 'LB' }
+    ]);
+    const h = await bootGamePage({ roster });
+    const { window: win, document: doc } = h;
+
+    // Whoever the roster map resolves to by default is the man we must
+    // NOT end up crediting -- picking the default would pass either way.
+    const defaultCarrier = h.evalIn('TEAMS.teamA.rosterOffense["7"]');
+    const defaultTackler = h.evalIn('TEAMS.teamB.rosterDefense["55"]');
+
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="rush"]'));
+    typeInto(win, doc.getElementById('pp_carrier_manual'), '7');
+    const carrierAlts = [...doc.querySelectorAll('.nameConfirmAlt')];
+    if (!carrierAlts.length) {
+      // The roster maps hold one name per number, so before 13 Aug the
+      // second same-unit player was not offered at all and was reachable
+      // only by tapping the grid.
+      fail('shared number', 'typing #7 offered no alternative — the other #7 is unreachable by hand');
+    } else {
+      click(win, carrierAlts[0]);
+    }
+    typeInto(win, doc.getElementById('pp_yards'), '4');
+    typeInto(win, doc.getElementById('pp_credit_manual'), '55');
+    const tacklerAlts = [...doc.querySelectorAll('.nameConfirmAlt')];
+    if (!tacklerAlts.length) {
+      fail('shared number', 'typing tackler #55 offered no alternative');
+    } else {
+      click(win, tacklerAlts[0]);
+    }
+    click(win, doc.getElementById('pp_review'));
+    click(win, doc.getElementById('saveBtn'));
+
+    const saved = h.db.plays[h.db.plays.length - 1];
+    const wantCarrier = saved && saved.roles && saved.roles.carrier && saved.roles.carrier.name;
+    const wantTackler = saved && saved.roles && saved.roles.defense && saved.roles.defense.name;
+    if (!wantCarrier) {
+      fail('shared number', 'the saved play records no carrier NAME, only #' +
+           (saved && saved.roles && saved.roles.carrier && saved.roles.carrier.num) +
+           ' — the disambiguation was thrown away');
+    }
+    if (!wantTackler) {
+      fail('shared number', 'the saved play records no tackler NAME, only #' +
+           (saved && saved.roles && saved.roles.defense && saved.roles.defense.num));
+    }
+    if (wantCarrier && wantCarrier === defaultCarrier) {
+      fail('shared number', 'test is not proving anything: it picked the roster default (' +
+           defaultCarrier + '), which would pass even unfixed');
+    }
+
+    const plays = h.db.plays.map((p, i) =>
+      Object.assign({}, p, { sequence_number: p.sequence_number || i + 1 }));
+    h.close();
+
+    const v = await bootPage('view.html', { existingPlays: plays, roster });
+    await new Promise(r => setTimeout(r, 250));
+    const box = JSON.parse(v.evalIn('JSON.stringify(computeBoxScore(plays))'));
+    const rushNames = Object.keys((box.teamA || {}).rushing || {}).filter(n => n !== 'TEAM');
+    const tackNames = Object.keys((box.teamB || {}).defense || {});
+    if (wantCarrier && rushNames.indexOf(wantCarrier) === -1) {
+      fail('shared number', 'after a reload the carry is credited to ' +
+           (rushNames.join(', ') || 'nobody') + ', not to ' + wantCarrier +
+           ' — the box score fell back to the roster map');
+    }
+    if (wantTackler && tackNames.indexOf(wantTackler) === -1) {
+      fail('shared number', 'after a reload the tackle is credited to ' +
+           (tackNames.join(', ') || 'nobody') + ', not to ' + wantTackler);
+    }
+    v.close();
+  }
+
   return failures;
 }
 

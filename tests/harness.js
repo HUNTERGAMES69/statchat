@@ -89,6 +89,8 @@ function makeMockSupabase(db) {
         Object.assign(db.gameFields, fields);
         return this;
       },
+      // Records the intent only -- the row removal happens in then(),
+      // once the .eq() filters have been collected.
       delete() { this._op = 'delete'; return this; },
       eq(col, val) { this._filters[col] = val; return this; },
       order() { return this; },
@@ -110,6 +112,37 @@ function makeMockSupabase(db) {
             ? db.existingPlays.concat(db.plays) : [];
           return Promise.resolve({ data: null, count: rows.length, error: null })
             .then(resolve, reject);
+        }
+        // DELETE, actually performed.
+        // ------------------------------------------------------------
+        // This was a no-op until 13 Aug 2026: `delete()` set a flag and
+        // then() ignored it, so db.plays was insert-only and NO test
+        // could verify that a row was removed. Undo "passed" by never
+        // being checked -- the page dropped the play from its in-memory
+        // array, the mock cheerfully reported success, and whether the
+        // delete reached the server was untestable. The group-delete
+        // added to undo the same day had to be verified by reading the
+        // page's own array instead, which proves the app's state and
+        // says nothing about what the server was told.
+        //
+        // Rows are removed from BOTH lists: existingPlays is what a
+        // reload would return, so a delete that misses it looks fine
+        // until the page reloads and the row comes back -- which is the
+        // exact failure this is here to catch.
+        if (this._op === 'delete') {
+          const f = this._filters || {};
+          const matches = (r) => Object.keys(f).every(k => String(r[k]) === String(f[k]));
+          const removed = [];
+          for (const listName of ['plays', 'existingPlays']) {
+            for (let i = db[listName].length - 1; i >= 0; i--) {
+              if (matches(db[listName][i])) removed.unshift(db[listName].splice(i, 1)[0]);
+            }
+          }
+          // Kept so a test can assert WHAT was deleted, not merely that
+          // the row is gone -- "deleted the right two rows" and "deleted
+          // everything" both leave the table empty.
+          db.deleted.push({ table, filters: Object.assign({}, f), rows: removed });
+          return Promise.resolve({ data: removed, error: null }).then(resolve, reject);
         }
         let data = [];
         // Narrow every row to the columns actually requested.
@@ -257,6 +290,7 @@ async function bootPage(file, opts = {}) {
     failNext: opts.failNext || null,   // see builder().insert
     failUpdates: opts.failUpdates || null,  // see builder().update
     role: opts.role || 'admin',        // the signed-in user's role
+    deleted: [],                       // every delete performed, see builder().then
     rpcCalls: [],                      // see makeMockSupabase().rpc
     rpcError: opts.rpcError || null,
     // Realtime bookkeeping. `emit` replays a postgres_changes event the
