@@ -149,6 +149,10 @@
       </div>
       <button type="button" id="fieldStripShow" style="display:none; margin:8px 0; padding:3px 10px; font-size:12px;">Show field position</button>
       <div id="insertModeBanner" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:#e6f1fb; border:1px solid #6ba3d6; font-size:13px;"></div>
+      <!-- Connectivity. Separate from syncStatus below, which only appears
+           AFTER a play has failed to save. This one is proactive: it tells
+           you the connection is gone before you enter the next play. -->
+      <div id="connStatus" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:#fdecea; border:1px solid #c8443a; color:#7a1f18; font-size:13px; font-weight:600;"></div>
       <div id="syncStatus" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:#fff4d6; border:1px solid #e0b84c; font-size:13px;"></div>
       <input autocomplete="off" type="text" id="code" style="display:none;">
 
@@ -404,6 +408,7 @@
     // Retry the moment the device says it is back online, rather than
     // waiting out the polling interval.
     window.addEventListener('online', () => { if (pendingQueue.length) drainPendingQueue(); });
+    startConnectionWatch();
 
     // WAKE FROM SLEEP. The `online` event above is not enough: closing a
     // laptop lid does not necessarily change the browser's network state,
@@ -1704,6 +1709,77 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       else window.localStorage.removeItem(pendingKey());
     } catch (e) {}
   }
+  // ---- connectivity ---------------------------------------------------
+  // navigator.onLine is not enough on its own: it reports whether a
+  // network INTERFACE exists, not whether anything is reachable. A laptop
+  // joined to stadium wifi with no working uplink reports "online" all
+  // night. So this probes the database for real.
+  //
+  // Proactive on purpose. The sync banner below only appears once a play
+  // has already failed; this tells you the connection is gone BEFORE you
+  // type the next one.
+  let isOnline = true;
+  async function probeConnection(){
+    if (!navigator.onLine) return false;
+    try {
+      // A count-only query: no rows come back, so it is about as small as
+      // a request to Supabase can be.
+      const { error } = await supabaseClient
+        .from('games').select('id', { count: 'exact', head: true })
+        .eq('id', currentGameId);
+      return !error;
+    } catch (e) { return false; }
+  }
+
+  function renderConnStatus(){
+    const el = document.getElementById('connStatus');
+    if (!el) return;
+    if (isOnline){ el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = 'block';
+    // The refresh warning is the important half. Nothing is LOST by
+    // refreshing -- queued plays live in this browser's storage and
+    // survive -- but the page itself cannot load without a network, so
+    // you would be locked out of entry until the connection returns.
+    el.innerHTML = '\u26A0 <b>No connection to the server.</b> ' +
+      'Keep entering plays &mdash; they are saved on this device and will ' +
+      'upload when the connection returns.' +
+      '<br><b>Do not refresh or close this tab.</b> Nothing is lost if you ' +
+      'do, but the page cannot reload without a connection, so you would ' +
+      'be unable to enter anything until it comes back.';
+  }
+
+  function startConnectionWatch(){
+    const CHECK_MS = 8000;
+    const check = async () => {
+      const was = isOnline;
+      isOnline = await probeConnection();
+      if (was !== isOnline){
+        renderConnStatus();
+        // Coming back: push anything waiting immediately rather than
+        // waiting out the sync interval.
+        if (isOnline && pendingQueue.length) drainPendingQueue();
+      }
+    };
+    check();
+    setInterval(check, CHECK_MS);
+    // The browser's own events are still worth listening to -- they fire
+    // faster than the poll when they are right.
+    window.addEventListener('offline', () => { isOnline = false; renderConnStatus(); });
+    window.addEventListener('online', check);
+  }
+
+  // The strongest protection available against a reflexive refresh: the
+  // browser's own "leave site?" dialog. Only armed when plays are
+  // actually waiting, so it never nags during normal use.
+  window.addEventListener('beforeunload', (e) => {
+    if (!pendingQueue.length) return;
+    e.preventDefault();
+    // Browsers ignore custom text now and show their own wording, but
+    // returnValue must be set for the dialog to appear at all.
+    e.returnValue = '';
+    return '';
+  });
+
   function renderSyncStatus(){
     const el = document.getElementById('syncStatus');
     if (!el) return;

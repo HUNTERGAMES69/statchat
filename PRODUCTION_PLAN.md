@@ -87,7 +87,7 @@ three NFL weeks CLEAN (48 games, 6,977 plays, 4,787 state pairs, 0 issues).
 - [x] **Rollback procedure** written: `ROLLBACK.md`. Two routes (Vercel
       promote, then the tagged ZIP), what a rollback does NOT undo, the
       paper fallback, and blanks for the deployment id and on-call name.
-- [ ] Fill in the deployment id and on-call name, then **print it**. Nobody
+- [x] Filled in and **printed**, 12 Aug 2026. Nobody
       reads source at 7pm on a Friday. It must say: how to promote the
       previous Vercel deploy, how to restore the tag, and who to call.
 
@@ -330,9 +330,11 @@ The part no test can replace.
 - [ ] **A full scrimmage: real hardware, venue wifi, vMix live.** Enter a
       complete game start to finish.
 - [ ] **Deliberately drop the connection mid-drive**, then restore it.
-- [ ] Test on **the actual device the scorer will use.** Nobody has yet.
+- [x] **Same laptop throughout.** Andy is the scorer and every session so
+      far has been on that machine, so this was never an unknown — the
+      concern applied to a crew with separate hardware.
 - [ ] Let the device **sleep and wake** mid-game. Does realtime recover?
-- [ ] Have the broadcast crew set up the data sources themselves, from
+- [x] ~~ Have the broadcast crew set up the data sources themselves, from~~  (Andy: not required)
       the written instructions, without help.
 
 ---
@@ -389,7 +391,8 @@ is a ONE-file engine change**, which is part of why it sits here.
       `season_report` aggregates by NAME across games, a different code
       path from displaying one box score; mutation-tested by removing
       the aggregation.
-- [ ] Still to add: the XLS export.
+- [x] XLS export: `D-Tackle` and `D-PlayerTFL` columns plus one row per
+      tackler, added 12 Aug 2026.
 - [x] `tests/tackles_check.js`, mutation-tested.
 
 ### The honest caveat, which must reach the reports
@@ -420,27 +423,92 @@ built to count from the play log instead.
 - [ ] **No code changes in the final 48 hours** except a rollback.
 - [ ] Final full regression: suites, fuzzer, three NFL weeks.
 - [ ] Fallback tag re-verified as restorable.
-- [ ] Rollback page printed and in the booth.
+- [x] Rollback page printed, 12 Aug 2026.
 
 ---
 
 ## 4. Open questions needing answers before or during the work
 
-- [ ] **Does the Supabase plan pause on inactivity?** Free-tier projects
-      are believed to. If it pauses the week before a game, the first
-      request of the night is a cold start or an outage. **Verify the
-      plan and the policy** — cheap to rule out, catastrophic to discover
-      at kickoff.
-- [ ] **No service worker: reloading while genuinely offline fails.** A
-      scorer who reloads on bad stadium wifi gets nothing. Accept, or
-      cache?
-- [ ] **If the scorer's device dies mid-game**, another device can take
+- [x] **RESOLVED 12 Aug 2026 — upgraded to Pro.** The project WAS on the
+      free plan, which pauses after 7 days without database activity.
+      That is exactly StatChat's shape: heavy on a Friday, then possibly
+      nothing for a week. A paused project means ~30 seconds of dead air
+      on the first request at kickoff.
+
+      Pro also brings 7-day backup retention. **The free tier has ZERO** —
+      no snapshot is kept at all — so until today the only protection for
+      game data was the export button, and it only covered games somebody
+      remembered to download.
+
+      Usage at the time of upgrading, after all development testing:
+      egress 489 MB / 5 GB, database 29 MB / 500 MB, 13 monthly users,
+      file storage 2 MB. Nothing was near a limit; the pause was the only
+      real problem.
+
+- [ ] **Check egress after the FIRST REAL GAME.** This is the one number
+      the feed changes. Eight data sources polling every second for three
+      hours is roughly 86,000 requests a game — small responses, but a
+      pattern that has never run. One game's figure multiplied by twelve
+      answers the question. Pro allows 250 GB, so almost certainly fine.
+- [ ] **USE A 2-SECOND REFRESH INTERVAL, not 1.** Andy is handling the
+      wording change. This is not a preference — Vercel Pro allows
+      1,000,000 function invocations and the HARD CAP IS ALSO 1,000,000.
+      Every other line has overage headroom (transfer 100 GB / 1 TB,
+      duration 100 / 1,000 GB-Hrs); invocations show 1M / 1M.
+
+          per game  @1s :    94,500      12 games : 1,134,000  OVER CAP
+          per game  @2s :    51,300      12 games :   615,600
+
+      At 1 second the allowance runs out around game 11. Inside one
+      billing period that may not bite, but if the reset falls mid-season
+      the failure arrives at kickoff.
+
+      Baseline before the first game: 47 invocations, 2.1 MB transfer,
+      0 GB-Hrs duration. Everything except invocations has enormous room.
+
+- [ ] **If invocations ever get tight**, the lever is a `view=all`
+      endpoint returning every view in ONE response. Eight data sources
+      currently hit /api/feed separately; combining them cuts invocations
+      eightfold — about 6,400 a game instead of 51,300. Not worth
+      building speculatively, but worth knowing it exists.
+- [x] **RESOLVED 12 Aug 2026 — warned against, not cached.**
+
+      **The risk turned out to be smaller than first stated.** Refreshing
+      while offline does NOT lose data: queued plays live in localStorage
+      and survive a failed page load. Verified — three plays queued, tab
+      closed, reopened, all three drained. The cost is DOWNTIME, not loss:
+      the page cannot fetch itself without a network, so entry is blocked
+      until the connection returns.
+
+      A service worker was rejected. It would fix it, but caching
+      aggressively enough to serve the app offline brings a stale-code
+      failure mode — uploading a fix that never reaches the browser —
+      which is worse mid-season than the problem it solves. Self-hosting
+      the Supabase library was rejected too: not scalable.
+
+      **Built instead:**
+      - A live connectivity indicator that probes the DATABASE every 8s.
+        `navigator.onLine` alone is not enough — it reports whether a
+        network interface exists, not whether anything is reachable, so a
+        laptop on stadium wifi with a dead uplink reports online all
+        night.
+      - The warning says plainly that plays are safe AND not to refresh,
+        because a scorer who thinks data is being lost will do something
+        drastic.
+      - A `beforeunload` guard, armed ONLY when plays are queued, so the
+        browser's own "leave site?" dialog catches a reflexive Ctrl-R.
+        Deliberately silent otherwise: nagging on every navigation
+        teaches people to click through it.
+- [x] ~~ **If the scorer's device dies mid-game**, another device can take~~  (Andy: not required)
       over because plays are in the database — but the pending queue is
       in that device's localStorage and is lost. Document the handover
       and know how many plays are at risk.
-- [ ] **Paper fallback** if the app is unavailable at kickoff.
-- [ ] **Who is on call**, and what do they do?
-- [ ] **Load the real rosters** — Neville's squad and the week-one
+- [x] ~~ **Paper fallback** if the app is unavailable at kickoff.~~  (Andy: not required)
+- [x] On call is Andy — he built it and enters the plays. Recorded in
+      ROLLBACK.md, along with the point that matters if HE is the problem:
+      the app is not required to run the game. Record on paper, enter
+      afterwards.
+- [x] **Real rosters loaded**, 12 Aug 2026 — Neville's squad and the week-one
       opponent — well before game day.
 
 ---
