@@ -2403,7 +2403,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // or a guided flow. Redo mirrors it, gated only on having something
     // to restore.
     document.getElementById('redoBtn').disabled = !redoStack.length;
-    document.getElementById('quarterUtilBtn').disabled = disable;
+    // Quarter marker is greyed out when no quarter can legally start next
+    // -- in Q2 and Q4 the half has to be CLOSED, which is a different
+    // button. Reads the same whitelist the picker does, so the button and
+    // the panel can never disagree about what is legal.
+    //
+    // Greyed rather than left live to open a warning: a control that is
+    // available and then refuses is worse than one that is plainly
+    // unavailable, because it costs a tap to discover and reads as the app
+    // being broken. The title says WHY, so it is not a dead end.
+    {
+      const qBtn = document.getElementById('quarterUtilBtn');
+      const nowQ = computeState().quarter;
+      const noneAllowed = !quarterMarkersAllowed(nowQ).length;
+      qBtn.disabled = disable || noneAllowed;
+      qBtn.title = noneAllowed ? quarterMarkerNextStep(nowQ) : '';
+    }
     // Flip possession and Timeout were never gated. Both write straight
     // to the log, so on a finalized game they would append plays after
     // the final score -- and neither is meaningful once the game is
@@ -5428,53 +5443,36 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     });
   });
 
-  // WHICH QUARTER MARKERS ARE OFFERABLE, by the quarter now in progress.
-  // ------------------------------------------------------------------
-  // A WHITELIST, not a set of exclusions. The picker used to offer Q2, Q3
-  // and Q4 unconditionally, so from Q1 it was possible to jump straight to
-  // Q4 -- and marking a quarter that has not been reached silently
-  // rewrites the clock and the phase for every play after it.
-  //
-  // Only ONE quarter can ever legally start next, and at the end of each
-  // half none can: the half has to be closed first, which is a different
-  // button because it writes a divider and moves the phase.
-  //
-  //   Q1 -> Q2          Q3 -> Q4
-  //   Q2 -> nothing; End 1st half closes the half
-  //   Q4 -> nothing; End game, or Start overtime if tied
-  //   OT -> nothing
-  //
-  // Listing what IS allowed means a quarter added later (a running-clock
-  // variant, a second overtime) is unavailable until someone states where
-  // it belongs, rather than appearing by default. That is the lesson from
-  // the fake-kick panels in PROJECT_NOTES.md, which took five passes
-  // because they hid strays one at a time.
-  const QUARTER_MARKERS_ALLOWED = {
-    1: ['2'],
-    2: [],
-    3: ['4'],
-    4: [],
-    5: []
-  };
-  // What to do instead, when nothing can be marked. Naming the button is
-  // the point: an empty panel reads as broken.
-  const QUARTER_MARKER_NEXT_STEP = {
-    2: 'The 1st half is nearly over — use “End 1st half” to close it, then “Start 2nd half”.',
-    4: 'The 4th quarter is the last one — use “End game”, or “Start overtime” if the score is tied.',
-    5: 'Overtime is already under way, so there is no further quarter to mark.'
-  };
+  // Function declarations, not consts: updatePhaseUI() greys the Quarter
+  // marker button out using this table and runs long before this point in
+  // the file. A `const` would still be in its temporal dead zone on the
+  // first render and throw; a function declaration hoists.
+  function quarterMarkersAllowed(q){
+    return ({ 1: ['2'], 2: [], 3: ['4'], 4: [], 5: [] })[q] || [];
+  }
+  function quarterMarkerNextStep(q){
+    return ({
+      2: 'The 1st half is nearly over — use “End 1st half” to close it, then “Start 2nd half”.',
+      4: 'The 4th quarter is the last one — use “End game”, or “Start overtime” if the score is tied.',
+      5: 'Overtime is already under way, so there is no further quarter to mark.'
+    })[q] || 'No quarter can be marked from here.';
+  }
 
   document.getElementById('quarterUtilBtn').addEventListener('click', () => {
     document.getElementById('confirmCard').style.display = 'none';
     const panel = document.getElementById('playPanel');
     panel.style.display = 'block';
     const nowQ = computeState().quarter;
-    const allowed = QUARTER_MARKERS_ALLOWED[nowQ] || [];
+    const allowed = quarterMarkersAllowed(nowQ);
     if (!allowed.length){
+      // The button is greyed out in this state, so this branch should be
+      // unreachable. Kept as a backstop: it reads the SAME table that
+      // greys the button, so the two cannot disagree, and if a render ever
+      // leaves the button live the illegal marker still cannot be written.
       panel.innerHTML = '<p style="font-size:13px; color:#888; margin:0 0 6px;">Mark start of quarter</p>' +
         '<p style="font-size:14px; color:#7a5c00; background:#fff3cd; border:1px solid #e0b400; ' +
         'border-radius:6px; padding:8px 12px; margin:0;">' +
-        (QUARTER_MARKER_NEXT_STEP[nowQ] || 'No quarter can be marked from here.') + '</p>' +
+        quarterMarkerNextStep(nowQ) + '</p>' +
         '<div class="row" style="margin-top:10px;"><button class="secondary" id="qMarkClose">Close</button></div>';
       const close = document.getElementById('qMarkClose');
       if (close) close.addEventListener('click', collapsePlayPanel);
