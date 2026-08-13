@@ -583,6 +583,24 @@ function playerCandidates(teamKey, num){
     const n = roster && roster[num];
     if (n && !seen[n]){ seen[n] = true; out.push({ unit, name: n }); }
   });
+  // The roster maps hold ONE name per number, so two players sharing a
+  // number inside the SAME unit are invisible here -- the map keeps
+  // whichever row loaded last and the other lives only in the ambiguous
+  // list. That meant typing a shared number offered no alternative at
+  // all: the confirm box showed one name as though it were settled, and
+  // the second player was unreachable except by tapping the grid.
+  //
+  // Two #7 running backs is the ordinary case this app was built for, so
+  // the ambiguous maps are consulted too.
+  [['offense', t.ambiguousOffense], ['defense', t.ambiguousDefense], ['special', t.ambiguousSpecialTeams]]
+    .forEach(([unit, amb]) => {
+      const entries = amb && amb[num];
+      if (!entries) return;
+      entries.forEach(e => {
+        const nm = typeof e === 'string' ? e : e.name;
+        if (nm && !seen[nm]){ seen[nm] = true; out.push({ unit, name: nm }); }
+      });
+    });
   return out;
 }
 
@@ -1540,6 +1558,21 @@ function offenseEligible(team, role){
       ambiguousList.push({ num, name: nm + ' ?', resolvedName: nm });
     });
   });
+  // Order the shared-number entries by WHO last played the role, not by
+  // the order the roster happened to load. Without this, picking the
+  // right #7 and then opening the panel again offered the OTHER #7 first
+  // -- the number was recorded as recently used, but the number cannot
+  // say which of them it was.
+  if (roleKey){
+    const byId = lastUsedByIdentity(team, [roleKey]);
+    ambiguousList.sort((a, b) => {
+      const ra = byId[identityKey(a.num, a.resolvedName)], rb = byId[identityKey(b.num, b.resolvedName)];
+      if (ra === undefined && rb === undefined) return 0;
+      if (ra === undefined) return 1;
+      if (rb === undefined) return -1;
+      return rb - ra;
+    });
+  }
   return ambiguousList.concat(resolved);
 }
 // Most recent play index at which a player filled any of these roles.
@@ -1552,6 +1585,42 @@ function lastUsedByRole(team, roleKeys){
     roleKeys.forEach(k => {
       if (r[k] && r[k].team === team && r[k].num) out[r[k].num] = i;
     });
+  });
+  return out;
+}
+// The same thing keyed by WHO rather than by what number they wear.
+// A jersey number is not an identity: with two #7s, number-keyed recency
+// says "a 7 just carried" and the picker then offers them in roster
+// order, so the man who did not touch the ball can sort first. This is
+// the same lesson as the box-score buckets, which moved off numbers onto
+// display names for exactly this reason.
+//
+// Only plays that RECORDED a name can be attributed, which is every play
+// entered since the disambiguation fix. Older rows carry the number
+// alone and simply do not contribute here -- they cannot, because the
+// information was never captured.
+function identityKey(num, name){ return num + '\u0000' + (name || ''); }
+function lastUsedByIdentity(team, roleKeys){
+  const out = {};
+  plays.forEach((p, i) => {
+    const r = p.roles; if (!r) return;
+    roleKeys.forEach(k => {
+      const who = r[k];
+      if (who && who.team === team && who.num && who.name) out[identityKey(who.num, who.name)] = i;
+    });
+  });
+  return out;
+}
+// Yardage in a role, attributed by name. The per-number version credits
+// a shared number's whole total to both players, so a picker showing two
+// #7s labelled "(6 yds)" each is claiming twelve yards were gained.
+function statsByIdentity(team, roleKey){
+  const out = {};
+  plays.forEach(p => {
+    const who = p.roles && p.roles[roleKey];
+    if (who && who.team === team && who.num && who.name){
+      out[identityKey(who.num, who.name)] = (out[identityKey(who.num, who.name)] || 0) + (who.yards || 0);
+    }
   });
   return out;
 }
@@ -1730,7 +1799,13 @@ function clearNameOverrides(){
   nameOverrides = [];
 }
 
-function attachNameConfirm(inputId, getTeam, getOrder){
+// onResolve(num, name) fires whenever this field settles on a specific
+// player and the number is SHARED -- both when an alternative is tapped
+// and when the default is accepted. Without it the choice lived only in
+// a temporary roster override that is deliberately reverted for the next
+// play, so the saved play carried the number alone and every later
+// reader resolved it back to whichever roster row loaded last.
+function attachNameConfirm(inputId, getTeam, getOrder, onResolve){
   const input = document.getElementById(inputId);
   if (!input || input.dataset.nameConfirm) return;
   input.dataset.nameConfirm = '1';
@@ -1752,6 +1827,10 @@ function attachNameConfirm(inputId, getTeam, getOrder){
       return;
     }
     const others = playerCandidates(teamKey, num).filter(c => c.name !== resolved);
+    // Shared number: pin the default too. Accepting it without tapping is
+    // still a choice, and leaving it unrecorded is what made the saved
+    // play depend on roster load order.
+    if (onResolve) onResolve(num, others.length ? resolved : null);
     box.innerHTML =
       '<button type="button" disabled style="padding:6px 12px; border-radius:6px; border:2px solid #2e7d32; ' +
       'background:#eaf5ea; color:#1b4d1f; font-weight:700; cursor:default; opacity:1;">#' + num + ' ' + resolved + '</button>' +
@@ -1781,6 +1860,7 @@ function attachNameConfirm(inputId, getTeam, getOrder){
         nameOverrides.push({ teamKey, bucket, num, prev: t[bucket][num] });
       }
       t[bucket][num] = chosen.name;
+      if (onResolve) onResolve(num, chosen.name);
       render();
     }));
   };
@@ -3476,7 +3556,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const { stats } = computePlayerStats();
     function offBlock(role, label){
       const list = (role === 'kicker' || role === 'punter') ? specialTeamsEligible(off) : offenseEligible(off, role);
-      const statFn = role === 'carrier' ? (n => (stats[off].rushYds[n]||0)+' yds') : role === 'passer' ? (n => (stats[off].passYds[n]||0)+' yds') : role === 'receiver' ? (n => (stats[off].recYds[n]||0)+' yds') : null;
+      // Labelled per PLAYER where we know who it was. The number-keyed
+      // totals credit a shared number's whole yardage to both entries, so
+      // two #7s both read "(6 yds)" off one 6-yard carry -- twelve yards
+      // claimed from six gained.
+      const roleKeyFor = role === 'carrier' ? 'carrier' : role === 'passer' ? 'passer' : role === 'receiver' ? 'receiver' : null;
+      const numKey = role === 'carrier' ? 'rushYds' : role === 'passer' ? 'passYds' : role === 'receiver' ? 'recYds' : null;
+      const idStats = roleKeyFor ? statsByIdentity(off, roleKeyFor) : {};
+      const statFn = !numKey ? null : ((n, p) => {
+        if (p && p.resolvedName){
+          return (idStats[identityKey(n, p.resolvedName)] || 0) + ' yds';
+        }
+        return (stats[off][numKey][n] || 0) + ' yds';
+      });
       return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
         '<div id="pp_' + role + '_grid">' + pickerHtml(list, 'pp_' + role + '_pick', statFn) + '</div>' +
         '<input autocomplete="off" type="text" id="pp_' + role + '_manual" placeholder="or type #" style="width:100px; margin-top:4px;">';
@@ -4153,7 +4245,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
 
-    const sel = { carrier:null, passer:null, receiver:null, kicker:null, punter:null, credit:null };
+    const sel = { carrier:null, passer:null, receiver:null, kicker:null, punter:null, credit:null, creditName:null };
     ['carrier','passer','receiver','kicker','punter'].forEach(role => {
       const grid = document.getElementById('pp_' + role + '_grid');
       const targetRoster = (role === 'kicker' || role === 'punter') ? TEAMS[off].rosterSpecialTeams : TEAMS[off].rosterOffense;
@@ -4175,7 +4267,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // first; everyone else from offense. Mirroring that here means the
       // name shown on blur is the name that ends up in the log.
       attachNameConfirm('pp_' + role + '_manual', off,
-        (role === 'kicker' || role === 'punter') ? ['special','offense','defense'] : ['offense','special','defense']);
+        (role === 'kicker' || role === 'punter') ? ['special','offense','defense'] : ['offense','special','defense'],
+        // Record WHICH player, so the saved play does not depend on which
+        // roster row happened to load last. The grid path already does
+        // this; typing the number did not, which is the whole bug.
+        (num, name) => { if (sel[role] === num) sel[role + 'Name'] = name; });
     });
 
     // Pre-select the quarterback. A team throws with the same passer
@@ -4278,10 +4374,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           }
         }
         sel.credit = num;
+        // Remember WHICH defender, not just the number -- the same fix as
+        // the carrier and passer. The roster write above only makes the
+        // log text right at entry; the saved play carried the number
+        // alone, so computeBoxScore resolved it back to whichever roster
+        // row loaded last and credited the tackle to the wrong man.
+        sel.creditName = resolvedName || null;
       });
-      attachNameConfirm('pp_credit_manual' + suffix, def, ['defense','special','offense']);
+      // The tackler role IS built from sel.credit in the save path, so a
+      // resolved name has somewhere to go. (An earlier note here claimed
+      // it arrived via the code string and could not be fixed -- that was
+      // wrong: the code string carries the tackler for the LOG TEXT only.)
+      attachNameConfirm('pp_credit_manual' + suffix, def, ['defense','special','offense'],
+        (num, name) => { if (sel.credit === num) sel.creditName = name; });
       const creditManual = document.getElementById('pp_credit_manual' + suffix);
-      if (creditManual) creditManual.addEventListener('input', e => { sel.credit = e.target.value.trim(); });
+      if (creditManual) creditManual.addEventListener('input', e => {
+        sel.credit = e.target.value.trim();
+        // Typing a new number invalidates any earlier resolution --
+        // otherwise the name chosen for #55 stays attached while the
+        // field now reads #21, and the wrong player is credited with
+        // nothing on screen to show it.
+        sel.creditName = null;
+      });
     });
 
     if (type === 'rush'){
@@ -4824,13 +4938,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const returnTd = document.getElementById('pp_rushfum_td').checked;
           code = sel.carrier + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
           roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined }, playType: 'fumble', lost: true };
-          if (fumCredit) roles.defense = { team: def, num: fumCredit };
+          if (fumCredit) roles.defense = { team: def, num: fumCredit, name: sel.creditName || undefined };
         }
       } else {
         const isRushSafety = document.getElementById('pp_rush_safety').checked;
         code = sel.carrier + 'r ' + yds + (sel.credit ? ' ' + sel.credit : '') + (isRushSafety ? ' sf' : (td ? ' td' : ''));
         roles = { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0, name: sel.carrierName || undefined } };
-        if (sel.credit) roles.defense = { team: def, num: sel.credit };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       }
     } else if (type === 'pass'){
       if (!sel.passer) return;
@@ -4869,14 +4983,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             const returnTd = document.getElementById('pp_passfum_td').checked;
             code = sel.receiver + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
             roles = { carrier: { team: off, num: sel.receiver, name: sel.receiverName || undefined }, playType: 'fumble', lost: true };
-            if (fumCredit) roles.defense = { team: def, num: fumCredit };
+            if (fumCredit) roles.defense = { team: def, num: fumCredit, name: sel.creditName || undefined };
           }
         } else {
           const isPassSafety = document.getElementById('pp_pass_safety').checked;
           code = sel.passer + 'p ' + recTok + ' ' + yds + (sel.credit ? ' ' + sel.credit : '') + (isPassSafety ? ' sf' : (td ? ' td' : ''));
           roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0, name: sel.passerName || undefined } };
           if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: parseInt(yds)||0, name: sel.receiverName || undefined };
-          if (sel.credit) roles.defense = { team: def, num: sel.credit };
+          if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
         }
       }
     } else if (type === 'sack'){
@@ -4902,13 +5016,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const returnTd = document.getElementById('pp_sackfum_td').checked;
           code = sel.passer + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
           roles = { carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble', lost: true };
-          if (fumCredit) roles.defense = { team: def, num: fumCredit };
+          if (fumCredit) roles.defense = { team: def, num: fumCredit, name: sel.creditName || undefined };
         }
       } else {
         const isSackSafety = document.getElementById('pp_sack_safety').checked;
         code = sel.passer + 's ' + yds + (sel.credit ? ' ' + sel.credit : '') + (isSackSafety ? ' sf' : '');
         roles = { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0, name: sel.passerName || undefined } };
-        if (sel.credit) roles.defense = { team: def, num: sel.credit };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       }
     } else if (type === 'int'){
       if (!sel.passer) return;
@@ -4917,7 +5031,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // the return yardage, are what matter and are always visible.
       code = sel.passer + 'x ' + (sel.credit || '?') + (yds ? ' ' + yds : '') + (td ? ' td' : '');
       roles = { passer: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'int' };
-      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+      if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       // Carries the target. No yardage: the throw was not caught, so the
       // receiver gets an attempt against his name and nothing else.
       if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: 0, name: sel.receiverName || undefined };
@@ -4939,11 +5053,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const yds = yards('pp_yards');
         code = sel.carrier + 'f ' + (sel.credit || '?') + (yds ? ' ' + yds : '') + (td ? ' td' : '');
         roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined }, playType: 'fumble', lost: true };
-        if (sel.credit) roles.defense = { team: def, num: sel.credit };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       }
     } else if (type === 'safety'){
       code = 'sf' + (sel.credit ? ' ' + sel.credit : '');
-      roles = sel.credit ? { defense: { team: def, num: sel.credit }, playType: 'safety' } : null;
+      roles = sel.credit ? { defense: { team: def, num: sel.credit, name: sel.creditName || undefined }, playType: 'safety' } : null;
     } else if (type === 'kickoff'){
       if (!sel.kicker) return;
       const yds = yards('pp_yards') || '0';
@@ -4983,7 +5097,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const retTok = sel.credit || ((retyds || td) ? '?' : null);
         code = sel.kicker + 'ko ' + yds + (retTok ? ' ' + retTok + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
         roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0 } };
-        if (sel.credit) roles.defense = { team: def, num: sel.credit };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       }
     } else if (type === 'punt' && document.getElementById('pp_punt_fake') &&
                document.getElementById('pp_punt_fake').checked){
@@ -5016,7 +5130,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const retyds = yards('pp_blockretyds');
           code = sel.punter + 'pb ' + (sel.credit || '?') + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
           roles = { punter: { team: off, num: sel.punter, yards: 0, blocked: true } };
-          if (sel.credit) roles.defense = { team: def, num: sel.credit };
+          if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
         }
       } else {
         const yds = yards('pp_yards') || '0';
@@ -5047,7 +5161,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const retTok = sel.credit || ((retyds || td) ? '?' : null);
         code = sel.punter + 'pt ' + yds + (retTok ? ' ' + retTok + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
         roles = { punter: { team: off, num: sel.punter, yards: parseInt(yds)||0, blocked: false } };
-        if (sel.credit) roles.defense = { team: def, num: sel.credit };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
         }
       }
     } else if (type === 'fg'){
@@ -5072,7 +5186,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         code = sel.kicker + 'fg ' + yds + ' ' + res;
       }
       roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0, result: res } };
-      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+      if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
     } else if (type === 'pat'){
       if (!sel.kicker) return;
       if (document.getElementById('pp_pat_muffhold').checked){
@@ -5091,7 +5205,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         code = sel.kicker + 'pa ' + res;
       }
       roles = { kicker: { team: off, num: sel.kicker, result: res } };
-      if (sel.credit) roles.defense = { team: def, num: sel.credit };
+      if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
     } else if (type === 'twopt'){
       const sub = document.getElementById('playPanel').dataset.twoptSub || 'rush';
       if (sub === 'rush'){
@@ -5103,7 +5217,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           code = sel.carrier + 'tpr ' + res;
         }
         roles = { carrier: { team: off, num: sel.carrier, result: res } };
-        if (sel.credit) roles.defense = { team: def, num: sel.credit };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       } else {
         if (!sel.passer) return;
         const recTok2 = sel.receiver || '?';
@@ -5115,7 +5229,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
         roles = { passer: { team: off, num: sel.passer, result: res } };
         if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, result: res };
-        if (sel.credit) roles.defense = { team: def, num: sel.credit };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       }
     }
 
