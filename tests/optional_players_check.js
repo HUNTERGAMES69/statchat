@@ -52,6 +52,19 @@ async function run() {
   };
 
   const open = t => click(win, doc.querySelector('.ptypeBtn[data-type="' + t + '"]'));
+  // The ensuing spot became REQUIRED on kickoffs and punts on 13 Aug 2026.
+  // It is not a PLAYER, so it does not belong to what this suite is
+  // testing -- but without it Review is refused and the failure reads as
+  // "the returner was not optional", which is the wrong diagnosis
+  // entirely. Filled on every kick case so the only thing left out is the
+  // player.
+  const fillSpot = (yardline) => {
+    const p = doc.getElementById('playPanel');
+    const side = p.querySelector('.pp_spot_side[data-side="own"]');
+    if (side) click(win, side);
+    const yl = doc.getElementById('pp_spot_yardline');
+    if (yl) typeInto(win, yl, String(yardline));
+  };
   const passSwitch = label => {
     open('pass');
     const p = doc.getElementById('playPanel');
@@ -65,6 +78,7 @@ async function run() {
     const p = doc.getElementById('playPanel');
     click(win, p.querySelector('.pp_kicker_pick[data-num="3"]'));
     typeInto(win, doc.getElementById('pp_retyds'), '20');
+    fillSpot(25);
   }, ['kicks off', 'returned for 20']);
 
   attempt('punt, no returner', () => {
@@ -73,6 +87,7 @@ async function run() {
     click(win, p.querySelector('.pp_punter_pick[data-num="15"]'));
     typeInto(win, doc.getElementById('pp_yards'), '40');
     typeInto(win, doc.getElementById('pp_retyds'), '12');
+    fillSpot(30);
   }, ['punts 40', 'returned for 12']);
 
   attempt('blocked punt, no recoverer', () => {
@@ -81,6 +96,7 @@ async function run() {
     click(win, p.querySelector('.pp_punter_pick[data-num="15"]'));
     click(win, doc.getElementById('pp_blocked_toggle'));
     typeInto(win, doc.getElementById('pp_blockretyds'), '8');
+    fillSpot(35);
   }, ['punt BLOCKED', 'returned 8']);
 
   // --- turnovers ------------------------------------------------------

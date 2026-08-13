@@ -73,6 +73,11 @@ async function buildPuntScenario() {
   const panel = doc.getElementById('playPanel');
   click(win, panel.querySelector('.pp_punter_pick[data-num="15"]'));
   typeInto(win, doc.getElementById('pp_yards'), '40');
+  // The ensuing spot is REQUIRED on a punt as of 13 Aug 2026. This suite
+  // builds its punt by hand rather than through enterPlay's spec.spot, so
+  // the two fields are clicked directly.
+  click(win, panel.querySelector('.pp_spot_side[data-side="own"]'));
+  typeInto(win, doc.getElementById('pp_spot_yardline'), '28');
   click(win, doc.getElementById('pp_review'));
   typeInto(win, doc.getElementById('confirmClockInput'), '6:30');
   click(win, doc.getElementById('saveBtn'));

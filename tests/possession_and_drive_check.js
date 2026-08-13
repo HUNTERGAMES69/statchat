@@ -47,6 +47,11 @@ async function run() {
     const p2 = doc.getElementById('playPanel');
     click(win, p2.querySelector('.pp_punter_pick[data-num="15"]'));
     typeInto(win, doc.getElementById('pp_yards'), '40');
+    // Required as of 13 Aug 2026: a punt with no ensuing spot is refused,
+    // so without these two clicks the punt never saved and possession
+    // never changed hands -- which is what this check is counting.
+    click(win, p2.querySelector('.pp_spot_side[data-side="own"]'));
+    typeInto(win, doc.getElementById('pp_spot_yardline'), '25');
     click(win, doc.getElementById('pp_review'));
     typeInto(win, doc.getElementById('confirmClockInput'), '10:34');
     click(win, doc.getElementById('saveBtn'));
@@ -147,7 +152,12 @@ async function run() {
        h => enterPlay(h, { type: 'sack', passer: '7', yards: '6', credit: '55' }),
        { d3att: 1, d3conv: 0 }],
       ['3rd down PUNT is not an attempt', 4, 3, 5,
-       h => enterPlay(h, { type: 'punt', punter: '15', yards: '40' }),
+       // The ensuing spot is REQUIRED on a punt as of 13 Aug 2026 -- a
+       // half-filled or absent one is now refused instead of silently
+       // dropped, so a punt with no spot never saves and possession
+       // never changes hands.
+       h => enterPlay(h, { type: 'punt', punter: '15', yards: '40',
+                           spot: { side: 'own', yardline: '25' } }),
        { d3att: 0 }]
     ];
     for (const [label, , down, distance, act, want] of cases) {

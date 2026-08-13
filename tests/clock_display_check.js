@@ -31,6 +31,13 @@ async function run() {
     const panel = doc.getElementById('playPanel');
     click(win, panel.querySelector('.pp_punter_pick[data-num="15"]'));
     typeInto(win, doc.getElementById('pp_yards'), '40');
+    // The ensuing spot is REQUIRED on a punt as of 13 Aug 2026. This suite
+    // is about the CLOCK, so the spot is incidental -- but without it
+    // Review is refused, no confirm card appears, and the failure reads as
+    // "the confirm card did not ask for a clock", which is the wrong
+    // diagnosis.
+    click(win, panel.querySelector('.pp_spot_side[data-side="own"]'));
+    typeInto(win, doc.getElementById('pp_spot_yardline'), '25');
     click(win, doc.getElementById('pp_review'));
 
     const clockRow = doc.getElementById('confirmClockRow');
@@ -79,6 +86,13 @@ async function run() {
     const panel = doc.getElementById('playPanel');
     click(win, panel.querySelector('.pp_punter_pick[data-num="15"]'));
     typeInto(win, doc.getElementById('pp_yards'), '40');
+    // The ensuing spot is REQUIRED on a punt as of 13 Aug 2026. This suite
+    // is about the CLOCK, so the spot is incidental -- but without it
+    // Review is refused, no confirm card appears, and the failure reads as
+    // "the confirm card did not ask for a clock", which is the wrong
+    // diagnosis.
+    click(win, panel.querySelector('.pp_spot_side[data-side="own"]'));
+    typeInto(win, doc.getElementById('pp_spot_yardline'), '25');
     click(win, doc.getElementById('pp_review'));
     typeInto(win, doc.getElementById('confirmClockInput'), '3:07');
     click(win, doc.getElementById('saveBtn'));
