@@ -899,12 +899,23 @@ function parseInput(raw, state){
     else if (type === 's'){
       const sackLossYards = parseInt(rest[0]) || 0; tackler = rest[1];
       netYards = -sackLossYards;
+      // Through gainPhrase, like every other yardage phrase. This used to
+      // build its own string, "sacked for 12 yds", which reads as a GAIN
+      // of twelve -- the one play type where the number is always a loss
+      // was the one place the log did not say so. gainPhrase already
+      // exists so rush and pass cannot drift apart in wording; the sack
+      // path simply never used it, which is the drift it was written to
+      // prevent.
+      //
+      // netYards is already negative here, so a 12-yard sack reads
+      // "sacked for a loss of 12", and a quarterback dragged down on the
+      // line reads "sacked for no gain" rather than "sacked for 0 yds".
       if (isSafety){
-        return { text: O(p1) + ' sacked for ' + sackLossYards + ' yds — SAFETY',
+        return { text: O(p1) + ' sacked ' + gainPhrase(netYards) + ' — SAFETY',
           effect: { score: { team: def, points: 2 }, endsDrive: true },
           flipEligible: false, team: off, quarter: state.quarter };
       }
-      text = O(p1) + ' sacked for ' + sackLossYards + ' yds';
+      text = O(p1) + ' sacked ' + gainPhrase(netYards);
     }
 
     const curDown = state.down || 1, curDist = state.distance || 10;
