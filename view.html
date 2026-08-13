@@ -782,9 +782,23 @@ function extractNameTag(rawName){
       // against the team's own name in the row below, which says the same
       // thing in a glance instead of a phrase, and gives the down and
       // distance the width it needs to be readable across a room.
-      document.getElementById('downText').textContent = state.down
+      // The middle slot shows down, distance and spot ONLY while a drive
+      // is actually in progress. It used to read "no active drive"
+      // between drives -- a caption for an empty state on a screen where
+      // the empty state is already plain, and it took the widest slot in
+      // the banner to say nothing. Blank is the honest rendering of
+      // "nothing to report", and on a scoreboard read from across a room
+      // absence is faster to parse than a sentence.
+      //
+      // fieldPos is required as well as down. A down with no spot yet
+      // rendered as "1st & 10 at " with a dangling "at" -- rare, but it
+      // is the state right after a possession change before the spot is
+      // entered, which is exactly when someone is looking.
+      const hasDrive = !!state.down &&
+        state.fieldPos !== null && state.fieldPos !== undefined;
+      document.getElementById('downText').textContent = hasDrive
         ? (ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabel(state.fieldPos))
-        : 'no active drive';
+        : '';
       // Just the quarter, matching game.html. Which half it belongs to is
       // obvious from the number and only crowded the banner.
       document.getElementById('quarterText').textContent =

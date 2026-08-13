@@ -3083,7 +3083,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const c = panel && panel.__spotCalc;
     if (!c) return;
     const td = document.getElementById('pp_td');
-    const fum = document.getElementById('pp_rush_fumbled') || document.getElementById('pp_pass_fumbled');
+    const fum = document.getElementById('pp_rush_fumbled') ||
+                document.getElementById('pp_pass_fumbled') ||
+                // The sack panel has a Fumbled toggle too, and now has a
+                // calculator, so a strip-sack's spot is where the ball came
+                // loose exactly as on a rush.
+                document.getElementById('pp_sack_fumbled');
     // Punt outcomes that make a landing spot meaningless. A touchback did
     // not come down in the field of play, and a blocked kick never got
     // away -- asking where it came down would invite a wrong number for
@@ -3098,7 +3103,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       (fum && fum.checked) ? 'Or enter ball came loose on'
       : (puntMuffed && puntMuffed.checked) ? 'Or enter muffed on'
       : (puntTb || puntBlocked) ? 'Or enter downed/received on'
-      : 'Or enter tackled on');
+      : (c.defaultLabel || 'Or enter tackled on'));
     // A touchdown IS the distance to the goal line -- there is exactly one
     // possible gain, so asking for it is busywork and getting it wrong is
     // easy from the far end of the field. Filled and locked while ticked,
@@ -3353,7 +3358,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '</div>' +
         '</div>';
     else if (type === 'sack') html = offBlock('passer','Passer') +
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;"><div style="margin-bottom:6px;">' + yardsBlock('Yards lost') + '</div>' +
+        // The same two-row shape as rush and pass, and for the same
+        // reason: the yardage question and the calculator are ONE
+        // either/or decision, so they get a row with the working
+        // underneath, and the outcome toggles go below. Sharing one row
+        // with Fumbled and Safety is exactly what made the rush panel
+        // wrap unpredictably once the calculator arrived.
+        '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div>' +
+          yardsBlock('Yards lost') + '</div>' + spotCalcHtml('Or enter sacked on') + '</div>' +
+        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
         '<div id="pp_sack_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_sack_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_sack_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_sack_safety', 'Safety') + '</div></div>' +
         '<div id="pp_sack_credit_wrap">' + defBlock('Sacked by') + '</div>' +
@@ -3617,6 +3630,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const readout = document.getElementById('pp_calc_readout');
       const yardsEl = document.getElementById('pp_yards');
       const lossBtn = panel.querySelector('.lossToggle[data-for="pp_yards"]');
+      // A SACK CANNOT GAIN YARDS, and the sack panel is the only place the
+      // calculator runs without a LOSS toggle beside it -- its box is
+      // labelled "Yards lost" and holds a positive magnitude, which is the
+      // convention every reader of roles.passer.yards depends on.
+      //
+      // So the sign cannot be shown here the way it is on rush and pass,
+      // where LOSS lights up to confirm a negative was understood as a
+      // negative. Writing Math.abs(gain) for a spot AHEAD of the current
+      // one would silently record a loss of that many yards from an entry
+      // that plainly meant a gain -- the worst possible outcome, because
+      // the number looks deliberate.
+      //
+      // Absence of lossBtn is NOT the test to use: the punt and field goal
+      // panels also lack one, and a "gain" there is an ordinary kick
+      // distance. It has to key off the play type.
+      //
+      // Zero is allowed. A quarterback dragged down on the line of
+      // scrimmage is a sack for no loss, which the engine already handles
+      // as a sack with no TFL.
+      const lossOnly = (type === 'sack');
       const st = computeState();
       // Pre-select the side the ball is already on, so a short gain stays
       // one number and only a play crossing midfield costs an extra tap.
@@ -3643,6 +3676,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // own N is N from our goal; opp N is N from theirs, so 100 - N.
         const newPos = side === 'own' ? n : (100 - n);
         const gain = newPos - cur;
+        if (lossOnly && gain > 0){
+          releaseYards();
+          readout.textContent = markerLabel(newPos) + ' is ahead of ' +
+            markerLabel(cur) + ' — a sack cannot gain yards. Check the yard line.';
+          return;
+        }
         yardsEl.value = String(Math.abs(gain));
         // Tinted so it is obvious the number was worked out rather than
         // typed -- a locked grey box just looks broken.
@@ -3683,7 +3722,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       });
       paintSides();
       recompute();
-      panel.__spotCalc = { recompute, releaseYards, setLabel: t => {
+      panel.__spotCalc = { recompute, releaseYards,
+        // The resting label belongs to the PANEL, not to
+        // refreshSpotCalcContext, which relabels on fumble/muff/touchback
+        // and then has to restore something. Hardcoding "Or enter tackled
+        // on" there would rename the sack panel's calculator the first
+        // time any toggle fired.
+        defaultLabel: type === 'sack' ? 'Or enter sacked on' : 'Or enter tackled on',
+        setLabel: t => {
         wrap.querySelector('p').textContent = t;
       }, hide: on => {
         wrap.style.display = on ? 'none' : '';
@@ -4003,6 +4049,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       document.getElementById('pp_sack_fumbled').addEventListener('change', (e) => {
         document.getElementById('pp_sack_fumble_fields').style.display = e.target.checked ? 'block' : 'none';
         document.getElementById('pp_sack_credit_wrap').style.display = e.target.checked ? 'none' : 'block';
+        // Relabel the calculator: on a strip-sack the spot is where the
+        // ball came loose, not where the quarterback was brought down.
+        refreshSpotCalcContext(panel);
         if (e.target.checked) resetToggle('pp_sack_safety', 'Safety');
         // Re-wire before dispatching. Switching the pass panel to "Sacked"
         // re-renders its contents, which throws away the click listeners
