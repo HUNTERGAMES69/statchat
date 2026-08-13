@@ -2597,6 +2597,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   document.getElementById('startHalfBtn').addEventListener('click', () => startGuided(3, 'secondHalf'));
   document.getElementById('endFirstHalfBtn').addEventListener('click', () => {
     const state = computeState();
+    // Confirmed like End game, and for the same reason: it is a one-tap
+    // action that closes a phase, writes two rows and changes what the
+    // rest of the app will let you do. Undo can walk it back, but only if
+    // you notice -- and it sits in the same row as Quarter marker, which
+    // is pressed often.
+    //
+    // The score is in the prompt because it is the thing worth checking
+    // before the half closes. A missed PAT noticed here is a ten-second
+    // fix; noticed after the interval it is an unlock and a re-entry.
+    const ok = confirm('End the 1st half now? Score at the half: ' +
+      TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' +
+      TEAMS.teamB.name + ' ' + state.scores.teamB + '.\n\n' +
+      'This closes the first half and moves to halftime.');
+    if (!ok) return;
     const absSec = clockToAbsSeconds(state.quarter, '0:00');
     if (!confirmClockAdvances(absSec, '0:00')) return;
     pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
@@ -5414,12 +5428,61 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     });
   });
 
+  // WHICH QUARTER MARKERS ARE OFFERABLE, by the quarter now in progress.
+  // ------------------------------------------------------------------
+  // A WHITELIST, not a set of exclusions. The picker used to offer Q2, Q3
+  // and Q4 unconditionally, so from Q1 it was possible to jump straight to
+  // Q4 -- and marking a quarter that has not been reached silently
+  // rewrites the clock and the phase for every play after it.
+  //
+  // Only ONE quarter can ever legally start next, and at the end of each
+  // half none can: the half has to be closed first, which is a different
+  // button because it writes a divider and moves the phase.
+  //
+  //   Q1 -> Q2          Q3 -> Q4
+  //   Q2 -> nothing; End 1st half closes the half
+  //   Q4 -> nothing; End game, or Start overtime if tied
+  //   OT -> nothing
+  //
+  // Listing what IS allowed means a quarter added later (a running-clock
+  // variant, a second overtime) is unavailable until someone states where
+  // it belongs, rather than appearing by default. That is the lesson from
+  // the fake-kick panels in PROJECT_NOTES.md, which took five passes
+  // because they hid strays one at a time.
+  const QUARTER_MARKERS_ALLOWED = {
+    1: ['2'],
+    2: [],
+    3: ['4'],
+    4: [],
+    5: []
+  };
+  // What to do instead, when nothing can be marked. Naming the button is
+  // the point: an empty panel reads as broken.
+  const QUARTER_MARKER_NEXT_STEP = {
+    2: 'The 1st half is nearly over — use “End 1st half” to close it, then “Start 2nd half”.',
+    4: 'The 4th quarter is the last one — use “End game”, or “Start overtime” if the score is tied.',
+    5: 'Overtime is already under way, so there is no further quarter to mark.'
+  };
+
   document.getElementById('quarterUtilBtn').addEventListener('click', () => {
     document.getElementById('confirmCard').style.display = 'none';
     const panel = document.getElementById('playPanel');
     panel.style.display = 'block';
+    const nowQ = computeState().quarter;
+    const allowed = QUARTER_MARKERS_ALLOWED[nowQ] || [];
+    if (!allowed.length){
+      panel.innerHTML = '<p style="font-size:13px; color:#888; margin:0 0 6px;">Mark start of quarter</p>' +
+        '<p style="font-size:14px; color:#7a5c00; background:#fff3cd; border:1px solid #e0b400; ' +
+        'border-radius:6px; padding:8px 12px; margin:0;">' +
+        (QUARTER_MARKER_NEXT_STEP[nowQ] || 'No quarter can be marked from here.') + '</p>' +
+        '<div class="row" style="margin-top:10px;"><button class="secondary" id="qMarkClose">Close</button></div>';
+      const close = document.getElementById('qMarkClose');
+      if (close) close.addEventListener('click', collapsePlayPanel);
+      if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
+      return;
+    }
     panel.innerHTML = '<p style="font-size:13px; color:#888; margin:0 0 6px;">Mark start of quarter</p>' +
-      ['2','3','4'].map(q => '<button type="button" class="qMarkBtn" data-q="' + q + '">Start Q' + q + '</button>').join(' ');
+      allowed.map(q => '<button type="button" class="qMarkBtn" data-q="' + q + '">Start Q' + q + '</button>').join(' ');
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
     panel.querySelectorAll('.qMarkBtn').forEach(b => b.addEventListener('click', () => {
       document.getElementById('code').value = 'q' + b.dataset.q;
