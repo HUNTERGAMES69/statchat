@@ -119,11 +119,30 @@ function enterPlay(h, spec) {
     const b = panel.querySelector('.penTeamBtn[data-team="' + side + '"]');
     if (!b) throw new UnreachableByUI('no penalty team button');
     click(win, b);
+    // The penalty type is a real select, and it only exists once a side
+    // has been picked -- which is why this comes after the click above and
+    // not with the other field fills. Optional, so an unset spec.penalty
+    // leaves it at "not specified".
+    if (spec.penalty) {
+      const sel = q(doc, 'pen_type');
+      const opt = [...sel.options].find(o => o.value === spec.penalty);
+      if (!opt) {
+        throw new UnreachableByUI('penalty type "' + spec.penalty +
+          '" is not offered for the ' + (spec.on || 'offense'));
+      }
+      sel.value = spec.penalty;
+      sel.dispatchEvent(new win.Event('change', { bubbles: true }));
+    }
     typeInto(win, q(doc, 'pen_yds'), spec.yards);
     // Automatic first down and dead-ball are real coach decisions on this
     // panel; without them the driver could only enter the plain case.
     if (spec.firstDown) toggle(win, doc, 'pen_first_down_toggle');
-    if (spec.deadBall) toggle(win, doc, 'pen_no_down_toggle');
+    // pen_no_down is a PLAIN visible checkbox, not the hidden-checkbox +
+    // styled-button pattern the rest of the panel uses, so toggle() looked
+    // for a #pen_no_down_toggle that has never existed and threw. Nothing
+    // passed spec.deadBall, so the throw was never seen -- the dead-ball
+    // path was simply undrivable. Click the checkbox itself.
+    if (spec.deadBall) click(win, q(doc, 'pen_no_down'));
     click(win, q(doc, 'pen_review'));
     return finish(h, spec);
   }

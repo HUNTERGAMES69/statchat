@@ -54,14 +54,21 @@ module.exports = [
     expect: { down: 1, distance: 10, fieldPos: 30, possession: 'teamB' } },
 
   { note: 'penalty on the offense: back up AND increase distance-to-go',
-    spec: { type: 'penalty', on: 'offense', yards: '10' },
+    spec: { type: 'penalty', on: 'offense', yards: '10', penalty: 'holding' },
     expect: { down: 1, distance: 20, fieldPos: 20, possession: 'teamB',
-              textHas: ['Penalty on TEST OPP', '10 yds', '1st & 20'] } },
+              // "PENALTY, Holding, on TEST OPP, 10 yards". The old line was
+              // "Penalty on X — 10 yds", which buried the foul behind the
+              // team. The named type comes from the optional dropdown, so
+              // this step also proves the slug survives the round trip
+              // through the play code.
+              textHas: ['PENALTY, Holding, on TEST OPP', '10 yards', '1st & 20'] } },
 
   { note: 'penalty on the defense large enough to be an automatic first down',
     spec: { type: 'penalty', on: 'defense', yards: '25' },
     expect: { down: 1, distance: 10, fieldPos: 45, possession: 'teamB',
-              textHas: ['Penalty on Neville', '25 yds'] } },
+              // No type selected: the clause must be ABSENT, not empty --
+              // "PENALTY, , on Neville" would be the obvious bug here.
+              textHas: ['PENALTY, on Neville', '25 yards'] } },
 
   { note: 'rushing touchdown',
     spec: { type: 'rush', carrier: '22', yards: '55', td: true },
