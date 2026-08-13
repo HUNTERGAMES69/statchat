@@ -3120,10 +3120,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       document.getElementById('guidedReturnSave').addEventListener('click', () => {
         const yds = document.getElementById('gr_yards').value.trim();
         const td = document.getElementById('gr_td').checked;
-        // The returner is optional here too -- on the opening kickoff the
-        // picker is usually empty anyway, and a coach frequently can't
-        // read the number. Return yardage is still required because it
-        // is what the rest of the flow needs.
+        // BOTH the returner and the return yardage are optional here, the
+        // same as on the play panel's kickoff. The returner has always
+        // been optional -- on an opening kickoff the picker is usually
+        // empty and a coach frequently cannot read the number.
+        //
+        // The yardage USED to be required, and the old comment justified
+        // it as "what the rest of the flow needs". That stopped being true
+        // on 13 Aug 2026, when the takeover spot became mandatory: field
+        // position now comes from the spot, so the return distance is a
+        // stat like any other and a scorer who did not see it should not
+        // be blocked.
+        //
+        // The refusal was also SILENT -- a bare `return`, no message. The
+        // Save button simply did nothing, which reads as the app being
+        // broken rather than as a missing field.
         const touchback = document.getElementById('gr_touchback').checked;
         // A touchback has no return, so requiring yardage would block it.
         // Nor does an onside kick or a muffed catch -- the ball is
@@ -3133,7 +3144,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const noReturnExpected = touchback ||
           document.getElementById('gr_muffed').checked ||
           !!(grOnsideNow && grOnsideNow.checked);
-        if (!yds && !noReturnExpected) return;
         const q = guided.quarter;
 
         // The half-start kickoffs go through this flow instead of the play
@@ -3208,7 +3218,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           text = TEAMS[guided.receivingTeam].name + ' — TOUCHBACK';
           effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
         } else {
-          text = (returnerNum ? nameInDefense(guided.receivingTeam, returnerNum) : TEAMS[guided.receivingTeam].name) + ' returns ' + yds;
+          // No yardage given: say the kick was returned without claiming a
+          // distance. "returns 0" would state something measured and false,
+          // and "returns " with nothing after it looks like a broken string.
+          const who = returnerNum ? nameInDefense(guided.receivingTeam, returnerNum) : TEAMS[guided.receivingTeam].name;
+          text = yds === '' ? (who + ' returns the kickoff') : (who + ' returns ' + yds);
           effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
         }
         if (td){ text += ' — TOUCHDOWN'; effect.score = { team: takingOver, points: 6 }; }
