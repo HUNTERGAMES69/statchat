@@ -726,6 +726,105 @@ function extractNameTag(rawName){
 }
 
 
+// NFHS penalty types, for the OPTIONAL dropdown on the penalty panel.
+// -------------------------------------------------------------------
+// `side` says which team can be charged with the foul, so the dropdown
+// can be filtered by whichever of On offense / On defense was picked:
+// 'off', 'def', or 'both'. "Offense" and "defense" here mean the team in
+// possession and the team not in possession, which is how the panel's own
+// two buttons already work -- on a punt the kicking team is still the
+// offense, which is why kick-catch interference and the roughing fouls
+// are reachable from the side you would not expect at first glance.
+//
+// NO YARDAGE IS STORED. The coach types the yards, and deliberately so:
+// NFHS yardages are not the NFL's (pass interference is 15 with no
+// automatic first down, not 10-and-a-first), enforcement spots vary, and
+// a half-the-distance situation overrides the book number anyway. A
+// dropdown that silently filled in a wrong 10 would be worse than one
+// that fills in nothing, because the number would look deliberate.
+//
+// The list covers the fouls a scorer actually reaches for. It is NOT the
+// whole rulebook, and it does not need to be -- the field is optional and
+// an unlisted foul can be left blank, or typed straight into the code as
+// f:some_slug, which the parser accepts as-is.
+const PENALTIES = {
+  // --- before the snap ---
+  false_start:          { name: 'False start',                     side: 'off', group: 'Before the snap' },
+  illegal_formation:    { name: 'Illegal formation',               side: 'off', group: 'Before the snap' },
+  illegal_shift:        { name: 'Illegal shift',                   side: 'off', group: 'Before the snap' },
+  illegal_motion:       { name: 'Illegal motion',                  side: 'off', group: 'Before the snap' },
+  illegal_snap:         { name: 'Illegal snap',                    side: 'off', group: 'Before the snap' },
+  illegal_numbering:    { name: 'Illegal numbering',               side: 'off', group: 'Before the snap' },
+  // NFHS keeps "encroachment" for the DEFENCE entering the neutral zone
+  // and uses "false start" for the offence -- it is not the NFL's
+  // "offside", and calling it that in the log would be wrong.
+  encroachment:         { name: 'Encroachment',                    side: 'def', group: 'Before the snap' },
+  delay_of_game:        { name: 'Delay of game',                   side: 'both', group: 'Before the snap' },
+  illegal_substitution: { name: 'Illegal substitution',            side: 'both', group: 'Before the snap' },
+  too_many_players:     { name: 'Too many players on the field',   side: 'both', group: 'Before the snap' },
+
+  // --- during the play ---
+  holding:              { name: 'Holding',                         side: 'both', group: 'During the play' },
+  illegal_use_hands:    { name: 'Illegal use of hands',            side: 'both', group: 'During the play' },
+  illegal_block_back:   { name: 'Illegal block in the back',       side: 'both', group: 'During the play' },
+  block_below_waist:    { name: 'Illegal block below the waist',   side: 'both', group: 'During the play' },
+  clipping:             { name: 'Clipping',                        side: 'both', group: 'During the play' },
+  tripping:             { name: 'Tripping',                        side: 'both', group: 'During the play' },
+  illegal_participation:{ name: 'Illegal participation',           side: 'both', group: 'During the play' },
+  illegal_kick_bat:     { name: 'Illegal kicking or batting',      side: 'both', group: 'During the play' },
+  chop_block:           { name: 'Chop block',                      side: 'off', group: 'During the play' },
+  hurdling:             { name: 'Hurdling',                        side: 'off', group: 'During the play' },
+  helping_runner:       { name: 'Helping the runner',              side: 'off', group: 'During the play' },
+  ineligible_downfield: { name: 'Ineligible receiver downfield',   side: 'off', group: 'During the play' },
+  illegal_forward_pass: { name: 'Illegal forward pass',            side: 'off', group: 'During the play' },
+  intentional_grounding:{ name: 'Intentional grounding',           side: 'off', group: 'During the play' },
+  illegal_touching:     { name: 'Illegal touching',                side: 'off', group: 'During the play' },
+  offensive_pi:         { name: 'Offensive pass interference',     side: 'off', group: 'During the play' },
+  defensive_pi:         { name: 'Defensive pass interference',     side: 'def', group: 'During the play' },
+  roughing_passer:      { name: 'Roughing the passer',             side: 'def', group: 'During the play' },
+  leaping:              { name: 'Leaping',                         side: 'def', group: 'During the play' },
+  leverage:             { name: 'Leverage',                        side: 'def', group: 'During the play' },
+
+  // --- kicking plays ---
+  // Charged to the KICKING team, which is the side in possession, so
+  // these sit under offence. The receiving team's fouls are the mirror.
+  roughing_kicker:      { name: 'Roughing the kicker',             side: 'def', group: 'Kicking plays' },
+  roughing_holder:      { name: 'Roughing the holder',             side: 'def', group: 'Kicking plays' },
+  running_into_kicker:  { name: 'Running into the kicker',         side: 'def', group: 'Kicking plays' },
+  invalid_fair_catch:   { name: 'Invalid fair catch signal',       side: 'def', group: 'Kicking plays' },
+  kick_catch_interference:{ name: 'Kick-catch interference',       side: 'off', group: 'Kicking plays' },
+
+  // --- personal fouls and conduct ---
+  personal_foul:        { name: 'Personal foul',                   side: 'both', group: 'Personal foul / conduct' },
+  unnecessary_roughness:{ name: 'Unnecessary roughness',           side: 'both', group: 'Personal foul / conduct' },
+  unsportsmanlike:      { name: 'Unsportsmanlike conduct',         side: 'both', group: 'Personal foul / conduct' },
+  face_mask:            { name: 'Grasping the face mask',          side: 'both', group: 'Personal foul / conduct' },
+  horse_collar:         { name: 'Horse-collar tackle',             side: 'both', group: 'Personal foul / conduct' },
+  targeting:            { name: 'Targeting',                       side: 'both', group: 'Personal foul / conduct' },
+  helmet_contact:       { name: 'Illegal helmet contact',          side: 'both', group: 'Personal foul / conduct' },
+  spearing:             { name: 'Spearing',                        side: 'both', group: 'Personal foul / conduct' },
+  butt_block:           { name: 'Butt block',                      side: 'both', group: 'Personal foul / conduct' },
+  fighting:             { name: 'Fighting',                        side: 'both', group: 'Personal foul / conduct' },
+  sideline_interference:{ name: 'Sideline interference',           side: 'both', group: 'Personal foul / conduct' },
+  illegal_equipment:    { name: 'Illegal equipment',               side: 'both', group: 'Personal foul / conduct' }
+};
+
+// Options for one side, grouped, in the order the groups are declared
+// above rather than alphabetically -- a scorer looks for "false start"
+// among the pre-snap fouls, not under F.
+function penaltyOptionsFor(side){
+  const groups = [];
+  for (const slug of Object.keys(PENALTIES)){
+    const p = PENALTIES[slug];
+    if (p.side !== 'both' && p.side !== side) continue;
+    let g = groups.find(x => x.label === p.group);
+    if (!g){ g = { label: p.group, items: [] }; groups.push(g); }
+    g.items.push({ slug, name: p.name });
+  }
+  groups.forEach(g => g.items.sort((a, b) => a.name.localeCompare(b.name)));
+  return groups;
+}
+
 function parseInput(raw, state){
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -765,6 +864,19 @@ function parseInput(raw, state){
     const yds = parseInt(tokens[1]) || 0;
     const team = which === 'po' ? off : def;
     const fieldDelta = which === 'po' ? -yds : yds;
+    // 'f:slug' = the penalty type, OPTIONAL. Carried as a slug rather than
+    // the display name because the code line is split on whitespace and
+    // half these names contain spaces. PENALTIES is the single source for
+    // slug -> name, shared with the dropdown that writes the code, so the
+    // two can never disagree about what "f:hands" means.
+    //
+    // An unrecognised slug is not an error: underscores become spaces and
+    // it is used as typed. A referee's signal this table has not caught up
+    // with should still reach the log rather than being silently dropped.
+    const penSlug = (tokens.slice(2).find(t => /^f:/i.test(t)) || '').slice(2).toLowerCase();
+    const penName = penSlug
+      ? ((PENALTIES[penSlug] && PENALTIES[penSlug].name) || penSlug.replace(/_/g, ' '))
+      : null;
     // 'nd' = no down change. A dead-ball foul, or one assessed after a
     // kick or a change of possession, is walked off before the series
     // begins: the ball moves but the down and the distance-to-go do
@@ -794,10 +906,22 @@ function parseInput(raw, state){
     }
     const downDistanceText = (newDown !== null && newDistance !== null) ? (' — ' + ordinal(newDown) + ' & ' + togoLabel(newFieldPos, newDistance)) : '';
     return {
-      text: 'Penalty on ' + TEAMS[team].name + ' — ' + yds + ' yds' +
+      // "PENALTY, Holding, on West Monroe, 10 yards". The old line read
+      // "Penalty on X — 10 yds", which buried the one thing a coach scans
+      // the log for -- WHAT the foul was -- behind the team. Leading with
+      // PENALTY also makes these lines findable at a glance in a log that
+      // is otherwise all plays.
+      //
+      // The type is optional, so with nothing selected the clause is
+      // simply absent rather than reading "PENALTY, , on ...".
+      text: 'PENALTY, ' + (penName ? penName + ', ' : '') +
+        'on ' + TEAMS[team].name + ', ' + yds + (yds === 1 ? ' yard' : ' yards') +
         (noDownChange ? ' (no down change)' : '') +
         (autoFirstDown ? ' (automatic first down)' : '') + downDistanceText,
       effect: Object.assign({ penaltyTeam: team, penaltyYds: yds, fieldDelta },
+        // Stored as well as written into the text, so a penalty breakdown
+        // by type is possible later without re-parsing prose.
+        penName ? { penaltyName: penName } : {},
         noDownChange ? { noDownChange: true } : {}, autoFirstDown ? { autoFirstDown: true } : {}),
       flipEligible: false, team
     };
@@ -5249,6 +5373,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<p class="hint">Penalty</p>' +
       '<button type="button" class="penTeamBtn" data-team="off">On offense</button> ' +
       '<button type="button" class="penTeamBtn" data-team="def">On defense</button>' +
+      // Hidden until a side is picked, because the list DEPENDS on the
+      // side -- showing an unfiltered dropdown first would offer
+      // "Roughing the passer" as an offensive foul. It sits above the
+      // yards box so the panel reads in the order the call is made: who,
+      // what, how far.
+      '<div id="pen_type_wrap" style="margin-top:10px; display:none;">' +
+        '<p style="font-size:13px; color:#888; margin:0 0 4px;">Penalty (optional)</p>' +
+        '<select id="pen_type" style="min-width:260px; padding:8px; font-size:15px; border-radius:6px; border:1px solid #ccc;"></select>' +
+      '</div>' +
       '<div style="margin-top:8px;"><label class="inline">Yards <input autocomplete="off" type="text" id="pen_yds" style="width:70px; display:inline-block; margin-left:6px;"></label></div>' +
       '<label class="inline" style="margin-top:8px; display:block;"><input autocomplete="off" type="checkbox" id="pen_no_down"> Dead-ball / after a kick or change of possession (move the ball, keep the down &amp; distance)</label>' +
       '<div style="margin-top:8px;">' +
@@ -5268,6 +5401,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       penTeam = b.dataset.team;
       panel.querySelectorAll('.penTeamBtn').forEach(x => x.classList.remove('picked'));
       b.classList.add('picked');
+      // Rebuild from scratch on every pick. Switching sides must CLEAR the
+      // selection, not just re-filter around it -- otherwise choosing
+      // "Roughing the passer" on defence and then switching to offence
+      // leaves a foul selected that the offence cannot commit, and the
+      // dropdown looks answered.
+      const sel = document.getElementById('pen_type');
+      sel.innerHTML = '<option value="">— not specified —</option>' +
+        penaltyOptionsFor(penTeam).map(g =>
+          '<optgroup label="' + g.label + '">' +
+          g.items.map(i => '<option value="' + i.slug + '">' + i.name + '</option>').join('') +
+          '</optgroup>').join('');
+      sel.value = '';
+      document.getElementById('pen_type_wrap').style.display = 'block';
     }));
     document.getElementById('pen_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('pen_review').addEventListener('click', () => {
@@ -5275,7 +5421,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (!penTeam || !yds) return;
       const noDown = document.getElementById('pen_no_down').checked;
       const firstDown = document.getElementById('pen_first_down').checked;
-      const code = (penTeam === 'off' ? 'po' : 'pd') + ' ' + yds + (noDown ? ' nd' : '') + (firstDown ? ' fd' : '');
+      const penType = (document.getElementById('pen_type') || {}).value || '';
+      const code = (penTeam === 'off' ? 'po' : 'pd') + ' ' + yds +
+        (penType ? ' f:' + penType : '') +
+        (noDown ? ' nd' : '') + (firstDown ? ' fd' : '');
       document.getElementById('code').value = code;
       showConfirm();
     });
