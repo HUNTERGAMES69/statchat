@@ -1555,10 +1555,34 @@ function offenseEligible(team, role){
   // Injecting every ambiguous entry into every picker put linemen in the
   // passer list and turned the panel into a wall of question marks.
   const ambiguousList = [];
+  // THE THIRD OVERRIDE: has this player actually done it in THIS game?
+  // ------------------------------------------------------------------
+  // The resolved list admits anyone who has already filled the role,
+  // whatever their recorded position says -- a tight end who has carried
+  // is a ball carrier. Ambiguous numbers never reached that rule: they
+  // are dropped from the resolved list before it, and this branch only
+  // checked position, then (as of today) the seed.
+  //
+  // So a shared-number running back could throw a halfback pass, have it
+  // recorded perfectly, and STILL not appear in the passer picker on the
+  // next snap -- the coach had to type the number every single time. Same
+  // for a lineman who recovers a fumble, or a receiver on a jet sweep.
+  //
+  // Keyed by IDENTITY, not by number: the man who threw the pass is
+  // promoted, not both players wearing his jersey. That distinction only
+  // became possible once the play started carrying a name, which is the
+  // point of the whole shared-number fix.
+  const playedThisRole = roleKey ? lastUsedByIdentity(team, [roleKey]) : {};
   Object.keys(ambiguous).forEach(num => {
     ambiguous[num].forEach(entry => {
       const nm = typeof entry === 'string' ? entry : entry.name;
       const pos = (typeof entry === 'string' ? '' : (entry.position || '')).toUpperCase().trim();
+      const hasPlayedRole = playedThisRole[identityKey(num, nm)] !== undefined;
+      if (hasPlayedRole){
+        // Doing the thing outranks every guess about whether he would.
+        ambiguousList.push({ num, name: nm + ' ?', resolvedName: nm });
+        return;
+      }
       if (allowedPos && pos){
         // The entry's OWN position is more specific evidence than a
         // seed, which is keyed by number and so cannot tell these two
