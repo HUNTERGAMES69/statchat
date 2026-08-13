@@ -60,15 +60,23 @@ module.exports = [
               // "Penalty on X — 10 yds", which buried the foul behind the
               // team. The named type comes from the optional dropdown, so
               // this step also proves the slug survives the round trip
-              // through the play code.
-              textHas: ['PENALTY, Holding, on TEST OPP', '10 yards', '1st & 20'] } },
+              // through the play code. The SIGN is asserted too: an
+              // unsigned "10 yards" reads as a gain, the same misreading
+              // the sack line had. Negative here because the ball moved
+              // BACKWARD; the defensive step below is positive.
+              textHas: ['PENALTY, Holding, on TEST OPP', '-10 yards', '1st & 20'] } },
 
   { note: 'penalty on the defense large enough to be an automatic first down',
     spec: { type: 'penalty', on: 'defense', yards: '25' },
     expect: { down: 1, distance: 10, fieldPos: 45, possession: 'teamB',
               // No type selected: the clause must be ABSENT, not empty --
               // "PENALTY, , on Neville" would be the obvious bug here.
-              textHas: ['PENALTY, on Neville', '25 yards'] } },
+              // POSITIVE for a foul on the defence: the ball advances
+              // toward the offence's goal, so the sign has to agree with
+              // the "1st & 10" sitting beside it. Signing against the
+              // penalised team instead printed "-25 yards — 1st & 10",
+              // which claimed a loss on a play that gained 25.
+              textHas: ['PENALTY, on Neville', '+25 yards'] } },
 
   { note: 'rushing touchdown',
     spec: { type: 'rush', carrier: '22', yards: '55', td: true },
