@@ -480,17 +480,35 @@ function computeBoxScore(playsList){
     // team TFL counts from the play log and needs no named tackler, so it
     // is a ceiling and this is a floor. Both are correct; they answer
     // different questions. Do not "fix" one to match the other.
+    //
+    // LOSS IS READ FROM `effect.statYds`, NOT from the role objects.
+    // Fixed 12 Aug 2026; before this, no sack ever produced a TFL.
+    //
+    // The role yardages do not share a sign convention. A rush stores a
+    // loss as a negative number (-3), but a SACK stores it as a POSITIVE
+    // magnitude: seven yards lost is `passer.yards = 7`. That is what
+    // game.html writes, what the play code "#12s 7" carries, what the
+    // team-rushing charge twenty lines above relies on (it SUBTRACTS the
+    // value), and what the sack-yards tiles in view.html, recap.html,
+    // stat_package.html and season_report.html all sum. Six writers and
+    // readers agree; this one check disagreed, read +7 as a seven-yard
+    // gain, and silently credited no tackle for loss on any sack.
+    //
+    // `effect.statYds` is signed net yardage, set for exactly the isStat
+    // plays -- rush, pass, incomplete and sack -- and it is already the
+    // field view.html counts team TFL from. Reading the same field here
+    // means the floor and the ceiling measure the same thing and differ
+    // only by whether a tackler was named, which is the whole point of
+    // the distinction. Fumbles carry no statYds and so contribute no
+    // per-player TFL, which is unchanged behaviour (fumble roles have no
+    // `yards` either) and matches view.html's team TFL_TYPES, which also
+    // omits fumbles.
     const TACKLE_TYPES = ['rush', 'pass', 'sack', 'fumble'];
     if (r.defense && TACKLE_TYPES.includes(type)){
       const s = bucket(r.defense.team, 'defense', r.defense.num, r.defense.name);
       if (s){
         s.tackles = (s.tackles||0) + 1;
-        // Yardage on the play, from whoever had the ball.
-        const gained = (r.carrier && typeof r.carrier.yards === 'number') ? r.carrier.yards
-                     : (r.receiver && typeof r.receiver.yards === 'number') ? r.receiver.yards
-                     : (type === 'sack' && r.passer && typeof r.passer.yards === 'number') ? r.passer.yards
-                     : null;
-        if (gained !== null && gained < 0) s.tfl = (s.tfl||0) + 1;
+        if (typeof e.statYds === 'number' && e.statYds < 0) s.tfl = (s.tfl||0) + 1;
       }
     }
 
