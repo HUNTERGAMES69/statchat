@@ -3083,6 +3083,32 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (!yds && !noReturnExpected) return;
         const q = guided.quarter;
 
+        // The half-start kickoffs go through this flow instead of the play
+        // panel, so they need the same refusal -- and they are the ones
+        // most likely to be entered in a hurry. Checked BEFORE anything is
+        // pushed: this handler writes several rows (the return, a clock
+        // event, then the New drive marker), and bailing halfway would
+        // leave the kickoff logged with no spot, which is exactly the state
+        // this is meant to prevent.
+        //
+        // A touchdown on the return needs no ensuing spot, matching the
+        // `!td` guard further down where the marker is written.
+        const grTd = document.getElementById('gr_td').checked;
+        if (!grTd){
+          // Which of the two guided spot blocks is on screen, rather than
+          // recomputing the muff/onside recovery logic that decides it a
+          // few lines below -- two copies of that condition would be one
+          // more place for them to disagree.
+          const grPrefix = isShown(document.getElementById('gr_spot_kick'), content)
+            ? 'gr_kickspot' : 'gr_spot';
+          const grGaps = spotGaps(grPrefix, content);
+          if (grGaps){
+            alert('This kickoff sets up the next drive, so the spot is required.\n\n' +
+                  'Still needed: ' + grGaps.join(' and ') + '.\n\nNothing has been saved.');
+            return;
+          }
+        }
+
         // Validate the clock before anything gets saved, same reasoning
         // as the main save flow -- a rejected value should abort the
         // whole thing, not commit the return and quietly drop the clock.
@@ -3181,6 +3207,60 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<input autocomplete="off" type="text" id="' + idPrefix + '_yardline" style="width:70px; display:inline-block;" placeholder="Yard line">' +
       '</div>';
   }
+  // Is an element actually on screen? Walks up looking for display:none
+  // rather than asking for offsetParent, which is always null under jsdom
+  // and would make every spot field look hidden to the test suite.
+  function isShown(el, root){
+    let e = el;
+    while (e && e !== root && e !== document.body){
+      if (e.style && e.style.display === 'none') return false;
+      e = e.parentElement;
+    }
+    return !!el;
+  }
+
+  // WHICH HALF OF A SPOT ENTRY IS MISSING, or null when it is complete.
+  //
+  // wireStartingSpot's getter returns null if EITHER the side or the yard
+  // line is absent, and every caller wrote `if (reset)` -- so a
+  // half-filled spot was silently discarded. The play saved, no New drive
+  // marker was written, the ball had no spot, and the scorer was told
+  // nothing. The failure then surfaced several taps later as "the ball's
+  // spot is not set" when they tried to enter a play from scrimmage,
+  // pointing nowhere near the kickoff that actually caused it.
+  //
+  // Reads the DOM rather than the closure so one check covers the play
+  // panel, the muff and onside variants, and the guided half-start flow
+  // without threading a getter through all of them. The 'picked' class is
+  // set by wireStartingSpot itself, so it is a faithful proxy for the
+  // side it recorded.
+  function spotGaps(idPrefix, container){
+    const root = container || document;
+    const gaps = [];
+    if (!root.querySelector('.' + idPrefix + '_side.picked')) gaps.push('which side of the field');
+    const ylEl = document.getElementById(idPrefix + '_yardline');
+    const raw = ylEl ? ylEl.value.trim() : '';
+    const n = parseInt(raw, 10);
+    // A side-relative yard line only runs 0-50: "own 60" is not a place.
+    // Catching it here rather than letting Math.abs quietly turn it into
+    // a spot past midfield on the wrong side.
+    if (!raw) gaps.push('the yard line');
+    else if (isNaN(n) || n < 0 || n > 50) gaps.push('a yard line between 0 and 50 (got "' + raw + '")');
+    return gaps.length ? gaps : null;
+  }
+
+  // The spot block a panel is actually showing. Kickoff and punt swap
+  // between the general field and their own muff/onside variants, so
+  // validating a fixed id would demand a yard line the scorer cannot see.
+  const SPOT_PREFIXES = ['pp_spot', 'pp_komuffspot', 'pp_koonsidespot', 'pp_muffspot'];
+  function visibleSpotPrefix(panel){
+    for (const p of SPOT_PREFIXES){
+      const w = document.getElementById(p + '_wrap');
+      if (w && isShown(w, panel)) return p;
+    }
+    return null;
+  }
+
   function wireStartingSpot(container, idPrefix){
     let side = null;
     container.querySelectorAll('.' + idPrefix + '_side').forEach(b => b.addEventListener('click', () => {
@@ -3587,9 +3667,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
           '<input autocomplete="off" type="text" id="pp_ko_muff_rec" placeholder="type #" style="width:100px;">' +
           yardsBlock('Return yards after recovery (optional)', 'pp_ko_muff_retyds') +
-          '<div id="pp_ko_muff_spot_wrap">' + startingSpotFieldsHtml('pp_komuffspot', 'Spot where the kicking team took over (optional)', off) + '</div>' +
+          '<div id="pp_ko_muff_spot_wrap">' + startingSpotFieldsHtml('pp_komuffspot', 'Spot where the kicking team took over (required)', off) + '</div>' +
         '</div>' +
-        tdBlock + startingSpotFieldsHtml('pp_spot', null, def);
+        tdBlock + startingSpotFieldsHtml('pp_spot', 'Spot where the ensuing drive starts (required)', def);
     else if (type === 'punt') html =
         offBlock('punter','Punter') +
         // Punt distance is the same subtraction as a rushing gain: where
@@ -3610,7 +3690,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
           '<input autocomplete="off" type="text" id="pp_muff_rec" placeholder="type #" style="width:100px;">' +
           yardsBlock('Return yards after recovery (optional)', 'pp_muff_retyds') +
-          '<div id="pp_muff_spot_wrap">' + startingSpotFieldsHtml('pp_muffspot', 'Spot where the kicking team took over (optional)', off) + '</div>' +
+          '<div id="pp_muff_spot_wrap">' + startingSpotFieldsHtml('pp_muffspot', 'Spot where the kicking team took over (required)', off) + '</div>' +
         '</div>' +
         '<div id="pp_punt_blocked" style="display:none;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_punt_blockrec" value="opp" checked> Recovered by opponent</label>' +
@@ -3619,7 +3699,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_punt_block_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_punt_safety" style="display:none;">' +
           '<button type="button" id="pp_punt_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
         '</div>' +
-        '<div id="pp_punt_td_wrap">' + tdBlock + '</div>' + startingSpotFieldsHtml('pp_spot', null, def);
+        '<div id="pp_punt_td_wrap">' + tdBlock + '</div>' + startingSpotFieldsHtml('pp_spot', 'Spot where the ensuing drive starts (required)', def);
     else if (type === 'fg') html =
         offBlock('kicker','Kicker') +
         '<div style="display:flex; align-items:flex-end; gap:14px;"><div style="margin-bottom:6px;">' + yardsBlock('Distance') + '</div>' +
@@ -4912,6 +4992,36 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     if (!code) return;
     if (roles) roles.playType = roles.playType || type;
+    // A kickoff or punt ESTABLISHES where the next drive starts, so an
+    // incomplete spot is refused rather than dropped. Both halves are
+    // required: a side with no yard line and a yard line with no side are
+    // equally unusable, and the old getter treated both as "no spot given"
+    // without saying so.
+    //
+    // Skipped when the kick was returned for a touchdown -- there is no
+    // ensuing spot to state, and demanding one would deadlock the entry.
+    // A touchback needs no special case: prefillTouchbackSpot has already
+    // clicked the side and filled the 20, so the check passes.
+    if ((type === 'kickoff' || type === 'punt') && !td){
+      // buildAndReview has no `panel` in scope -- the panel-building code
+      // is a different function -- so look it up here rather than relying
+      // on a closure that does not reach this far.
+      const spotPanel = document.getElementById('playPanel');
+      const prefix = visibleSpotPrefix(spotPanel);
+      const gaps = prefix ? spotGaps(prefix, spotPanel) : null;
+      if (gaps){
+        const msg = 'This ' + type + ' sets up the next drive, so the spot is required — ' +
+          'still needed: ' + gaps.join(' and ') + '. Nothing has been saved.';
+        showMsg('gameMsg', msg, 'error');
+        const w = document.getElementById('fieldPosWarning');
+        // In the panel as well as at the top of the page. gameMsg sits
+        // well above where the coach is looking when they press Review, so
+        // on its own the refusal reads as the button not working.
+        if (w){ w.textContent = '⚠️ ' + msg; w.style.display = 'block'; }
+        document.getElementById('confirmCard').style.display = 'none';
+        return;
+      }
+    }
     document.getElementById('code').value = code;
     showConfirm();
     if (pending){
