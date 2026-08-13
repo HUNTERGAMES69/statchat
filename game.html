@@ -193,6 +193,7 @@
       <div class="row" style="margin-top:6px;">
         <button id="driveUtilBtn">Adjust Down/Distance</button>
         <button id="flipBtn">Flip possession</button>
+        <button id="setClockUtilBtn" title="Opens the clock for the possession now in progress. Only use this at the START of a possession.">Set clock</button>
         <button id="manualBtn" class="lastresort" title="Free text only — the play is flagged unresolved and contributes no stats, no yardage and no down change">⚠ Manual entry</button>
       </div>
 
@@ -2064,8 +2065,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const btn = document.getElementById('redoBtn');
     if (!btn) return;
     btn.disabled = !redoStack.length;
-    btn.title = redoStack.length
-      ? 'Restore: ' + redoStack[redoStack.length - 1].text
+    // Entries are GROUPS (arrays), because undo removes a half divider
+    // and the clock row written with it as one unit. The label names the
+    // row a coach would recognise -- the last one written, which is the
+    // divider itself, not the clock line in front of it.
+    const top = redoStack.length ? redoStack[redoStack.length - 1] : null;
+    btn.title = top
+      ? 'Restore: ' + top[top.length - 1].text + (top.length > 1 ? ' (+' + (top.length - 1) + ' more)' : '')
       : 'Nothing to redo';
   }
 
@@ -2398,6 +2404,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     document.getElementById('penUtilBtn').disabled = disable;
     document.getElementById('driveUtilBtn').disabled = disable;
+    // Gated with the other corrections. It writes a play row, so on a
+    // finalized game or mid-guided-flow it would append after the final
+    // score -- the same reason Flip possession and Timeout are gated.
+    // NOT gated on awaitingKickoff: the gap between a score and the
+    // kickoff is exactly when a missed change-of-possession clock gets
+    // noticed and fixed.
+    document.getElementById('setClockUtilBtn').disabled = disable;
     // Undo is deliberately NOT gated on `disable` -- it never has been,
     // and a coach needs to be able to correct a mistake during halftime
     // or a guided flow. Redo mirrors it, gated only on having something
@@ -5514,9 +5527,33 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   document.getElementById('undoBtn').addEventListener('click', async () => {
     if (!plays.length) return;
     const removed = plays.pop();
-    // Keep it so "Redo last" can put it back exactly as it was, with the
-    // same id, roles, effect and sequence number.
-    redoStack.push(removed);
+    // A HALF OR GAME DIVIDER AND ITS CLOCK ROW ARE ONE UNIT.
+    //
+    // "End 1st half" writes two rows: a clock row, then the divider. Undo
+    // removed one at a time, and the moment the divider went derivePhase()
+    // returned firstHalf again -- so the banner looked right and a scorer
+    // naturally stopped there, leaving the clock row orphaned. Re-ending
+    // the half then wrote a second one and the log carried a duplicate.
+    //
+    // Harmless as it stood (the clock handler only accrues time when a
+    // start is pending, so a repeated end is a no-op) but it is the kind
+    // of residue that makes a log hard to trust when reading it back.
+    //
+    // Narrow on purpose: only a DIVIDER pulls a companion, and only when
+    // the row directly behind it is an administrative clock row. Anything
+    // looser would start swallowing real plays that happen to sit before
+    // a divider.
+    const removedRows = [removed];
+    if (removed.isDivider){
+      const prev = plays[plays.length - 1];
+      if (prev && isAdminMarker(prev) && prev.effect && prev.effect.clockEvent){
+        removedRows.unshift(plays.pop());
+      }
+    }
+    // Keep them so "Redo last" can put them back exactly as they were,
+    // with the same ids, roles, effects and sequence numbers -- and in
+    // the order they were originally written.
+    redoStack.push(removedRows);
     updateRedoBtn();
     // Undoing back across the interval has to restore HALFTIME, not just
     // delete plays. gamePhase is stored on the game row rather than
@@ -5560,20 +5597,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // Deleting a row the server has never seen would report a spurious
     // failure and leave the queue trying to upload a play the coach has
     // already taken back.
-    const queued = pendingQueue.findIndex(r => r.sequence_number === removed._seq);
-    if (queued !== -1){
-      pendingQueue.splice(queued, 1);
-      savePendingQueue();
-      renderSyncStatus();
-    } else if (removed._seq){
-      try {
-        const { error } = await supabaseClient.from('plays').delete()
-          .eq('game_id', currentGameId).eq('sequence_number', removed._seq);
-        if (error){
-          showMsg('gameMsg', 'Removed here, but failed to remove from the server: ' + error.message, 'error');
+    // Every row in the group, not just the last one -- a divider undone
+    // without its clock row would delete one from the server and leave
+    // the other behind, which is the same orphan this change exists to
+    // prevent, only now on the server where a reload would bring it back.
+    for (const row of removedRows){
+      const queued = pendingQueue.findIndex(r => r.sequence_number === row._seq);
+      if (queued !== -1){
+        pendingQueue.splice(queued, 1);
+        savePendingQueue();
+        renderSyncStatus();
+      } else if (row._seq){
+        try {
+          const { error } = await supabaseClient.from('plays').delete()
+            .eq('game_id', currentGameId).eq('sequence_number', row._seq);
+          if (error){
+            showMsg('gameMsg', 'Removed here, but failed to remove from the server: ' + error.message, 'error');
+          }
+        } catch (e) {
+          showMsg('gameMsg', 'Removed here, but could not reach the server to remove it: ' + e.message, 'error');
         }
-      } catch (e) {
-        showMsg('gameMsg', 'Removed here, but could not reach the server to remove it: ' + e.message, 'error');
       }
     }
   });
@@ -5636,15 +5679,83 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   document.getElementById('redoBtn').addEventListener('click', async () => {
     if (!redoStack.length) return;
-    const restored = redoStack.pop();
-    plays.push(restored);
+    // A group, because undo removes a divider and its clock row together.
+    const restoredRows = redoStack.pop();
+    restoredRows.forEach(r => plays.push(r));
     updateRedoBtn();
     renderAll();
-    // Re-insert at its original sequence number so the play lands back in
-    // the same position. Undo deleted the row, so this is an insert, not
-    // an update. A play that never reached the server has no _seq and
-    // simply gets the next one.
-    await persistPlay(restored, restored._seq);
+    // Re-insert at their original sequence numbers so they land back in
+    // the same positions. Undo deleted the rows, so these are inserts,
+    // not updates. A play that never reached the server has no _seq and
+    // simply gets the next one. Sequentially, not in parallel: they must
+    // arrive in the order they were written.
+    for (const r of restoredRows){
+      await persistPlay(r, r._seq);
+    }
+  });
+
+  document.getElementById('setClockUtilBtn').addEventListener('click', () => {
+    document.getElementById('confirmCard').style.display = 'none';
+    const panel = document.getElementById('playPanel');
+    panel.style.display = 'block';
+    const st = computeState();
+    const who = st.possession;
+    if (!who){
+      panel.innerHTML = '<p class="hint">Set clock</p>' +
+        '<p style="font-size:14px; color:#7a5c00; background:#fff3cd; border:1px solid #e0b400; ' +
+        'border-radius:6px; padding:8px 12px; margin:0;">Nobody has the ball yet, so there is no ' +
+        'possession to time. Enter the kickoff first.</p>' +
+        '<div class="row" style="margin-top:10px;"><button class="secondary" id="setclock_clear">Close</button></div>';
+      document.getElementById('setclock_clear').addEventListener('click', collapsePlayPanel);
+      return;
+    }
+    panel.innerHTML =
+      '<p class="hint">Set clock</p>' +
+      // The warning Andy asked for, stated as a rule rather than a hint.
+      // This writes a START event, which opens a stretch of time that runs
+      // until the next possession change. Used mid-drive it would discard
+      // the time already elapsed on that drive and restart the count, so
+      // the drive's time of possession comes out short and every
+      // per-possession average built on it is wrong -- silently, because
+      // nothing else looks off.
+      '<p style="font-size:15px; font-weight:700; color:#8a1c1c; background:#fdecea; ' +
+      'border:2px solid #d33; border-radius:6px; padding:10px 12px; margin:0 0 10px;">' +
+      '⚠ ONLY USE THIS ON A NEW POSSESSION.</p>' +
+      '<p style="font-size:13px; color:#666; margin:0 0 10px;">Records the clock at the start of ' +
+      TEAMS[who].name + '\u2019s possession — for when a change of possession was saved without one. ' +
+      'It does not change the down, the spot or the score.</p>' +
+      '<label class="inline">Clock <input autocomplete="off" type="text" id="setclock_val" ' +
+      'placeholder="M:SS or MSS" style="width:110px; display:inline-block; margin-left:6px;"></label>' +
+      '<div class="row" style="margin-top:12px;">' +
+      '<button class="primary" id="setclock_save">Save clock</button>' +
+      '<button class="secondary" id="setclock_clear">Cancel</button></div>';
+    if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
+    document.getElementById('setclock_clear').addEventListener('click', collapsePlayPanel);
+    document.getElementById('setclock_val').focus();
+    document.getElementById('setclock_save').addEventListener('click', () => {
+      const q = computeState().quarter;
+      const val = (document.getElementById('setclock_val').value || '').trim();
+      if (!val){
+        showMsg('gameMsg', 'Enter a clock value, or Cancel. Nothing has been saved.', 'error');
+        return;
+      }
+      // Validated and confirmed exactly like every other clock entry --
+      // a rejected value must abort rather than write a row the engine
+      // cannot read, and a value that runs the clock BACKWARDS is worth
+      // a second look because it is usually a mistyped quarter.
+      const absSec = clockToAbsSeconds(q, val);
+      if (absSec === null){
+        alert(clockHelpFor(val) + '\n\nNothing was saved -- fix the clock and try again.');
+        return;
+      }
+      if (!confirmClockAdvances(absSec, val)) return;
+      pushAndPersist({ id: nextId++,
+        text: 'Clock — ' + normalizeClockStr(q, val) + ' start of possession (' + TEAMS[who].name + ')',
+        effect: { clockEvent: { type: 'start', team: who, absSec } }, quarter: q });
+      collapsePlayPanel();
+      renderAll();
+      showMsg('gameMsg', 'Clock set at ' + normalizeClockStr(q, val) + ' for ' + TEAMS[who].name + '.', 'info');
+    });
   });
 
   document.getElementById('penUtilBtn').addEventListener('click', () => {
