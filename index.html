@@ -123,6 +123,10 @@
   // original link-based one.
   let justVerifiedInviteCode = false;
 
+  // Declared before onAuthStateChange, which can call showLoggedIn
+  // immediately on page load.
+  let pendingFactorId = null;
+
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY' || (isInviteOrRecovery && session)){
       showView('setPasswordView');
@@ -158,7 +162,40 @@
     }, 3000);
   }
 
-  function showLoggedIn(session){
+  // THE MFA CHECK LIVES HERE, not in the sign-in handler.
+  //
+  // First attempt put it after signInWithPassword resolved, which never
+  // ran: onAuthStateChange fires SIGNED_IN the moment the password is
+  // accepted and calls this function straight away, so the browser had
+  // already navigated to the dashboard before the check happened.
+  //
+  // Putting it here covers every route in -- a fresh sign-in, a restored
+  // session on page load, anything added later. A session that needs a
+  // second factor cannot get past this point.
+  async function showLoggedIn(session){
+    try {
+      const { data: aal } = await supabaseClient.auth.mfa
+        .getAuthenticatorAssuranceLevel();
+      // nextLevel above currentLevel means a verified factor exists and
+      // this session has not satisfied it yet.
+      if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2'){
+        const { data: factors } = await supabaseClient.auth.mfa.listFactors();
+        const totp = (factors && factors.totp || []).find(f => f.status === 'verified');
+        if (totp){
+          pendingFactorId = totp.id;
+          showView('loginView');
+          document.getElementById('mfaChallenge').style.display = 'block';
+          const box = document.getElementById('mfaLoginCode');
+          box.value = '';
+          box.focus();
+          return;
+        }
+      }
+    } catch (e) {
+      // A failure to CHECK must not bar the owner of the account. Two
+      // factor guards against a stolen password, not against a network
+      // blip on the way to reading the assurance level.
+    }
     window.location.href = 'dashboard.html';
   }
 
@@ -218,37 +255,13 @@
       showMsg('loginMsg', error.message, 'error');
       return;
     }
-    // The password succeeded. If this account has two-factor enabled the
-    // session is at aal1 and needs a code before it counts as signed in.
-    //
-    // The check is "does this account NEED aal2", not "is a factor
-    // enrolled" -- Supabase answers that directly, so an account
-    // part-way through enrolment does not get stuck at a challenge it
-    // cannot complete.
-    try {
-      const { data: aal } = await supabaseClient.auth.mfa
-        .getAuthenticatorAssuranceLevel();
-      if (aal && aal.nextLevel === 'aal2' && aal.nextLevel !== aal.currentLevel){
-        const { data: factors } = await supabaseClient.auth.mfa.listFactors();
-        const totp = (factors && factors.totp || []).find(f => f.status === 'verified');
-        if (totp){
-          pendingFactorId = totp.id;
-          document.getElementById('mfaChallenge').style.display = 'block';
-          document.getElementById('mfaLoginCode').focus();
-          showMsg('loginMsg', '', 'info');
-          return;
-        }
-      }
-    } catch (e) {
-      // If the check itself fails, do not lock the user out over it --
-      // fall through and let them in. Two-factor is protection against a
-      // stolen password, not a reason to bar the owner of the account.
-    }
+    // No MFA check here: onAuthStateChange fires SIGNED_IN as soon as the
+    // password is accepted, so showLoggedIn has already run by the time
+    // this line is reached. The check lives there instead.
     showLoggedIn(data.session);
   });
 
   // ---- the two-factor challenge ---------------------------------------
-  let pendingFactorId = null;
 
   async function submitMfaCode(){
     const code = (document.getElementById('mfaLoginCode').value || '').trim();
