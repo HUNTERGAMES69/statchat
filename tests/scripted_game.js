@@ -27,7 +27,12 @@ module.exports = [
   { note: 'SACK: ball must move BACKWARD and distance-to-go must grow',
     spec: { type: 'sack', passer: '7', yards: '7', credit: '55' },
     expect: { down: 2, distance: 17, fieldPos: 48, possession: 'teamA',
-              textHas: ['sacked for 7', 'O Linebacker'] } },
+              // "a loss of 7", not "for 7 yds". The old wording read as a
+              // GAIN of seven on the one play type whose number is always
+              // a loss; the sack path now goes through gainPhrase like
+              // every other yardage phrase. Asserting the word "loss" is
+              // the point of this line, not incidental to it.
+              textHas: ['sacked for a loss of 7', 'O Linebacker'] } },
 
   { note: 'second rush by the same carrier -- totals must accumulate',
     spec: { type: 'rush', carrier: '22', yards: '5' },
