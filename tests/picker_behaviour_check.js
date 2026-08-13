@@ -232,6 +232,65 @@ async function run(){
     h.close();
   }
 
+  // --- A SHARED NUMBER WHO PLAYS OUT OF POSITION ------------------------
+  // The halfback pass. A running back throws, and from then on he is a
+  // player who throws -- the resolved list has always worked that way
+  // ("a tight end who has carried is a ball carrier"). Ambiguous numbers
+  // never reached that rule, so a shared-number back could throw a
+  // perfectly recorded pass and still not appear in the passer picker on
+  // the next snap. The number had to be typed every single time.
+  //
+  // Identity-keyed: throwing promotes the man who threw, NOT both players
+  // wearing his jersey. Both halves are asserted, because admitting both
+  // would look like a pass and is the easier thing to write by accident.
+  {
+    const roster = defaultRoster().filter(r => r.team_side === 'teamB').concat([
+      { team_side: 'teamA', unit: 'offense', jersey_number: '7',  player_name: 'Alpha Ates',  position: 'RB' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '7',  player_name: 'Bravo Boone', position: 'RB' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '12', player_name: 'Real Quarterback', position: 'QB' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '80', player_name: 'Wide Out',    position: 'WR' }
+    ]);
+    const h = await bootGamePage({ roster });
+    const { window: win, document: doc } = h;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    const pre = [...doc.querySelectorAll('.pp_passer_pick')].map(b => b.textContent);
+    if (pre.some(t => /Alpha|Bravo/.test(t))) {
+      fail('halfback pass', 'a recorded RB should not be pre-offered in the passer picker ' +
+           'before he has thrown — that is what keeps the grid short. Got: ' + pre.join(' , '));
+    }
+
+    // Type the back's number and pick him -- the manual path never
+    // filters on position, which is what makes the play enterable at all.
+    typeInto(win, doc.getElementById('pp_passer_manual'), '7');
+    const alts = [...doc.querySelectorAll('.nameConfirmAlt')];
+    const alpha = alts.find(b => /Alpha/.test(b.textContent));
+    if (alpha) click(win, alpha);
+    typeInto(win, doc.getElementById('pp_receiver_manual'), '80');
+    typeInto(win, doc.getElementById('pp_yards'), '18');
+    click(win, doc.getElementById('pp_review'));
+    click(win, doc.getElementById('saveBtn'));
+
+    const thrown = h.db.plays[h.db.plays.length - 1];
+    const who = thrown && thrown.roles && thrown.roles.passer && thrown.roles.passer.name;
+    if (who !== 'Alpha Ates') {
+      fail('halfback pass', 'the pass should be recorded to Alpha Ates, got ' + JSON.stringify(who));
+    }
+
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    const post = [...doc.querySelectorAll('.pp_passer_pick')].map(b => b.textContent);
+    if (!post.some(t => /Alpha/.test(t))) {
+      fail('halfback pass', 'after throwing, the back should JOIN the passer picker — ' +
+           'otherwise his number has to be typed on every halfback pass. Got: ' + post.join(' , '));
+    }
+    if (post.some(t => /Bravo/.test(t))) {
+      fail('halfback pass', 'only the man who actually threw should be promoted. Bravo Boone ' +
+           'shares the number but has thrown nothing, and appears anyway: ' + post.join(' , '));
+    }
+    h.close();
+  }
+
   return failures;
 }
 
