@@ -1560,10 +1560,30 @@ function offenseEligible(team, role){
       const nm = typeof entry === 'string' ? entry : entry.name;
       const pos = (typeof entry === 'string' ? '' : (entry.position || '')).toUpperCase().trim();
       if (allowedPos && pos){
+        // The entry's OWN position is more specific evidence than a
+        // seed, which is keyed by number and so cannot tell these two
+        // apart. A player recorded as an RB stays out of the passer
+        // picker even if the coach seeded QB to his number.
         const parts = pos.split(/[^A-Z]+/).filter(Boolean);
         if (!parts.some(pt => allowedPos.indexOf(pt) !== -1)) return;
       } else if (allowedPos && !pos && allowedPos.length === 1){
-        return;   // narrow roles do not take guesses -- same rule as above
+        // NARROW ROLES (passer, kicker, punter) do not take guesses -- an
+        // unpositioned player must not land in the quarterback picker.
+        // But the seed is an explicit statement by the coach and is meant
+        // to outrank that, exactly as it does for unshared numbers a few
+        // lines above. It did not reach here, because the filter that
+        // admits seeded players runs over the RESOLVED list and an
+        // ambiguous number is excluded from that list before it is
+        // reached. Seeding QB to a shared number therefore did nothing at
+        // all, and the passer picker came up EMPTY -- which reads as
+        // broken rather than as filtered.
+        //
+        // The seed is on the NUMBER, so it admits BOTH players wearing
+        // it: the app cannot know which one the coach meant, and saying
+        // "one of these two is your quarterback, tap the right one" is
+        // the honest version. Narrowing to one of them would be a guess
+        // wearing the appearance of a fact.
+        if (!(seedPos[num] && allowedPos.indexOf(seedPos[num]) !== -1)) return;
       }
       ambiguousList.push({ num, name: nm + ' ?', resolvedName: nm });
     });
@@ -1577,10 +1597,22 @@ function offenseEligible(team, role){
     const byId = lastUsedByIdentity(team, [roleKey]);
     ambiguousList.sort((a, b) => {
       const ra = byId[identityKey(a.num, a.resolvedName)], rb = byId[identityKey(b.num, b.resolvedName)];
-      if (ra === undefined && rb === undefined) return 0;
-      if (ra === undefined) return 1;
-      if (rb === undefined) return -1;
-      return rb - ra;
+      // RECENCY WINS ONCE ANYONE HAS ACTUALLY PLAYED. The seed is a guess
+      // made before kickoff; a carry is a fact. So the moment a player
+      // has filled this role, he outranks the starters list -- including
+      // when the backup has taken over and the "starter" has not touched
+      // the ball.
+      if (ra !== undefined || rb !== undefined){
+        if (ra === undefined) return 1;
+        if (rb === undefined) return -1;
+        if (ra !== rb) return rb - ra;
+      }
+      // Nobody has played this role yet, so the coach's starters list is
+      // the only signal there is. Keyed by number, so two players sharing
+      // one tie with each other and simply sort ahead of other shared
+      // numbers -- which is the most it can say.
+      const sa = seed.indexOf(a.num), sb = seed.indexOf(b.num);
+      return (sa === -1 ? 999 : sa) - (sb === -1 ? 999 : sb);
     });
   }
   return ambiguousList.concat(resolved);
