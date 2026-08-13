@@ -224,6 +224,77 @@ async function run() {
     h.close();
   }
 
+  // --- the connection loss is announced BEFORE a play fails ------------
+  // The sync banner only appears once something has already failed to
+  // save. This one is proactive, because knowing the connection is gone
+  // before you type the next play is worth more than being told after.
+  //
+  // navigator.onLine alone is not enough -- it reports whether a network
+  // INTERFACE exists, not whether anything is reachable. A laptop joined
+  // to stadium wifi with a dead uplink reports "online" all night.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    await new Promise(r => setTimeout(r, 400));
+    const el = h.document.getElementById('connStatus');
+    if (!el) {
+      fail('connectivity', 'no connection indicator on the game page');
+    } else {
+      if (el.style.display !== 'none') {
+        fail('connectivity', 'the offline warning is showing while online');
+      }
+      Object.defineProperty(h.window.navigator, 'onLine',
+        { value: false, configurable: true });
+      h.window.dispatchEvent(new h.window.Event('offline'));
+      await new Promise(r => setTimeout(r, 200));
+
+      if (el.style.display === 'none') {
+        fail('connectivity', 'the connection dropped and nothing on screen ' +
+             'said so. The scorer keeps entering plays believing they are ' +
+             'saving');
+      }
+      const t = el.textContent;
+      if (!/do not refresh/i.test(t)) {
+        fail('connectivity', 'the offline warning does not warn against ' +
+             'refreshing. The page cannot RELOAD without a network, so a ' +
+             'refresh locks the scorer out until the connection returns');
+      }
+      if (!/nothing is lost/i.test(t) && !/saved on this device/i.test(t)) {
+        fail('connectivity', 'the warning does not say the queued plays are ' +
+             'safe. A scorer who thinks data is being lost will do something ' +
+             'drastic');
+      }
+    }
+    h.close();
+  }
+
+  // --- the browser's own guard, armed only when it matters -------------
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    await new Promise(r => setTimeout(r, 300));
+
+    const quiet = new h.window.Event('beforeunload', { cancelable: true });
+    h.window.dispatchEvent(quiet);
+    if (quiet.defaultPrevented) {
+      fail('unload guard', 'the "leave site?" dialog fires with NOTHING ' +
+           'queued. Nagging on every navigation teaches people to click ' +
+           'through it, which is exactly when it needs to be noticed');
+    }
+
+    h.db.failNext = 'offline';
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '5' });
+    await settle();
+    const armed = new h.window.Event('beforeunload', { cancelable: true });
+    h.window.dispatchEvent(armed);
+    if (!armed.defaultPrevented) {
+      fail('unload guard', 'refreshing with unsaved plays queued does NOT ' +
+           'prompt. The browser dialog is the only thing standing between a ' +
+           'reflexive Ctrl-R and being locked out mid-game');
+    }
+    h.close();
+  }
+
   // --- the scorer can see there is a problem --------------------------
   {
     const h = await bootGamePage();
