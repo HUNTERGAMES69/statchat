@@ -588,3 +588,41 @@ side has not started.
 The one unchecked item still squarely in code and squarely on the path to
 a first game is **PDF and XLS export, which remain completely untested**
 (`TODO.md`). The stat package is what coaches actually receive.
+
+---
+
+## Connection-loss rehearsal — first run, 13 August 2026
+
+Run against the checklist item above. **It found two real bugs, which is
+what the item is for.** Neither is a clean pass yet.
+
+**What worked.** Plays can be entered offline, they queue on the device,
+and they sync when the connection returns.
+
+**Bug 1 — the play log blanked.** A failed read replaced the whole
+in-memory log with an empty array, and the `visibilitychange` handler
+calls that read on every alt-tab. Losing the connection and switching
+windows made the game look erased: down, distance, field position and
+the score all recomputing from nothing, every drive tile empty. Nothing
+was lost on the server. Fixed; see `PROJECT_NOTES.md`.
+
+**Bug 2 — undo could silently reverse itself.** Undoing a play from
+before the outage removed it locally, failed to delete the row, never
+retried, and the play reappeared on the next successful reload. Undo is
+now refused for rows the server already has, and still allowed for plays
+entered during the outage. A `pendingDeletes` queue would remove the
+restriction entirely and is deliberately deferred (`TODO.md` §16).
+
+**This item is NOT ticked.** Re-run after uploading, because the
+blanking would have masked anything else in the same scenario. Two
+things the first run did not cover:
+
+- an outage lasting past the 8-second connection poll, rather than a
+  brief drop
+- SLEEPING the laptop rather than alt-tabbing — the wake path runs the
+  same reload plus a queue drain and a game-field write, in that order
+
+The lesson worth keeping: the rehearsal items on this plan are not
+formalities. Two bugs in the first ten minutes of the first one, both in
+code that had been reviewed and neither reachable by the automated
+suite, because no test could fail a SELECT.

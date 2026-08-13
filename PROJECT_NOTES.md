@@ -1148,3 +1148,162 @@ in the same row as "Quarter marker", writing two rows, and changing what
 the rest of the app allows. It has one now, with the score in the
 prompt -- a missed PAT noticed at that moment is a ten-second fix, and
 noticed after the interval it is an unlock and a re-entry.
+
+## A failed read is not an empty game (August 13, 2026)
+
+`reloadPlaysFromServer()` destructured only `data` and ignored `error`:
+
+```js
+const { data: existingPlays } = await supabaseClient.from('plays').select(...)
+plays = (existingPlays || []).map(...)
+```
+
+Offline that returns `data: null` with an error set, `(null || [])`
+becomes `[]`, and **the entire in-memory play log is replaced with
+nothing.** Down, distance, field position and the score all recompute
+from an empty log. Every drive tile empties. Plays cannot be undone
+because they are no longer in the array to pop.
+
+The trigger is ordinary: the `visibilitychange` handler calls this on
+every alt-tab, so losing the connection and switching windows makes the
+game look erased mid-drive. Found by running the connection-loss test
+on the production plan, which is exactly what that test is for.
+
+Nothing was ever lost -- the rows are on the server and a reload once
+online brings them back -- but there is no way to know that while
+watching the board go blank.
+
+**`|| []` on a value that can fail is a fallback that silences an
+error.** It reads as defensive and is the opposite: the empty array is
+indistinguishable from a real empty game, so the failure is laundered
+into a plausible-looking state. `init()` twelve lines below handles
+`gameError` properly; the plays read was the one place it was dropped.
+
+## An action that cannot be applied must not be offered (August 13, 2026)
+
+Undo removes a play locally and then deletes the row. Offline the delete
+fails, nothing retries it, and the row is still on the server -- so the
+next successful reload brings the undone play BACK. A silent reversion
+twenty minutes later with nothing connecting it to the undo.
+
+The first instinct was a warning in the offline banner. That is weaker
+than it sounds: **a warning leaves the button working**, and under
+pressure it gets pressed. Documenting a trap is not the same as removing
+it.
+
+Blanket "no undo while offline" is too strong the other way, because
+half of undo is perfectly safe: a play entered DURING the outage never
+reached the server, and dropping it from the device queue is the whole
+job. That is also the undo a scorer actually needs mid-drive.
+
+So it is refused precisely -- only for rows the server already has.
+
+**The gating flag has to be positive knowledge, not an inference.** The
+first version asked "is it in the pending queue?", which is a race: for
+the moment between pressing Save and the insert failing, a play is in
+neither the queue nor the server, and undo refused the very play just
+typed. It now keys on `_onServer`, set when an insert succeeds, when a
+queued row drains, and on rows loaded at page load. **Known-landed, not
+not-known-local.** The negative form has a window; the positive form
+does not.
+
+## A jersey number is not a person (August 13, 2026)
+
+The whole shared-number family of bugs is one confusion: the number was
+doing two jobs, an INPUT TOKEN (what you type, what is on the shirt) and
+an IDENTITY KEY (which human gets the stat). Identical until two players
+share a number, and then every place that conflates them is a bug.
+
+Both ends were already right. The roster ingest keeps both players in
+`ambiguousOffense/Defense/SpecialTeams` with their own positions, and
+`keyFor()` in the box score prefers a name over a number lookup. **What
+was missing was the middle: nothing ever put a name on the play**, so
+`keyFor` always fell through to the roster map -- which holds one name
+per number and keeps whichever row loaded last.
+
+Four fixes, all making the resolved name the identity once known:
+
+- `playerCandidates()` consults the ambiguous maps, so two players
+  sharing a number INSIDE ONE UNIT are offered. Before, the second was
+  unreachable by typing -- the confirm box showed one name as settled.
+- `attachNameConfirm()` reports the choice through an `onResolve`
+  callback, on the chosen alternate AND on an accepted default. Before,
+  the choice lived only in a temporary roster override that is
+  deliberately reverted for the next play, which is why the picker then
+  offered the OTHER player.
+- The name is stored on the play at all 16 role-building sites.
+- Picker recency and yardage labels key on `num + name`.
+
+The symptom that proves it: before, picking the non-default player gave
+a correct log line and a box score crediting the other man **after any
+reload**. Live it looked right, because the temporary override was still
+in memory. Any test asserting on the live page would have passed.
+
+## The three overrides, and a branch that had none of them (August 13, 2026)
+
+`offenseEligible()` decides who gets a button. The RESOLVED list has
+three ways in, in order of strength:
+
+1. **Has actually filled this role this game** -- a tight end who has
+   carried is a ball carrier, whatever the roster says.
+2. **Seeded as a likely starter** -- an explicit statement by the coach.
+3. **Recorded position** matches the role.
+
+Ambiguous numbers are excluded from that list on the first line
+(`if (ambiguous[num]) return false`) so a shared number is not offered
+both as two "?" entries and as one bare button. They come back through
+`ambiguousList` -- which checked only position, and so had **none of the
+other two overrides**. Two live consequences:
+
+- Seeding QB to a shared number did nothing, and with no positions
+  recorded the passer picker came up **EMPTY**. Opponent rosters typed
+  from a programme have no positions, so this is the ordinary case.
+- A shared-number back could throw a halfback pass, have it recorded
+  perfectly, and still not appear in the passer picker next snap. The
+  number had to be typed every time.
+
+Both now honour all three. The has-played check is keyed by IDENTITY, so
+throwing promotes the man who threw, not both players wearing his shirt
+-- a distinction only possible because the play now carries a name.
+
+**Ordering rule, decided deliberately:** recency wins outright once
+anyone has actually filled the role; the starters list only breaks ties
+before the first touch. A seed is a guess made in August; a carry is a
+fact.
+
+## Exclusive groups, not pairwise rules (August 13, 2026)
+
+The kickoff outcome toggles (Touchback / Muffed / Onside) each cleared
+the others BY NAME, so the rules lived in three handlers and adding a
+fourth meant editing all of them. Adding "Out of bounds" replaced them
+with one `KO_OUTCOMES` array; a fifth outcome is now one entry.
+
+It also fixed a live bug. Clearing another toggle set its hidden
+checkbox to false and fired `change`, but **nothing repainted the
+button** -- the paint lives in the click handler. Picking Onside after
+Touchback left "✓ Touchback" lit in gold beside "✓ Onside kick": two
+outcomes apparently selected, one of them a lie, with the saved play
+silently following the checkbox.
+
+Worth noting how it was found: not by looking for it, but by reading the
+existing exclusivity code closely enough to add a fourth case. The bug
+had been visible on screen the whole time.
+
+## A mock that ignores an operation cannot test it (August 13, 2026)
+
+`tests/harness.js` had `delete() { this._op = 'delete'; return this; }`
+and `then()` never acted on it. `db.plays` was insert-only, so **no test
+could verify that a row was ever removed.** Undo "passed" by never being
+checked: the page dropped the play from its in-memory array, the mock
+reported success, and whether the delete reached the server was
+unobservable.
+
+The sibling lesson is already in `tests/README.md` -- "a mock that always
+succeeds cannot test a queue", which is why `db.failNext` exists. This is
+the same shape one level down: a mock that silently accepts a call it
+does not implement reports success for work it never did.
+
+Deletes are now performed against both `db.plays` and `db.existingPlays`
+(a delete that misses the latter looks fine until a reload brings the row
+back) and recorded in `db.deleted`, so a test can assert WHAT went, not
+merely that the table shrank.

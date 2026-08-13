@@ -1491,3 +1491,85 @@ items closed and a few new ones opened.
   end state is to delete it and let `broadcast.html` be a normal
   hand-maintained page loading `engine.js`, now that the engine has
   landed. Deferred, not decided.
+
+---
+
+## 16. Later on 13 August 2026 — entry fixes and the connection test
+
+Continues section 15. Everything below landed the same day, after the
+documentation pass, which is why section 15 does not mention it.
+
+### Closed
+
+- [x] **Bad-snap fumble asked for no clock.** `needsClock` tested
+  `flipEligible` (ask the coach whether possession changed) and
+  `endsDrive`/`newPossession`, but not `effect.flip` — a turnover that
+  applies the flip ITSELF rather than offering it. The new drive got no
+  start event and accrued zero time of possession. Now covers all four.
+- [x] **Undo treats a half/game divider and its clock row as one unit.**
+  "End 1st half" writes two rows; undo removed one, and as soon as the
+  divider went the banner read first half again, so a scorer stopped
+  there and left the clock row orphaned. Redo restores the group in
+  order; the server delete covers every row in it.
+- [x] **Manual "Set clock" button** on the corrections row, with the
+  warning ONLY USE THIS ON A NEW POSSESSION in red. Writes the same
+  `start` clock row the guided kickoff does. Gated with the other
+  corrections, but deliberately NOT on awaiting-kickoff — the gap after
+  a score is when a missing clock gets noticed.
+- [x] **Shared jersey numbers: the choice is now recorded on the play.**
+  See `PROJECT_NOTES.md`. Covers carrier, passer, receiver AND tackler.
+  An earlier note claiming the tackler could not be fixed without
+  changing the play-code format was wrong: the code string carries the
+  tackler for the LOG TEXT only, and the role is built from `sel.credit`
+  in the save path like every other.
+- [x] **Same-unit duplicates are reachable by typing.** `playerCandidates`
+  reads the ambiguous maps, not just the roster.
+- [x] **Picker ordering and yardage labels key on identity**, so two #7s
+  no longer both show one carry's yards.
+- [x] **Seeds reach narrow roles for shared numbers** — the empty passer
+  picker. **Recency outranks the seed** once anyone has played the role.
+- [x] **A shared-number player who plays out of position joins the
+  picker** (the halfback pass), keyed by identity so only the man who
+  did it is promoted.
+- [x] **Out of bounds on kickoffs**, both the normal panel and the
+  guided half-start flow. Receiving team's own 35, prefilled and still
+  editable. No returner or return yardage — nobody touched the ball.
+- [x] **Kickoff outcome toggles are one exclusive group.** Fixed a live
+  bug where a deselected toggle kept its gold tick, so two outcomes
+  looked selected at once.
+- [x] **The mock database now performs deletes** (`tests/harness.js`),
+  recorded in `db.deleted`. No test could verify a row removal before.
+- [x] **A failed play read no longer wipes the log.** See
+  `PROJECT_NOTES.md` — the connection-loss test found this.
+- [x] **Undo is refused offline for plays the server already has**, and
+  allowed for plays entered during the outage.
+
+### Opened
+
+- [ ] **A `pendingDeletes` queue — considered and DELIBERATELY DEFERRED,
+  not overlooked.** It would let any play be undone offline and apply
+  the deletion on reconnection, which is the complete answer. Judged not
+  worth the mechanism now; the precise refusal above covers the harm.
+  Roughly 30 lines plus cases in `offline_queue_check.js`. Do not
+  rediscover this as an oversight.
+- [ ] **Re-run the connection-loss rehearsal.** The blanking bug would
+  have masked anything else in that scenario, so the earlier run is not
+  a clean pass. Also test what was not tested: an outage lasting past
+  the 8-second connection poll, and SLEEPING the laptop rather than
+  alt-tabbing.
+- [ ] **`seed_starters` cannot name a specific player.** It is
+  `{QB: "7"}` — slot to jersey NUMBER — so with two #7s nothing records
+  which one is the starter. Everything downstream now handles ambiguity
+  correctly; this is the last place that cannot state it. Would need
+  `{QB: {num, name}}`, a UI confirm at seeding time reusing the
+  `attachNameConfirm` pattern, and readers that accept both shapes so
+  existing games keep working. Half a day. **Do not let seeding narrow
+  the picker to the seeded player** — both must stay offered.
+- [ ] `seedOrder` is role-ordered (QB, RB1, RB2, WR1…), so a seeded QB
+  sorts ahead of the seeded RB1 even in the CARRIER picker. Pre-existing
+  and consistent with the resolved list, but if the carrier picker
+  should prefer a seeded RB, that is a separate deliberate change.
+- [ ] The out-of-bounds path and the toggle-repaint fix have no test.
+  `whitelist_check.js` already covers kickoff outcome exclusivity and is
+  the natural home.
+- [ ] `normalizeHex` still has no committed test (from section 15).
