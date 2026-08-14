@@ -1649,8 +1649,34 @@ function offenseEligible(team, role){
       const pos = (typeof entry === 'string' ? '' : (entry.position || '')).toUpperCase().trim();
       const hasPlayedRole = playedThisRole[identityKey(num, nm)] !== undefined;
       if (hasPlayedRole){
-        // Doing the thing outranks every guess about whether he would.
-        ambiguousList.push({ num, name: nm + ' ?', resolvedName: nm });
+        // Doing the thing outranks every guess about whether he would --
+        // including a seed naming the other man. No '?' either: he has
+        // demonstrably played this role, so there is nothing to query.
+        ambiguousList.push({ num, name: nm, resolvedName: nm });
+        return;
+      }
+      // A NAMED SEED IS THE ANSWER TO "WHICH ONE".
+      // ------------------------------------------------------------
+      // If the coach resolved this number in the starters list, offering
+      // BOTH players as "?" entries ignores the answer they just gave --
+      // two question marks against a number they already settled. Only
+      // the named player is offered, and without the '?', because it is
+      // no longer an open question.
+      //
+      // The other man is NOT lost. Typing the number brings up the same
+      // choice the setup page gave (playerCandidates reads the ambiguous
+      // maps), and the moment he actually plays the role the branch above
+      // promotes him permanently. So the cost is one typed number on his
+      // first touch, and the benefit is a picker that reflects what the
+      // coach said.
+      //
+      // Only a NAMED seed narrows. A legacy bare-number seed cannot say
+      // which player it meant, so it must keep offering both.
+      const seedNamesThisNumber = Object.keys(seedId)
+        .some(k => k.slice(0, k.indexOf('\u0000')) === num);
+      if (seedNamesThisNumber){
+        if (!seedId[identityKey(num, nm)]) return;
+        ambiguousList.push({ num, name: nm, resolvedName: nm });
         return;
       }
       if (allowedPos && pos){
@@ -1972,14 +1998,34 @@ function attachNameConfirm(inputId, getTeam, getOrder, onResolve){
   box.style.cssText = 'margin-top:5px; font-size:13px; line-height:1.7;';
   input.parentNode.insertBefore(box, input.nextSibling);
 
+  // What the coach explicitly tapped, if anything. A seeded starter is
+  // only a DEFAULT: without this, tapping the alternative re-rendered,
+  // the seed won again, and the choice was silently reverted -- the
+  // picker and the log would both have said the starter no matter which
+  // button was pressed. Cleared whenever the number changes.
+  let chosenOverride = null;
+  let lastNum = null;
+
   const render = () => {
     const num = (input.value || '').trim();
+    if (num !== lastNum){ chosenOverride = null; lastNum = num; }
     box.innerHTML = '';
     if (!num) return;
     const teamKey = typeof getTeam === 'function' ? getTeam() : getTeam;
     if (!teamKey || !TEAMS[teamKey]) return;
     const order = (typeof getOrder === 'function' ? getOrder() : getOrder) || ['offense', 'special', 'defense'];
-    const resolved = rosterName(teamKey, num, order);
+    // THE SEEDED STARTER IS THE DEFAULT for a shared number.
+    // rosterName() reads the roster map, which holds one name per number
+    // and keeps whichever row loaded LAST -- so typing 7 defaulted to
+    // whoever happened to be second in the spreadsheet. With a named seed
+    // that meant the picker offered the starter while typing the same
+    // number silently offered the backup: two parts of the app
+    // disagreeing about who #7 is, and the quiet one winning.
+    const seedIds = (TEAMS[teamKey] || {}).seedIdentity || {};
+    const seededName = Object.keys(seedIds)
+      .filter(k => k.slice(0, k.indexOf('\u0000')) === num)
+      .map(k => k.slice(k.indexOf('\u0000') + 1))[0] || null;
+    const resolved = chosenOverride || seededName || rosterName(teamKey, num, order);
     if (!resolved){
       box.innerHTML = '<span style="color:#a05a00;">#' + num + ' is not on ' +
         TEAMS[teamKey].name + "'s roster — it will be recorded as #" + num + '</span>';
@@ -2019,6 +2065,7 @@ function attachNameConfirm(inputId, getTeam, getOrder, onResolve){
         nameOverrides.push({ teamKey, bucket, num, prev: t[bucket][num] });
       }
       t[bucket][num] = chosen.name;
+      chosenOverride = chosen.name;
       if (onResolve) onResolve(num, chosen.name);
       render();
     }));
