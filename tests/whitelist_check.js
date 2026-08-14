@@ -87,7 +87,7 @@ async function run() {
     click(win, doc.getElementById('guidedKickoffSave'));
 
     // Exclusivity: these three outcomes cannot coexist.
-    const EXCLUSIVE = ['gr_touchback_toggle', 'gr_muffed_toggle', 'gr_onside_toggle'];
+    const EXCLUSIVE = ['gr_touchback_toggle', 'gr_muffed_toggle', 'gr_onside_toggle', 'gr_oob_toggle'];
     const present = EXCLUSIVE.filter(id => doc.getElementById(id));
     for (const id of present) {
       // Reset, then tick this one.
@@ -203,6 +203,111 @@ async function run() {
       }
     }
 
+    h.close();
+  }
+
+  // --- KICKOFF OUTCOMES ON THE PLAY PANEL -------------------------------
+  // Four now, since Out of bounds landed on 13 Aug 2026. Two separate
+  // things are checked, and the second is the one that had a live bug.
+  //
+  // 1. EXCLUSIVITY of the underlying checkboxes.
+  // 2. THE BUTTON MUST AGREE WITH THE CHECKBOX. Clearing another outcome
+  //    set its hidden checkbox to false but never repainted the button,
+  //    because the paint lives in the click handler. So picking Onside
+  //    after Touchback left "✓ Touchback" lit in gold beside "✓ Onside
+  //    kick" — two outcomes apparently selected, one of them a lie, and
+  //    the saved play silently followed the checkbox rather than the tick
+  //    the scorer could see.
+  //
+  // Tested in BOTH orders. One order only exercises one handler, which is
+  // the lesson already recorded for the punt toggles below.
+  {
+    const { typeInto } = require('./ui_driver');
+    const OUTCOMES = ['pp_ko_touchback', 'pp_ko_muffed', 'pp_ko_onside', 'pp_ko_oob'];
+    const pairs = [];
+    OUTCOMES.forEach(a => OUTCOMES.forEach(b => { if (a !== b) pairs.push([a, b]); }));
+
+    for (const [first, second] of pairs){
+      const h = await bootGamePage();
+      const { window: win, document: doc } = h;
+      setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 35 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="kickoff"]'));
+      if (!doc.getElementById(first + '_toggle') || !doc.getElementById(second + '_toggle')){
+        h.close();
+        fail('kickoff outcomes', 'expected all four outcome toggles on the kickoff panel; ' +
+             first + ' or ' + second + ' is missing');
+        break;
+      }
+      click(win, doc.getElementById(first + '_toggle'));
+      click(win, doc.getElementById(second + '_toggle'));
+
+      const checked = OUTCOMES.filter(o => (doc.getElementById(o) || {}).checked);
+      if (checked.length !== 1 || checked[0] !== second){
+        fail('kickoff outcomes', first + ' then ' + second + ': checkboxes on = ' +
+             (checked.join(', ') || 'none') + ', expected only ' + second);
+      }
+      // The visible state has to match. A tick left behind on a cleared
+      // outcome is worse than a wrong value, because it looks deliberate.
+      OUTCOMES.forEach(o => {
+        const btn = doc.getElementById(o + '_toggle');
+        const cb = doc.getElementById(o);
+        if (!btn || !cb) return;
+        const ticked = /\u2713/.test(btn.textContent);
+        if (ticked !== !!cb.checked){
+          fail('kickoff outcomes', first + ' then ' + second + ': ' + o + ' button reads ' +
+               JSON.stringify(btn.textContent.trim()) + ' but its checkbox is ' +
+               (cb.checked ? 'ON' : 'OFF') + ' — the button and the value disagree, and ' +
+               'the saved play follows the value');
+        }
+      });
+      h.close();
+    }
+  }
+
+  // --- OUT OF BOUNDS ----------------------------------------------------
+  // NFHS gives the receiving team the ball at their own 35. Nobody
+  // touched it, so there is no returner and no return yardage, and the
+  // spot is fixed by rule rather than asked for.
+  {
+    const { typeInto, finish } = require('./ui_driver');
+    const h = await bootGamePage();
+    const { window: win, document: doc } = h;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 35 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="kickoff"]'));
+    typeInto(win, doc.getElementById('pp_kicker_manual'), '3');
+    // Touchback first, so switching to Out of bounds has to MOVE the
+    // prefilled 20 to a 35. Leaving the 20 would save a spot the scorer
+    // never chose and could not see was wrong.
+    click(win, doc.getElementById('pp_ko_touchback_toggle'));
+    click(win, doc.getElementById('pp_ko_oob_toggle'));
+
+    const yl = doc.getElementById('pp_spot_yardline');
+    if (!yl || yl.value !== '35'){
+      fail('kickoff out of bounds', 'the takeover spot should be pre-filled to the ' +
+           'receiving team\'s own 35, got ' + JSON.stringify(yl ? yl.value : null) +
+           ' — switching from Touchback must move the 20, not keep it');
+    }
+    const side = doc.querySelector('.pp_spot_side.picked');
+    if (!side || side.dataset.side !== 'own'){
+      fail('kickoff out of bounds', 'the spot side should be the receiving team\'s own half');
+    }
+    const shown = (id) => { const e = doc.getElementById(id); return e && e.style.display !== 'none'; };
+    if (shown('pp_ko_ret_wrap') || shown('pp_ret_yds_wrap')){
+      fail('kickoff out of bounds', 'returner or return-yards fields are still on screen — ' +
+           'nobody touched the ball, so there is no return to record');
+    }
+
+    click(win, doc.getElementById('pp_review'));
+    finish(h, {});
+    const text = JSON.parse(h.evalIn('JSON.stringify(plays.map(p => p.text))')).join(' | ');
+    if (!/OUT OF BOUNDS/.test(text)){
+      fail('kickoff out of bounds', 'the log does not say OUT OF BOUNDS: ' + text.slice(-120));
+    }
+    const st = JSON.parse(h.evalIn('JSON.stringify(computeState())'));
+    if (st.possession !== 'teamB' || st.fieldPos !== 35 || st.down !== 1){
+      fail('kickoff out of bounds', 'expected the receiving team 1st & 10 at their own 35, ' +
+           'got possession=' + st.possession + ' fieldPos=' + st.fieldPos + ' down=' + st.down);
+    }
     h.close();
   }
 

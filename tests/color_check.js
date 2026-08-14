@@ -1,0 +1,220 @@
+// Colour helpers — engine.js
+// ==========================
+// `normalizeHex`, `luminance`, `colorDistance` and `safeTextColor` decide
+// what colour text is drawn in on six pages: the game page, the view
+// page, the broadcast overlay, and the three report surfaces. They are
+// the only reason a team's own colours do not make their own scoreboard
+// unreadable.
+//
+// They were consolidated into engine.js on 13 Aug 2026 and had no test at
+// all. This is that test.
+//
+// WHY IT MATTERS MORE THAN IT LOOKS. The bug that prompted the
+// consolidation was silent: `#fff` was parsed as if it had six digits,
+// produced NaN, and `NaN > 0.55` is false — so a shorthand hex quietly
+// chose white text and put white on white. Nothing threw. Nothing logged.
+// The scoreboard was simply blank in the one place a coach looks.
+//
+// So the assertions here are mostly about MALFORMED input, not the happy
+// path. A colour helper that works on '#1a4d2e' and falls over on '#fff'
+// is the one that ships.
+//
+// Reachability, stated honestly: every colour that reaches these
+// functions today comes from an `<input type="color">`, which the HTML
+// spec requires to emit seven-character lowercase hex. So the shorthand
+// case is NOT reachable through the UI right now — this is hardening, and
+// the tests are here so it stays hardened rather than because a coach can
+// trigger it today. A hand-edited database row or a future import path
+// changes that without warning.
+
+const path = require('path');
+
+// engine.js is loaded the way api/feed.js loads it: as a plain module,
+// with no page around it. If it ever stops working that way this file
+// fails to require, which is itself worth knowing.
+const engine = require(path.join(__dirname, '..', 'engine.js'));
+
+function run(){
+  const failures = [];
+  const fail = (area, detail) => failures.push({ area, detail });
+  const show = (v) => v === undefined ? 'undefined' : JSON.stringify(v);
+
+  // --- normalizeHex ------------------------------------------------------
+  // The gate everything else goes through. Six-digit passes, three-digit
+  // EXPANDS (that is the fix), anything else is null rather than a
+  // half-parsed value that reads as a real colour.
+  const NORM = [
+    ['#ffffff', '#ffffff', 'plain six-digit'],
+    ['#1A4D2E', '#1a4d2e', 'uppercase is lowercased, so keys compare equal'],
+    ['  #abcdef  ', '#abcdef', 'a value pasted from a spreadsheet carries spaces'],
+    ['#fff',    '#ffffff', 'THE BUG: #abc is the same colour as #aabbcc'],
+    ['#FFF',    '#ffffff', 'shorthand, uppercase'],
+    ['#AbC',    '#aabbcc', 'shorthand, mixed case'],
+    ['#000',    '#000000', 'shorthand black — must not be confused with invalid'],
+    ['red',     null,      'a CSS colour name is not a hex value'],
+    ['ffffff',  null,      'no hash'],
+    ['#ffff',   null,      'four digits is not a hex colour'],
+    ['#fffffff', null,     'seven digits'],
+    ['#gggggg', null,      'not hex digits'],
+    ['',        null,      'empty'],
+    [null,      null,      'null'],
+    [undefined, null,      'undefined'],
+    [42,        null,      'a number, not a string'],
+    [{},        null,      'an object']
+  ];
+  NORM.forEach(([input, expected, why]) => {
+    let got;
+    try { got = engine.normalizeHex(input); }
+    catch (e) { fail('normalizeHex', 'threw on ' + show(input) + ' (' + why + '): ' + e.message); return; }
+    if (got !== expected){
+      fail('normalizeHex', show(input) + ' -> ' + show(got) + ', expected ' + show(expected) +
+           ' — ' + why);
+    }
+  });
+
+  // --- luminance ---------------------------------------------------------
+  // Never NaN. That is the whole point: a NaN here does not throw, it
+  // makes every comparison downstream silently false.
+  const LUM = [
+    ['#ffffff', 1],
+    ['#000000', 0],
+    ['#fff',    1],      // was NaN before the fix
+    ['#000',    0],
+    ['red',     0],      // unreadable scores as black, so white text goes on it
+    ['',        0],
+    [null,      0],
+    [undefined, 0]
+  ];
+  LUM.forEach(([input, expected]) => {
+    const got = engine.luminance(input);
+    if (typeof got !== 'number' || Number.isNaN(got)){
+      fail('luminance', show(input) + ' produced ' + show(got) + ' — a NaN never throws, it ' +
+           'just makes every comparison after it false, which is how white ended up on white');
+      return;
+    }
+    if (Math.abs(got - expected) > 0.001){
+      fail('luminance', show(input) + ' -> ' + got + ', expected about ' + expected);
+    }
+  });
+  // Ordering, not just endpoints: a mid grey has to sit between them.
+  if (!(engine.luminance('#000000') < engine.luminance('#808080') &&
+        engine.luminance('#808080') < engine.luminance('#ffffff'))){
+    fail('luminance', 'black < grey < white does not hold, so the whole scale is wrong');
+  }
+
+  // --- safeTextColor -----------------------------------------------------
+  // THE REGRESSION THAT STARTED IT. White on a white background, from a
+  // three-digit hex, with no error anywhere.
+  if (engine.safeTextColor('#fff', '#ffffff') === '#ffffff'){
+    fail('safeTextColor', 'white text on a #fff background — this is the exact bug the ' +
+         'shorthand handling exists to prevent, and it is invisible rather than broken');
+  }
+  const CONTRAST = [
+    ['#ffffff', '#ffffff', 'white on white'],
+    ['#fff',    '#ffffff', 'white on shorthand white'],
+    ['#000000', '#000000', 'black on black'],
+    ['#000',    '#000000', 'black on shorthand black'],
+    ['#1a4d2e', '#1a4d2e', 'a real team colour on itself']
+  ];
+  CONTRAST.forEach(([bg, pref, why]) => {
+    const out = engine.safeTextColor(bg, pref);
+    const bgLum = engine.luminance(bg), outLum = engine.luminance(out);
+    if (Math.abs(bgLum - outLum) < 0.3){
+      fail('safeTextColor', why + ': chose ' + show(out) + ' on ' + show(bg) +
+           ' — luminance ' + outLum.toFixed(2) + ' against ' + bgLum.toFixed(2) +
+           ', which is not readable');
+    }
+  });
+  // A preference that already contrasts must be honoured, or a team's
+  // chosen colours get overridden for no reason.
+  if (engine.safeTextColor('#000000', '#ffc72c') !== '#ffc72c'){
+    fail('safeTextColor', 'gold on black is perfectly readable and was overridden — the ' +
+         'point is to rescue unreadable combinations, not to impose a house style');
+  }
+  // Missing inputs must still return something usable.
+  [['#ffffff', null], ['#000000', null], [null, '#123456'], [null, null], ['red', '#ffffff']]
+    .forEach(([bg, pref]) => {
+      const out = engine.safeTextColor(bg, pref);
+      if (!engine.normalizeHex(out)){
+        fail('safeTextColor', 'bg=' + show(bg) + ' pref=' + show(pref) + ' returned ' +
+             show(out) + ', which is not a usable colour — this value goes straight into ' +
+             'a style attribute');
+      }
+    });
+
+  // --- colorDistance -----------------------------------------------------
+  if (engine.colorDistance('#ffffff', '#000000') <= engine.colorDistance('#ffffff', '#eeeeee')){
+    fail('colorDistance', 'black is not further from white than near-white is');
+  }
+  if (engine.colorDistance('#8b0000', '#8b0000') !== 0){
+    fail('colorDistance', 'a colour is not zero distance from itself');
+  }
+  // Shorthand must measure the same as its long form, or two spellings of
+  // one colour read as different colours.
+  if (engine.colorDistance('#fff', '#000') !== engine.colorDistance('#ffffff', '#000000')){
+    fail('colorDistance', '#fff/#000 measured differently from #ffffff/#000000 — the same ' +
+         'colour written two ways must not compare as two colours');
+  }
+  // Unreadable input reports MAXIMUM distance on purpose: a caller asking
+  // "are these too similar?" should keep what it has rather than swap on
+  // the strength of a comparison that never happened.
+  [['red', '#000000'], [null, '#000000'], ['#000000', undefined]].forEach(([a, b]) => {
+    const d = engine.colorDistance(a, b);
+    if (d !== Infinity){
+      fail('colorDistance', show(a) + ' vs ' + show(b) + ' -> ' + show(d) +
+           ', expected Infinity so an unreadable colour is treated as maximally distant ' +
+           'rather than accidentally "similar"');
+    }
+  });
+
+  // --- the five page copies must not drift ------------------------------
+  // markerLabel and the colour helpers were each duplicated across pages
+  // and had to be fixed in three places at once. RECEIVE_POS was defaulted
+  // in Node only and nobody noticed for months. This is the cheap guard:
+  // every page's position lists must be character-identical.
+  {
+    const fs = require('fs');
+    const read = (file, name, isSet) => {
+      const src = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+      const re = isSet
+        ? new RegExp('const ' + name + ' = new Set\\(\\[([^\\]]*)\\]\\)')
+        : new RegExp('const ' + name + ' = \\[([^\\]]*)\\]');
+      const m = src.match(re);
+      return m ? m[1].replace(/\s|'/g, '') : null;
+    };
+    const pages = [['create_game.html', false], ['roster.html', false],
+                   ['game.html', true], ['view.html', true], ['broadcast.html', true]];
+    ['OFFENSE_POS', 'DEFENSE_POS', 'SPECIAL_POS'].forEach(listName => {
+      const values = pages.map(([f, isSet]) => [f, read(f, listName, isSet)]);
+      const missing = values.filter(([, v]) => v === null).map(([f]) => f);
+      if (missing.length){
+        fail('position lists', listName + ' could not be read from ' + missing.join(', ') +
+             ' — if the declaration moved, this guard is no longer guarding anything');
+        return;
+      }
+      const first = values[0][1];
+      const differ = values.filter(([, v]) => v !== first).map(([f]) => f);
+      if (differ.length){
+        fail('position lists', listName + ' differs in ' + differ.join(', ') + ' from ' +
+             values[0][0] + '. Five copies exist and they must stay identical: a code the ' +
+             'import accepts but the entry app does not know leaves that player with no unit');
+      }
+    });
+  }
+
+  return failures;
+}
+
+if (require.main === module){
+  const f = run();
+  console.log('=== Colour helpers ===\n');
+  console.log('Failures: ' + f.length);
+  f.forEach(x => console.log('  [' + x.area + '] ' + x.detail));
+  if (!f.length){
+    console.log('  shorthand hex expands, malformed input never yields NaN,');
+    console.log('  text stays readable, and the five position lists agree.');
+  }
+  process.exitCode = f.length ? 1 : 0;
+}
+
+module.exports = { run };
