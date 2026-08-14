@@ -1212,6 +1212,14 @@ function parseInput(raw, state){
   if (type === 'x'){
     const defn = rest[0], ret = rest[1];
     let t = O(p1) + ' intercepted' + (defn === '?' ? '' : ' by ' + D(defn));
+    // Caught in the end zone and downed. `isTouchback` is stripped from
+    // `rest` at the top of parseInput, so it cannot be misread as return
+    // yardage. The 20-yard spot comes through currentSpotGetter, as every
+    // other fixed spot does.
+    if (isTouchback){
+      return { text: t + ' in the end zone — TOUCHBACK', effect: {},
+        flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
+    }
     if (ret) t += ', returned ' + ret;
     let score = null;
     if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
@@ -3881,6 +3889,34 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }));
   }
 
+    // WHAT KIND OF PASS PLAY WAS IT -- shown on all three panels.
+  // ------------------------------------------------------------------
+  // These used to sit on the Pass panel only, and clicking one called
+  // renderPlayPanel('sack'), which rebuilt the panel WITHOUT the row.
+  // So the buttons vanished on the way to the thing they selected: no
+  // tick, no gold, and no way back to Pass except closing the panel and
+  // starting again. Every other toggle in the app stays put and lights
+  // up, and these now behave the same.
+  //
+  // Switching between them is free at this point -- nothing has been
+  // entered yet -- so all three stay live rather than the current one
+  // being disabled.
+  function outcomeSwitchRow(current){
+    const one = (t, label) => {
+      const on = t === current;
+      return '<button type="button" class="pp-outcome-switch" data-type="' + t + '"' +
+        (on ? '' : ' onclick="renderPlayPanel(\'' + t + '\')"') +
+        ' style="padding:8px 12px; border-radius:6px; border:2px solid ' +
+        (on ? '#8a6a00' : '#ccc') + '; background:' + (on ? '#ffc72c' : '#fff') +
+        '; color:' + (on ? '#1a1a2e' : '#555') +
+        '; font-size:14px; font-weight:' + (on ? '700' : '600') + '; cursor:' +
+        (on ? 'default' : 'pointer') + ';">' + (on ? '\u2713 ' : '') + label + '</button>';
+    };
+    return '<div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">' +
+      one('pass', 'Completed / incomplete') + one('sack', 'Sacked') +
+      one('int', 'Intercepted') + '</div>';
+  }
+
   function renderPlayPanel(type){
     // New play, new question: never carry a shared-number choice over.
     clearNameOverrides();
@@ -4078,11 +4114,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '<button type="button" id="pp_rushfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
           '</div>' +
         '</div>';
-    else if (type === 'pass') html =
-        '<div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">' +
-        '<button type="button" class="pp-outcome-switch" onclick="renderPlayPanel(\'sack\')" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Sacked</button>' +
-        '<button type="button" class="pp-outcome-switch" onclick="renderPlayPanel(\'int\')" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:14px; font-weight:600; cursor:pointer;">Intercepted</button>' +
-        '</div>' +
+    else if (type === 'pass') html = outcomeSwitchRow('pass') +
         offBlock('passer','Passer') + offBlock('receiver','Receiver') +
         '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap">' + yardsBlock('Enter yards', null, true) + '</div>' + spotCalcHtml() + '</div>' +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
@@ -4108,7 +4140,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '<button type="button" id="pp_passfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
           '</div>' +
         '</div>';
-    else if (type === 'sack') html = offBlock('passer','Passer') +
+    else if (type === 'sack') html = outcomeSwitchRow('sack') + offBlock('passer','Passer') +
         // The same two-row shape as rush and pass, and for the same
         // reason: the yardage question and the calculator are ONE
         // either/or decision, so they get a row with the working
@@ -4143,7 +4175,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // the interception panel was the only one that did not, which made
     // targets undercount precisely on the throws a coach most wants to
     // look back at. Optional, like the receiver everywhere else.
-    else if (type === 'int') html = offBlock('passer','Passer') + offBlock('receiver','Intended receiver (optional)') + defBlock('Intercepted by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot', null, def);
+    else if (type === 'int') html = outcomeSwitchRow('int') +
+        offBlock('passer','Passer') + offBlock('receiver','Intended receiver (optional)') +
+        defBlock('Intercepted by') +
+        // INTERCEPTED IN THE END ZONE. The defence may simply down it, and
+        // then it is a touchback: their ball at their own 20, with no
+        // return to record. Without this the only way to enter it was to
+        // put 0 return yards and hand-type the spot, which is two chances
+        // to get it wrong on a play with a fixed answer.
+        //
+        // Hides the return and touchdown fields for the same reason the
+        // kickoff touchback does -- there is nothing that happened after
+        // the catch to describe.
+        '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_int_tb" style="display:none;">' +
+        '<button type="button" id="pp_int_tb_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Downed in the end zone — touchback</button></div>' +
+        '<div id="pp_int_return_wrap">' + yardsBlock('Return yards (optional)') + tdBlock + '</div>' +
+        startingSpotFieldsHtml('pp_spot', null, def);
     else if (type === 'fumble') html = offBlock('carrier','Who fumbled') +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="own"> Recovered by own team</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="opp" checked> Recovered by opponent</label>' +
@@ -4596,6 +4643,36 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     wireLossToggles(panel);
     currentSpotGetter = (type === 'kickoff' || type === 'punt' || type === 'int' || type === 'fumble' || type === 'fg') ? wireStartingSpot(panel, 'pp_spot') : null;
+    // An interception downed in the end zone is a touchback: the defence
+    // takes over at their own 20 and there is no return. The spot is
+    // supplied rather than collected, through the same currentSpotGetter
+    // channel every other fixed spot uses.
+    {
+      const intTb = document.getElementById('pp_int_tb');
+      if (intTb){
+        const intSpotGetter = currentSpotGetter;
+        const refreshIntTb = () => {
+          const on = intTb.checked;
+          const rw = document.getElementById('pp_int_return_wrap');
+          if (rw) rw.style.display = on ? 'none' : '';
+          const sw = document.getElementById('pp_spot_wrap');
+          if (sw) sw.style.display = on ? 'none' : '';
+          const btn = document.getElementById('pp_int_tb_toggle');
+          if (btn){
+            btn.textContent = (on ? '\u2713 ' : '') + 'Downed in the end zone — touchback';
+            btn.style.background = on ? '#ffc72c' : '#fff';
+            btn.style.color = on ? '#1a1a2e' : '#555';
+            btn.style.borderColor = on ? '#8a6a00' : '#ccc';
+          }
+          currentSpotGetter = on ? touchbackReset : intSpotGetter;
+        };
+        document.getElementById('pp_int_tb_toggle').addEventListener('click', () => {
+          intTb.checked = !intTb.checked;
+          refreshIntTb();
+        });
+        refreshIntTb();
+      }
+    }
     // The rush and pass panels only need a spot when their fumble is lost,
     // so the getter is swapped in by the fumble toggle rather than set for
     // the whole panel.
@@ -5426,9 +5503,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     } else if (type === 'int'){
       if (!sel.passer) return;
       const yds = yards('pp_yards');
+      const intTbOn = document.getElementById('pp_int_tb') && document.getElementById('pp_int_tb').checked;
       // Who intercepted it is optional -- the interception itself, and
       // the return yardage, are what matter and are always visible.
-      code = sel.passer + 'x ' + (sel.credit || '?') + (yds ? ' ' + yds : '') + (td ? ' td' : '');
+      // A touchback has no return and no touchdown by definition, so
+      // neither token is emitted even if a stale value is sitting in a
+      // hidden field.
+      code = sel.passer + 'x ' + (sel.credit || '?') +
+        (intTbOn ? ' tb' : ((yds ? ' ' + yds : '') + (td ? ' td' : '')));
       roles = { passer: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'int' };
       if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       // Carries the target. No yardage: the throw was not caught, so the
