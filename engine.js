@@ -576,7 +576,18 @@ function computeBoxScore(playsList){
     // per-player TFL, which is unchanged behaviour (fumble roles have no
     // `yards` either) and matches view.html's team TFL_TYPES, which also
     // omits fumbles.
-    const TACKLE_TYPES = ['rush', 'pass', 'sack', 'fumble'];
+    // NO 'fumble'. On a fumble play `roles.defense` is the RECOVERER, not
+    // a tackler -- he picked the ball up, which is a different act and is
+    // already credited as fumRec in its own block below. Counting it as a
+    // tackle inflated every recovering defender by one and made the
+    // per-player tackle column disagree with what anyone watching saw.
+    //
+    // Removed 13 Aug 2026, on Andy's call, after the golden-game fixture
+    // showed a linebacker with three tackles when he had made two.
+    //
+    // The recovery itself is untouched: fumRec is credited whether or not
+    // anyone is named, including to a TEAM bucket.
+    const TACKLE_TYPES = ['rush', 'pass', 'sack'];
     if (r.defense && TACKLE_TYPES.includes(type)){
       const s = bucket(r.defense.team, 'defense', r.defense.num, r.defense.name);
       if (s){
@@ -697,6 +708,23 @@ function computeBoxScore(playsList){
 // definitions are the only ones. That asymmetry is deliberate: adding
 // them to the pages instead would mean editing six files to no benefit.
 // ---------------------------------------------------------------------
+// Pure data, defaulted for EVERY environment, not just Node.
+// ---------------------------------------------------------------------
+// RECEIVE_POS was defaulted only inside the Node block below, and each
+// browser page declared its own copy. game.html never did, because it
+// never calls computeBoxScore -- so the omission was invisible.
+//
+// It is still a trap: the first box-score readout added to the game page
+// would throw "RECEIVE_POS is not defined", and ONLY on games containing
+// a fumble, because that is the single branch that reads it. Reproduced
+// 13 Aug 2026 while building the golden-game fixture.
+//
+// A `const RECEIVE_POS` later in a page shadows this harmlessly, so the
+// five existing page copies keep working untouched.
+if (typeof globalThis !== 'undefined' && globalThis.RECEIVE_POS === undefined){
+  globalThis.RECEIVE_POS = new Set(['WR','TE','SE','FL','SLOT']);
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   if (typeof globalThis.isAdminMarker !== 'function') {
     globalThis.isAdminMarker = function isAdminMarker(p){
