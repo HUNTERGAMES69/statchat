@@ -323,16 +323,63 @@ async function run(){
       fail('named seed', 'seeding RB1 to Bravo Boone specifically should put him first, got: ' +
            named.map(t => t.trim()).join(' , '));
     }
-    if (!named.some(t => /Alpha/.test(t))){
-      fail('named seed', 'the OTHER #7 disappeared from the picker — a seed says who is ' +
-           'expected to start, not who may play, and the backup must stay reachable');
+    // REVISED 13 Aug 2026, same evening. This first asserted that BOTH
+    // players stay in the picker, on the reasoning that a seed says who
+    // is expected to start rather than who may play. Seeing it in a real
+    // game showed that was wrong: the coach had already answered "which
+    // #5" in the starters list, and the picker showed two question marks
+    // against the number they had just settled. Answering a question and
+    // then being asked it again reads as the app ignoring you.
+    //
+    // The backup was never actually unreachable, which is what made the
+    // original reasoning hollow -- typing the number offers the same
+    // choice, and one play promotes him permanently. Both are asserted
+    // below, because they are what make the narrowing safe.
+    if (named.some(t => /Alpha/.test(t))){
+      fail('named seed', 'the un-named #7 is still offered — naming Bravo in the starters ' +
+           'list answered "which one", and showing both again ignores that answer');
+    }
+    if (named.some(t => /\?/.test(t))){
+      fail('named seed', 'the seeded player is still marked "?" — the number was resolved ' +
+           'at setup, so there is no open question left to flag');
     }
     // ...and naming the other one reverses it, so the assertion above is
     // not just observing roster order.
     const other = await firstCarrier({ RB1: { num: '7', name: 'Alpha Ates' } });
     if (!other.length || !/Alpha/.test(other[0])){
-      fail('named seed', 'naming Alpha Ates should put HIM first, got: ' +
+      fail('named seed', 'naming Alpha Ates should offer HIM, got: ' +
            other.map(t => t.trim()).join(' , '));
+    }
+    if (other.some(t => /Bravo/.test(t))){
+      fail('named seed', 'naming Alpha still offered Bravo');
+    }
+
+    // THE BACKUP MUST STAY REACHABLE. Narrowing the picker is only
+    // defensible because these two paths exist; without them a coach
+    // would have no way to record the other man at all.
+    {
+      const h2 = await bootGamePage({ roster,
+        game: { seed_starters: { teamA: { RB1: { num: '7', name: 'Bravo Boone' } } } } });
+      setDrive(h2, { down: 1, distance: 10, side: 'own', yardline: 25 });
+      click(h2.window, h2.document.querySelector('.ptypeBtn[data-type="rush"]'));
+      typeInto(h2.window, h2.document.getElementById('pp_carrier_manual'), '7');
+      const box = h2.document.querySelector('#pp_carrier_manual + div');
+      const boxText = box ? box.textContent : '';
+      const alts = [...h2.document.querySelectorAll('.nameConfirmAlt')].map(b => b.textContent).join(' ');
+      // The DEFAULT must be the seeded starter, not whoever the roster
+      // map happens to hold. Otherwise the picker offers one player and
+      // typing the same number quietly offers the other.
+      if (!/Bravo/.test(boxText)){
+        fail('named seed', 'typing the shared number defaults to somebody other than the ' +
+             'seeded starter — the picker and the typed entry must agree about who #7 is. ' +
+             'Got: ' + JSON.stringify(boxText.slice(0, 100)));
+      }
+      if (!/Alpha/.test(alts)){
+        fail('named seed', 'typing the shared number does not offer the un-named player — ' +
+             'that path is the whole reason narrowing the picker is safe. Offered: ' +
+             JSON.stringify(alts.slice(0, 120)));
+      }
+      h2.close();
     }
 
     // BACKWARD COMPATIBILITY: a bare number, as every older game has.
@@ -347,7 +394,17 @@ async function run(){
       game: { seed_starters: { teamA: { RB1: { num: '7', name: 'Alpha Ates' } } } } });
     setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
     click(h.window, h.document.querySelector('.ptypeBtn[data-type="rush"]'));
-    click(h.window, [...h.document.querySelectorAll('.pp_carrier_pick')].find(b => /Bravo/.test(b.textContent)));
+    // Bravo is not a button here -- Alpha is the named starter -- so he
+    // goes in the way the backup always does: type the number, pick him.
+    typeInto(h.window, h.document.getElementById('pp_carrier_manual'), '7');
+    const bravoAlt = [...h.document.querySelectorAll('.nameConfirmAlt')]
+      .find(b => /Bravo/.test(b.textContent));
+    if (!bravoAlt){
+      fail('named seed', 'Alpha is the seeded starter, so typing #7 should default to him ' +
+           'and offer Bravo as the alternative — Bravo was not offered');
+    } else {
+      click(h.window, bravoAlt);
+    }
     typeInto(h.window, h.document.getElementById('pp_yards'), '9');
     click(h.window, h.document.getElementById('pp_review'));
     click(h.window, h.document.getElementById('saveBtn'));
