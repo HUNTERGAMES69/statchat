@@ -95,6 +95,13 @@ function makeClient(db){
           const ids = doomed.map(r => r.id);
           db[table] = rows.filter(r => ids.indexOf(r.id) === -1);
           // THE CASCADE, modelled. The page never deletes these itself.
+          // A CASCADING players -> game_rosters key, modelled deliberately.
+          // If the app deletes players without unlinking first, the
+          // snapshots go too and the assertions above catch it.
+          if (table === 'players'){
+            const gone = doomed.map(p => p.id);
+            db.game_rosters = db.game_rosters.filter(r => gone.indexOf(r.player_id) === -1);
+          }
           if (table === 'games' && db.cascade){
             const gone = doomed.map(g => g.id);
             db.plays = db.plays.filter(p => gone.indexOf(p.game_id) === -1);
@@ -141,10 +148,10 @@ function makeClient(db){
   };
 }
 
-async function boot(db){
-  const html = fs.readFileSync(path.join(REPO, 'account.html'), 'utf8');
+async function boot(db, file){
+  const html = fs.readFileSync(path.join(REPO, file || 'account.html'), 'utf8');
   const dom = new JSDOM(html, {
-    url: 'https://nevillestatchat.vercel.app/account.html',
+    url: 'https://nevillestatchat.vercel.app/' + (file || 'account.html'),
     runScripts: 'dangerously',
     beforeParse(window){
       window.supabase = { createClient: () => makeClient(db) };
@@ -333,6 +340,156 @@ async function run(){
            'the test fixture is lying and every other cascade assertion here is worthless');
     }
     // Not a failure of the app: a note that the app cannot see this.
+  }
+
+  // === CLEAR ROSTER FOR A NEW SEASON (roster.html) ======================
+  // A different button with the opposite requirement to the one above:
+  // it must delete the CURRENT roster and leave every past season
+  // completely intact. The danger is not the delete, it is the foreign
+  // key -- game_rosters.player_id points at players, and if that
+  // constraint cascades, clearing the roster would silently destroy the
+  // roster snapshot of a game played last October.
+  //
+  // The mock below cascades ON PURPOSE, so a version that deletes
+  // players without unlinking first is caught rather than passing by
+  // luck of the schema.
+  async function clearRoster(dom, { typed = 'CLEAR' } = {}){
+    const doc = dom.window.document, win = dom.window;
+    const click = id => doc.getElementById(id).dispatchEvent(new win.Event('click', { bubbles: true }));
+    click('clearRosterBtn');
+    await tick();
+    doc.getElementById('clearRosterInput').value = typed;
+    click('clearRosterConfirmBtn');
+    await tick(250);
+    return doc.getElementById('rosterMsg').textContent;
+  }
+
+  {
+    const db = makeDb();
+    db.rosterCascade = true;   // honoured in the delete branch below
+    const dom = await boot(db, 'roster.html');
+    const msg = await clearRoster(dom);
+
+    if (db.players.length){
+      fail('clear roster', db.players.length + ' player(s) survived — the button is meant ' +
+           'to empty the roster so next season can be uploaded fresh');
+    }
+    // THE POINT OF THE WHOLE FEATURE.
+    if (db.game_rosters.length !== 2){
+      fail('clear roster', 'a past game lost its roster snapshot (' + db.game_rosters.length +
+           ' of 2 left) — last season\'s names and numbers come from these rows, and the ' +
+           'coach was told past seasons are untouched');
+    }
+    if (db.games.length !== 3 || db.plays.length !== 4){
+      fail('clear roster', 'clearing the roster removed games or plays — it must touch ' +
+           'neither');
+    }
+    // The link must be severed, not the row.
+    if (db.game_rosters.some(r => r.player_id !== null)){
+      fail('clear roster', 'game_rosters.player_id was left pointing at deleted players: ' +
+           JSON.stringify(db.game_rosters) + ' — a cascading foreign key would then have ' +
+           'taken the snapshot with it');
+    }
+    if (db.ops.indexOf('game_rosters.update') === -1 ||
+        db.ops.indexOf('game_rosters.update') > db.ops.indexOf('players.delete')){
+      fail('clear roster', 'the snapshots must be unlinked BEFORE the players are deleted, ' +
+           'not after — after is too late for a cascade');
+    }
+    if (!/untouched/i.test(msg || '')){
+      fail('clear roster', 'the confirmation does not reassure that past seasons survived');
+    }
+    dom.window.close();
+  }
+
+  // --- the phrase must be exact, and a failed unlink must abort ---------
+  {
+    const db = makeDb();
+    const dom = await boot(db, 'roster.html');
+    await clearRoster(dom, { typed: 'clear' });
+    if (db.players.length !== 3){
+      fail('clear roster', 'typing "clear" in lower case still emptied the roster');
+    }
+    dom.window.close();
+  }
+  {
+    const db = makeDb({ failOn: 'game_rosters.update' });
+    const dom = await boot(db, 'roster.html');
+    const msg = await clearRoster(dom);
+    if (db.players.length !== 3){
+      fail('clear roster', 'the unlink failed and it deleted the players anyway — that is ' +
+           'the exact case where a cascading key destroys a past season');
+    }
+    if (!/[Nn]othing has been deleted/.test(msg || '')){
+      fail('clear roster', 'the unlink failed and the message does not say nothing was ' +
+           'deleted: ' + JSON.stringify((msg || '').slice(0, 140)));
+    }
+    dom.window.close();
+  }
+
+  // --- PROOF that a past season's reports are unchanged -----------------
+  // The assertions above prove the clear does not DELETE games, plays or
+  // roster snapshots. This proves the stronger thing the coach was
+  // actually promised: that the reports READ THE SAME afterwards.
+  //
+  // The clear does exactly two things -- nulls game_rosters.player_id and
+  // deletes the players rows -- so a finished game is rendered in both
+  // states and the output compared character for character. Anything
+  // that quietly resolved a name through the players table instead of the
+  // snapshot would show up here and nowhere else.
+  {
+    const { bootGamePage, bootPage, defaultRoster } = require('./harness');
+    const D = require('./ui_driver');
+
+    const g = await bootGamePage({ roster: defaultRoster() });
+    D.setDrive(g, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    D.enterPlay(g, { type: 'rush', carrier: '22', yards: '12', credit: '55' });
+    D.enterPlay(g, { type: 'pass', passer: '7', receiver: '80', yards: '23', credit: '44' });
+    D.setDrive(g, { down: 1, distance: 10, side: 'opp', yardline: 6 });
+    D.enterPlay(g, { type: 'rush', carrier: '22', yards: '6', td: true });
+    const plays = g.db.plays.map((p, i) =>
+      Object.assign({}, p, { sequence_number: p.sequence_number || i + 1 }));
+    g.close();
+
+    const before = defaultRoster().map((r, i) => Object.assign({}, r, { player_id: 'pl' + i }));
+    const after  = defaultRoster().map(r => Object.assign({}, r, { player_id: null }));
+
+    const render = async (page, roster, query) => {
+      const v = await bootPage(page, { existingPlays: plays, roster, query,
+        game: { status: 'final', season_year: 2025, game_date: '2025-10-04' } });
+      await tick(400);
+      const t = v.document.body.textContent.replace(/\s+/g, ' ').trim();
+      v.close();
+      return t;
+    };
+
+    for (const [page, query] of [['recap.html', undefined],
+                                 ['stat_package.html', undefined],
+                                 ['season_report.html', '?season=2025']]){
+      const a = await render(page, before, query);
+      const b = await render(page, after, query);
+      // Guard against two blank pages agreeing with each other.
+      if (a.length < 200 || !/\d/.test(a)){
+        fail('past seasons', page + ' rendered almost nothing, so comparing it proves ' +
+             'nothing — fix the fixture before trusting this check');
+        continue;
+      }
+      if (a !== b){
+        const at = a.split(' '), bt = b.split(' ');
+        let where = '';
+        for (let i = 0; i < Math.max(at.length, bt.length); i++){
+          if (at[i] !== bt[i]){
+            where = ' — first difference: ' + JSON.stringify(at.slice(i, i + 8).join(' ')) +
+                    ' vs ' + JSON.stringify(bt.slice(i, i + 8).join(' '));
+            break;
+          }
+        }
+        fail('past seasons', page + ' renders DIFFERENTLY after the roster is cleared' + where);
+      }
+      if (!/Runningback/.test(b)){
+        fail('past seasons', page + ' lost its player names once the roster was cleared — ' +
+             'names for a finished game must come from the game_rosters snapshot, not players');
+      }
+    }
   }
 
   return failures;
