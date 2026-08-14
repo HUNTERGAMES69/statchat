@@ -335,6 +335,37 @@ async function run() {
     r.close();
   }
 
+  // --- A FUMBLE RECOVERY IS NOT A TACKLE --------------------------------
+  // Decided 13 Aug 2026. On a fumble play `roles.defense` is the
+  // RECOVERER: he picked the ball up, which is a different act from
+  // bringing the carrier down, and it is already credited as fumRec.
+  // Counting it as a tackle too inflated every recovering defender by
+  // one and made the column disagree with what anyone watching saw.
+  //
+  // Nothing asserted this in either direction before, which is why it
+  // survived — the whole suite stayed green when the behaviour was
+  // reversed. Pinned now, both halves: the tackle must NOT appear and
+  // the recovery MUST.
+  {
+    const h = await bootGamePage({ roster: ROSTER });
+    D.setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 30 });
+    const r = D.enterPlay(h, { type: 'rush', carrier: '22', yards: 3, fumbled: true,
+      fumbleRec: 'opp', credit: '99', spot: { side: 'own', yardline: '33' } });
+    if (!r.saved) fail('fumble recovery', 'the fumble play did not save: ' + r.reason);
+    const box = JSON.parse(h.evalIn('JSON.stringify(computeBoxScore(plays))'));
+    const rec = ((box.teamB || {}).defense || {})['Frank'] || {};
+    if (rec.tackles) {
+      fail('fumble recovery', 'recovering a fumble credited ' + rec.tackles + ' tackle(s) — ' +
+           'picking the ball up is not bringing the carrier down, and it is already ' +
+           'counted as a fumble recovery');
+    }
+    if (!rec.fumRec) {
+      fail('fumble recovery', 'the recovery itself was lost: ' + JSON.stringify(rec) +
+           ' — removing the tackle must not remove the fumRec, they are separate credits');
+    }
+    h.close();
+  }
+
   return failures;
 }
 
