@@ -481,9 +481,27 @@
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
     const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
     const seeds = game.seed_starters || {};
+    // TWO SHAPES, FOREVER. A seed is either a bare jersey number, which
+    // is every game saved before 13 Aug 2026, or { num, name } after it.
+    // The name is only present when the number was shared and the coach
+    // said which player they meant. Reading both is not a transition
+    // step -- old game rows are not migrated and must keep working.
+    const seedNum  = (v) => (v && typeof v === 'object') ? v.num  : v;
+    const seedName = (v) => (v && typeof v === 'object') ? v.name : null;
     const seedOrderFor = (side) => {
       const s = seeds[side] || {};
-      return ['QB','RB1','RB2','WR1','WR2','WR3'].map(role => s[role]).filter(Boolean);
+      return ['QB','RB1','RB2','WR1','WR2','WR3'].map(role => seedNum(s[role])).filter(Boolean);
+    };
+    // num + name -> true, for the seeds that name a specific player. This
+    // is what finally lets a starters list say WHICH #7 -- the last place
+    // in the app that could not express it.
+    const seedIdentityFor = (side) => {
+      const s = seeds[side] || {}, out = {};
+      Object.keys(s).forEach(role => {
+        const n = seedNum(s[role]), nm = seedName(s[role]);
+        if (n && nm) out[n + '\u0000' + nm] = true;
+      });
+      return out;
     };
     // The slot a player was seeded into already states what they do, so
     // keep it. Flattening to a bare list of numbers threw that away, and
@@ -492,15 +510,16 @@
     const seedPosFor = (side) => {
       const s = seeds[side] || {}, out = {};
       Object.keys(s).forEach(role => {
-        if (!s[role]) return;
-        out[s[role]] = role.replace(/[0-9]+$/, '');   // WR2 -> WR, RB1 -> RB
+        const n = seedNum(s[role]);
+        if (!n) return;
+        out[n] = role.replace(/[0-9]+$/, '');   // WR2 -> WR, RB1 -> RB
       });
       return out;
     };
     TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: ourBranding.logo_url || null, seedOrder: seedOrderFor('teamA'), seedPos: seedPosFor('teamA') };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: ourBranding.logo_url || null, seedOrder: seedOrderFor('teamA'), seedPos: seedPosFor('teamA'), seedIdentity: seedIdentityFor('teamA') };
     TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#8B0000', text: game.opponent_secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: game.opponent_logo_url || null, seedOrder: seedOrderFor('teamB'), seedPos: seedPosFor('teamB') };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: game.opponent_logo_url || null, seedOrder: seedOrderFor('teamB'), seedPos: seedPosFor('teamB'), seedIdentity: seedIdentityFor('teamB') };
     TEAMS.teamA.ambiguousOffense = {}; TEAMS.teamA.ambiguousDefense = {}; TEAMS.teamA.ambiguousSpecialTeams = {};
     TEAMS.teamB.ambiguousOffense = {}; TEAMS.teamB.ambiguousDefense = {}; TEAMS.teamB.ambiguousSpecialTeams = {};
     // Shared jersey numbers are recorded, not silently overwritten.
@@ -1601,6 +1620,10 @@ function offenseEligible(team, role){
   // A shared number does NOT excuse a player from the position filter.
   // Injecting every ambiguous entry into every picker put linemen in the
   // passer list and turned the panel into a wall of question marks.
+  // Seeds that name a specific player -- see seedIdentityFor(). Used
+  // only to break the tie between two people wearing one number,
+  // before either of them has played the role.
+  const seedId = (TEAMS[team] || {}).seedIdentity || {};
   const ambiguousList = [];
   // THE THIRD OVERRIDE: has this player actually done it in THIS game?
   // ------------------------------------------------------------------
@@ -1679,9 +1702,17 @@ function offenseEligible(team, role){
         if (ra !== rb) return rb - ra;
       }
       // Nobody has played this role yet, so the coach's starters list is
-      // the only signal there is. Keyed by number, so two players sharing
-      // one tie with each other and simply sort ahead of other shared
-      // numbers -- which is the most it can say.
+      // the only signal there is.
+      //
+      // A NAMED seed breaks the tie between two players sharing a number
+      // -- the thing seedOrder alone could never do, because it holds
+      // numbers. Both stay in the list: the seed says who is EXPECTED to
+      // start, not who is allowed to play, and narrowing to the named one
+      // would hide the backup the moment he came on. It decides who is
+      // offered first, nothing more.
+      const ia = !!seedId[identityKey(a.num, a.resolvedName)];
+      const ib = !!seedId[identityKey(b.num, b.resolvedName)];
+      if (ia !== ib) return ia ? -1 : 1;
       const sa = seed.indexOf(a.num), sb = seed.indexOf(b.num);
       return (sa === -1 ? 999 : sa) - (sb === -1 ? 999 : sb);
     });

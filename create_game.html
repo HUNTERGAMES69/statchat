@@ -86,6 +86,7 @@
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR2<input type="text" id="ourStarterWR2" style="width:36px;"></label>
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR3<input type="text" id="ourStarterWR3" style="width:36px;"></label>
       </div>
+      <div id="ourStarterResolve" style="margin-top:8px;"></div>
     </div>
 
     <div class="card">
@@ -121,6 +122,7 @@
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR2<input type="text" id="oppStarterWR2" style="width:36px;"></label>
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR3<input type="text" id="oppStarterWR3" style="width:36px;"></label>
       </div>
+      <div id="oppStarterResolve" style="margin-top:8px;"></div>
 
       <p class="hint" style="margin:16px 0 6px; font-size:13px; color:#888;">Opponent branding (optional)</p>
       <div class="row" style="gap:16px; align-items:flex-end; flex-wrap:wrap;">
@@ -181,6 +183,100 @@
     if (DEFENSE_POS.includes(first)) return 'defense';
     return null;
   }
+  // SEEDED STARTERS: WHICH PLAYER, NOT JUST WHICH NUMBER
+  // ===================================================================
+  // seed_starters used to be { QB: "7" } -- a slot mapped to a jersey
+  // NUMBER. With two players wearing 7 that cannot say which one is the
+  // starter, and it was the last place in the app that still could not
+  // express the difference. Everything downstream was taught to handle
+  // shared numbers on 13 Aug; this was the remaining gap.
+  //
+  // It is now { QB: { num: "7", name: "Alpha Ates" } }, with `name`
+  // present only when it was needed. Readers MUST accept both shapes:
+  // every game row already saved is the old form and none of them should
+  // break. seedNum()/seedName() in game.html do that.
+  //
+  // The interaction mirrors attachNameConfirm() in the entry app on
+  // purpose -- type a number, see who it resolved to, tap to change it if
+  // the number is shared. A coach meets the same control in both places.
+  const seedChoice = { our: {}, opp: {} };   // role -> chosen name
+  const SEED_ROLES = ['QB','RB1','RB2','WR1','WR2','WR3'];
+
+  // Everyone wearing this number, across all three units, from whichever
+  // roster is loaded for that side.
+  function candidatesForNumber(side, num){
+    const resolved = side === 'our' ? ourResolved : oppResolved;
+    const bucket = (resolved || {})[String(num).trim()];
+    if (!bucket) return [];
+    const seen = {}, out = [];
+    ['offense','defense','special'].forEach(u => {
+      (bucket[u] || []).forEach(en => {
+        if (en && en.name && !seen[en.name]){ seen[en.name] = true; out.push(en.name); }
+      });
+    });
+    return out;
+  }
+
+  function renderStarterResolve(side){
+    const box = document.getElementById(side + 'StarterResolve');
+    if (!box) return;
+    const lines = [];
+    SEED_ROLES.forEach(role => {
+      const num = document.getElementById(side + 'Starter' + role).value.trim();
+      if (!num){ delete seedChoice[side][role]; return; }
+      const cands = candidatesForNumber(side, num);
+      if (cands.length === 0){
+        // No roster loaded, or a number nobody wears. Not an error -- a
+        // coach may seed before uploading, or from memory -- but say so
+        // rather than showing a confident tick against nothing.
+        delete seedChoice[side][role];
+        lines.push('<div style="font-size:13px; color:#888; margin-bottom:4px;">' +
+          role + ' #' + num + ' — not on the roster loaded here; the number will be used on its own.</div>');
+        return;
+      }
+      if (cands.length === 1){
+        seedChoice[side][role] = cands[0];
+        lines.push('<div style="font-size:13px; color:#1a7a4c; margin-bottom:4px;">' +
+          '✓ ' + role + ' #' + num + ' — ' + cands[0] + '</div>');
+        return;
+      }
+      // SHARED NUMBER. Nothing is chosen for the coach: an arbitrary
+      // default here would be indistinguishable from a decision.
+      const chosen = seedChoice[side][role];
+      lines.push('<div style="font-size:13px; margin-bottom:6px; padding:6px 8px; ' +
+        'background:#fff8e6; border:1px solid #e0b400; border-radius:6px;">' +
+        '<strong>' + role + ' #' + num + '</strong> is shared — which player?<br>' +
+        cands.map(n =>
+          '<button type="button" class="seedPick" data-side="' + side + '" data-role="' + role +
+          '" data-name="' + n.replace(/"/g, '&quot;') + '" style="margin:4px 6px 0 0; padding:4px 10px; ' +
+          'font-size:13px; border-radius:6px; border:2px solid ' + (chosen === n ? '#1a7a4c' : '#ccc') +
+          '; background:' + (chosen === n ? '#1a7a4c' : '#fff') + '; color:' + (chosen === n ? '#fff' : '#555') +
+          '; cursor:pointer;">' + (chosen === n ? '✓ ' : '') + n + '</button>').join('') +
+        '</div>');
+    });
+    box.innerHTML = lines.join('');
+    box.querySelectorAll('.seedPick').forEach(b => b.addEventListener('click', () => {
+      seedChoice[b.dataset.side][b.dataset.role] = b.dataset.name;
+      renderStarterResolve(b.dataset.side);
+    }));
+  }
+
+  function wireStarterResolve(){
+    ['our','opp'].forEach(side => SEED_ROLES.forEach(role => {
+      const el = document.getElementById(side + 'Starter' + role);
+      if (!el || el.dataset.seedWired) return;
+      el.dataset.seedWired = '1';
+      el.addEventListener('input', () => {
+        // A new number invalidates the old choice -- otherwise the name
+        // picked for #7 stays attached while the box now reads #21.
+        delete seedChoice[side][role];
+        renderStarterResolve(side);
+      });
+    }));
+    renderStarterResolve('our');
+    renderStarterResolve('opp');
+  }
+
   function extractNameTag(rawName){
     const m = String(rawName).match(/\(\s*(O|D|ST)\s*\)\s*$/i);
     if (!m) return { cleanName: String(rawName).trim(), explicitUnit: null };
@@ -423,8 +519,17 @@
       if (eg.opponent_secondary_color) document.getElementById('oppSecondaryColorInput').value = eg.opponent_secondary_color;
       const seeds = eg.seed_starters || {};
       ['QB','RB1','RB2','WR1','WR2','WR3'].forEach(role => {
-        if (seeds.teamA && seeds.teamA[role]) document.getElementById('ourStarter' + role).value = seeds.teamA[role];
-        if (seeds.teamB && seeds.teamB[role]) document.getElementById('oppStarter' + role).value = seeds.teamB[role];
+        // Both shapes: a bare number from before 13 Aug 2026, or
+        // { num, name } after it.
+        const load = (seed, side) => {
+          if (!seed) return;
+          const num = (typeof seed === 'object') ? seed.num : seed;
+          const nm = (typeof seed === 'object') ? seed.name : null;
+          document.getElementById(side + 'Starter' + role).value = num || '';
+          if (nm) seedChoice[side][role] = nm;
+        };
+        load(seeds.teamA && seeds.teamA[role], 'our');
+        load(seeds.teamB && seeds.teamB[role], 'opp');
       });
       if (eg.opponent_logo_url){
         const img = document.getElementById('oppLogoPreview');
@@ -493,6 +598,10 @@
       (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>';
     renderAssignmentUI('ourAssignments', 'our', needsAssignment, ourResolved);
     renderConflictUI('ourConflicts', 'our', conflicts, ourResolved);
+    // A roster just became available, so any starter numbers already
+    // typed can now be resolved to actual players. Seeding before
+    // uploading is the normal order, not an edge case.
+    wireStarterResolve();
 
     if (editGameStatus === 'final'){
       setFormLocked(true);
@@ -652,6 +761,10 @@
         (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>';
       renderAssignmentUI('opponentAssignments', 'opp', needsAssignment, oppResolved);
       renderConflictUI('opponentConflicts', 'opp', conflicts, oppResolved);
+      // A roster just became available, so any starter numbers already
+      // typed can now be resolved to actual players. Seeding before
+      // uploading is the normal order, not an edge case.
+      wireStarterResolve();
     };
     reader.readAsArrayBuffer(file);
   });
@@ -800,8 +913,13 @@
     ['QB','RB1','RB2','WR1','WR2','WR3'].forEach(role => {
       const ourVal = document.getElementById('ourStarter' + role).value.trim();
       const oppVal = document.getElementById('oppStarter' + role).value.trim();
-      if (ourVal) seedStarters.teamA[role] = ourVal;
-      if (oppVal) seedStarters.teamB[role] = oppVal;
+      // { num, name } when we know who; a bare number otherwise, which is
+      // exactly the old shape, so a game seeded without a roster loaded
+      // saves what it always did.
+      if (ourVal) seedStarters.teamA[role] = seedChoice.our[role]
+        ? { num: ourVal, name: seedChoice.our[role] } : ourVal;
+      if (oppVal) seedStarters.teamB[role] = seedChoice.opp[role]
+        ? { num: oppVal, name: seedChoice.opp[role] } : oppVal;
     });
 
     const gamePayload = {
