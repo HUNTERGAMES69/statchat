@@ -1573,3 +1573,148 @@ documentation pass, which is why section 15 does not mention it.
   `whitelist_check.js` already covers kickoff outcome exclusivity and is
   the natural home.
 - [ ] `normalizeHex` still has no committed test (from section 15).
+
+---
+
+## 17. 14 August 2026 — closing the test gaps
+
+Five items from the Night 1 list. Four closed, one half closed, and one
+of them was not a defect at all.
+
+### Closed
+
+- [x] **`normalizeHex` has a test** — new `tests/color_check.js`. Covers
+  shorthand expansion, every malformed input, luminance never returning
+  NaN, readable text on every background, and `colorDistance` returning
+  Infinity for unreadable input. It also guards the FIVE position lists
+  against drift, which is the cheap check that would have caught the
+  `SLOT` divergence.
+- [x] **Out of bounds and the toggle repaint have tests** — added to
+  `whitelist_check.js`. Exclusivity is checked in BOTH orders across all
+  four outcomes (12 pairs), the button text must agree with its
+  checkbox, and the out-of-bounds spot must move a prefilled 20 to a 35.
+- [x] **`2023_01_GB_CHI` does NOT hang.** 21 seconds, zero issues, clean
+  exit. Seven games in one process: all ~20s, heap flat, no degradation.
+  The original report was an artefact of how it was being run in a
+  shared sandbox, not a defect. **Nothing to fix — finding withdrawn.**
+- [x] **The safety clause in `expectedScore()` is verified**, against
+  `2023_03_IND_BAL` and `2023_03_NE_NYJ`. In both, the two points land on
+  the right side and StatChat's score is exactly the real score minus the
+  safety, zero issues.
+- [x] **Two-point conversions are converted.** They arrived as
+  `play_type` run/pass with `two_point_attempt` set and fell through to
+  the ordinary branches, so the points were never scored AND the attempt
+  was entered as a scrimmage play, inflating rushing and receiving totals
+  with yardage NFHS excludes. `run_qa` no longer deducts for them.
+  `2023_01_CIN_CLE` now reproduces its real score 24-3 exactly.
+- [x] Four new mutants in `mutation_check.js`, and **three suites added
+  to its SUITES list** — mutants aimed at suites the runner never ran
+  would have been reported as survivors, which is worse than no mutant.
+
+### Opened
+
+- [ ] **`convert.js` still drops defensive and return touchdowns.**
+  `scoredIt()` requires `td_team === posteam`, so a fumble return,
+  interception return or punt return score is not emitted. Still
+  deducted, still measured. `2023_01_GB_CHI` is the standing example
+  (6 points).
+- [ ] **`convert.js` does not emit safeties either.** Same shape as the
+  above: known, measured, deducted rather than fixed. Both are now the
+  only two deductions left in `expectedScore()`.
+- [ ] **Four mutants in `mutation_check.js` are SKIPPED** because their
+  anchor text no longer exists: `penalty-distance`, `returner-overload`,
+  `engine-drift`, `returner-name`. A skipped mutant is counted as a
+  survivor, but it is really a stale fixture — the code moved under it.
+  They need re-anchoring, and `engine-drift` may be meaningless now that
+  the engine is consolidated.
+
+### Closed later the same day — the converter gaps
+
+- [x] **Defensive and return touchdowns are converted.** All five ways
+  they happen: an interception taken back, a fumble returned off a run,
+  a catch stripped and returned, a STRIP-SACK returned, a punt returned,
+  and a blocked field goal returned. Each needed its own branch because
+  each is a different StatChat play; `scoredIt()` refuses them all by
+  design, so a `defensiveTd` test was added alongside it.
+- [x] **Safeties are converted** — on a run and on a sack, which is how
+  both real examples occur.
+- [x] **Every deduction in `expectedScore()` is gone.** Tier 1.5 now
+  compares StatChat's score against the REAL score with no adjustment
+  layer between them. **16 of 16 week-1 2023 games reproduce the real
+  final score exactly, plus the two week-3 safety games — 18 for 18,
+  zero issues.** Nine of those were never looked at while writing the
+  code.
+
+  This is what the harness was for. A deduction that covers a gap also
+  hides it; with none left, any future divergence is a real finding.
+
+### The mutation fixtures — 14 August 2026
+
+- [x] **Ten stale mutant anchors re-pointed, not four.** The first run
+  stopped before reaching the rest. Nine had simply moved into
+  `engine.js` during the consolidation. A SKIPPED mutant is reported as
+  a survivor, so ten stale fixtures were reading as ten blind spots —
+  the opposite of the truth: the code had moved and nobody re-pointed
+  the fixture.
+- [x] **`engine-drift` retired.** It changed `recap.html`'s own copy of
+  `computeBoxScore` to prove the copies had diverged. There are no
+  copies now, so it had nothing to bite on. Replaced by a mutant
+  guarding the shared-number identity fix.
+- [x] **`engine_parity.js` removed from every `expectCaughtBy`** — it is
+  a passing tombstone and can never catch anything, so listing it
+  implied coverage that does not exist.
+- [x] Four suites added to the runner: `color_check`, `tackles_check`,
+  `whitelist_check`, `shared_number_check`. A mutant aimed at a suite
+  the runner never runs is reported as a survivor.
+- [x] **Every anchor now appears EXACTLY ONCE**, and that is checked.
+  The runner uses `original.replace()`, which mutates only the first
+  occurrence, so an anchor with sixteen matches mutates one branch and
+  probably not the one under test. The first `shared-number` mutant did
+  exactly that and survived — weak mutant, not blind suite. **Any new
+  mutant must use text that appears once.**
+
+### The runner corrupted the working tree, twice
+
+- [x] **`mutation_check` now recovers from being killed.** It edits real
+  source files and restores them in a `finally`, which covers an
+  exception and does NOT cover the process being killed or running out
+  of memory. It died mid-mutation twice, each time leaving a deliberate
+  bug written into `game.html`.
+
+  The second time did real damage: the corrupted file was mistaken for
+  the real one and reasoned from, producing confident wrong conclusions
+  about which anchors were stale. **Every diagnosis made while that run
+  was in the background had to be thrown away and redone against files
+  re-fetched from the repo.**
+
+  Three changes: a breadcrumb (`tests/.mutation-in-flight.json` and a
+  `.bak` of the untouched file) written BEFORE each mutation and removed
+  on restore; a recovery pass at startup that puts back anything a
+  previous run left in flight; and SIGINT/SIGTERM/SIGHUP handlers.
+  Nothing covers SIGKILL, which is why the breadcrumb is a file on disk
+  rather than a variable in memory. Verified by corrupting `game.html`
+  by hand and watching the next run restore it.
+- [x] **Per-suite timeout, 2 minutes.** A mutant can make a suite HANG
+  rather than fail, and `execFileSync` with no timeout waits for ever,
+  taking the run with it and leaving the mutation on disk. A timeout
+  counts as CAUGHT: a suite that never returns has certainly noticed
+  something, and the alternative is calling a hang a pass.
+- [x] `.gitignore` added so the breadcrumbs never reach the repo.
+
+**Two working rules from this.** Never run `mutation_check` in the
+background while editing — it rewrites the files underneath you. And any
+conclusion drawn from a source file while it is running is suspect until
+re-checked against a clean copy.
+
+### Genuine blind spots, confirmed on a clean run
+
+- [ ] **`returner-overload` survives.** Broadening the defensive-credit
+  test in `engine.js` to `if (r.defense)` — crediting a returner with an
+  interception, a sack and a fumble recovery — is no longer caught by
+  `cross_surface.js`. It was, before the engine moved.
+- [ ] **`returner-name` survives.** Dropping the cross-roster fallback in
+  `playerName` (the Aug 5 bug) is no longer caught by `run_scripted.js`.
+
+  Both are real coverage gaps rather than stale fixtures, and both
+  concern returners. One scenario using a special-teams-only returner,
+  checking his defensive stats, would close both.
