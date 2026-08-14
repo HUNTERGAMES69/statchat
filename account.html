@@ -167,7 +167,7 @@
 
     <div id="resetCard" class="card hidden">
       <h2>Reset for production</h2>
-      <p class="sub">Permanently deletes every game, play, and roster snapshot in the database. Your team roster and branding are not touched. Only use this once, when you're done testing and ready to track real games.</p>
+      <p class="sub">Empties the app for live use. Permanently deletes <strong>every game, play and roster snapshot</strong>, your <strong>team roster</strong>, and clears the <strong>current season year</strong>. Your team name, colours and logo are kept, as are all user accounts. Only use this once, when you're done testing and ready to track real games.</p>
       <div id="resetMsg"></div>
       <button class="danger" id="startResetBtn">Reset for production…</button>
 
@@ -182,7 +182,8 @@
 
       <div id="resetStep3" class="hidden danger-zone">
         <p style="font-weight:600; margin:0 0 6px;">This cannot be undone</p>
-        <p class="sub" style="margin:0 0 10px;">Every game, every play, every roster snapshot — gone permanently. Type <strong>I agree</strong> exactly to confirm.</p>
+        <p class="sub" style="margin:0 0 10px;">Every game, every play, every roster snapshot, every player on your roster, and the current season year — gone permanently. There is no export and no undo. Type <strong>I agree</strong> exactly to confirm.</p>
+        <div id="resetPreflight" class="sub" style="margin:0 0 10px; font-weight:600; color:#a32d2d;"></div>
         <input type="text" id="resetAgreeInput" placeholder="I agree">
         <div class="row" style="margin-top:10px;">
           <button class="danger" id="resetFinalBtn">Delete everything</button>
@@ -666,6 +667,30 @@
     document.getElementById('resetStep2').classList.add('hidden');
     document.getElementById('resetPasswordInput').value = '';
     document.getElementById('resetStep3').classList.remove('hidden');
+
+    // COUNT BEFORE, NOT AFTER. The old flow reported how much it had
+    // deleted in the success message -- which is the first moment you
+    // could have discovered it was about to delete more than you thought,
+    // and by then it was gone. For a one-shot irreversible action the
+    // number belongs in front of the button, not behind it.
+    //
+    // Best effort: if the counts cannot be read the reset still proceeds,
+    // because failing to COUNT is not a reason to block the delete. It
+    // says so rather than showing a reassuring blank.
+    const pre = document.getElementById('resetPreflight');
+    pre.textContent = 'Checking what will be deleted…';
+    try {
+      const [g, pl, pr] = await Promise.all([
+        supabaseClient.from('games').select('id', { count: 'exact', head: true }),
+        supabaseClient.from('players').select('id', { count: 'exact', head: true }),
+        supabaseClient.from('plays').select('id', { count: 'exact', head: true })
+      ]);
+      const n = (x) => (x && typeof x.count === 'number') ? x.count : '?';
+      pre.textContent = 'This will delete ' + n(g) + ' game(s), ' + n(pr) +
+        ' play(s) and ' + n(pl) + ' roster player(s), and clear the season year.';
+    } catch (e) {
+      pre.textContent = 'Could not count what will be deleted — proceeding will still delete everything.';
+    }
   });
 
   document.getElementById('resetFinalBtn').addEventListener('click', async () => {
@@ -700,16 +725,78 @@
     if (ids.length > 0){
       const { error: deleteError } = await supabaseClient.from('games').delete().in('id', ids);
       if (deleteError){
-        showMsg('resetMsg', 'Could not delete: ' + deleteError.message, 'error');
+        // The un-finalize loop above has already run. If the delete fails
+        // here, every finalized game has been flipped to in_progress and
+        // stays that way -- unlocked and editable. Harmless when the plan
+        // was to delete them, alarming if you now decide not to, so say
+        // so rather than leaving it to be discovered on the dashboard.
+        showMsg('resetMsg', 'Could not delete: ' + deleteError.message +
+          (finalized.length ? '<br><br><strong>Note:</strong> ' + finalized.length +
+            ' finished game(s) were unlocked to in-progress before this failed and are ' +
+            'still unlocked. Re-run the reset, or finalize them again from the dashboard.' : ''), 'error');
         document.getElementById('resetFinalBtn').disabled = false;
         return;
       }
     }
 
+    // --- the team roster -------------------------------------------------
+    // AFTER the games, never before. game_rosters rows carry a player_id
+    // referencing players, so deleting players first would either fail on
+    // the foreign key or strand the snapshots. Games go first, their
+    // roster snapshots cascade with them, and only then is players empty
+    // enough to clear.
+    let playersDeleted = 0;
+    const { data: ourTeams, error: teamFetchError } = await supabaseClient
+      .from('teams').select('id').eq('is_our_team', true);
+    if (teamFetchError){
+      showMsg('resetMsg', 'Games were deleted, but the team could not be loaded to clear ' +
+        'the roster: ' + teamFetchError.message + ' — the roster and season year are ' +
+        'still there. Fix and run this again.', 'error');
+      document.getElementById('resetFinalBtn').disabled = false;
+      return;
+    }
+    for (const t of (ourTeams || [])){
+      const { data: gone, error: playersError } = await supabaseClient
+        .from('players').delete().eq('team_id', t.id).select('id');
+      if (playersError){
+        showMsg('resetMsg', 'Games were deleted, but the roster could not be cleared: ' +
+          playersError.message + ' — the season year is still set. Fix and run this again.', 'error');
+        document.getElementById('resetFinalBtn').disabled = false;
+        return;
+      }
+      playersDeleted += (gone || []).length;
+
+      // --- the season year ------------------------------------------------
+      // A "reset for production" that leaves this pointing at the season
+      // you were testing under is not a blank slate: the next game created
+      // inherits the stale year and files itself into a season with no
+      // other games in it. Cleared to null so create_game asks.
+      //
+      // Name, colours and logo are deliberately kept -- they are the real
+      // team's, not test data.
+      const { error: seasonError } = await supabaseClient
+        .from('teams').update({ current_season_year: null }).eq('id', t.id);
+      if (seasonError){
+        showMsg('resetMsg', 'Games and roster were deleted, but the season year could ' +
+          'not be cleared: ' + seasonError.message + ' — set it yourself on the ' +
+          'Customize page before creating a game.', 'error');
+        document.getElementById('resetFinalBtn').disabled = false;
+        return;
+      }
+    }
+
+    // The dashboard caches branding in localStorage; harmless, but a stale
+    // cache after a "blank slate" is confusing. Cheap to clear.
+    try { localStorage.removeItem('statchat_branding'); } catch (e){}
+
     document.getElementById('resetStep3').classList.add('hidden');
     document.getElementById('resetAgreeInput').value = '';
+    document.getElementById('resetPreflight').textContent = '';
     document.getElementById('resetFinalBtn').disabled = false;
-    showMsg('resetMsg', 'Done — ' + ids.length + ' game(s) and all their plays and rosters were deleted. Ready for production.', 'success');
+    showMsg('resetMsg', 'Done — ' + ids.length + ' game(s) with all their plays and roster ' +
+      'snapshots, and ' + playersDeleted + ' roster player(s), were deleted, and the season ' +
+      'year was cleared. Set the season on the Customize page before creating your first ' +
+      'real game.', 'success');
   });
 </script>
 </body>
