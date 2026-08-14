@@ -269,21 +269,29 @@ async function run() {
     }
   }
 
-  // --- it reaches the screen --------------------------------------------
+  // --- the view page shows TEAM defence only ----------------------------
+  // The per-player tackles tile was removed from view.html on 13 Aug 2026
+  // at Andy's request. It is the live spectator and broadcast screen,
+  // where the useful defensive figure is the team one; a per-player list
+  // is a post-game reading, and it is the one table on that page that is
+  // knowingly a floor rather than a total.
+  //
+  // Asserted as an ABSENCE, so a well-meaning re-add is caught. The
+  // numbers themselves are checked above and their display is checked on
+  // the three report pages below -- this is about the surface, not the
+  // data, and the two must not be conflated.
   {
     const text = v.document.body.textContent.replace(/\s+/g, ' ');
-    if (!/Tackles/i.test(text)) {
-      fail('display', 'view.html shows no tackles table — the numbers exist ' +
-           'but nobody can see them');
+    if (/Frank|Carter/.test(text)) {
+      fail('display', 'view.html names an individual tackler — the per-player ' +
+           'tackles tile is deliberately not on the live view page. Team ' +
+           'defensive totals belong there; per-player belongs on the reports');
     }
-    if (!/Frank/.test(text)) {
-      fail('display', 'the leading tackler is not named on the view page');
-    }
-    // The caveat must be visible, or an under-count reads as a complete
-    // figure.
-    if (!/tackler was named/i.test(text)) {
-      fail('display', 'no note explaining that only named tackles are counted. ' +
-           'Without it the number reads as complete when it is a floor');
+    // The TEAM defence tile must still be there -- removing the wrong one
+    // would also make the assertion above pass.
+    if (!/Fum Rec/i.test(text) && !/Sacks/i.test(text)) {
+      fail('display', 'view.html shows no team defensive tile at all — the ' +
+           'per-player tile was meant to go, not the team one');
     }
   }
   v.close();
