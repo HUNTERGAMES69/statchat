@@ -102,8 +102,8 @@
           <tr><td style="padding:2px 14px 2px 0;">7</td><td style="padding:2px 14px 2px 0;">Alpha Ates</td><td style="padding:2px 0;">RB</td></tr>
           <tr><td style="padding:2px 14px 2px 0;">12</td><td style="padding:2px 14px 2px 0;">Bravo Boone</td><td style="padding:2px 0;">QB</td></tr>
         </table>
-        <p style="margin:0 0 8px; font-size:14px;"><strong>One position per player.</strong> Not <em>RB/WR</em> or <em>RB WR</em> &mdash; pick the one they mostly play. Two players may share a number; you will be asked which is which.</p>
-        <p style="margin:0 0 10px; font-size:13px; color:#666;">Valid positions &mdash; offense: QB RB FB HB TB WR SE FL SLOT TE OL OT OG C &middot; defense: DB CB S FS SS LB OLB ILB MLB WLB DE DT NG NT EDGE DL &middot; special: K P LS H KR PR RET</p>
+        <p style="margin:0 0 8px; font-size:14px;"><strong>List more than one position if you like &mdash; only the first is used.</strong> <em>RB/WR</em>, <em>RB, WR</em> and <em>RB-WR</em> all read as <strong>RB</strong>. Put the position they mostly play first. Two players may share a number; you will be asked which is which.</p>
+        <p style="margin:0 0 10px; font-size:13px; color:#666;"><strong>Offense:</strong> QB RB FB HB TB WR SE FL SLOT TE OL OT OG G T C ATHLETE<br><strong>Defense:</strong> DB CB S FS SS LB OLB ILB MLB WLB DE DT NG NT EDGE DL<br><strong>Special teams:</strong> K P LS DS H KR PR RET</p>
         <button type="button" id="oppFormatContinue">Choose file&hellip;</button>
         <button type="button" id="oppFormatCancel" class="secondary" style="margin-left:8px;">Cancel</button>
       </div>
@@ -170,9 +170,9 @@
   //
   // Consolidating properly is blocked on the two posToUnit variants
   // returning different strings ('offense' here, 'o' there). On TODO.md.
-  const OFFENSE_POS = ['QB','RB','FB','HB','TB','WR','SE','FL','SLOT','TE','OL','OT','OG','G','T','C'];
+  const OFFENSE_POS = ['QB','RB','FB','HB','TB','WR','SE','FL','SLOT','TE','OL','OT','OG','G','T','C','ATHLETE'];
   const DEFENSE_POS = ['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE','DL'];
-  const SPECIAL_POS = ['K','P','LS','H','KR','PR','RET'];
+  const SPECIAL_POS = ['K','P','LS','DS','H','KR','PR','RET'];
   function posToUnit(pos){
     if (!pos) return null;
     const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
@@ -593,16 +593,25 @@
         else if (!/^\d+$/.test(num)) rowProblems.push('column A should be the jersey NUMBER, got "' + num + '"');
         if (!rawName) rowProblems.push('no name in column B');
         else if (/^\d+$/.test(rawName)) rowProblems.push('column B should be the NAME, got "' + rawName + '"');
+        // MULTIPLE POSITIONS ARE ACCEPTED; ONLY THE FIRST IS USED.
+        // Rejecting "RB/WR" was too strict -- real rosters list two or
+        // three, and a scorer should not have to edit a file they were
+        // handed. Everything after the first special character is
+        // discarded, and the FIRST is stored, so nothing downstream ever
+        // sees a compound position.
+        //
+        // Split on anything that is not a letter or digit, which covers
+        // the slash, comma, semicolon, hyphen, dot and space that rosters
+        // actually use. Only the first has to be a position we know: if
+        // the rest are junk, they were going to be ignored anyway.
+        let firstPos = null;
         if (!pos) rowProblems.push('no position in column C');
         else {
-          // ONE position. Splitting on the same separators posToUnit uses
-          // to read the first one, so anything it would silently discard
-          // is reported instead.
-          const parts = pos.split(/[\/,;&\s]+/).filter(Boolean);
-          if (parts.length > 1){
-            rowProblems.push('more than one position ("' + pos + '") — use just one, the one they mostly play');
-          } else if (!ALL_POS.includes(parts[0])){
-            rowProblems.push('"' + parts[0] + '" is not a position this app knows');
+          firstPos = pos.split(/[^A-Z0-9]+/).filter(Boolean)[0] || null;
+          if (!firstPos) rowProblems.push('no readable position in column C, got "' + pos + '"');
+          else if (!ALL_POS.includes(firstPos)){
+            rowProblems.push('"' + firstPos + '" is not a position this app knows' +
+              (firstPos !== pos ? ' (read from "' + pos + '")' : ''));
           }
         }
         if (rowProblems.length){
@@ -610,7 +619,9 @@
           return;
         }
         const { cleanName, explicitUnit } = extractNameTag(rawName);
-        entries.push({ number: num, name: cleanName, position: pos, explicitUnit });
+        // firstPos, not pos -- the compound form is normalised away at the
+        // door so no later reader has to know the rule.
+        entries.push({ number: num, name: cleanName, position: firstPos, explicitUnit });
       });
 
       if (problems.length){
@@ -622,13 +633,13 @@
           (entries.length ? ' (' + entries.length + ' other row' + (entries.length === 1 ? ' was' : 's were') + ' fine)' : '') +
           '.<br><br>' + shown.join('<br>') +
           (more > 0 ? '<br>…and ' + more + ' more' : '') +
-          '<br><br>Expected three columns: <strong>A = number, B = name, C = one position</strong>. ' +
+          '<br><br>Expected three columns: <strong>A = number, B = name, C = position</strong>. ' +
           'Fix the file and upload it again — nothing has been saved.', 'error');
         return;
       }
       if (entries.length === 0){
         showMsg('opponentRosterStatus', 'That file has no player rows in it. Expected three columns: ' +
-          'A = number, B = name, C = one position.', 'error');
+          'A = number, B = name, C = position.', 'error');
         return;
       }
       const { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
