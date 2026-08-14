@@ -16,6 +16,10 @@
 //   TEAM totals (sack yardage, kneels), never about what an individual
 //   rusher gained. So any mismatch here is unambiguous.
 //
+//   Tier 1.5 -- the final score, per team. Added 13 Aug 2026. See the
+//   long note above expectedScore() for why this took a while to become
+//   trustworthy, and why it is 1.5 rather than 2.
+//
 //   Tier 3 -- signal, not comparison. validateGame() must report zero
 //   issues. Across 150 real plays that is a strong check on down
 //   continuity, impossible gains and touchdown distances, and it needs
@@ -34,6 +38,84 @@ const { bootGamePage, bootPage } = require('../harness');
 const { enterPlay, setDrive, click } = require('../ui_driver');
 const fetchNfl = require('./fetch');
 const { buildRoster, convertRow, fieldPosFrom, num, truthy } = require('./convert');
+
+// The expected FINAL SCORE, and the points this harness knowingly throws
+// away before StatChat ever sees them.
+// ---------------------------------------------------------------------
+// A score check looks like the most obvious assertion in the file, so it
+// is worth recording why it was not here from the start, and why the
+// number it compares against is not simply total_home_score.
+//
+// An earlier audit compared per-team scores across a set of games and
+// found what looked like a SYSTEMATIC HOME/AWAY SWAP -- most games wrong,
+// with a weaker combined-score check masking it. That reading was wrong.
+// Re-run on 13 Aug 2026 against eight week-1 2023 games, teamA tracked
+// the home team correctly in every single one. There is no swap. The
+// mapping is consistent in all three places that set it: buildRoster,
+// convertRow and wantTeam below all key off homeAbbr.
+//
+// What is really happening is that convert.js DROPS POINTS, and it always
+// drops them from the team that did not have the ball -- which is exactly
+// what makes an aggregate check look like a swap. Two causes:
+//
+//   1. A TOUCHDOWN SCORED BY THE DEFENCE. scoredIt() in convert.js
+//      requires td_team === posteam, so a fumble return, interception
+//      return or punt return score is never emitted at all. 2023_01_
+//      ARI_WAS has Arizona scooping a sack fumble for six (posteam WAS,
+//      td_team ARI); 2023_01_BUF_NYJ is the Gipson punt return, on a
+//      play_type=punt row whose punt branch never sets td. Costs 6.
+//
+//   2. A SUCCESSFUL TWO-POINT CONVERSION. It arrives as play_type 'run'
+//      or 'pass' with two_point_conv_result 'success', so the converter
+//      enters an ordinary rush and the points are lost. Costs 2.
+//
+// Both are HARNESS limitations, not engine bugs. Neither is hard to fix
+// -- ui_driver already drives a 'twopt' panel -- and doing so would be
+// strictly better than deducting, because it would put real StatChat
+// code under test instead of routing around it. Deducting is the
+// expedient choice for now, taken deliberately so the score can be
+// asserted at all rather than left unchecked for another month.
+//
+// The deduction is DERIVED FROM THE DATA, never hardcoded per game, so
+// it cannot quietly absorb a real defect: anything wrong for any other
+// reason still fails. And when convert.js is fixed, this check FAILS
+// LOUDLY (the deduction will over-subtract), which is the reminder to
+// delete the corresponding clause. That is the intended behaviour, not a
+// fragility -- a silent adjustment layer is the exact failure mode Tier 2
+// was held back to avoid.
+function expectedScore(rows, homeAbbr) {
+  const last = rows[rows.length - 1];
+  const awayAbbr = rows[0].away_team;
+  const truth = {
+    teamA: num(last.total_home_score),
+    teamB: num(last.total_away_score)
+  };
+  const lost = { teamA: 0, teamB: 0 };
+  const sideOf = abbr => (abbr === homeAbbr ? 'teamA' : 'teamB');
+
+  for (const r of rows) {
+    // (1) scored by whoever did NOT have the ball
+    if (truthy(r.touchdown) && r.td_team && r.td_team !== 'NA' &&
+        r.posteam && r.td_team !== r.posteam) {
+      lost[sideOf(r.td_team)] += 6;
+    }
+    // (2) two-point conversion entered as an ordinary scrimmage play
+    if (r.two_point_conv_result === 'success' && r.posteam) {
+      lost[sideOf(r.posteam)] += 2;
+    }
+    // (3) a safety, for completeness. None appeared in the eight games
+    // checked, so unlike the two above this clause is UNVERIFIED against
+    // real output -- treat a failure here as suspect the clause first.
+    if (truthy(r.safety) && r.posteam) {
+      lost[sideOf(r.posteam === homeAbbr ? awayAbbr : homeAbbr)] += 2;
+    }
+  }
+  return {
+    truth,
+    lost,
+    expect: { teamA: truth.teamA - lost.teamA, teamB: truth.teamB - lost.teamB }
+  };
+}
 
 // Expected per-player yardage, straight from the play-by-play. Derived
 // from the same rows rather than from player_stats so a mismatch points
@@ -207,6 +289,24 @@ async function runGame(rows, gameId) {
     }
   }
 
+  // --- Tier 1.5: the final score, per team ----------------------------
+  // Deliberately per-team. A combined-score check passes whenever the two
+  // errors happen to cancel, which is how the swap that was not a swap
+  // stayed unexplained for as long as it did.
+  const finalScore = JSON.parse(h.evalIn('JSON.stringify(computeState().scores)'));
+  const scoreExp = expectedScore(rows, homeAbbr);
+  for (const side of ['teamA', 'teamB']) {
+    if (finalScore[side] !== scoreExp.expect[side]) {
+      const who = side === 'teamA' ? homeAbbr + ' (home)' : rows[0].away_team + ' (away)';
+      issues.push({ area: 'tier1.5 score', detail:
+        who + ': StatChat ' + finalScore[side] + ', expected ' + scoreExp.expect[side] +
+        ' (real ' + scoreExp.truth[side] +
+        (scoreExp.lost[side] ? ' less ' + scoreExp.lost[side] +
+          ' the converter drops: defensive/return TDs and two-point conversions' : '') +
+        ')' });
+    }
+  }
+
   // --- Tier 3: the app's own checker must be silent -------------------
   const validation = JSON.parse(h.evalIn('JSON.stringify(validateGame())'));
 
@@ -314,7 +414,7 @@ async function runGame(rows, gameId) {
     issues.push({ area: 'tier3 validateGame', detail: String(msg).slice(0, 110) });
   }
 
-  return { gameId, entered, skipped, failed, issues, stateMismatches, comparable, penaltySkips, fumbleSkips,
+  return { gameId, finalScore, scoreExp, entered, skipped, failed, issues, stateMismatches, comparable, penaltySkips, fumbleSkips,
            validationCount: validation.length };
 }
 
@@ -343,6 +443,9 @@ if (require.main === module) {
                   ' (' + r.penaltySkips + ' penalty, ' + r.fumbleSkips +
                   ' own-recovered fumble)');
       console.log('   tier1 yardage mismatches : ' + tier1);
+      console.log('   tier1.5 final score      : ' + r.finalScore.teamA + '-' + r.finalScore.teamB +
+                  '  (real ' + r.scoreExp.truth.teamA + '-' + r.scoreExp.truth.teamB +
+                  ', harness drops ' + r.scoreExp.lost.teamA + '/' + r.scoreExp.lost.teamB + ')');
       console.log('   tier3 validateGame issues: ' + r.validationCount);
       for (const i of r.issues.slice(0, 6)) {
         console.log('      [' + i.area + '] ' + i.detail);
