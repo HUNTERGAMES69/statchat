@@ -283,9 +283,9 @@ function readFileAsDataURL(file){
   });
 }
 
-const OFFENSE_POS = new Set(['QB','RB','FB','HB','WR','TE','OL','OT','OG','C']);
-const DEFENSE_POS = new Set(['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE']);
-const SPECIAL_POS = new Set(['K','P','LS','H','KR','PR']);
+const OFFENSE_POS = new Set(['QB','RB','FB','HB','TB','WR','SE','FL','SLOT','TE','OL','OT','OG','G','T','C']);
+const DEFENSE_POS = new Set(['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE','DL']);
+const SPECIAL_POS = new Set(['K','P','LS','H','KR','PR','RET']);
 function posToUnit(pos){
   if (!pos) return null;
   const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
@@ -518,18 +518,18 @@ function extractNameTag(rawName){
       // it is a CEILING. Per-player tackles come from the optional
       // "tackled by" field, so they are a FLOOR. Showing them in one
       // table would make the app look like it was contradicting itself.
-      const defPlayers = Object.keys(box[teamKey].defense || {})
-        .filter(n => n !== 'TEAM' && (box[teamKey].defense[n].tackles || 0) > 0)
-        .map(n => ({ name: n, d: box[teamKey].defense[n] }))
-        .sort((a, b) => (b.d.tackles || 0) - (a.d.tackles || 0));
-      if (defPlayers.length){
-        defHtml += tile('Tackles', table(['Tack','TFL','Sacks','Int'],
-          defPlayers.map(p => ({ name: p.name,
-            values: [p.d.tackles || 0, p.d.tfl || 0, p.d.sacks || 0, p.d.int || 0] }))) +
-          '<p class="hint" style="margin:6px 0 0; font-size:11px;">' +
-          'Only plays where a tackler was named. The team TFL above counts ' +
-          'every play for a loss, so it may be higher.</p>');
-      }
+      // NO PER-PLAYER TACKLES TILE HERE. Removed 13 Aug 2026 at Andy's
+      // request: the view page is the live spectator and broadcast
+      // screen, where the useful defensive figure is the TEAM one above
+      // (interceptions, fumble recoveries, sacks, team TFL). A per-player
+      // list is a post-game reading, and it is the one table on the page
+      // that is knowingly incomplete -- it counts only plays where a
+      // tackler happened to be named, which is a floor, not a total.
+      //
+      // The data is unaffected. Per-player tackles are still computed by
+      // computeBoxScore, still recorded, and still shown on recap.html,
+      // stat_package.html and season_report.html, each of which carries
+      // the "only named tackles" caveat. Only this tile is gone.
 
       const defNums = hasDef ? ['team'] : [];
       if (!rushNums.length && !passNums.length && !recNums.length && !stTotalEntries && !defNums.length){

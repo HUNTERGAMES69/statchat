@@ -156,7 +156,21 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-  const OFFENSE_POS = ['QB','RB','FB','HB','TB','WR','SE','FL','SLOT','TE','OL','OT','OG','C'];
+  // ONE LIST, five copies. game.html, view.html, broadcast.html,
+  // roster.html and this file each carry their own, and until 13 Aug 2026
+  // they DISAGREED: this file accepted TB, SE, FL, SLOT, DL and RET and
+  // the entry app did not, so a player imported as a slot receiver
+  // resolved to offense at setup and then had no unit at all during the
+  // game -- which quietly excluded him from the narrow-role pickers.
+  //
+  // They are identical now. G (guard) and T (tackle) were added the same
+  // day: a real roster used them and the import rejected the rows.
+  // Adding them here alone would not have been enough -- the import would
+  // pass and the entry app would still not know what a G was.
+  //
+  // Consolidating properly is blocked on the two posToUnit variants
+  // returning different strings ('offense' here, 'o' there). On TODO.md.
+  const OFFENSE_POS = ['QB','RB','FB','HB','TB','WR','SE','FL','SLOT','TE','OL','OT','OG','G','T','C'];
   const DEFENSE_POS = ['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE','DL'];
   const SPECIAL_POS = ['K','P','LS','H','KR','PR','RET'];
   function posToUnit(pos){
