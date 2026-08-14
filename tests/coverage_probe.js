@@ -69,6 +69,10 @@ const CASES = [
   ['punt blocked, opp rec TD',{ type: 'punt', punter: '15', blocked: true, blockrec: 'opp', credit: '55', retyds: '35', td: true }],
   ['punt blocked, own rec',   { type: 'punt', punter: '15', blocked: true, blockrec: 'own',
                                spot: { side: 'own', yardline: '40' } }],
+  // Added 14 Aug 2026 with the interception touchback: caught in the end
+  // zone and downed, the defence takes over at their own 20 with no
+  // return to record.
+  ['int touchback',           { type: 'int', passer: '7', credit: '55', intTouchback: true }],
   ['punt blocked, safety',    { type: 'punt', punter: '15', blocked: true, blockrec: 'own', safety: true,
                                spot: { side: 'own', yardline: '40' } }],
 

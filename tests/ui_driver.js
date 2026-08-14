@@ -220,9 +220,16 @@ function enterPlay(h, spec) {
   } else if (t === 'int') {
     P('passer', spec.passer);
     P('credit', spec.credit);
-    if (spec.yards !== undefined) typeInto(win, q(doc, 'pp_yards'), spec.yards);
-    if (spec.td) toggle(win, doc, 'pp_td_toggle');
-    if (spec.spot) setStartingSpot(win, doc, 'pp_spot', spec.spot.side, spec.spot.yardline);
+    // Downed in the end zone. Checked FIRST because it hides the return
+    // and spot fields, and driving a hidden field is how a test comes to
+    // assert something the coach can never do.
+    if (spec.intTouchback) {
+      click(win, q(doc, 'pp_int_tb_toggle'));
+    } else {
+      if (spec.yards !== undefined) typeInto(win, q(doc, 'pp_yards'), spec.yards);
+      if (spec.td) toggle(win, doc, 'pp_td_toggle');
+      if (spec.spot) setStartingSpot(win, doc, 'pp_spot', spec.spot.side, spec.spot.yardline);
+    }
   } else if (t === 'fumble') {
     P('carrier', spec.carrier);
     radio(win, doc, 'pp_fumrec', spec.fumrec || 'opp');
