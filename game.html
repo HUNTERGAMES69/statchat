@@ -1144,6 +1144,15 @@ function parseInput(raw, state){
   }
   if (type === 'f'){
     const rec = rest[0], retyds = rest[1];
+    // Out of the DEFENDING team's end zone: nobody recovered it, so this
+    // has to be answered before the recoverer logic below, which would
+    // otherwise see an empty rest[] and read it as an own-team recovery.
+    // The 20-yard spot is not set here -- it comes through
+    // currentSpotGetter like every other takeover spot.
+    if (isTouchback){
+      return { text: O(p1) + ' fumble out of the end zone — TOUCHBACK',
+        effect: {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
+    }
     if (rec){
       let t = O(p1) + ' fumble — ' + (rec === '?' ? 'recovered by the defense' : 'recovered by ' + D(rec)) + ' (turnover)';
       if (retyds) t += ', returned ' + retyds;
@@ -3601,6 +3610,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     return null;
   }
 
+  // A fumble out of the DEFENDING team's end zone. They take over at
+  // their own 20 and there is nothing to ask, so the spot is supplied
+  // rather than collected -- through currentSpotGetter, which is the
+  // channel every other takeover spot already uses. Setting pending.reset
+  // directly does not survive the re-parse that happens at save time,
+  // which is the bug the bad-snap panel hit.
+  //
+  // fieldPos is possession-relative and possession has flipped by the
+  // time this is read, so 20 IS their own 20.
+  function touchbackReset(){ return { down: 1, distance: 10, fieldPos: 20 }; }
+
   function wireStartingSpot(container, idPrefix){
     let side = null;
     container.querySelectorAll('.' + idPrefix + '_side').forEach(b => b.addEventListener('click', () => {
@@ -3902,6 +3922,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_rush_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_rush_fumrec" value="own"> Recovered by own team</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_rush_fumrec" value="opp" checked> Recovered by opponent</label>' +
+          // A fumble that goes out of bounds through the DEFENDING
+          // team's end zone is nobody's recovery: it is a touchback,
+          // and they take over at their own 20. The mirror of the
+          // "in the end zone -- safety" option on the own-recovery
+          // side, and it was missing from every fumble tree.
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_rush_fumrec" value="tb"> Out of the end zone — touchback</label>' +
           '<div id="pp_rush_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_rushfum_safety" style="display:none;">' +
           '<button type="button" id="pp_rushfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
           // A lost fumble hands the ball over, so the takeover spot has to
@@ -3931,6 +3957,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_pass_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pass_fumrec" value="own"> Recovered by own team</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pass_fumrec" value="opp" checked> Recovered by opponent</label>' +
+          // A fumble that goes out of bounds through the DEFENDING
+          // team's end zone is nobody's recovery: it is a touchback,
+          // and they take over at their own 20. The mirror of the
+          // "in the end zone -- safety" option on the own-recovery
+          // side, and it was missing from every fumble tree.
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pass_fumrec" value="tb"> Out of the end zone — touchback</label>' +
           '<div id="pp_pass_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_passfum_safety" style="display:none;">' +
           '<button type="button" id="pp_passfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
           '<div id="pp_pass_fum_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_passfum') + yardsBlock('Return yards (optional)', 'pp_passfum_retyds') +
@@ -3955,6 +3987,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_sack_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_sack_fumrec" value="own"> Recovered by own team</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_sack_fumrec" value="opp" checked> Recovered by opponent</label>' +
+          // A fumble that goes out of bounds through the DEFENDING
+          // team's end zone is nobody's recovery: it is a touchback,
+          // and they take over at their own 20. The mirror of the
+          // "in the end zone -- safety" option on the own-recovery
+          // side, and it was missing from every fumble tree.
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_sack_fumrec" value="tb"> Out of the end zone — touchback</label>' +
           '<div id="pp_sack_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_sackfum_safety" style="display:none;">' +
           '<button type="button" id="pp_sackfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
           '<div id="pp_sack_fum_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_sackfum') + yardsBlock('Return yards (optional)', 'pp_sackfum_retyds') +
@@ -3971,7 +4009,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     else if (type === 'int') html = offBlock('passer','Passer') + offBlock('receiver','Intended receiver (optional)') + defBlock('Intercepted by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot', null, def);
     else if (type === 'fumble') html = offBlock('carrier','Who fumbled') +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="own"> Recovered by own team</label>' +
-        '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="opp" checked> Recovered by opponent</label></div>' +
+        '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="opp" checked> Recovered by opponent</label>' +
+          // A fumble that goes out of bounds through the DEFENDING
+          // team's end zone is nobody's recovery: it is a touchback,
+          // and they take over at their own 20. The mirror of the
+          // "in the end zone -- safety" option on the own-recovery
+          // side, and it was missing from every fumble tree.
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="tb"> Out of the end zone — touchback</label></div>' +
         '<div id="pp_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_fum_safety" style="display:none;">' +
         '<button type="button" id="pp_fum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
         '<div id="pp_fum_opp" style="">' + defBlock('Recovered by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot', null, def) + '</div>';
@@ -4617,11 +4661,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         });
       }
       panel.querySelectorAll('input[name=pp_rush_fumrec]').forEach(r => r.addEventListener('change', () => {
-        const isOpp = document.querySelector('input[name=pp_rush_fumrec]:checked').value === 'opp';
+        const recVal = document.querySelector('input[name=pp_rush_fumrec]:checked').value;
+        const isOpp = recVal === 'opp', isTb = recVal === 'tb';
         document.getElementById('pp_rush_fum_opp').style.display = isOpp ? 'block' : 'none';
         // Only ask for a takeover spot when the ball actually changed hands.
-        currentSpotGetter = isOpp ? rushFumSpotGetter : null;
-        document.getElementById('pp_rush_fum_own').style.display = isOpp ? 'none' : 'block';
+        // A touchback needs no recoverer, no return and no spot field --
+        // the 20 is fixed by rule -- so both blocks go away and the reset
+        // is supplied instead of collected.
+        currentSpotGetter = isOpp ? rushFumSpotGetter : (isTb ? touchbackReset : null);
+        document.getElementById('pp_rush_fum_own').style.display = (isOpp || isTb) ? 'none' : 'block';
       }));
       const rushFumSafetyToggle = document.getElementById('pp_rushfum_safety_toggle');
       if (rushFumSafetyToggle){
@@ -4673,11 +4721,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         });
       }
       panel.querySelectorAll('input[name=pp_pass_fumrec]').forEach(r => r.addEventListener('change', () => {
-        const isOpp = document.querySelector('input[name=pp_pass_fumrec]:checked').value === 'opp';
+        const recVal = document.querySelector('input[name=pp_pass_fumrec]:checked').value;
+        const isOpp = recVal === 'opp', isTb = recVal === 'tb';
         document.getElementById('pp_pass_fum_opp').style.display = isOpp ? 'block' : 'none';
         // Only ask for a takeover spot when the ball actually changed hands.
-        currentSpotGetter = isOpp ? passFumSpotGetter : null;
-        document.getElementById('pp_pass_fum_own').style.display = isOpp ? 'none' : 'block';
+        // A touchback needs no recoverer, no return and no spot field --
+        // the 20 is fixed by rule -- so both blocks go away and the reset
+        // is supplied instead of collected.
+        currentSpotGetter = isOpp ? passFumSpotGetter : (isTb ? touchbackReset : null);
+        document.getElementById('pp_pass_fum_own').style.display = (isOpp || isTb) ? 'none' : 'block';
       }));
       const passFumSafetyToggle = document.getElementById('pp_passfum_safety_toggle');
       if (passFumSafetyToggle){
@@ -4729,10 +4781,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         });
       }
       panel.querySelectorAll('input[name=pp_sack_fumrec]').forEach(r => r.addEventListener('change', () => {
-        const isOpp = document.querySelector('input[name=pp_sack_fumrec]:checked').value === 'opp';
+        const recVal = document.querySelector('input[name=pp_sack_fumrec]:checked').value;
+        const isOpp = recVal === 'opp', isTb = recVal === 'tb';
         document.getElementById('pp_sack_fum_opp').style.display = isOpp ? 'block' : 'none';
-        currentSpotGetter = isOpp ? sackFumSpotGetter : null;
-        document.getElementById('pp_sack_fum_own').style.display = isOpp ? 'none' : 'block';
+        // A touchback needs no recoverer, no return and no spot field --
+        // the 20 is fixed by rule -- so both blocks go away and the reset
+        // is supplied instead of collected.
+        currentSpotGetter = isOpp ? sackFumSpotGetter : (isTb ? touchbackReset : null);
+        document.getElementById('pp_sack_fum_own').style.display = (isOpp || isTb) ? 'none' : 'block';
       }));
       const sackFumSafetyToggle = document.getElementById('pp_sackfum_safety_toggle');
       if (sackFumSafetyToggle){
@@ -4759,9 +4815,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
     if (type === 'fumble'){
       panel.querySelectorAll('input[name=pp_fumrec]').forEach(r => r.addEventListener('change', () => {
-        const isOpp = document.querySelector('input[name=pp_fumrec]:checked').value === 'opp';
+        const recVal = document.querySelector('input[name=pp_fumrec]:checked').value;
+        const isOpp = recVal === 'opp', isTb = recVal === 'tb';
         document.getElementById('pp_fum_opp').style.display = isOpp ? 'block' : 'none';
-        document.getElementById('pp_fum_own').style.display = isOpp ? 'none' : 'block';
+        document.getElementById('pp_fum_own').style.display = (isOpp || isTb) ? 'none' : 'block';
+        // This panel's spot lives in the shared pp_spot widget inside the
+        // opp block, so hiding that block also hides the spot -- supply it.
+        if (isTb) currentSpotGetter = touchbackReset;
+        else if (isOpp) currentSpotGetter = wireStartingSpot(panel, 'pp_spot');
       }));
       const fumSafetyToggle = document.getElementById('pp_fum_safety_toggle');
       if (fumSafetyToggle){
@@ -5116,7 +5177,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         pushAndPersist({ id: nextId++, text: rushParsed.text, effect: rushParsed.effect, team: off, quarter: computeState().quarter,
           roles: { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0, name: sel.carrierName || undefined }, playType: 'rush' } });
         const rec = document.querySelector('input[name=pp_rush_fumrec]:checked').value;
-        if (rec === 'own'){
+        if (rec === 'tb'){
+          // Lost, but to nobody -- the defence gets it at their own 20.
+          code = sel.carrier + 'f tb';
+          roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined }, playType: 'fumble', lost: true };
+        } else if (rec === 'own'){
           const isRushFumSafety = document.getElementById('pp_rushfum_safety').checked;
           code = sel.carrier + 'f' + (isRushFumSafety ? ' sf' : '');
           roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined }, playType: 'fumble' };
@@ -5161,7 +5226,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             roles: Object.assign({ passer: { team: off, num: sel.passer, yards: parseInt(yds)||0, name: sel.passerName || undefined }, playType: 'pass' },
               sel.receiver ? { receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0, name: sel.receiverName || undefined } } : {}) });
           const rec = document.querySelector('input[name=pp_pass_fumrec]:checked').value;
-          if (rec === 'own'){
+          if (rec === 'tb'){
+            // Lost, but to nobody -- the defence gets it at their own 20.
+            code = sel.receiver + 'f tb';
+            roles = { carrier: { team: off, num: sel.receiver, name: sel.receiverName || undefined }, playType: 'fumble', lost: true };
+          } else if (rec === 'own'){
             const isPassFumSafety = document.getElementById('pp_passfum_safety').checked;
             code = sel.receiver + 'f' + (isPassFumSafety ? ' sf' : '');
             roles = { carrier: { team: off, num: sel.receiver, name: sel.receiverName || undefined }, playType: 'fumble' };
@@ -5194,7 +5263,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         pushAndPersist({ id: nextId++, text: sackParsed.text, effect: sackParsed.effect, team: off, quarter: computeState().quarter,
           roles: { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0, name: sel.passerName || undefined }, playType: 'sack' } });
         const rec = document.querySelector('input[name=pp_sack_fumrec]:checked').value;
-        if (rec === 'own'){
+        if (rec === 'tb'){
+          // Lost, but to nobody -- the defence gets it at their own 20.
+          code = sel.passer + 'f tb';
+          roles = { carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble', lost: true };
+        } else if (rec === 'own'){
           const isSackFumSafety = document.getElementById('pp_sackfum_safety').checked;
           code = sel.passer + 'f' + (isSackFumSafety ? ' sf' : '');
           roles = { carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble' };
@@ -5228,7 +5301,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     } else if (type === 'fumble'){
       if (!sel.carrier) return;
       const rec = document.querySelector('input[name=pp_fumrec]:checked').value;
-      if (rec === 'own'){
+        if (rec === 'tb'){
+          // Lost, but to nobody -- the defence gets it at their own 20.
+          code = sel.carrier + 'f tb';
+          roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined }, playType: 'fumble', lost: true };
+        } else if (rec === 'own'){
         const isFumSafety = document.getElementById('pp_fum_safety').checked;
         code = sel.carrier + 'f' + (isFumSafety ? ' sf' : '');
         roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined } };
