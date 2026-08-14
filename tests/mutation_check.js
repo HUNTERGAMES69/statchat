@@ -214,8 +214,13 @@ function recoverInterrupted(){
               ' carried the mutant "' + info.name + '". The file has been restored.\n');
 }
 
-// Ctrl-C and kill. Not SIGKILL -- nothing can cover that, which is what
-// the breadcrumb above is for.
+// Ctrl-C and kill. These are BEST EFFORT ONLY and usually will not fire:
+// runSuite uses execFileSync, which blocks the event loop, so a signal
+// arriving mid-suite is queued until the sync call returns -- which for a
+// hung suite means the timeout, and for SIGKILL means never. Verified on
+// 14 Aug 2026: a SIGINT during a run left the mutation on disk and the
+// BREADCRUMB is what recovered it. The handler is kept for the case where
+// the signal lands between suites; the file on disk is the real mechanism.
 ['SIGINT', 'SIGTERM', 'SIGHUP'].forEach(sig => process.on(sig, () => {
   try {
     if (fs.existsSync(FLIGHT) && fs.existsSync(BACKUP)) {
@@ -231,12 +236,13 @@ function recoverInterrupted(){
 // A mutant can make a suite HANG rather than fail -- an infinite loop in
 // drive detection will do it -- and execFileSync with no timeout waits
 // for ever, taking the whole run with it and leaving the mutation on
-// disk. Two minutes is roughly four times the slowest honest suite.
+// disk. 45s is about three times the slowest honest suite; two minutes
+// was tried first and made a single surviving mutant cost 24 minutes.
 //
 // A timeout counts as CAUGHT, deliberately: a suite that never returns
 // has certainly noticed something, and the alternative is reporting a
 // hang as a clean pass.
-const SUITE_TIMEOUT_MS = 120000;
+const SUITE_TIMEOUT_MS = 45000;
 
 function runSuite(file) {
   try {
@@ -302,7 +308,20 @@ function main() {
       // against all nineteen mutants takes long enough to hit tool
       // timeouts, and one catch is all that's needed to prove the
       // mutant is not a blind spot.
-      for (const s of SUITES){
+      // Try the suites this mutant is EXPECTED to be caught by first,
+      // then the rest. Without this the runner walks the whole list in a
+      // fixed order for every mutant, and a genuine survivor costs
+      // twelve full suite runs -- with the per-suite timeout that is
+      // twenty-four minutes for ONE mutant, which is how a 23-mutant run
+      // stopped being something anyone would sit through.
+      //
+      // The expectation is a hint about where to look, not a
+      // restriction: every other suite is still tried before declaring a
+      // survivor, so a mutant caught somewhere unexpected is still
+      // caught, and still reported by the suite that actually caught it.
+      const expected = (m.expectCaughtBy || []).filter(x => SUITES.includes(x));
+      const order = expected.concat(SUITES.filter(x => !expected.includes(x)));
+      for (const s of order){
         if (!runSuite(s)){ caughtBy.push(s); break; }
       }
     } finally {

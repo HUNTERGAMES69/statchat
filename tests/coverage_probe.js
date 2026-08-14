@@ -49,17 +49,28 @@ const CASES = [
   ['fumble ret TD',           { type: 'fumble', carrier: '22', credit: '99', yards: '60', td: true }],
 
   // --- Kickoff ------------------------------------------------------
-  ['kickoff returned',        { type: 'kickoff', kicker: '3', yards: '55', credit: '25', retyds: '18' }],
+  // The five entries carrying a `spot` do so because the takeover spot
+  // became MANDATORY on kickoffs and punts on 13 Aug 2026. Without it
+  // Review refuses the play and the path reads as unreachable, which is
+  // a stale fixture rather than a hole in the UI. The touchback and
+  // return-touchdown variants need no spot -- one is prefilled, the
+  // other has no ensuing drive -- which is why only these five broke.
+  ['kickoff returned',        { type: 'kickoff', kicker: '3', yards: '55', credit: '25', retyds: '18',
+                               spot: { side: 'own', yardline: '25' } }],
   ['kickoff touchback',       { type: 'kickoff', kicker: '3', yards: '65', touchback: true }],
   ['kickoff return TD',       { type: 'kickoff', kicker: '3', yards: '50', credit: '25', retyds: '50', td: true }],
 
   // --- Punt ---------------------------------------------------------
-  ['punt returned',           { type: 'punt', punter: '15', yards: '38', credit: '25', retyds: '9' }],
+  ['punt returned',           { type: 'punt', punter: '15', yards: '38', credit: '25', retyds: '9',
+                               spot: { side: 'own', yardline: '31' } }],
   ['punt return TD',          { type: 'punt', punter: '15', yards: '38', credit: '25', retyds: '55', td: true }],
-  ['punt blocked, opp rec',   { type: 'punt', punter: '15', blocked: true, blockrec: 'opp', credit: '55', retyds: '10' }],
+  ['punt blocked, opp rec',   { type: 'punt', punter: '15', blocked: true, blockrec: 'opp', credit: '55', retyds: '10',
+                               spot: { side: 'own', yardline: '40' } }],
   ['punt blocked, opp rec TD',{ type: 'punt', punter: '15', blocked: true, blockrec: 'opp', credit: '55', retyds: '35', td: true }],
-  ['punt blocked, own rec',   { type: 'punt', punter: '15', blocked: true, blockrec: 'own' }],
-  ['punt blocked, safety',    { type: 'punt', punter: '15', blocked: true, blockrec: 'own', safety: true }],
+  ['punt blocked, own rec',   { type: 'punt', punter: '15', blocked: true, blockrec: 'own',
+                               spot: { side: 'own', yardline: '40' } }],
+  ['punt blocked, safety',    { type: 'punt', punter: '15', blocked: true, blockrec: 'own', safety: true,
+                               spot: { side: 'own', yardline: '40' } }],
 
   // --- Kicking ------------------------------------------------------
   ['field goal good',         { type: 'fg', kicker: '3', yards: '38', result: 'g' }],
