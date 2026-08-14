@@ -94,6 +94,19 @@
       <button id="uploadOpponentBtn" class="secondary">Upload opponent roster (.xlsx)</button>
       <button id="skipOpponentBtn" class="secondary" style="margin-left:8px;">Skip roster (manual entry only)</button>
       <input type="file" id="opponentFile" accept=".xlsx,.xls" style="display:none;">
+      <div id="oppFormatCard" style="display:none; margin-top:10px; padding:14px 16px; border:2px solid #1a4d2e; border-radius:8px; background:#f2f8f4;">
+        <p style="margin:0 0 8px; font-weight:700; font-size:15px; color:#1a4d2e;">Roster file format</p>
+        <p style="margin:0 0 8px; font-size:14px;">A spreadsheet (.xlsx or .xls) with <strong>three columns</strong>, in this order. A header row is fine &mdash; it will be ignored.</p>
+        <table style="border-collapse:collapse; font-size:14px; margin-bottom:10px;">
+          <tr><th style="text-align:left; padding:4px 14px 4px 0;">A &mdash; Number</th><th style="text-align:left; padding:4px 14px 4px 0;">B &mdash; Name</th><th style="text-align:left; padding:4px 0;">C &mdash; Position</th></tr>
+          <tr><td style="padding:2px 14px 2px 0;">7</td><td style="padding:2px 14px 2px 0;">Alpha Ates</td><td style="padding:2px 0;">RB</td></tr>
+          <tr><td style="padding:2px 14px 2px 0;">12</td><td style="padding:2px 14px 2px 0;">Bravo Boone</td><td style="padding:2px 0;">QB</td></tr>
+        </table>
+        <p style="margin:0 0 8px; font-size:14px;"><strong>One position per player.</strong> Not <em>RB/WR</em> or <em>RB WR</em> &mdash; pick the one they mostly play. Two players may share a number; you will be asked which is which.</p>
+        <p style="margin:0 0 10px; font-size:13px; color:#666;">Valid positions &mdash; offense: QB RB FB HB TB WR SE FL SLOT TE OL OT OG C &middot; defense: DB CB S FS SS LB OLB ILB MLB WLB DE DT NG NT EDGE DL &middot; special: K P LS H KR PR RET</p>
+        <button type="button" id="oppFormatContinue">Choose file&hellip;</button>
+        <button type="button" id="oppFormatCancel" class="secondary" style="margin-left:8px;">Cancel</button>
+      </div>
       <div id="currentOppRosterNote"></div>
       <div id="opponentRosterStatus"></div>
       <div id="opponentAssignments"></div>
@@ -488,7 +501,20 @@
     }
   });
 
+  // The format is shown BEFORE the file picker, not after a failed
+  // import. A roster is typed up once, usually from a programme, and the
+  // cost of getting the shape wrong is discovering it at the next step --
+  // or worse, not discovering it, because rows that did not parse used to
+  // be dropped in silence.
   document.getElementById('uploadOpponentBtn').addEventListener('click', () => {
+    document.getElementById('oppFormatCard').style.display = 'block';
+    document.getElementById('opponentRosterStatus').innerHTML = '';
+  });
+  document.getElementById('oppFormatCancel').addEventListener('click', () => {
+    document.getElementById('oppFormatCard').style.display = 'none';
+  });
+  document.getElementById('oppFormatContinue').addEventListener('click', () => {
+    document.getElementById('oppFormatCard').style.display = 'none';
     document.getElementById('opponentFile').click();
   });
 
@@ -525,16 +551,70 @@
         showMsg('opponentRosterStatus', 'Could not read that file: ' + err.message, 'error');
         return;
       }
-      const entries = [];
-      rows.forEach(row => {
-        const num = row[0], rawName = row[1], pos = row[2];
-        if (num === undefined || rawName === undefined) return;
-        if (!/^\d+$/.test(String(num).trim())) return;
+      // VALIDATE, DO NOT SILENTLY SKIP.
+      // ------------------------------------------------------------------
+      // Every malformed row used to be dropped with a bare `return`, and
+      // only a file where EVERY row failed produced a message. So a
+      // 40-player roster with 12 bad rows loaded 28 and cheerfully
+      // reported "28 players loaded" -- the twelve missing players
+      // surfaced later as numbers with no name, mid-game, with nothing to
+      // connect them to the import.
+      //
+      // A row is now either understood or reported. Genuinely empty rows
+      // and a header line are still ignored, because those are normal
+      // parts of a real spreadsheet; anything with content that cannot be
+      // read in full is an error and blocks the import.
+      const entries = [], problems = [];
+      const ALL_POS = OFFENSE_POS.concat(DEFENSE_POS, SPECIAL_POS);
+      rows.forEach((row, i) => {
+        const label = 'Row ' + (i + 1);
+        const cells = (row || []).map(c => c === undefined || c === null ? '' : String(c).trim());
+        if (!cells.some(c => c !== '')) return;                       // blank line
+        const num = cells[0] || '', rawName = cells[1] || '', pos = (cells[2] || '').toUpperCase();
+        // A header row: first cell is not a number and reads like a label.
+        if (i === 0 && !/^\d+$/.test(num) && /num|no\.?|#|jersey/i.test(num)) return;
+
+        const rowProblems = [];
+        if (!num) rowProblems.push('no jersey number in column A');
+        else if (!/^\d+$/.test(num)) rowProblems.push('column A should be the jersey NUMBER, got "' + num + '"');
+        if (!rawName) rowProblems.push('no name in column B');
+        else if (/^\d+$/.test(rawName)) rowProblems.push('column B should be the NAME, got "' + rawName + '"');
+        if (!pos) rowProblems.push('no position in column C');
+        else {
+          // ONE position. Splitting on the same separators posToUnit uses
+          // to read the first one, so anything it would silently discard
+          // is reported instead.
+          const parts = pos.split(/[\/,;&\s]+/).filter(Boolean);
+          if (parts.length > 1){
+            rowProblems.push('more than one position ("' + pos + '") — use just one, the one they mostly play');
+          } else if (!ALL_POS.includes(parts[0])){
+            rowProblems.push('"' + parts[0] + '" is not a position this app knows');
+          }
+        }
+        if (rowProblems.length){
+          problems.push(label + ': ' + rowProblems.join('; '));
+          return;
+        }
         const { cleanName, explicitUnit } = extractNameTag(rawName);
-        entries.push({ number: String(num).trim(), name: cleanName, position: pos ? String(pos).trim().toUpperCase() : null, explicitUnit });
+        entries.push({ number: num, name: cleanName, position: pos, explicitUnit });
       });
+
+      if (problems.length){
+        const shown = problems.slice(0, 12);
+        const more = problems.length - shown.length;
+        showMsg('opponentRosterStatus',
+          '<strong>That file was not imported.</strong> ' + problems.length + ' row' +
+          (problems.length === 1 ? '' : 's') + ' could not be read' +
+          (entries.length ? ' (' + entries.length + ' other row' + (entries.length === 1 ? ' was' : 's were') + ' fine)' : '') +
+          '.<br><br>' + shown.join('<br>') +
+          (more > 0 ? '<br>…and ' + more + ' more' : '') +
+          '<br><br>Expected three columns: <strong>A = number, B = name, C = one position</strong>. ' +
+          'Fix the file and upload it again — nothing has been saved.', 'error');
+        return;
+      }
       if (entries.length === 0){
-        showMsg('opponentRosterStatus', 'No valid rows found. Expected column A = number, column B = name, column C = position.', 'error');
+        showMsg('opponentRosterStatus', 'That file has no player rows in it. Expected three columns: ' +
+          'A = number, B = name, C = one position.', 'error');
         return;
       }
       const { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
