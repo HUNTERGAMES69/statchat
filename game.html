@@ -110,6 +110,7 @@
     <div id="clockPromptCard" style="display:none; background:#fff3cd; border-radius:8px; padding:12px 14px; margin-bottom:10px;">
       <div id="clockPromptLabel" style="font-size:15px; font-weight:600; margin-bottom:8px;"></div>
       <input autocomplete="off" type="text" id="clockPromptInput" placeholder="M:SS or MSS" style="width:100px; display:inline-block;">
+      <span id="clockPromptLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:#f2f4f7; border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>
       <button class="primary" id="clockPromptSave">Save clock</button>
       <button class="secondary" id="clockPromptSkip">Skip</button>
     </div>
@@ -213,6 +214,7 @@
         <label id="flipRow" style="display:none;"><input autocomplete="off" type="checkbox" id="flipCheck" checked> <span id="flipLabel"></span></label>
         <div id="confirmClockRow" style="display:none; margin-bottom:8px;">
           <span id="confirmClockLabel">Clock</span>&nbsp;<input autocomplete="off" type="text" id="confirmClockInput" placeholder="M:SS or MSS" style="width:90px; display:inline-block;">
+          <span id="confirmClockLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:#f2f4f7; border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>
           <div id="confirmClockWarn" style="font-size:12px; color:#a05a00; margin-top:4px;">
             Optional — but with no clock this possession's time won't be counted.
           </div>
@@ -727,6 +729,50 @@ function getLastClockAbsSec(){
   }
   return null;
 }
+// THE LAST CLOCK ENTERED, as a coach would read it back.
+// ---------------------------------------------------------------------
+// Every clock box in the app now shows this beside it. The reason is
+// mundane and constant: a scorer entering a clock is remembering a number
+// they read seconds ago on a board they are no longer looking at, and the
+// single most useful check is "was the last one 8:42 or 3:42?".
+//
+// Derived from the play log rather than from a variable, so it is right
+// after a reload, after an undo, and on a second device -- the same
+// reasoning as everything else in the app that shows state.
+//
+// absSec counts UP from the start of the game; a clock counts DOWN within
+// its quarter, which is why this is not simply a format call.
+function absSecToClockStr(absSec){
+  if (absSec === null || absSec === undefined) return null;
+  const q = Math.floor(absSec / quarterLengthSec) + 1;
+  const remaining = quarterLengthSec - (absSec - (q - 1) * quarterLengthSec);
+  const mins = Math.floor(remaining / 60), secs = remaining % 60;
+  return { q, text: mins + ':' + String(secs).padStart(2, '0') };
+}
+
+// Fills an element with "Last entered  8:42 (Q2)", or a plain note when
+// nothing has been entered yet. Called wherever a clock box is shown.
+// Silent if the element is absent, so a panel that has not been given one
+// costs nothing.
+function renderLastClockHint(elId){
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const last = absSecToClockStr(getLastClockAbsSec());
+  if (!last){
+    el.innerHTML = '<span style="color:#999;">no clock entered yet</span>';
+    return;
+  }
+  const st = computeState();
+  // Naming the quarter matters more than it looks: the same 8:42 means a
+  // different moment in Q1 and Q3, and a clock entered against the wrong
+  // quarter is the mistake this is meant to catch.
+  const stale = st && st.quarter && st.quarter !== last.q;
+  el.innerHTML = '<span style="color:#666;">Last entered</span> ' +
+    '<strong style="font-size:15px;">' + last.text + '</strong> ' +
+    '<span style="color:' + (stale ? '#a05a00' : '#666') + ';">(Q' + last.q +
+    (stale ? ', not the current quarter' : '') + ')</span>';
+}
+
 // Absolute game time only ever moves forward -- a new clock entry must
 // always be later than whatever was last recorded, regardless of which
 // of the several places in the app that clock gets entered from. Warns
@@ -2878,6 +2924,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (clockPrompt.mode === 'end') label = 'Clock at end of ' + TEAMS[clockPrompt.team].name + ' possession';
     document.getElementById('clockPromptLabel').textContent = label;
     document.getElementById('clockPromptInput').value = '';
+    renderLastClockHint('clockPromptLastHint');
   }
   function resolveClockPrompt(skip){
     const val = document.getElementById('clockPromptInput').value.trim();
@@ -3343,6 +3390,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="gr_spot_kick" style="display:none;">' + startingSpotFieldsHtml('gr_kickspot', 'Spot where ' + TEAMS[guided.kickingTeam].name + ' took over', guided.kickingTeam) + '</div>' +
         '<p style="font-size:13px; color:#888; margin:10px 0 4px;">Clock</p>' +
         '<input autocomplete="off" type="text" id="guidedReturnClock" placeholder="M:SS or MSS" style="width:110px;">' +
+        '<span id="guidedReturnLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:#f2f4f7; border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>' +
         '<div id="grClockWarn" style="font-size:12px; color:#a05a00; margin-top:4px;">' +
           'Optional — but with no clock this possession\'s time won\'t be counted.</div>' +
         '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedReturnSave">Save return</button></div>';
@@ -3381,6 +3429,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         grMuffBtn.style.color = on ? '#fff' : '#555';
         grMuffBtn.style.borderColor = on ? '#a05a00' : '#ccc';
       };
+      renderLastClockHint('guidedReturnLastHint');
       const grClock = document.getElementById('guidedReturnClock');
       if (grClock) grClock.addEventListener('input', e => {
         const w = document.getElementById('grClockWarn');
@@ -5731,6 +5780,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         (pending.effect && (pending.effect.endsDrive || pending.effect.newPossession ||
                             pending.effect.flip));
       document.getElementById('confirmClockRow').style.display = needsClock ? 'block' : 'none';
+      // Rendered every time the row is shown, not once at load: an undo
+      // or another device's play can change what "last entered" means
+      // between one play and the next.
+      if (needsClock) renderLastClockHint('confirmClockLastHint');
       // The note is the whole point of "warn but allow": the cost of
       // skipping the clock is invisible otherwise -- the play saves fine
       // and the missing time only shows up later as a drive with no TOP.
@@ -6230,11 +6283,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       'It does not change the down, the spot or the score.</p>' +
       '<label class="inline">Clock <input autocomplete="off" type="text" id="setclock_val" ' +
       'placeholder="M:SS or MSS" style="width:110px; display:inline-block; margin-left:6px;"></label>' +
+      '<span id="setclockLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:#f2f4f7; border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>' +
       '<div class="row" style="margin-top:12px;">' +
       '<button class="primary" id="setclock_save">Save clock</button>' +
       '<button class="secondary" id="setclock_clear">Cancel</button></div>';
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
     document.getElementById('setclock_clear').addEventListener('click', collapsePlayPanel);
+    renderLastClockHint('setclockLastHint');
     document.getElementById('setclock_val').focus();
     document.getElementById('setclock_save').addEventListener('click', () => {
       const q = computeState().quarter;
