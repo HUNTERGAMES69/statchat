@@ -85,6 +85,19 @@
       <div style="margin-bottom:16px;">
         <button id="uploadRosterBtn" class="secondary">Upload roster spreadsheet (.xlsx)</button>
         <input type="file" id="rosterFile" accept=".xlsx,.xls" style="display:none;">
+        <button id="clearRosterBtn" class="danger" style="margin-left:8px;">Clear roster for new season</button>
+      </div>
+
+      <div id="clearRosterPanel" class="hidden" style="border:1px solid #f0d0a0; background:#fffaf0; border-radius:10px; padding:16px; margin-bottom:16px;">
+        <p style="font-weight:700; margin:0 0 8px;">Clear the roster for a new season</p>
+        <p class="sub" style="margin:0 0 8px;">Removes <strong id="clearRosterCount">every player</strong> from this roster so you can upload next year's squad. Uploading normally MERGES into what is already here, which is right during a season and wrong at the start of one &mdash; last year's seniors would sit in the pickers all autumn.</p>
+        <p class="sub" style="margin:0 0 8px;"><strong>Past seasons are not affected.</strong> Every finished game keeps its own roster snapshot, taken when the game was created, and all stats are calculated from the plays themselves. Old recaps, stat packages and season reports read exactly the same afterwards.</p>
+        <p class="sub" style="margin:0 0 10px;">Type <strong>CLEAR</strong> to confirm.</p>
+        <input type="text" id="clearRosterInput" placeholder="CLEAR" style="width:140px;">
+        <div class="row" style="margin-top:10px;">
+          <button class="danger" id="clearRosterConfirmBtn">Clear roster</button>
+          <button class="secondary" id="clearRosterCancelBtn">Cancel</button>
+        </div>
       </div>
       <div id="uploadPreview" class="hidden" style="background:#f7f6f2; border-radius:8px; padding:14px; margin-bottom:16px;"></div>
       <div class="rosterList" id="rosterBody"></div>
@@ -325,6 +338,106 @@
     document.getElementById('newName').value = '';
     document.getElementById('newPosition').value = '';
     loadRoster();
+  });
+
+  // CLEAR ROSTER FOR A NEW SEASON
+  // ===================================================================
+  // Upload MERGES, which is correct during a season -- a mid-year
+  // call-up should not wipe everyone else. At the start of a season it
+  // is exactly wrong: last year's leavers stay in every picker all
+  // autumn, and a coach has to delete them one at a time.
+  //
+  // PAST SEASONS MUST SURVIVE THIS, and they do, because nothing in the
+  // reporting path reads the `players` table. Checked, not assumed:
+  // - Stats are computed from `plays`, which carry the jersey number and
+  //   (since 13 Aug) the resolved player NAME on the play itself.
+  // - Names and units for a finished game come from `game_rosters`, the
+  //   snapshot taken when that game was created, which stores
+  //   `player_name` and `jersey_number` denormalised.
+  // - Only account.html, create_game.html and this page read `players`
+  //   at all, and none of them render a past game.
+  //
+  // The one real danger is the FOREIGN KEY. `game_rosters.player_id`
+  // points at `players`, and if that constraint were ever declared
+  // ON DELETE CASCADE, deleting a player would take the historical
+  // snapshot row with it -- silently destroying the roster of a game
+  // played last October.
+  //
+  // So the link is severed FIRST: player_id is set to null on every
+  // snapshot row that references these players, and only then are the
+  // players deleted. The column is nullable (create_game.html writes
+  // `entry.playerId || null`), the snapshots keep the name and number
+  // that actually matter, and no cascade can fire because by the time
+  // the delete runs nothing references them.
+  //
+  // If that first step fails -- a NOT NULL constraint, an RLS refusal --
+  // it ABORTS rather than pressing on. Failing to unlink is precisely
+  // the case where deleting would do the damage this is guarding
+  // against.
+  document.getElementById('clearRosterBtn').addEventListener('click', async () => {
+    const { data: current } = await supabaseClient
+      .from('players').select('id').eq('team_id', ourTeamId);
+    const n = (current || []).length;
+    if (!n){
+      showMsg('rosterMsg', 'The roster is already empty.', 'success');
+      return;
+    }
+    document.getElementById('clearRosterCount').textContent =
+      'all ' + n + ' player' + (n === 1 ? '' : 's');
+    document.getElementById('clearRosterPanel').classList.remove('hidden');
+  });
+  document.getElementById('clearRosterCancelBtn').addEventListener('click', () => {
+    document.getElementById('clearRosterPanel').classList.add('hidden');
+    document.getElementById('clearRosterInput').value = '';
+  });
+
+  document.getElementById('clearRosterConfirmBtn').addEventListener('click', async () => {
+    if (document.getElementById('clearRosterInput').value.trim() !== 'CLEAR'){
+      showMsg('rosterMsg', 'Type CLEAR to confirm — nothing has been changed.', 'error');
+      return;
+    }
+    const btn = document.getElementById('clearRosterConfirmBtn');
+    btn.disabled = true;
+
+    const { data: current, error: loadError } = await supabaseClient
+      .from('players').select('id').eq('team_id', ourTeamId);
+    if (loadError){
+      showMsg('rosterMsg', 'Could not read the roster: ' + loadError.message +
+        ' — nothing has been changed.', 'error');
+      btn.disabled = false;
+      return;
+    }
+    const ids = (current || []).map(p => p.id);
+    if (ids.length){
+      // Sever the link before deleting. See the note above.
+      const { error: unlinkError } = await supabaseClient
+        .from('game_rosters').update({ player_id: null }).in('player_id', ids);
+      if (unlinkError){
+        showMsg('rosterMsg', 'Could not detach this roster from past games: ' +
+          unlinkError.message + '<br><br>Nothing has been deleted. Clearing without ' +
+          'detaching first could remove the roster snapshots those games depend on, ' +
+          'so this stopped instead.', 'error');
+        btn.disabled = false;
+        return;
+      }
+      const { error: deleteError } = await supabaseClient
+        .from('players').delete().eq('team_id', ourTeamId);
+      if (deleteError){
+        showMsg('rosterMsg', 'Could not clear the roster: ' + deleteError.message, 'error');
+        btn.disabled = false;
+        return;
+      }
+    }
+    document.getElementById('clearRosterPanel').classList.add('hidden');
+    document.getElementById('clearRosterInput').value = '';
+    btn.disabled = false;
+    // loadRoster() opens with clearMsg('rosterMsg'), so the confirmation
+    // has to come AFTER the reload or it is wiped the instant it appears.
+    // Found by the test, not by looking.
+    await loadRoster();
+    showMsg('rosterMsg', 'Roster cleared — ' + ids.length + ' player' +
+      (ids.length === 1 ? '' : 's') + ' removed. Past seasons are untouched. ' +
+      'Upload next season\'s roster when you are ready.', 'success');
   });
 
   document.getElementById('uploadRosterBtn').addEventListener('click', () => {
