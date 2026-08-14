@@ -291,6 +291,76 @@ async function run(){
     h.close();
   }
 
+  // --- A NAMED SEED PICKS WHICH #7 --------------------------------------
+  // The structural fix, 13 Aug 2026. seed_starters was slot -> jersey
+  // NUMBER, so with two players wearing 7 it could not say which one was
+  // the starter — the last place in the app that could not express a
+  // shared number. It is now { num, name }, and BOTH shapes must be read
+  // forever: no game row is migrated, so every game saved before that
+  // date is still a bare number and must behave exactly as it used to.
+  //
+  // The seed decides who is offered FIRST, and nothing else. Both players
+  // stay in the list — a starters list says who is expected to start, not
+  // who is allowed to play, and narrowing to the named one would hide the
+  // backup the moment he came on. That is asserted explicitly because it
+  // is the tempting "improvement" that would break a real game.
+  {
+    const roster = defaultRoster().filter(r => r.team_side === 'teamB').concat([
+      { team_side: 'teamA', unit: 'offense', jersey_number: '7',  player_name: 'Alpha Ates',  position: 'RB' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '7',  player_name: 'Bravo Boone', position: 'RB' }
+    ]);
+    const firstCarrier = async (seeds) => {
+      const h = await bootGamePage({ roster, game: { seed_starters: { teamA: seeds } } });
+      setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+      click(h.window, h.document.querySelector('.ptypeBtn[data-type="rush"]'));
+      const names = [...h.document.querySelectorAll('.pp_carrier_pick')].map(b => b.textContent);
+      h.close();
+      return names;
+    };
+
+    const named = await firstCarrier({ RB1: { num: '7', name: 'Bravo Boone' } });
+    if (!named.length || !/Bravo/.test(named[0])){
+      fail('named seed', 'seeding RB1 to Bravo Boone specifically should put him first, got: ' +
+           named.map(t => t.trim()).join(' , '));
+    }
+    if (!named.some(t => /Alpha/.test(t))){
+      fail('named seed', 'the OTHER #7 disappeared from the picker — a seed says who is ' +
+           'expected to start, not who may play, and the backup must stay reachable');
+    }
+    // ...and naming the other one reverses it, so the assertion above is
+    // not just observing roster order.
+    const other = await firstCarrier({ RB1: { num: '7', name: 'Alpha Ates' } });
+    if (!other.length || !/Alpha/.test(other[0])){
+      fail('named seed', 'naming Alpha Ates should put HIM first, got: ' +
+           other.map(t => t.trim()).join(' , '));
+    }
+
+    // BACKWARD COMPATIBILITY: a bare number, as every older game has.
+    const legacy = await firstCarrier({ RB1: '7' });
+    if (legacy.length < 2){
+      fail('named seed', 'a legacy bare-number seed broke the picker — old game rows are ' +
+           'never migrated and must keep working: ' + legacy.map(t => t.trim()).join(' , '));
+    }
+
+    // Recency still outranks a named seed once someone has played.
+    const h = await bootGamePage({ roster,
+      game: { seed_starters: { teamA: { RB1: { num: '7', name: 'Alpha Ates' } } } } });
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    click(h.window, h.document.querySelector('.ptypeBtn[data-type="rush"]'));
+    click(h.window, [...h.document.querySelectorAll('.pp_carrier_pick')].find(b => /Bravo/.test(b.textContent)));
+    typeInto(h.window, h.document.getElementById('pp_yards'), '9');
+    click(h.window, h.document.getElementById('pp_review'));
+    click(h.window, h.document.getElementById('saveBtn'));
+    click(h.window, h.document.querySelector('.ptypeBtn[data-type="rush"]'));
+    const after = [...h.document.querySelectorAll('.pp_carrier_pick')].map(b => b.textContent);
+    if (!after.length || !/Bravo/.test(after[0])){
+      fail('named seed', 'Bravo Boone carried, so he must lead the picker even though Alpha ' +
+           'was the named starter — a carry is a fact and a seed is a guess. Got: ' +
+           after.map(t => t.trim()).join(' , '));
+    }
+    h.close();
+  }
+
   return failures;
 }
 
