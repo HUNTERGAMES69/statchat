@@ -6021,9 +6021,46 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // was never requested, the new drive got no start event, and it
       // accumulated no time of possession at all. Same class of miss as
       // the newPossession case noted above.
-      const needsClock = pending.flipEligible ||
+      // THE CLOCK IS ASKED AT THE TOUCHDOWN, NOT AT THE TRY.
+      // ------------------------------------------------------------------
+      // A touchdown does not set endsDrive -- the drive runs until the try
+      // is taken -- so the prompt used to land on the PAT, and the scoring
+      // drive's time of possession swallowed the try with it. The number a
+      // coach wants is the time the DRIVE took, ending when the ball
+      // crossed the line.
+      //
+      // So: ask on any six-point score, and do not ask on the try itself.
+      // The next clock comes at the kickoff, which opens the next
+      // possession. The gap between them is the try and the dead-ball time
+      // around it, and it belongs to nobody -- which is correct, because
+      // neither team has the ball in any sense that TOP is measuring.
+      //
+      // A try is identified by WHAT CAME BEFORE IT, not by roles.playType.
+      // showConfirm() runs BEFORE `pending.roles` is attached a few lines
+      // below its call site, so reading playType here always saw
+      // undefined and the PAT kept asking. The effect is available; the
+      // roles are not yet.
+      //
+      // The test: this play scores one or two points, ends the drive, and
+      // the last real play was a touchdown. That last clause is what
+      // separates a try from a SAFETY -- a safety also ends the drive for
+      // two points, but nothing scored six immediately before it, and it
+      // is a real end of possession that must keep its prompt.
+      const prevReal = (function(){
+        for (let i = plays.length - 1; i >= 0; i--){
+          if (!isAdminMarker(plays[i])) return plays[i];
+        }
+        return null;
+      })();
+      const followsTouchdown = !!(prevReal && prevReal.effect && prevReal.effect.score &&
+                                  prevReal.effect.score.points === 6);
+      const isTry = followsTouchdown && !!(pending.effect && pending.effect.endsDrive &&
+        pending.effect.score && (pending.effect.score.points === 1 || pending.effect.score.points === 2));
+      const isTouchdown = !!(pending.effect && pending.effect.score &&
+                             pending.effect.score.points === 6);
+      const needsClock = !isTry && (pending.flipEligible || isTouchdown ||
         (pending.effect && (pending.effect.endsDrive || pending.effect.newPossession ||
-                            pending.effect.flip));
+                            pending.effect.flip)));
       document.getElementById('confirmClockRow').style.display = needsClock ? 'block' : 'none';
       // Rendered every time the row is shown, not once at load: an undo
       // or another device's play can change what "last entered" means
@@ -6137,6 +6174,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' end of possession (' + TEAMS[endingTeam].name + ')', effect: { clockEvent: { type: 'end', team: endingTeam, absSec } }, quarter: q });
       } else if (flipHappened && effect.score && effect.score.points === 6){
         pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' end of possession (' + TEAMS[effect.score.team].name + ')', effect: { clockEvent: { type: 'end', team: effect.score.team, absSec } }, quarter: q });
+      } else if (effect.score && effect.score.points === 6){
+        // An ORDINARY touchdown: no flip, and endsDrive is not set because
+        // the try is still to come. Without this branch a clock entered on
+        // the touchdown recorded nothing at all, and the possession stayed
+        // open until the try closed it -- which is the whole thing this
+        // change exists to stop.
+        //
+        // Keyed off preState.possession, not effect.score.team, for the
+        // same reason the endsDrive branch above is: the possession that
+        // ended belongs to whoever HAD the ball. They are the same team on
+        // an offensive touchdown and the distinction costs nothing, but
+        // copying the safer form keeps the three branches consistent.
+        const scoringTeam = preState.possession;
+        pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' end of possession (' + TEAMS[scoringTeam].name + ')', effect: { clockEvent: { type: 'end', team: scoringTeam, absSec } }, quarter: q });
       }
     }
     // A new set of downs normally follows a change of possession, but a
