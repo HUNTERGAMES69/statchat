@@ -5790,11 +5790,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             ? sel.punter + 'pm ' + yds + ' k ' + recNum + ' 0 sf'
             : sel.punter + 'pm ' + yds + ' ' + recTeamTok + ' ' + recNum + ' ' + muffRet + (td ? ' td' : '');
           roles = { punter: { team: off, num: sel.punter, yards: parseInt(yds) || 0 }, playType: 'punt' };
-          if (recNum !== '?'){
-            // Recovering a muff is not a defensive stat and not a
-            // receiving one, so it is recorded for the log only.
-            roles.recovery = { team: recTeamTok === 'k' ? off : def, num: recNum };
-          }
+          // WHICH TEAM RECOVERED IS NOT OPTIONAL. Only the NUMBER is.
+          // ------------------------------------------------------------
+          // This used to write the recovery role only when a number had
+          // been typed, so leaving the recoverer blank -- which the panel
+          // invites, and which a coach does whenever the pile is a mess --
+          // threw away the TEAM as well. The coach had chosen that on a
+          // radio button; it was never in doubt.
+          //
+          // The cost was silent and only showed up later: a muffed punt
+          // recovered by the kicking team is a turnover, and with no
+          // recovery role the engine could not see one had happened. The
+          // log line said "recovered by Neville" while the data said
+          // nothing. Reported from a real game, 14 Aug 2026.
+          //
+          // Same shape as the returner and tackler fixes: an optional
+          // field left blank must not discard the information that WAS
+          // given alongside it.
+          roles.recovery = { team: recTeamTok === 'k' ? off : def,
+                             num: recNum !== '?' ? recNum : undefined };
         } else {
         const retyds = yards('pp_retyds');
         // The returner is optional: a coach often can't read the number
