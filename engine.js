@@ -65,6 +65,17 @@ function normalizeHex(hex){
 // Genuinely unreadable input scores as black, so safeTextColor puts
 // white on it. A wrong-but-legible choice beats NaN, which produced a
 // choice that only LOOKED deliberate.
+// Seconds as M:SS. Lives here because THREE pages had their own copy and
+// the report pages had none, so adding time of possession to the recap
+// would have meant a fourth. Same reasoning as markerLabel and the colour
+// helpers: a `function formatDuration` later in a page shadows this
+// harmlessly, so the existing copies keep working untouched.
+function formatDuration(sec){
+  const s = Math.max(0, Math.round(sec || 0));
+  const m = Math.floor(s / 60);
+  return m + ':' + String(s % 60).padStart(2, '0');
+}
+
 // FIELD POSITION -> the way a coach says it.
 // -----------------------------------------
 // fieldPos is possession-relative: 0 is the offence's own goal line, 100
@@ -870,6 +881,7 @@ function buildContext(game, rosterRows, playRows, ourBranding){
 // The guard matters -- without it the browser throws on `module`.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    formatDuration,
     markerLabel,
     normalizeHex,
     luminance,

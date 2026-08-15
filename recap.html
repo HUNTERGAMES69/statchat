@@ -361,7 +361,14 @@ function isAdminMarker(p){
           ['Yards Per Play', totalPlays ? (totalYds/totalPlays).toFixed(1) : '0.0'],
           ['Pass Yards', passYds], ['Yards Per Pass', passAtt ? (passYds/passAtt).toFixed(1) : '0.0'], ['Pass TD', passTd],
           ['Rush Yards', rushYds], ['Yards Per Rush', rushAtt ? (rushYds/rushAtt).toFixed(1) : '0.0'], ['Rush TD', rushTd],
-          ['Possessions', possessions[teamKey]||0], ['Turnovers', turnovers[teamKey]||0], ['Sacks Allowed', sacked],
+          ['Possessions', possessions[teamKey]||0],
+          // TIME OF POSSESSION. Computed from the clock values the scorer
+          // typed, which are optional, so an em dash rather than 0:00 when
+          // none were entered -- a zero would read as "they never had the
+          // ball" instead of "nobody recorded it".
+          ['Time of Possession', (computeState(plays).possessionTime || {})[teamKey]
+            ? formatDuration(computeState(plays).possessionTime[teamKey]) : '—'],
+          ['Turnovers', turnovers[teamKey]||0], ['Sacks Allowed', sacked],
           ['Penalties', pen.count], ['Penalty Yards', pen.yds],
           ['3rd Down %', own.d3Pct !== null ? own.d3conv + '/' + own.d3att + ' (' + own.d3Pct + '%)' : '—'],
           ['4th Down %', own.d4Pct !== null ? own.d4conv + '/' + own.d4att + ' (' + own.d4Pct + '%)' : '—'],

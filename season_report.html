@@ -256,7 +256,7 @@ function isAdminMarker(p){
     defense: { int: 0, fumRec: 0, sacks: 0, tfl: 0 },
       tacklers: {},   // per-player: tackles, tfl, sacks, int, fumRec
     perGame: [],
-    totals: { rushAtt:0, rushYds:0, rushTd:0, passAtt:0, passComp:0, passYds:0, passTd:0, sacked:0, totalPlays:0, possessions:0, turnovers:0, penCount:0, penYds:0,
+    totals: { rushAtt:0, rushYds:0, rushTd:0, passAtt:0, passComp:0, passYds:0, passTd:0, sacked:0, totalPlays:0, possessions:0, turnovers:0, penCount:0, penYds:0, topSec:0, topGames:0,
       oppD3att:0, oppD3conv:0, oppD4att:0, oppD4conv:0, explosiveFor:0,
       oppRushAtt:0, oppRushYds:0, oppRushTd:0, oppPassAtt:0, oppPassComp:0, oppPassYds:0, oppPassTd:0,
       pointsScored:0, pointsAllowed:0, explosiveAgainst:0 },
@@ -324,6 +324,15 @@ function isAdminMarker(p){
     t.possessions += possessions.teamA || 0;
     t.turnovers += turnovers.teamA || 0;
     t.penCount += pen.count; t.penYds += pen.yds;
+    // Time of possession across the season. topGames counts only the
+    // games that actually recorded a clock, so the per-game average is
+    // over games with data rather than over every game played -- an
+    // average diluted by games nobody clocked would be worse than no
+    // average at all.
+    {
+      const gTop = (finalState.possessionTime || {}).teamA || 0;
+      if (gTop > 0){ t.topSec += gTop; t.topGames += 1; }
+    }
     t.oppD3att += oppDowns.d3att; t.oppD3conv += oppDowns.d3conv;
     t.oppD4att += oppDowns.d4att; t.oppD4conv += oppDowns.d4conv;
     t.explosiveFor += ownDowns.explosive;
@@ -608,7 +617,10 @@ function isAdminMarker(p){
           .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
         '</div>' +
       '<div class="chart-col-metrics">' +
-        [[t.penCount,'Penalties'],[per(t.penCount),'Pen/game'],[t.penYds,'Penalty yds'],[per(t.penYds),'Pen yds/game']]
+        [[t.penCount,'Penalties'],[per(t.penCount),'Pen/game'],[t.penYds,'Penalty yds'],[per(t.penYds),'Pen yds/game'],
+         [t.topGames ? formatDuration(t.topSec) : '—','Time of poss.'],
+         [t.topGames ? formatDuration(t.topSec / t.topGames) : '—',
+          t.topGames ? 'TOP/game (' + t.topGames + ' game' + (t.topGames === 1 ? '' : 's') + ')' : 'TOP/game']]
           .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
         '</div>' +
       '<div class="chart-box"><canvas id="chartTurnoversByGame"></canvas></div>' +

@@ -1039,8 +1039,26 @@ function extractNameTag(rawName){
         // Right-justified via margin-left:auto so it sits hard against
         // the end of the coloured bar regardless of how long the team
         // name or logo is.
-        '<span style="margin-left:auto; font-size:16px; font-weight:700; letter-spacing:0.02em;">TOL=' +
-          computeState(plays).timeouts[teamKey] + '</span>' +
+        // TIME OF POSSESSION, cumulative, in the header rather than the
+        // tile grid. The grid is a fixed 2x4 and every tile in it earns
+        // its place; a ninth would either reflow the whole panel or push
+        // something out. The coloured bar is per-team, fixed height, and
+        // already right-justified with the timeouts -- so this costs no
+        // vertical space at all.
+        //
+        // Shown only once some has accrued. TOP is computed from the
+        // clock values the scorer types, and those are optional, so a
+        // game with no clock entries would otherwise display a confident
+        // 0:00 -- which reads as "they never had the ball" rather than
+        // "nobody told me". Absent is honest; zero is a claim.
+        (liveState.possessionTime && liveState.possessionTime[teamKey] > 0
+          ? '<span style="margin-left:auto; font-size:16px; font-weight:700; letter-spacing:0.02em;" ' +
+            'title="Time of possession, from the clock values entered">TOP ' +
+            formatDuration(liveState.possessionTime[teamKey]) + '</span>' +
+            '<span style="margin-left:14px; font-size:16px; font-weight:700; letter-spacing:0.02em;">TOL=' +
+            computeState(plays).timeouts[teamKey] + '</span>'
+          : '<span style="margin-left:auto; font-size:16px; font-weight:700; letter-spacing:0.02em;">TOL=' +
+            computeState(plays).timeouts[teamKey] + '</span>') +
         '</div>' +
         '<div class="stat-tile-grid">' +
         tiles.map(([val, label]) => '<div class="stat-tile"><div class="stat-tile-value">' + val + '</div><div class="stat-tile-label">' + label + '</div></div>').join('') +

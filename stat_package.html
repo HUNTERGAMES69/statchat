@@ -589,7 +589,10 @@ function isAdminMarker(p){
       const pen = finalState.penalties[teamKey];
       return { totalYds, totalPlays, passYds, passAtt, passComp, passTd, rushYds, rushAtt, rushTd, sacked,
         turnovers: turnovers[teamKey]||0, penCount: pen.count, penYds: pen.yds,
-        possessions: possessions[teamKey]||0, own };
+        possessions: possessions[teamKey]||0,
+        // Cumulative time of possession, from the clock values entered.
+        top: (finalState.possessionTime || {})[teamKey] || 0,
+        own };
     };
 
     const visitorKey = TEAMS.teamA.isHome ? 'teamB' : 'teamA';
@@ -618,6 +621,12 @@ function isAdminMarker(p){
           [m.rushYds, 'Yds'], [m.rushAtt ? (m.rushYds/m.rushAtt).toFixed(1) : '0.0', 'Yds/att'], [m.rushTd, 'TD'] ] },
         { color: '#993556', label: 'Discipline', items: [
           [m.turnovers, 'Turnovers'], [m.sacked, 'Sacks allowed'], [m.penCount + '-' + m.penYds, 'Penalties'] ] },
+        // Time of possession sits with Efficiency rather than Discipline:
+        // it is a description of how the game was controlled, not of
+        // mistakes. Em dash when no clocks were entered -- 0:00 would
+        // claim they never had the ball.
+        { color: '#3C6E47', label: 'Possession', items: [
+          [m.top ? formatDuration(m.top) : '—', 'Time of possession'] ] },
         { color: '#999', label: 'Efficiency', items: [
           [m.own.d3Pct !== null ? m.own.d3conv+'/'+m.own.d3att+' ('+m.own.d3Pct+'%)' : '—', '3rd down'],
           [m.own.d4Pct !== null ? m.own.d4conv+'/'+m.own.d4att+' ('+m.own.d4Pct+'%)' : '—', '4th down'],
