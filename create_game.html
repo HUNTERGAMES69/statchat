@@ -103,7 +103,7 @@
           <tr><td style="padding:2px 14px 2px 0;">7</td><td style="padding:2px 14px 2px 0;">Alpha Ates</td><td style="padding:2px 0;">RB</td></tr>
           <tr><td style="padding:2px 14px 2px 0;">12</td><td style="padding:2px 14px 2px 0;">Bravo Boone</td><td style="padding:2px 0;">QB</td></tr>
         </table>
-        <p style="margin:0 0 8px; font-size:14px;"><strong>List more than one position if you like &mdash; only the first is used.</strong> <em>RB/WR</em>, <em>RB, WR</em> and <em>RB-WR</em> all read as <strong>RB</strong>. Put the position they mostly play first. Two players may share a number; you will be asked which is which.</p>
+        <p style="margin:0 0 8px; font-size:14px;"><strong>Position is optional.</strong> Leave column C blank for anyone you do not have a position for &mdash; a roster with positions for the starters only imports fine. <strong>List more than one if you like &mdash; only the first is used.</strong> <em>RB/WR</em>, <em>RB, WR</em> and <em>RB-WR</em> all read as <strong>RB</strong>. Put the position they mostly play first. Two players may share a number; you will be asked which is which.</p>
         <p style="margin:0 0 10px; font-size:13px; color:#666;"><strong>Offense:</strong> QB RB FB HB TB WR SE FL SLOT TE OL OT OG G T C ATHLETE<br><strong>Defense:</strong> DB CB S FS SS LB OLB ILB MLB WLB DE DT NG NT EDGE DL<br><strong>Special teams:</strong> K P LS DS H KR PR RET</p>
         <button type="button" id="oppFormatContinue">Choose file&hellip;</button>
         <button type="button" id="oppFormatCancel" class="secondary" style="margin-left:8px;">Cancel</button>
@@ -688,6 +688,7 @@
       // parts of a real spreadsheet; anything with content that cannot be
       // read in full is an error and blocks the import.
       const entries = [], problems = [];
+      let blankPositions = 0;
       const ALL_POS = OFFENSE_POS.concat(DEFENSE_POS, SPECIAL_POS);
       rows.forEach((row, i) => {
         const label = 'Row ' + (i + 1);
@@ -714,7 +715,25 @@
         // actually use. Only the first has to be a position we know: if
         // the rest are junk, they were going to be ignored anyway.
         let firstPos = null;
-        if (!pos) rowProblems.push('no position in column C');
+        // A BLANK POSITION IS ALLOWED. It is counted, not refused.
+        // ------------------------------------------------------------
+        // Rejecting it put the importer at odds with the rest of the app.
+        // An opponent roster off a programme is names and numbers, and a
+        // school's own roster often carries positions for the starters
+        // only -- 26 of 95 in the first real one tried. Everything
+        // downstream already handles a player with no position: he is
+        // offered in the broad pickers, kept out of the narrow ones
+        // (passer, kicker, punter) unless the coach seeds him, and
+        // promoted the moment he actually plays the role.
+        //
+        // Refusing the file forced someone to invent positions to get it
+        // in, which is strictly worse than leaving them blank: a guess is
+        // indistinguishable from a fact once it is in the database.
+        //
+        // A position that IS given still has to be one we recognise.
+        // "Blank" is incomplete; "FLANKERBACK" is wrong, and only the
+        // second is worth stopping the import for.
+        if (!pos) blankPositions++;
         else {
           firstPos = pos.split(/[^A-Z0-9]+/).filter(Boolean)[0] || null;
           if (!firstPos) rowProblems.push('no readable position in column C, got "' + pos + '"');
@@ -758,7 +777,18 @@
       oppConflictsList = conflicts;
       document.getElementById('opponentRosterStatus').innerHTML =
         '<div class="roster-summary">' + entries.length + ' players loaded' +
-        (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>';
+        // Say how many arrived without a position, and what that means.
+        // It is not an error -- but it does change which pickers they
+        // appear in, and finding that out mid-game is worse than reading
+        // it here.
+        (blankPositions ? ' — ' + blankPositions + ' with no position recorded' : '') +
+        (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>' +
+        (blankPositions
+          ? '<p class="sub" style="margin:6px 0 0;">Players with no position are still fully usable: ' +
+            'they appear in the rush, pass and tackle pickers, and can always be entered by typing ' +
+            'their number. They are kept out of the quarterback, kicker and punter pickers until you ' +
+            'name one as a starter above, or until they actually play that role in a game.</p>'
+          : '');
       renderAssignmentUI('opponentAssignments', 'opp', needsAssignment, oppResolved);
       renderConflictUI('opponentConflicts', 'opp', conflicts, oppResolved);
       // A roster just became available, so any starter numbers already
