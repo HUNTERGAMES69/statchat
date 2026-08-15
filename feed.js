@@ -22,6 +22,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const engine = require('./_engine.js');
+const { countPossessions, countTurnovers } = engine;
 
 // ---------------------------------------------------------------- utils
 
@@ -52,11 +53,20 @@ const mmss = (secs) => {
 // software; a title binds to a row, so the shape matters as much as the
 // numbers.
 
+// NO ABBREVIATION FIELDS. There used to be homeAbbr / awayAbbr /
+// possessionAbbr, derived by taking the first word of the team name --
+// which for "Neville" and "Ruston" returned the full name unchanged. A
+// field called `abbr` that returns the whole name is worse than no
+// field: bind a narrow scoreboard slot to it expecting "RUS" and you get
+// "Ruston" with nothing to explain why.
+//
+// Andy uses full names, so they were removed rather than faked. If short
+// codes are ever wanted they need a STORED field per team -- deriving
+// them guesses badly ("St. Aloysius" -> "St.").
 function buildViews(ctx) {
   const { state, box, teams, plays, game } = ctx;
 
   const sideName = k => (teams[k] || {}).name || '';
-  const sideAbbr = k => (teams[k] || {}).abbr || sideName(k);
 
   const distanceLabel = (state.down && state.fieldPos !== null &&
     state.fieldPos + state.distance >= 100) ? 'Goal' : state.distance;
@@ -75,7 +85,7 @@ function buildViews(ctx) {
     const rush = sumOf(s.rushing, 'yds');
     const pass = sumOf(s.passing, 'yds');
     return {
-      team: sideName(k), abbr: sideAbbr(k),
+      team: sideName(k),
       score: (state.scores || {})[k] || 0,
       rushYards: rush, passYards: pass, totalYards: rush + pass,
       rushAtt: sumOf(s.rushing, 'att'),
@@ -92,7 +102,22 @@ function buildViews(ctx) {
       interceptions: sumOf(s.defense, 'int'),
       fumbleRec: sumOf(s.defense, 'fumRec'),
       timeouts: (state.timeouts || {})[k] || 0,
-      timeOfPossession: mmss((state.possessionTime || {})[k])
+      timeOfPossession: mmss((state.possessionTime || {})[k]),
+      // Added 12 Aug after the coverage test found them missing. All
+      // three are on the view page's per-team tiles, so a production
+      // team looking at the app would reasonably expect them -- and
+      // nothing would have told us they were absent.
+      possessions: (countPossessions(plays) || {})[k] || 0,
+      turnovers: (countTurnovers(plays) || {})[k] || 0,
+      penaltyCount: ((state.penalties || {})[k] || {}).count || 0,
+      penaltyYards: ((state.penalties || {})[k] || {}).yds || 0,
+      // Pre-formatted the way the view page shows it ("4-35"), so a
+      // single text field can bind straight to it.
+      penalties: (((state.penalties || {})[k] || {}).count || 0) + '-' +
+                 (((state.penalties || {})[k] || {}).yds || 0),
+      totalPlays: plays.filter(p => p.team === k && p.roles &&
+        ['rush','pass','incomplete','sack','int','fumble']
+          .includes(p.roles.playType)).length
     };
   };
 
@@ -101,7 +126,13 @@ function buildViews(ctx) {
     const b = (box[teamKey] || {})[cat] || {};
     return Object.keys(b)
       .map(name => Object.assign({ player: name, team: sideName(teamKey) }, b[name]))
-      .filter(r => (r[sortKey] || 0) !== 0 || (r.att || r.rec || r.tgt))
+      // Keep anyone with ANY stat in the category, not just the one being
+      // sorted on. The old filter tested the sort key plus att/rec/tgt,
+      // which meant a defender with a sack and no tackles was dropped --
+      // and the whole `defense` view returned zero rows for a game that
+      // contained a sack and an interception. The coverage test found it.
+      .filter(r => Object.keys(r).some(k =>
+        k !== 'player' && k !== 'team' && (r[k] || 0) !== 0))
       .sort((a, b2) => (b2[sortKey] || 0) - (a[sortKey] || 0));
   };
   const bothTeams = (cat, sortKey) =>
@@ -113,9 +144,9 @@ function buildViews(ctx) {
   return {
     // One row: the scoreboard bug.
     score: [{
-      homeTeam: sideName('teamA'), homeAbbr: sideAbbr('teamA'),
+      homeTeam: sideName('teamA'),
       homeScore: (state.scores || {}).teamA || 0,
-      awayTeam: sideName('teamB'), awayAbbr: sideAbbr('teamB'),
+      awayTeam: sideName('teamB'),
       awayScore: (state.scores || {}).teamB || 0,
       quarter: state.quarter >= 5 ? 'OT' : ('Q' + state.quarter),
       quarterNumber: state.quarter,
@@ -126,7 +157,6 @@ function buildViews(ctx) {
         ? (['', '1st', '2nd', '3rd', '4th'][state.down] + ' & ' + distanceLabel) : '',
       ballOn: markerLabel(state.fieldPos),
       possession: sideName(state.possession),
-      possessionAbbr: sideAbbr(state.possession),
       homeHasBall: state.possession === 'teamA' && state.down ? 'true' : 'false',
       awayHasBall: state.possession === 'teamB' && state.down ? 'true' : 'false',
       homeTimeouts: (state.timeouts || {}).teamA || 0,
@@ -143,8 +173,20 @@ function buildViews(ctx) {
         team: sideName(state.possession),
         plays: scrimmage.length,
         yards: scrimmage.reduce((t, p) => t + (p.effect.statYds || 0), 0),
-        startedAt: markerLabel(state.fieldPos),
-        timeOfPossession: mmss((state.possessionTime || {})[state.possession])
+        startedAt: markerLabel(state.fieldPos)
+        // NO timeOfPossession HERE. It used to report
+        // state.possessionTime[possession], which is the team's CUMULATIVE
+        // total for the game -- the same figure the teamstats row carries,
+        // sitting in a row whose every other field (plays, yards,
+        // startedAt) is scoped to this drive. An operator binding it would
+        // read "time on this drive" and put a wrong number on air, and it
+        // would look plausible all night because it grows.
+        //
+        // Dropped rather than corrected, on Andy's call: a drive's own TOP
+        // only accrues when a closing clock event is entered, so a LIVE
+        // drive reads 0:00 until it ends. A field that is always zero
+        // while anyone would look at it is not worth broadcasting.
+        // Cumulative time of possession is in the teamstats view.
       };
     })()],
 
