@@ -173,8 +173,20 @@ function buildViews(ctx) {
         team: sideName(state.possession),
         plays: scrimmage.length,
         yards: scrimmage.reduce((t, p) => t + (p.effect.statYds || 0), 0),
-        startedAt: markerLabel(state.fieldPos),
-        timeOfPossession: mmss((state.possessionTime || {})[state.possession])
+        startedAt: markerLabel(state.fieldPos)
+        // NO timeOfPossession HERE. It used to report
+        // state.possessionTime[possession], which is the team's CUMULATIVE
+        // total for the game -- the same figure the teamstats row carries,
+        // sitting in a row whose every other field (plays, yards,
+        // startedAt) is scoped to this drive. An operator binding it would
+        // read "time on this drive" and put a wrong number on air, and it
+        // would look plausible all night because it grows.
+        //
+        // Dropped rather than corrected, on Andy's call: a drive's own TOP
+        // only accrues when a closing clock event is entered, so a LIVE
+        // drive reads 0:00 until it ends. A field that is always zero
+        // while anyone would look at it is not worth broadcasting.
+        // Cumulative time of possession is in the teamstats view.
       };
     })()],
 
