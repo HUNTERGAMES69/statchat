@@ -345,6 +345,29 @@ function countTurnovers(playsList){
     // r.defense is still honoured so plays saved before this change
     // keep counting.
     if (r.playType === 'fumble' && r.carrier && (r.lost || r.defense)) counts[r.carrier.team] = (counts[r.carrier.team] || 0) + 1;
+
+    // A MUFFED PUNT RECOVERED BY THE KICKING TEAM.
+    // ------------------------------------------------------------------
+    // The ball changed hands and nothing was counted, because this play
+    // is playType 'punt' and the two rules above only look at 'int' and
+    // 'fumble'. Reported from a real game on 14 Aug 2026.
+    //
+    // Charged to the RECEIVING team: they are the ones who lost it. The
+    // punting team's own drive ended with the punt, as it always does,
+    // so charging them would count one turnover twice over.
+    //
+    // The test is that the recoverer is on the SAME team as the punter.
+    // A muff the receiving team recovers themselves is not a turnover --
+    // they keep the ball, exactly as they would have anyway.
+    //
+    // A BLOCKED punt cannot be caught by this rule by accident: blocked
+    // plays record no `recovery` role at all, whichever side recovers.
+    // That is checked, not assumed.
+    if (r.playType === 'punt' && r.punter && r.recovery &&
+        r.recovery.team === r.punter.team){
+      const receiving = otherTeam(r.punter.team);
+      counts[receiving] = (counts[receiving] || 0) + 1;
+    }
   });
   return counts;
 }
