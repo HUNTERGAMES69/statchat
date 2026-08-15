@@ -191,16 +191,39 @@ assertion matching the old wording needs updating — and should assert
 the SIGN, not just the digits, since an unsigned number next to a
 penalised team is the misreading that prompted the change.
 
+## Recent additions
+
+- **`color_check.js`** — the shared colour helpers in `engine.js`, which
+  decide what colour text is drawn in on six pages. Mostly assertions
+  about MALFORMED input, because the bug that prompted them was silent:
+  `#fff` parsed as NaN, `NaN > 0.55` is false, so a shorthand hex quietly
+  put white text on white. It also guards the FIVE position lists against
+  drift — the cheap check that would have caught the `SLOT` divergence.
+- **`coverage_probe.js` is at 48/48.** It was 42/47: five paths read as
+  unreachable UI when they were really stale fixtures that predate the
+  mandatory takeover spot on kickoffs and punts. The touchback and
+  return-touchdown variants passed throughout, which is exactly
+  consistent — one is prefilled, the other has no ensuing drive.
+- **`receiver_targets_check.js`** now asserts the three reconciliations
+  (passing yards = receiving yards, attempts = targets, completions =
+  receptions) as well as targets. Its first mutation test SURVIVED: the
+  fixture had an unnamed incompletion but no unnamed completion, so
+  removing the whole Unknown bucket still reconciled. A reconciliation
+  check is worthless unless the fixture contains the thing that would
+  break it.
+
 ## Untested, and known to be
 
 Recorded here rather than left implicit, because "no test failed" is
 otherwise indistinguishable from "this is covered".
 
-- **The out-of-bounds kickoff** (13 Aug 2026), on both the normal panel
-  and the guided flow, and the **toggle repaint** fix that came with it —
-  a deselected kickoff outcome used to keep its gold tick, so two
-  outcomes looked selected at once. `whitelist_check.js` already covers
-  kickoff outcome exclusivity and is the natural home.
+- The **last-clock hint**, the **pass outcome switch row** and the
+  **time-of-possession display** (14 Aug 2026). All three were verified
+  by hand in a scratch script; none is committed. The switch row is the
+  one worth a test — it is a control that vanished when used, and
+  nothing would notice if it did so again.
+- **`normalizeHex`**, the out-of-bounds kickoff and the toggle repaint
+  are now covered (`color_check.js`, `whitelist_check.js`).
 - **`normalizeHex`**, which sits under every colour decision on six
   pages. Verified by hand across `#fff`, `#FFF`, `  #AbC  `, `red`, `''`,
   `null`, `undefined`, `42`, `#ffff`; none of it is committed. Wants a
