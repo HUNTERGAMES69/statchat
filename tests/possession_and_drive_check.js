@@ -180,6 +180,88 @@ async function run() {
     }
   }
 
+  // --- A MUFFED PUNT RECOVERED BY THE KICKING TEAM IS A TURNOVER ---------
+  // Reported from a real game, 14 Aug 2026: the ball changed hands and
+  // nothing was counted. countTurnovers only looked at playType 'int' and
+  // 'fumble', and a muff is playType 'punt'.
+  //
+  // Charged to the RECEIVING team -- they lost it. The punting team's
+  // drive ended with the punt as it always does, so charging them would
+  // count one turnover twice.
+  //
+  // The three neighbours are asserted alongside it because they all end a
+  // drive and none of them is a turnover, and the rule has to tell them
+  // apart: a muff the receiving team recovers themselves, a BLOCKED punt
+  // (which records no `recovery` role at all, whichever side gets it),
+  // and an ordinary punt.
+  {
+    const { typeInto } = require('./ui_driver');
+    const punt = async (fill) => {
+      const h = await bootGamePage();
+      const { window: win, document: doc } = h;
+      setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="punt"]'));
+      typeInto(win, doc.getElementById('pp_punter_manual'), '15');
+      fill(win, doc);
+      click(win, doc.getElementById('pp_review'));
+      click(win, doc.getElementById('saveBtn'));
+      const t = JSON.parse(h.evalIn('JSON.stringify(countTurnovers(plays))'));
+      h.close();
+      return t;
+    };
+
+    const muffKicking = await punt((w, d) => {
+      typeInto(w, d.getElementById('pp_yards'), '40');
+      click(w, d.getElementById('pp_muffed_toggle'));
+      click(w, d.querySelector('input[name=pp_punt_muffrec][value="k"]'));
+      typeInto(w, d.getElementById('pp_muff_rec'), '55');
+      click(w, d.querySelector('.pp_muffspot_side[data-side="opp"]'));
+      typeInto(w, d.getElementById('pp_muffspot_yardline'), '30');
+    });
+    if (muffKicking.teamB !== 1){
+      fail('muffed punt', 'a punt muffed and recovered by the KICKING team charged the ' +
+           'receiving team ' + muffKicking.teamB + ' turnovers, expected 1 — the ball ' +
+           'changed hands and nothing counted it');
+    }
+    if (muffKicking.teamA !== 0){
+      fail('muffed punt', 'the punting team was charged ' + muffKicking.teamA + ' — their ' +
+           'drive ended with the punt, as every punt does, so this double counts');
+    }
+
+    const muffReceiving = await punt((w, d) => {
+      typeInto(w, d.getElementById('pp_yards'), '40');
+      click(w, d.getElementById('pp_muffed_toggle'));
+      click(w, d.querySelector('input[name=pp_punt_muffrec][value="r"]'));
+      typeInto(w, d.getElementById('pp_muff_rec'), '21');
+      click(w, d.querySelector('.pp_spot_side[data-side="own"]'));
+      typeInto(w, d.getElementById('pp_spot_yardline'), '30');
+    });
+    if (muffReceiving.teamA || muffReceiving.teamB){
+      fail('muffed punt', 'a muff the RECEIVING team recovered itself was counted as a ' +
+           'turnover — they keep the ball, exactly as they would have anyway');
+    }
+
+    const blocked = await punt((w, d) => {
+      click(w, d.getElementById('pp_blocked_toggle'));
+      click(w, d.querySelector('input[name=pp_punt_blockrec][value="own"]'));
+      click(w, d.querySelector('.pp_spot_side[data-side="own"]'));
+      typeInto(w, d.getElementById('pp_spot_yardline'), '22');
+    });
+    if (blocked.teamA || blocked.teamB){
+      fail('muffed punt', 'a BLOCKED punt recovered by the kicking team was counted as a ' +
+           'turnover — nobody lost the ball');
+    }
+
+    const plain = await punt((w, d) => {
+      typeInto(w, d.getElementById('pp_yards'), '40');
+      click(w, d.querySelector('.pp_spot_side[data-side="own"]'));
+      typeInto(w, d.getElementById('pp_spot_yardline'), '30');
+    });
+    if (plain.teamA || plain.teamB){
+      fail('muffed punt', 'an ordinary punt was counted as a turnover');
+    }
+  }
+
   return failures;
 }
 
