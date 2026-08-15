@@ -29,13 +29,18 @@
   .card.compact { padding:0 0 8px; margin-bottom:16px; background:none; box-shadow:none; border-radius:0; border-bottom:2px solid #d5d2c8; }
   .card.compact:last-child { border-bottom:none; margin-bottom:0; }
   .drive-card { border-left:5px solid transparent; padding-left:10px !important; }
-  .drive-current { border-left-color:#1a7a4c; }
-  .drive-current h2 { color:#1a7a4c; }
+  /* Both drive cards take their colour from WHOEVER HAD THE BALL, set as
+     custom properties at render time. The literals below are only
+     fallbacks, for the moment before a drive exists or if a team has no
+     colour stored -- the green and grey they used to be fixed at said
+     nothing about the game, and a reader had to check the heading to see
+     whose drive they were looking at. */
+  .drive-card { --drive-accent:#8a8f98; --drive-heading:#5b6068; --drive-tint:#edeef0; }
+  .drive-current { --drive-accent:#1a7a4c; --drive-heading:#1a7a4c; --drive-tint:#e6f4ea; }
+  .drive-card { border-left-color:var(--drive-accent); }
+  .drive-card h2 { color:var(--drive-heading); }
   .drive-current h2::before { content:"● LIVE  "; font-size:10px; letter-spacing:0.05em; }
-  .drive-current .inline-stat-item { background:#e6f4ea; }
-  .drive-previous { border-left-color:#8a8f98; }
-  .drive-previous h2 { color:#5b6068; }
-  .drive-previous .inline-stat-item { background:#edeef0; }
+  .drive-card .inline-stat-item { background:var(--drive-tint); }
   .team-summary-row { display:flex; gap:28px; flex:1; min-height:0; }
   .team-summary-col { flex:1; display:flex; flex-direction:column; min-width:0; }
   .team-summary-header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:8px; font-weight:800; font-size:20px; margin-bottom:10px; }
@@ -921,6 +926,35 @@ function extractNameTag(rawName){
         ? computeDriveSummary(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1])
         : null;
       document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary);
+
+      // COLOUR EACH DRIVE CARD FOR THE TEAM THAT HAD THE BALL.
+      // ----------------------------------------------------------------
+      // The accent bar and the heading take the team's own colour; the
+      // stat chips take a pale mix of it toward white. Set as custom
+      // properties so the CSS above keeps its fallbacks -- before the
+      // first drive exists there is no team to colour for, and the card
+      // should not flash an undefined value.
+      //
+      // The heading goes through safeTextColor against WHITE, not against
+      // the tint: it sits on the card, and a pale gold team colour is
+      // perfectly readable on its own chips while being invisible as text
+      // on a white card.
+      const paintDrive = (sel, summary) => {
+        const card = document.querySelector(sel);
+        if (!card) return;
+        const teamKey = summary && summary.team;
+        const bg = teamKey && TEAMS[teamKey] && TEAMS[teamKey].bg;
+        if (!bg){
+          ['--drive-accent', '--drive-heading', '--drive-tint']
+            .forEach(v => card.style.removeProperty(v));
+          return;
+        }
+        card.style.setProperty('--drive-accent', bg);
+        card.style.setProperty('--drive-heading', safeTextColor('#ffffff', bg));
+        card.style.setProperty('--drive-tint', mixHex(bg, '#ffffff', 0.88));
+      };
+      paintDrive('.drive-current', currentSummary);
+      paintDrive('.drive-previous', prevSummary);
     } else {
       document.getElementById('allPlaysScroll').innerHTML = renderLogLines(plays.slice().reverse()) || '<div style="color:#999;">No plays recorded.</div>';
     }

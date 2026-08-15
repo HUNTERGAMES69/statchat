@@ -117,6 +117,24 @@ function colorDistance(hexA, hexB){
   return Math.sqrt((a.r-b.r)**2 + (a.g-b.g)**2 + (a.b-b.b)**2);
 }
 
+// Blend a colour toward another, 0 = all A, 1 = all B.
+// Used to turn a team's brand colour into a pale tint a dark label can sit
+// on. Mixing toward white rather than using rgba() because these tints go
+// on cards that are themselves layered, and a translucent fill would pick
+// up whatever is behind it.
+function mixHex(hexA, hexB, amount){
+  const a = normalizeHex(hexA), b = normalizeHex(hexB);
+  if (!a) return b || null;
+  if (!b) return a;
+  const t = Math.max(0, Math.min(1, amount));
+  const ch = i => {
+    const x = parseInt(a.slice(1 + i * 2, 3 + i * 2), 16);
+    const y = parseInt(b.slice(1 + i * 2, 3 + i * 2), 16);
+    return Math.round(x + (y - x) * t).toString(16).padStart(2, '0');
+  };
+  return '#' + ch(0) + ch(1) + ch(2);
+}
+
 // WCAG CONTRAST RATIO. This is what "can you read it" actually means.
 // ---------------------------------------------------------------------
 // luminance() above is Rec.601 luma -- a perceptual brightness, right for
@@ -930,6 +948,7 @@ function buildContext(game, rosterRows, playRows, ourBranding){
 // The guard matters -- without it the browser throws on `module`.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    mixHex,
     contrastRatio,
     relLuminance,
     formatDuration,
