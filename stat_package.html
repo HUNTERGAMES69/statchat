@@ -644,20 +644,20 @@ function isAdminMarker(p){
     html += teamBlock('teamA', false) + teamBlock('teamB', true);
 
     html += '<div class="section-title">' + TEAMS.teamA.name + ' — Passing</div>' +
-      (statTable('teamA', box.teamA.passing, ['Att','Comp','%','Yds','Y/C','Long','TD','Int','Sacked','Rush TD','Fumble'],
+      (statTable('teamA', box.teamA.passing, ['Comp','Att','%','Yds','Y/C','Long','TD','Int','Sacked','Rush TD','Fumble'],
         (d, n) => { const rd = box.teamA.rushing[n] || {};
-          return [d.att||0, d.comp||0, d.att?Math.round(100*(d.comp||0)/d.att):0, d.yds||0, d.comp?(d.yds/d.comp).toFixed(1):'0.0', d.long||0, d.td||0, d.intThrown||0, d.sacked||0, rd.td||0, (d.fum||0)+(rd.fum||0)]; },
+          return [d.comp||0, d.att||0, d.att?Math.round(100*(d.comp||0)/d.att):0, d.yds||0, d.comp?(d.yds/d.comp).toFixed(1):'0.0', d.long||0, d.td||0, d.intThrown||0, d.sacked||0, rd.td||0, (d.fum||0)+(rd.fum||0)]; },
         (obj, nums) => { const att=sumStat(obj,'att'), comp=sumStat(obj,'comp'), yds=sumStat(obj,'yds');
           const rushTdTotal = nums.reduce((t,n) => t + ((box.teamA.rushing[n]&&box.teamA.rushing[n].td)||0), 0);
           const fumTotal = nums.reduce((t,n) => t + ((obj[n].fum||0) + ((box.teamA.rushing[n]&&box.teamA.rushing[n].fum)||0)), 0);
-          return [att, comp, att?Math.round(100*comp/att):0, yds, comp?(yds/comp).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'intThrown'), sumStat(obj,'sacked'), rushTdTotal, fumTotal]; },
+          return [comp, att, att?Math.round(100*comp/att):0, yds, comp?(yds/comp).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'intThrown'), sumStat(obj,'sacked'), rushTdTotal, fumTotal]; },
         'yds') || '<p class="no-stats">No passing stats recorded.</p>');
 
     html += '<div class="section-title">' + TEAMS.teamA.name + ' — Receiving</div>' +
-      (statTable('teamA', box.teamA.receiving, ['Tgt','Rec','Catch %','Yds','Y/C','Long','TD','Fumble'],
-        d => [d.tgt||0, d.rec||0, d.tgt?Math.round(100*(d.rec||0)/d.tgt)+'%':'—', d.yds||0, d.rec?(d.yds/d.rec).toFixed(1):'0.0', d.long||0, d.td||0, d.fum||0],
+      (statTable('teamA', box.teamA.receiving, ['Rec','Tgt','Catch %','Yds','Y/C','Long','TD','Fumble'],
+        d => [d.rec||0, d.tgt||0, d.tgt?Math.round(100*(d.rec||0)/d.tgt)+'%':'—', d.yds||0, d.rec?(d.yds/d.rec).toFixed(1):'0.0', d.long||0, d.td||0, d.fum||0],
         (obj) => { const rec=sumStat(obj,'rec'), yds=sumStat(obj,'yds'), tgt=sumStat(obj,'tgt');
-          return [tgt, rec, tgt?Math.round(100*rec/tgt)+'%':'—', yds, rec?(yds/rec).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
+          return [rec, tgt, tgt?Math.round(100*rec/tgt)+'%':'—', yds, rec?(yds/rec).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
         'yds') || '<p class="no-stats">No receiving stats recorded.</p>');
 
     html += '<div class="section-title">' + TEAMS.teamA.name + ' — Rushing</div>' +
