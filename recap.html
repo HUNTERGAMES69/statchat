@@ -259,9 +259,10 @@ function isAdminMarker(p){
     if (!nums.length) return '';
     // TEAM last: it is a bookkeeping bucket (kneels, bad snaps, sack
     // yardage), not a player, and its usually-negative total otherwise
-    // ranks it above the real runners.
+    // ranks it above the real runners. Unknown joins it: a completion
+    // whose receiver was not recorded is not a leading receiver.
     const sorted = nums.slice().sort((a, b) =>
-      ((a === 'TEAM' ? 1 : 0) - (b === 'TEAM' ? 1 : 0)) ||
+      (((a === 'TEAM' || a === 'Unknown') ? 1 : 0) - ((b === 'TEAM' || b === 'Unknown') ? 1 : 0)) ||
       ((bucketObj[b][sortKey]||0) - (bucketObj[a][sortKey]||0)));
     const headerStyle = accent ? ' style="background:' + accent.tint + '; color:' + accent.text + ';"' : '';
     let h = '<table class="player-table"><tr' + headerStyle + '><th></th>' + headers.map(x => '<th>' + x + '</th>').join('') + '</tr>';
@@ -293,7 +294,14 @@ function isAdminMarker(p){
     let cards = '';
     categories.forEach(cat => {
       const bucketObj = box.teamA[cat.key];
-      const nums = Object.keys(bucketObj);
+      // A LEADER MUST BE A PLAYER. TEAM is a bookkeeping bucket (sack
+      // yardage, kneels) and Unknown is a completion whose receiver was
+      // not recorded -- neither is somebody a coach can congratulate, and
+      // Unknown in particular would take the card on exactly the play
+      // nobody identified. Excluded here rather than sorted last, because
+      // this picks a single winner: sorting it to the bottom of a list of
+      // one still leaves it at the top.
+      const nums = Object.keys(bucketObj).filter(n => n !== 'TEAM' && n !== 'Unknown');
       if (!nums.length) return;
       const leaderNum = nums.slice().sort((a,b) => cat.pick(bucketObj[b]) - cat.pick(bucketObj[a]))[0];
       const d = bucketObj[leaderNum];

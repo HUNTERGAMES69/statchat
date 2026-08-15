@@ -446,6 +446,9 @@ function computeBoxScore(playsList){
   // free. `name` on the role wins when a play recorded which of two
   // players it was; otherwise the roster answers, falling back to
   // "#21" for someone never rostered.
+  // One spelling, used by the engine and matched by the report pages when
+  // they decide where to sort it. Changing it here changes it everywhere.
+  const UNKNOWN_RECEIVER = 'Unknown';
   const UNIT_FOR_CAT = { rushing: null, passing: null, receiving: null,
                          defense: 'defense', specialTeams: 'special' };
   function keyFor(team, cat, num, name){
@@ -485,8 +488,13 @@ function computeBoxScore(playsList){
     // known intended receiver. Two-point conversions are excluded --
     // NFHS keeps conversion attempts out of season passing and
     // receiving totals, so 'tpp' never reaches this branch.
-    if (r.receiver && (type === 'incomplete' || type === 'int')){
-      const rs = bucket(r.receiver.team, 'receiving', r.receiver.num, r.receiver.name);
+    if (type === 'incomplete' || type === 'int'){
+      // Same reasoning as the completion below: an unnamed intended
+      // receiver still had a ball thrown at him, and leaving it out makes
+      // total targets disagree with total attempts.
+      const rs = r.receiver
+        ? bucket(r.receiver.team, 'receiving', r.receiver.num, r.receiver.name)
+        : bucket(r.passer && r.passer.team, 'receiving', 'UNKNOWN', UNKNOWN_RECEIVER);
       if (rs) rs.tgt = (rs.tgt||0) + 1;
     }
     if (r.passer && type === 'incomplete'){
@@ -502,15 +510,35 @@ function computeBoxScore(playsList){
         s.long = Math.max(s.long||0, r.passer.yards||0);
         if (e.td) s.td = (s.td||0) + 1;
       }
-      if (r.receiver){
-        const rs = bucket(r.receiver.team, 'receiving', r.receiver.num, r.receiver.name);
-        if (rs){
-          rs.rec = (rs.rec||0) + 1;
-          rs.tgt = (rs.tgt||0) + 1;
-          rs.yds = (rs.yds||0) + (r.receiver.yards||0);
-          rs.long = Math.max(rs.long||0, r.receiver.yards||0);
-          if (e.td) rs.td = (rs.td||0) + 1;
-        }
+      // A COMPLETION WITH NO RECEIVER NAMED still has to appear in the
+      // receiving column, under UNKNOWN.
+      // ----------------------------------------------------------------
+      // The receiver is optional on purpose -- a deep ball is exactly the
+      // play where a scorer does not catch the number, and blocking entry
+      // would be worse. But leaving the yardage out of the receiving
+      // table entirely breaks the check that matters most on a stat
+      // sheet: PASSING YARDS SHOULD EQUAL THE SUM OF RECEIVING YARDS.
+      // A coach seeing Passing 245 against Receiving 198 has no way to
+      // tell a missing entry from a bug.
+      //
+      // Bucketed here rather than written onto the play, for two reasons:
+      // no invented player ever reaches the database, and every game
+      // already entered reconciles the moment this ships.
+      //
+      // Distinct from the TEAM bucket in rushing, which means "correctly
+      // credited to nobody, by rule" -- a sack, a kneel, a bad snap.
+      // UNKNOWN means "this happened to a player we did not record", and
+      // conflating the two would hide a data-entry gap behind a rule.
+      const rcv = r.receiver
+        ? bucket(r.receiver.team, 'receiving', r.receiver.num, r.receiver.name)
+        : bucket(r.passer && r.passer.team, 'receiving', 'UNKNOWN', UNKNOWN_RECEIVER);
+      if (rcv){
+        rcv.rec = (rcv.rec||0) + 1;
+        rcv.tgt = (rcv.tgt||0) + 1;
+        const y = r.receiver ? (r.receiver.yards||0) : (r.passer ? (r.passer.yards||0) : 0);
+        rcv.yds = (rcv.yds||0) + y;
+        rcv.long = Math.max(rcv.long||0, y);
+        if (e.td) rcv.td = (rcv.td||0) + 1;
       }
     }
     if (r.passer && type === 'sack'){

@@ -451,7 +451,12 @@ function extractNameTag(rawName){
       // TEAM is a bucket, not a player -- kneels, bad snaps and sack
       // yardage. Its total is usually negative, so ranking by yards put a
       // bookkeeping row above the actual runners. Pinned last.
-      const teamLast = (a, b) => (a === 'TEAM' ? 1 : 0) - (b === 'TEAM' ? 1 : 0);
+      // TEAM and Unknown both sort last. They are different things --
+      // TEAM is "credited to nobody by rule" (a sack, a kneel), Unknown is
+      // "we did not record who" -- but neither is a player, and either
+      // one topping a leaders list would be wrong.
+      const bookkeeping = n => (n === 'TEAM' || n === 'Unknown') ? 1 : 0;
+      const teamLast = (a, b) => bookkeeping(a) - bookkeeping(b);
       const sortByYds = (nums, obj, key) => nums.slice().sort((a, b) =>
         teamLast(a, b) || (((obj[b] && obj[b][key]) || 0) - ((obj[a] && obj[a][key]) || 0)));
       // Caps a sorted list at 5 entries -- except anyone with a touchdown
