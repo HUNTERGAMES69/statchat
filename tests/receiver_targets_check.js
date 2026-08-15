@@ -214,6 +214,65 @@ async function run() {
     v.close();
   }
 
+  // --- COLUMN ORDER: Comp before Att, Rec before Tgt ---------------------
+  // Changed 14 Aug 2026 on Andy's call -- a coach reads "2 of 4", not
+  // "4 with 2 of them caught".
+  //
+  // Checked on every surface, not just the one that was asked about. The
+  // failure this guards is not a wrong order; it is the live view and the
+  // stat package DISAGREEING, so a coach checking one against the other
+  // reads the wrong column.
+  //
+  // It also checks the VALUES moved with the headers. Swapping a header
+  // list and forgetting the array beside it gives a table that looks
+  // right and is exactly wrong, and nothing else would catch it -- 2 and
+  // 4 are both plausible in either column.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 20 });
+    enterPlay(h, { type: 'pass', passer: '7', receiver: '80', yards: '20' });
+    enterPlay(h, { type: 'pass', passer: '7', receiver: '80', yards: '11' });
+    enterPlay(h, { type: 'pass', passer: '7', receiver: '80', incomplete: true });
+    enterPlay(h, { type: 'pass', passer: '7', receiver: '84', incomplete: true });
+    const rows = h.db.plays.map((p, i) =>
+      Object.assign({}, p, { sequence_number: p.sequence_number || i + 1 }));
+    h.close();
+    // Truth: the quarterback is 2 of 4; #80 has 2 catches on 3 targets.
+    for (const [page, query] of [['view.html', undefined], ['recap.html', undefined],
+                                 ['stat_package.html', undefined],
+                                 ['season_report.html', '?season=2025']]){
+      const v = await bootPage(page, { existingPlays: rows, query,
+        game: { status: 'final', season_year: 2025, game_date: '2025-10-04' } });
+      await new Promise(r => setTimeout(r, 300));
+      const tables = [...v.document.querySelectorAll('table')];
+      const check = (re, wantHdr, wantVals, what) => {
+        const t = tables.find(x => re.test(x.textContent));
+        if (!t){ fail('column order', page + ': no ' + what + ' table found'); return; }
+        // Empties dropped: the report pages carry a blank leading header
+        // over the player-name column and the live view does not. That is
+        // a layout difference, not a column-order one, and comparing it
+        // would fail every page for the wrong reason.
+        const hdr = [...t.querySelectorAll('th')].map(x => x.textContent.trim())
+          .filter(Boolean).slice(0, 2).join(' ');
+        if (hdr !== wantHdr){
+          fail('column order', page + ' ' + what + ' headers are ' + JSON.stringify(hdr) +
+               ', expected ' + JSON.stringify(wantHdr) + ' — every surface must agree');
+        }
+        const first = [...t.querySelectorAll('tr')]
+          .map(r => [...r.querySelectorAll('td')].map(c => c.textContent.trim()))
+          .filter(r => r.length)[0] || [];
+        if (first[1] !== wantVals[0] || first[2] !== wantVals[1]){
+          fail('column order', page + ' ' + what + ' values are ' + JSON.stringify(first.slice(1, 3)) +
+               ', expected ' + JSON.stringify(wantVals) + ' — the headers moved and the values ' +
+               'did not, which looks right and is exactly wrong');
+        }
+      };
+      check(/Comp|Att/, 'Comp Att', ['2', '4'], 'passing');
+      check(/Rec|Tgt/, 'Rec Tgt', ['2', '3'], 'receiving');
+      v.close();
+    }
+  }
+
   return failures;
 }
 
