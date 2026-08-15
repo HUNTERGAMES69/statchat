@@ -109,22 +109,64 @@ function run(){
     fail('safeTextColor', 'white text on a #fff background — this is the exact bug the ' +
          'shorthand handling exists to prevent, and it is invisible rather than broken');
   }
+  // WHATEVER IT RETURNS MUST BE READABLE, measured as WCAG contrast.
+  // ------------------------------------------------------------------
+  // This used to assert a LUMINANCE GAP of 0.3, mirroring what
+  // safeTextColor itself did -- a test that agreed with the code rather
+  // than with the requirement. Both were wrong in the same direction, so
+  // the suite stayed green while grey text shipped onto a navy banner:
+  // the gap was 0.41, over the line, and the contrast was 4.3:1.
+  //
+  // A fixture that repeats the implementation's own rule cannot catch
+  // the rule being wrong.
+  const MIN = 4.5;
   const CONTRAST = [
     ['#ffffff', '#ffffff', 'white on white'],
     ['#fff',    '#ffffff', 'white on shorthand white'],
     ['#000000', '#000000', 'black on black'],
     ['#000',    '#000000', 'black on shorthand black'],
-    ['#1a4d2e', '#1a4d2e', 'a real team colour on itself']
+    ['#1a4d2e', '#1a4d2e', 'a real team colour on itself'],
+    ['#1f2a80', '#999999', 'grey on navy — the case reported from a real game'],
+    ['#8b0000', '#000080', 'maroon on navy — two dark brand colours'],
+    ['#ffc72c', '#ffffff', 'white on gold'],
+    ['#000000', '#333333', 'dark grey on black'],
+    ['#7f7f7f', '#808080', 'a mid-tone, where a light/dark cutoff is a coin toss']
   ];
   CONTRAST.forEach(([bg, pref, why]) => {
     const out = engine.safeTextColor(bg, pref);
-    const bgLum = engine.luminance(bg), outLum = engine.luminance(out);
-    if (Math.abs(bgLum - outLum) < 0.3){
+    const ratio = engine.contrastRatio(bg, out);
+    if (ratio < MIN){
       fail('safeTextColor', why + ': chose ' + show(out) + ' on ' + show(bg) +
-           ' — luminance ' + outLum.toFixed(2) + ' against ' + bgLum.toFixed(2) +
-           ', which is not readable');
+           ' — contrast ' + ratio.toFixed(2) + ':1, below ' + MIN + ':1. A team\'s ' +
+           'colours are used when they can be read; the point of this function is ' +
+           'to rescue the pairs that cannot');
     }
   });
+
+  // ...and a readable preference must be HONOURED, or the function is
+  // just imposing a house style on every team in the league.
+  [['#1f2a80', '#c9a227', 'gold on navy'],
+   ['#1a4d2e', '#ffc72c', 'gold on green'],
+   ['#ffc72c', '#1a1a2e', 'near-black on gold']].forEach(([bg, pref, why]) => {
+    if (engine.safeTextColor(bg, pref) !== pref){
+      fail('safeTextColor', why + ' reads at ' + engine.contrastRatio(bg, pref).toFixed(1) +
+           ':1 and was overridden anyway — that is a team losing its own colours for ' +
+           'no reason');
+    }
+  });
+
+  // contrastRatio itself: a ratio, not a difference, bounded 1..21.
+  if (Math.abs(engine.contrastRatio('#000000', '#ffffff') - 21) > 0.1){
+    fail('contrastRatio', 'black on white should be 21:1, got ' +
+         engine.contrastRatio('#000000', '#ffffff').toFixed(2));
+  }
+  if (Math.abs(engine.contrastRatio('#4a7c59', '#4a7c59') - 1) > 0.001){
+    fail('contrastRatio', 'a colour against itself should be 1:1');
+  }
+  if (Math.abs(engine.contrastRatio('#123456', '#abcdef') -
+               engine.contrastRatio('#abcdef', '#123456')) > 0.001){
+    fail('contrastRatio', 'the ratio must not depend on argument order');
+  }
   // A preference that already contrasts must be honoured, or a team's
   // chosen colours get overridden for no reason.
   if (engine.safeTextColor('#000000', '#ffc72c') !== '#ffc72c'){
