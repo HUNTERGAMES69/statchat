@@ -19,7 +19,7 @@
 // still record, the turnover still counts, and NO phantom player appears
 // in the box score or in any future picker.
 
-const { bootGamePage, bootPage } = require('./harness');
+const { bootGamePage, bootPage, defaultRoster } = require('./harness');
 const { enterPlay, setDrive, click, typeInto } = require('./ui_driver');
 
 function rowsOf(h) {
@@ -190,6 +190,73 @@ async function run() {
            JSON.stringify(b2.teamA.defense));
     }
     v2.close();
+  }
+
+  // --- NAMING AN UNKNOWN NUMBER DURING THE GAME --------------------------
+  // Added 14 Aug 2026. A number that is not on the roster is ordinary --
+  // a call-up, an out-of-date programme, an opponent list typed from
+  // memory. The play always recorded correctly against the number, but
+  // every log line and stat line then read "#77", and a stat sheet full
+  // of bare numbers is most of the way to useless.
+  //
+  // The three things that make it worth having are all asserted here,
+  // because any one of them missing would leave a control that LOOKS like
+  // it worked: the row reaches game_rosters (so it survives a reload and
+  // reaches the view page on another device), later plays use the name,
+  // and plays entered BEFORE the naming pick it up too -- those carry no
+  // name of their own, so they resolve through the roster at render time.
+  {
+    const h = await bootGamePage({ roster: defaultRoster() });
+    const { window: win, document: doc } = h;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '77', yards: '11' });
+
+    click(win, doc.querySelector('.ptypeBtn[data-type="rush"]'));
+    typeInto(win, doc.getElementById('pp_carrier_manual'), '77');
+    const input = doc.getElementById('addPlayerName_77');
+    const btn = doc.getElementById('addPlayerBtn_77');
+    if (!input || !btn){
+      fail('name an unknown number', 'typing a number that is not on the roster offers no ' +
+           'way to name the player — the whole game then reads "#77"');
+      h.close();
+      return failures;
+    }
+    typeInto(win, input, 'Ty Knight');
+    click(win, btn);
+    await new Promise(r => setTimeout(r, 150));
+
+    const saved = h.db.roster.filter(r => String(r.jersey_number) === '77');
+    if (saved.length !== 1 || saved[0].player_name !== 'Ty Knight'){
+      fail('name an unknown number', 'the player was not written to game_rosters: ' +
+           JSON.stringify(saved) + ' — in memory only, it would not survive a reload and ' +
+           'the view page on another device would still show #77');
+    }
+    if (saved.length && saved[0].team_side !== 'teamA'){
+      fail('name an unknown number', 'saved against the wrong team: ' + saved[0].team_side);
+    }
+
+    typeInto(win, doc.getElementById('pp_yards'), '6');
+    click(win, doc.getElementById('pp_review'));
+    click(win, doc.getElementById('saveBtn'));
+    const after = h.db.plays[h.db.plays.length - 1];
+    if (!/Ty Knight/.test(after.text)){
+      fail('name an unknown number', 'the next play still logs the number: ' + after.text);
+    }
+
+    // Retrospective: the box score must merge both plays under the name.
+    const plays = h.db.plays.map((p, i) =>
+      Object.assign({}, p, { sequence_number: p.sequence_number || i + 1 }));
+    const roster = h.db.roster.slice();
+    h.close();
+    const v = await bootPage('view.html', { existingPlays: plays, roster });
+    await new Promise(r => setTimeout(r, 250));
+    const rush = JSON.parse(v.evalIn('JSON.stringify(computeBoxScore(plays).teamA.rushing)'));
+    v.close();
+    if (!rush['Ty Knight'] || rush['Ty Knight'].att !== 2){
+      fail('name an unknown number', 'the play entered BEFORE the naming did not pick up the ' +
+           'name — expected Ty Knight with 2 carries, got ' + JSON.stringify(rush) +
+           '. A player named mid-game must not end up as two stat lines');
+    }
   }
 
   return failures;

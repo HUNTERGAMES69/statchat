@@ -73,6 +73,14 @@ function makeMockSupabase(db) {
         }
         arr.forEach(r => db.inserted.push({ table, row: r }));
         if (table === 'plays') arr.forEach(r => db.plays.push(r));
+        // game_rosters too, or the mock accepts the row and then serves
+        // the OLD roster back on the next select -- reporting success for
+        // work it never did. Adding a player mid-game is exactly that
+        // shape: insert, then read back to confirm the name took.
+        //
+        // Same lesson as delete() being a no-op: a mock that silently
+        // ignores an operation cannot test it.
+        if (table === 'game_rosters') arr.forEach(r => db.roster.push(r));
         return this;
       },
       update(fields) {
