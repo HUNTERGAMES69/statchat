@@ -2769,8 +2769,35 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const awaitingKickoff = st0.down === null && st0.quarter < 5 &&
       !!(lastReal && lastReal.effect && lastReal.effect.endsDrive) &&
       (gamePhase === 'firstHalf' || gamePhase === 'secondHalf');
+    // AFTER A TOUCHDOWN, THE ONLY LEGAL PLAY IS THE TRY.
+    // ------------------------------------------------------------------
+    // A touchdown does NOT set endsDrive -- the drive is not over until
+    // the try is taken -- so awaitingKickoff above deliberately does not
+    // fire here, and every button stayed live. A rush or a punt entered
+    // in this gap is not a play that can happen.
+    //
+    // Keyed on SIX POINTS, not on effect.td. Nothing else in football
+    // scores six, so the test is exact -- and effect.td turned out to be
+    // the wrong flag: it is set on scrimmage touchdowns only. An
+    // interception, fumble or kick returned all the way carries
+    // score.points 6 with no td flag at all, so keying on td let a
+    // pick-six through with every button still live. Found by testing the
+    // defensive case rather than by reading the code.
+    //
+    // A defensive touchdown still compels a try, taken by whoever scored,
+    // and this gate does not care which team that was.
+    //
+    // Not restricted by quarter: tries happen in overtime too, which is
+    // why this does not borrow awaitingKickoff's `quarter < 5`.
+    const awaitingTry = st0.down === null &&
+      !!(lastReal && lastReal.effect && lastReal.effect.score &&
+         lastReal.effect.score.points === 6) &&
+      (gamePhase === 'firstHalf' || gamePhase === 'secondHalf');
     document.querySelectorAll('.ptypeBtn').forEach(b => {
-      b.disabled = disable || (awaitingKickoff && b.dataset.type !== 'kickoff');
+      const t = b.dataset.type;
+      b.disabled = disable ||
+        (awaitingTry && t !== 'pat' && t !== 'twopt') ||
+        (awaitingKickoff && t !== 'kickoff');
     });
 
     document.getElementById('penUtilBtn').disabled = disable;
@@ -2818,6 +2845,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // Everything that puts a ball in play. Penalty, Timeout, Adjust and
       // Manual entry stay available: dead-ball fouls, timeouts and
       // corrections are all real in this gap.
+      ['kneelUtilBtn', 'badSnapUtilBtn', 'flipBtn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = true;
+      });
+    }
+    // Same treatment between a touchdown and its try, and for the same
+    // reason: a kneel, a bad snap or a possession flip are not things
+    // that happen in that gap. Penalty stays live -- a foul on the try is
+    // ordinary -- as do Timeout, Adjust and Manual entry.
+    if (awaitingTry && !disable){
       ['kneelUtilBtn', 'badSnapUtilBtn', 'flipBtn'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.disabled = true;
