@@ -1718,3 +1718,74 @@ re-checked against a clean copy.
   Both are real coverage gaps rather than stale fixtures, and both
   concern returners. One scenario using a special-teams-only returner,
   checking his defensive stats, would close both.
+
+---
+
+## 18. 14 August 2026 — entry polish and cross-checks
+
+Feature work resumed briefly at Andy's request, after he called the app
+feature-complete. All of it is entry ergonomics or a visible cross-check;
+none of it changes how a stat is computed except the Unknown bucket.
+
+### Closed
+
+- [x] **The last clock entered is shown beside every clock box** — all
+  four: the confirm card, the guided kickoff return, the standalone
+  clock prompt and the Set clock utility. Shows the quarter too, and
+  flags it in amber when it is not the current one, because the same
+  8:42 is a different moment in Q1 and Q3. One helper,
+  `renderLastClockHint(elId)`, a no-op when the element is absent, so a
+  future panel with a clock box costs one line and cannot half-work.
+  Needed `absSecToClockStr`, the inverse of `clockToAbsSeconds`: absSec
+  counts up from kickoff, a clock counts down within its quarter.
+- [x] **The pass outcome switches stay put.** They called
+  `renderPlayPanel(...)`, which rebuilt the panel without the switch row,
+  so they vanished on use. All three panels now carry the same row from
+  one helper, with the current one gold and ticked, plus a third button
+  ("Completed / incomplete") so Pass is a destination rather than
+  somewhere you can only leave.
+- [x] **Interception downed in the end zone — touchback.** Defence takes
+  over at their own 20; returner, return yards and TD are hidden. The
+  spot is supplied through `currentSpotGetter` like every other fixed
+  spot, reusing `touchbackReset`. Previously this took 0 return yards
+  plus a hand-typed spot: two chances to get it wrong on a play with a
+  fixed answer.
+- [x] **A completion with no receiver named now buckets to Unknown**, so
+  passing yards equal total receiving yards, attempts equal targets and
+  completions equal receptions. See `PROJECT_NOTES.md`.
+- [x] **Time of possession is displayed** — view page (stacked under the
+  timeouts, right-justified), recap, stat package, and season report
+  with a per-game average. It was always computed; nothing showed it.
+- [x] **Category totals beside the Passing / Rushing / Receiving headers**
+  on the view page, as a check against the team tiles. Summed from the
+  whole bucket, not the rows on screen.
+- [x] `formatDuration` moved into `engine.js`. Three pages had a copy and
+  the report pages had none, so adding TOP to the recap would have meant
+  a fourth.
+- [x] `coverage_probe` is at **48/48**, including the new interception
+  touchback. It was 42/47 before this session: five paths were reading
+  as unreachable UI when they were really stale fixtures that predate
+  the mandatory takeover spot.
+
+### Answered, no change needed
+
+- [x] **A pass intercepted, returned, then fumbled** is enterable today
+  as two plays: the interception (with the takeover spot set to WHERE
+  THE FUMBLE HAPPENED, not where the return ended), then the standalone
+  Fumble panel with the interceptor typed as the carrier. Verified end
+  to end — possession goes A → B → A, both turnovers are counted, the
+  interception and the fumble recovery are both credited, and the QB is
+  charged with the pick. **Worth adding to `GOLDEN_GAME.md` as a Night 5
+  case:** it happens about once a season, is entered under pressure, and
+  getting the spot convention backwards is silent.
+
+### Still open from earlier
+
+- [ ] `tests/README.md`, `tests/nfl/run_qa.js`, `tests/nfl/convert.js`
+  and `.gitignore` have not been uploaded yet.
+- [ ] `returner-overload` and `returner-name` mutants still survive — one
+  scenario with a special-teams-only returner would close both.
+- [ ] The Night 1 items that need the live Supabase instance: verify the
+  foreign-key cascade, take a backup, run Reset for production against a
+  throwaway 2099 game, and clear the roster and confirm a finished game
+  keeps its names.

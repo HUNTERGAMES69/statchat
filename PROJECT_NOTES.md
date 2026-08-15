@@ -1307,3 +1307,80 @@ Deletes are now performed against both `db.plays` and `db.existingPlays`
 (a delete that misses the latter looks fine until a reload brings the row
 back) and recorded in `db.deleted`, so a test can assert WHAT went, not
 merely that the table shrank.
+
+## A number that cannot be cross-checked is a number nobody trusts (14 August 2026)
+
+The receiver on a completed pass is optional, deliberately: a deep ball is
+exactly the play where a scorer does not catch the number, and refusing
+to save it would be worse than not knowing who caught it.
+
+But leaving the yardage out of the receiving table entirely broke the
+check a stat sheet lives by -- **passing yards should equal the sum of
+receiving yards**. A coach reading Passing 245 against Receiving 198 has
+no way to tell a missing entry from a bug in the app.
+
+Andy's call, and the better one: bucket it to **Unknown** rather than
+footnote the gap. Two consequences worth keeping:
+
+- **It is derived in `computeBoxScore`, not written onto the play.** No
+  invented player reaches the database, and every game already entered
+  reconciled the moment it shipped. Nothing to migrate.
+- **Unknown is NOT the TEAM bucket.** TEAM in rushing means "credited to
+  nobody BY RULE" -- a sack, a kneel, a bad snap. Unknown means "this
+  happened to a player we did not record". Conflating them would hide a
+  data-entry gap behind a rule. They share a sort treatment (both last,
+  neither can be a "leader") and nothing else.
+
+Targets and receptions were bucketed the same way, or attempts would
+still have disagreed with targets.
+
+**The test that had to change is the interesting part.**
+`receiver_targets_check` asserted an unnamed pass created NO receiving
+row. That was right about the danger and wrong about the remedy: the
+danger is a REAL PLAYER credited with a catch nobody saw him make. The
+assertion now reads "an unnamed pass goes to Unknown OR NOWHERE, never
+to a real player", which is the original intent stated precisely.
+
+**And the first mutation test of it survived.** The fixture had an
+unnamed incompletion but no unnamed COMPLETION, so removing the whole
+bucket still reconciled and the new assertions proved nothing. A
+reconciliation check only means something when the fixture contains the
+thing that would break it.
+
+## Put the cross-check where the eye already is (14 August 2026)
+
+The category totals now sit beside the Passing / Rushing / Receiving
+headers on the view page, and time of possession under the timeouts.
+Neither is new information -- both were already computable -- and that is
+the point: the value is in having two numbers that must agree visible at
+the same time, computed by different paths.
+
+Two rules came out of placing them:
+
+**Sum the whole bucket, never the rows on screen.** Those tables show the
+top five plus anyone with a touchdown. A total added from the visible
+rows would quietly disagree with the tile it exists to check -- and would
+look exactly like the bug it was put there to catch.
+
+**Absent beats zero for a derived figure.** Time of possession is built
+entirely from optional clock entries, so a game with none would show a
+confident 0:00. That says "they never had the ball"; the truth is
+"nobody recorded it". It is omitted instead, and the season average is
+over the games that actually recorded a clock and says how many.
+
+## A control that vanishes when you use it (14 August 2026)
+
+The Sacked and Intercepted switches on the pass panel called
+`renderPlayPanel('sack')`, which rebuilt the panel WITHOUT the switch
+row. So the buttons disappeared on the way to the thing they selected: no
+tick, no gold, and no way back to Pass except closing the panel and
+starting again.
+
+Fixed by giving all three panels the same row, from one helper, with the
+current one ticked -- and by adding a third button, "Completed /
+incomplete", so Pass is a destination rather than somewhere you can only
+leave.
+
+Worth noticing how it hid: every OTHER toggle in the app stays put and
+lights up, so the inconsistency was invisible to anyone who had not just
+used a different panel. A convention is only as good as its exceptions.
