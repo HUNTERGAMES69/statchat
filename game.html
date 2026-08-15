@@ -5539,7 +5539,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const isIncomplete = e.target.checked;
         document.getElementById('pp_yards_wrap').style.display = isIncomplete ? 'none' : '';
         document.getElementById('pp_pass_extra').style.display = isIncomplete ? 'none' : '';
-        if (isIncomplete) document.getElementById('pp_yards').value = '';
+        // The yardage CALCULATOR goes with the yards field it fills. It
+        // was left on screen, still offering "Or enter tackled on" for a
+        // pass that was never caught -- and worse, still able to write a
+        // yardage into the box that had just been hidden.
+        const calc = document.getElementById('pp_calc_wrap');
+        if (calc) calc.style.display = isIncomplete ? 'none' : '';
+        if (isIncomplete){
+          document.getElementById('pp_yards').value = '';
+          // Clear what the calculator is holding as well, for the same
+          // reason the yards box is cleared: a value typed before the
+          // toggle must not survive behind a hidden control and be read
+          // back at save time.
+          const cy = document.getElementById('pp_calc_yardline');
+          if (cy) cy.value = '';
+        }
       });
     }
 
