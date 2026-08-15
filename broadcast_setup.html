@@ -35,6 +35,12 @@
   td { padding:8px; border-bottom:1px solid #f0f0f0; vertical-align:top; }
   td.what { font-weight:700; white-space:nowrap; }
   td.desc { color:var(--muted); }
+  /* Field names, not prose. A production team needs the exact strings to
+     bind an overlay to, and twenty-six of them run together in a
+     sentence -- as chips they are scannable and obviously literal. */
+  td.desc .fields { margin-top:5px; display:flex; flex-wrap:wrap; gap:3px; }
+  td.desc .fields code { background:#eef1f4; border:1px solid #dde1e6; border-radius:4px;
+    padding:1px 5px; font-size:10.5px; color:#2b3440; }
   code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:11px;
          background:#f4f4f2; padding:2px 5px; border-radius:3px; word-break:break-all; }
   button { font-family:inherit; cursor:pointer; }
@@ -164,15 +170,38 @@
   // Deliberately describes FOOTBALL, not any particular software. The
   // same list serves vMix, OBS, Singular, CasparCG or anything else that
   // can read a URL.
+  // EVERY FIELD, not a summary of them. A production team building an
+  // overlay needs the exact names to bind to, and a description saying
+  // "yards, first downs, third downs, turnovers" for a view that carries
+  // twenty-six fields sends them to fetch the URL and read the raw XML to
+  // find the rest.
+  //
+  // Kept in step with api/feed.js by tests/feed_fields_check.js, which
+  // builds the real feed and compares. A list like this rots silently
+  // otherwise -- it is read once, the day before a game, by someone with
+  // no way to tell it is out of date.
+  //
+  // Player rows carry `player` and `team` plus whichever stats that
+  // player has: a bucket only holds the keys that were actually
+  // incremented, so a receiver with no touchdown has no `td` field at
+  // all. The lists below are everything that CAN appear.
   const FEEDS = [
-    ['score',      'Scoreboard bug',  'Score, quarter, down &amp; distance, ball on, possession, timeouts'],
-    ['drive',      'Current drive',   'Plays, yards and time of possession on the drive in progress'],
-    ['lastplay',   'Play ticker',     'The text of the most recent play'],
-    ['teamstats',  'Team comparison', 'Two rows, one per team: yards, first downs, third downs, turnovers'],
-    ['rushing',    'Rushing leaders', 'One row per player, most yards first'],
-    ['passing',    'Passing leaders', 'One row per player, most yards first'],
-    ['receiving',  'Receiving leaders','One row per player, most yards first'],
-    ['defense',    'Defensive leaders','One row per player: tackles, sacks, interceptions']
+    ['score',     'Scoreboard bug',    'One row',
+     'homeTeam homeScore awayTeam awayScore quarter quarterNumber down downOrdinal distance downAndDistance ballOn possession homeHasBall awayHasBall homeTimeouts awayTimeouts'],
+    ['drive',     'Current drive',     'One row, the drive in progress',
+     'team plays yards startedAt'],
+    ['lastplay',  'Play ticker',       'One row',
+     'text quarter team'],
+    ['teamstats', 'Team comparison',   'Two rows, one per team',
+     'team score rushYards passYards totalYards rushAtt passComp passAtt totalPlays firstDowns thirdDownConv thirdDownAtt thirdDownPct fourthDownConv fourthDownAtt explosive sacks interceptions fumbleRec turnovers possessions timeOfPossession timeouts penaltyCount penaltyYards penalties'],
+    ['rushing',   'Rushing leaders',   'One row per player, most yards first',
+     'player team att yds long td fum'],
+    ['passing',   'Passing leaders',   'One row per player, most yards first',
+     'player team att comp yds long td intThrown sacked'],
+    ['receiving', 'Receiving leaders', 'One row per player, most yards first',
+     'player team rec tgt yds long td fum'],
+    ['defense',   'Defensive leaders', 'One row per player, most tackles first',
+     'player team tackles tfl sacks int fumRec']
   ];
 
   const feedUrlFor = (view, fmt) =>
@@ -201,11 +230,14 @@
   function renderFeeds(){
     const body = document.getElementById('feedRows');
     body.innerHTML = '';
-    FEEDS.forEach(([view, label, desc]) => {
+    FEEDS.forEach(([view, label, shape, fields]) => {
       const url = feedUrl(view);
       const tr = document.createElement('tr');
       tr.innerHTML = '<td class="what">' + label + '</td>' +
-                     '<td class="desc">' + desc + '</td>' +
+                     '<td class="desc">' + shape +
+                       '<div class="fields">' +
+                       fields.split(' ').map(f => '<code>' + f + '</code>').join('') +
+                       '</div></td>' +
                      '<td><code>' + url + '</code></td>';
       const td = document.createElement('td');
       td.appendChild(copyBtn(url));
