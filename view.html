@@ -47,11 +47,6 @@
   .stat-tile { background:#f5f7fa; border-radius:8px; padding:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
   .stat-tile-value { font-size:34px; font-weight:500; color:#1a1a2e; line-height:1.1; }
   .stat-tile-label { font-size:13px; color:#777; text-transform:uppercase; letter-spacing:0.03em; margin-top:3px; }
-  /* A second line under a tile's label, for a figure that belongs with
-     it rather than beside it -- currently time of possession under
-     Possessions. Deliberately smaller and lighter than the label so
-     it reads as a qualifier, not a competing number. */
-  .stat-tile-sub { font-size:12px; color:#999; letter-spacing:0.02em; margin-top:2px; font-weight:600; }
   .inline-stat-line { display:flex; gap:5px; margin-bottom:5px; }
   .inline-stat-item { flex:1; white-space:nowrap; text-align:center; font-size:19px; font-weight:700; color:#1a1a2e; background:#f5f7fa; border-radius:6px; padding:5px 6px; }
   .inline-stat-item b { font-size:14px; font-weight:800; color:#5b6068; text-transform:uppercase; letter-spacing:0.03em; margin-right:5px; }
@@ -1020,20 +1015,9 @@ function extractNameTag(rawName){
       const passLine = sumOf(s.passing, 'comp') + ' / ' + passYds;
       const rushLine = sumOf(s.rushing, 'att') + ' / ' + rushYds;
 
-      // TIME OF POSSESSION rides under the Possessions label rather than
-      // taking a tile of its own. The two belong together -- how many
-      // times they had the ball, and how long they kept it -- and the
-      // grid is a fixed 2x4 whose rows are 1fr each, so a third line
-      // inside one tile does not reflow the others.
-      //
-      // Shown only once some has accrued. TOP is built entirely from the
-      // clock values the scorer types, and those are optional, so a game
-      // with no clock entries would otherwise show a confident 0:00 --
-      // which reads as "they never had the ball" rather than "nobody
-      // recorded it". Absent is honest; zero is a claim.
       const topSec = (liveState.possessionTime || {})[teamKey] || 0;
       const tiles = [
-        [possessions[teamKey] || 0, 'Possessions', topSec > 0 ? formatDuration(topSec) + ' TOP' : null],
+        [possessions[teamKey] || 0, 'Possessions'],
         [totalYds, 'Total Yards'],
         [passLine, 'Comp / Pass Yds'],
         [rushLine, 'Att / Rush Yds'],
@@ -1056,13 +1040,29 @@ function extractNameTag(rawName){
         // Right-justified via margin-left:auto so it sits hard against
         // the end of the coloured bar regardless of how long the team
         // name or logo is.
-        '<span style="margin-left:auto; font-size:16px; font-weight:700; letter-spacing:0.02em;">TOL=' +
-          computeState(plays).timeouts[teamKey] + '</span>' +
+        // Timeouts and time of possession, stacked and right-justified at
+        // the end of the coloured bar. The bar is a flex row with no set
+        // height, so a second line grows it by one small line and nothing
+        // in the tile grid below moves -- the grid takes its height from
+        // flex:1 on whatever is left.
+        //
+        // TOP is shown only once some has accrued. It is built entirely
+        // from the clock values the scorer types, and those are optional,
+        // so a game with no clock entries would otherwise read a confident
+        // 0:00 -- which says "they never had the ball" rather than "nobody
+        // recorded it". Absent is honest; zero is a claim.
+        '<span style="margin-left:auto; display:flex; flex-direction:column; align-items:flex-end; line-height:1.15;">' +
+          '<span style="font-size:16px; font-weight:700; letter-spacing:0.02em;">TOL=' +
+            computeState(plays).timeouts[teamKey] + '</span>' +
+          (topSec > 0
+            ? '<span style="font-size:13px; font-weight:600; letter-spacing:0.02em; opacity:0.85;" ' +
+              'title="Time of possession, from the clock values entered">' +
+              formatDuration(topSec) + ' TOP</span>'
+            : '') +
+        '</span>' +
         '</div>' +
         '<div class="stat-tile-grid">' +
-        tiles.map(([val, label, sub]) => '<div class="stat-tile"><div class="stat-tile-value">' + val +
-          '</div><div class="stat-tile-label">' + label + '</div>' +
-          (sub ? '<div class="stat-tile-sub">' + sub + '</div>' : '') + '</div>').join('') +
+        tiles.map(([val, label]) => '<div class="stat-tile"><div class="stat-tile-value">' + val + '</div><div class="stat-tile-label">' + label + '</div></div>').join('') +
         '</div>' +
         '</div>';
     });
