@@ -2093,8 +2093,71 @@ function attachNameConfirm(inputId, getTeam, getOrder, onResolve){
       .map(k => k.slice(k.indexOf('\u0000') + 1))[0] || null;
     const resolved = chosenOverride || seededName || rosterName(teamKey, num, order);
     if (!resolved){
-      box.innerHTML = '<span style="color:#a05a00;">#' + num + ' is not on ' +
-        TEAMS[teamKey].name + "'s roster — it will be recorded as #" + num + '</span>';
+      // NAME HIM NOW, RATHER THAN LIVE WITH "#44" ALL SEASON.
+      // ----------------------------------------------------------------
+      // A number that is not on the roster is ordinary: a call-up, a
+      // programme that was out of date, an opponent list typed from
+      // memory. The play still records correctly against the number, but
+      // every log line, box score and report then reads "#44" -- and a
+      // stat sheet full of bare numbers is most of the way to useless.
+      //
+      // Saved to game_rosters, not just to the in-memory map, for three
+      // reasons: it survives a reload, it reaches the VIEW page on
+      // another device, and it applies RETROSPECTIVELY. Plays already
+      // entered for this number carry no name of their own, so they
+      // resolve through the roster at render time -- naming him now fixes
+      // the ones already in the log as well as the ones to come.
+      //
+      // The unit comes from the role being filled, which is the only
+      // signal available: a carrier is offense, a tackler defense, a
+      // kicker special teams. It can be wrong for a two-way player, and
+      // that costs nothing here -- the name is what matters, and the
+      // roster page can correct the unit later.
+      const safeNum = String(num).replace(/[^0-9]/g, '');
+      box.innerHTML =
+        '<div style="padding:8px 10px; background:#fff8e6; border:1px solid #e0b400; border-radius:6px;">' +
+        '<div style="color:#a05a00; margin-bottom:6px;">#' + num + ' is not on ' +
+          TEAMS[teamKey].name + "'s roster. The play will record as #" + num + '.</div>' +
+        '<input autocomplete="off" type="text" id="addPlayerName_' + safeNum + '" placeholder="Player name" style="width:190px;">' +
+        '<button type="button" id="addPlayerBtn_' + safeNum + '" style="margin-left:6px; padding:6px 12px; border-radius:6px; border:2px solid #1a7a4c; background:#1a7a4c; color:#fff; font-weight:700; cursor:pointer;">Add to roster</button>' +
+        '<div id="addPlayerMsg_' + safeNum + '" style="font-size:12px; color:#666; margin-top:5px;"></div>' +
+        '</div>';
+      const addBtn = document.getElementById('addPlayerBtn_' + safeNum);
+      const addInput = document.getElementById('addPlayerName_' + safeNum);
+      const addMsg = document.getElementById('addPlayerMsg_' + safeNum);
+      if (addBtn && addInput){
+        addBtn.addEventListener('click', async () => {
+          const nm = addInput.value.trim();
+          if (!nm){ addMsg.textContent = 'Type a name first.'; return; }
+          addBtn.disabled = true;
+          addMsg.textContent = 'Saving…';
+          const unit = (order && order[0]) || 'offense';
+          const { error } = await supabaseClient.from('game_rosters').insert({
+            game_id: currentGameId, team_side: teamKey, unit,
+            jersey_number: num, player_name: nm, position: null
+          });
+          if (error){
+            // Not saved is not the same as saved -- say so rather than
+            // updating the screen and letting a reload undo it.
+            addMsg.innerHTML = '<span style="color:#a32d2d;">Could not save: ' + error.message +
+              '. The play will still record as #' + num + '.</span>';
+            addBtn.disabled = false;
+            return;
+          }
+          const team = TEAMS[teamKey];
+          const rosterKey = { offense: 'rosterOffense', defense: 'rosterDefense',
+                              special: 'rosterSpecialTeams' }[unit] || 'rosterOffense';
+          // No noteAmbiguous call: it is scoped to the roster loader, and
+          // a number that had NO entry cannot become ambiguous by gaining
+          // its first one. If a second player on that number is added
+          // later, the roster reloads and the loader handles it there.
+          team[rosterKey][num] = nm;
+          if (onResolve) onResolve(num, nm);
+          render();
+          renderAll();
+        });
+        addInput.addEventListener('keydown', e => { if (e.key === 'Enter') addBtn.click(); });
+      }
       return;
     }
     const others = playerCandidates(teamKey, num).filter(c => c.name !== resolved);
