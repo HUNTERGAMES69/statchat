@@ -1274,6 +1274,18 @@ function parseInput(raw, state){
       ? (kickingRecovers ? ST(recNum) : D(recNum))
       : TEAMS[recTeam].name;
     let t = ST(p1) + ' punts ' + yds + ' — MUFFED, recovered by ' + recName;
+    // RECOVERED IN THEIR OWN END ZONE: two points to the receiving team,
+    // and the drive is over. Answered before the return and touchdown
+    // wording below, because neither applies -- the play ended where it
+    // was recovered and a free kick follows, so there is no takeover
+    // spot either. `isTouchback` is stripped earlier, and 'sf' is the
+    // same token the blocked-punt safety uses.
+    if (isSafety && kickingRecovers){
+      return { text: t + ' in the end zone — SAFETY',
+        effect: { score: { team: def, points: 2 }, endsDrive: true },
+        flipEligible: false, team: off, quarter: state.quarter,
+        roles: { punter: { team: off, num: p1 }, playType: 'punt' } };
+    }
     if (retyds && parseInt(retyds)) t += ' for ' + retyds;
     let score = null;
     // A touchdown ends the drive whichever side recovered. Without this
@@ -4268,6 +4280,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_punt_muffed" style="display:none;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_punt_muffrec" value="k" checked> Recovered by the kicking team (they keep the ball)</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_punt_muffrec" value="r"> Recovered by the receiving team</label>' +
+          // MOVED UP 14 Aug 2026, directly under the recovery radios.
+          // It used to sit below the recoverer, the return yardage and
+          // the spot -- fifth control down, in a branch already three
+          // levels deep -- and it disappears whenever "recovered by the
+          // receiving team" is chosen. Between those two it was
+          // effectively invisible: correct, wired, and nobody could find
+          // it.
+          //
+          // It belongs next to the choice that governs it. A muffed or
+          // bad snap recovered by the kicking team IN THEIR OWN END ZONE
+          // is a safety, exactly as a blocked punt recovered there is,
+          // and it only appears once "recovered by the kicking team" is
+          // chosen because that is the only way this team can be the one
+          // down in their own end zone.
+          '<div id="pp_muff_safety_wrap" style="display:none; margin:10px 0;">' +
+            '<input autocomplete="off" type="checkbox" id="pp_muff_safety" style="display:none;">' +
+            '<button type="button" id="pp_muff_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Recovered in our own end zone — SAFETY</button>' +
+          '</div>' +
           '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
           '<input autocomplete="off" type="text" id="pp_muff_rec" placeholder="type #" style="width:100px;">' +
           yardsBlock('Return yards after recovery (optional)', 'pp_muff_retyds') +
@@ -4494,6 +4524,39 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           return;
         }
         yardsEl.value = String(Math.abs(gain));
+
+        // ON A PUNT, THE LANDING SPOT IS ALSO THE TAKEOVER SPOT.
+        // ----------------------------------------------------------------
+        // This panel asks for a yard line twice: here, as "Or enter
+        // downed/received on", and again below as "Spot where the ensuing
+        // drive starts". Absent a return those are the SAME yard line,
+        // just said from opposite ends of the field -- so a scorer who
+        // fills this one in has, as far as they are concerned, given the
+        // app the spot. Review then refused the play for a missing spot
+        // they were sure they had entered.
+        //
+        // So the takeover spot is prefilled from this, FLIPPED: possession
+        // changes hands on a punt, and fieldPos is possession-relative, so
+        // the kicking team's "opp 13" is the receiving team's "own 13".
+        // That flip is exactly the arithmetic a scorer should not be asked
+        // to do twice under time pressure.
+        //
+        // Prefill, not a lock: with a return the drive starts somewhere
+        // else, and the field stays editable for that. Only filled when
+        // untouched, so it never overwrites a spot already given.
+        if (type === 'punt'){
+          const spotYl = document.getElementById('pp_spot_yardline');
+          const already = spotYl && spotYl.value.trim();
+          const sidePicked = panel.querySelector('.pp_spot_side.picked');
+          if (spotYl && !already && !sidePicked){
+            const takeover = 100 - newPos;            // flipped to the receiving team
+            const ownSide = takeover <= 50;
+            spotYl.value = String(ownSide ? takeover : 100 - takeover);
+            const btn = panel.querySelector('.pp_spot_side[data-side="' + (ownSide ? 'own' : 'opp') + '"]');
+            if (btn) btn.click();
+          }
+        }
+
         // Tinted so it is obvious the number was worked out rather than
         // typed -- a locked grey box just looks broken.
         yardsEl.style.background = '#eef6f1';
@@ -5184,6 +5247,34 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const genSpot = document.getElementById('pp_spot_wrap');
         if (genSpot) genSpot.style.display = kickingRecovers ? 'none' : 'block';
         currentSpotGetter = kickingRecovers ? muffSpotGetter : puntSpotGetter;
+        // The safety option belongs only to a kicking-team recovery: the
+        // receiving team recovering in the kicking team's end zone is a
+        // touchdown, not a safety, and offering it there would invite the
+        // wrong two points.
+        const muffSafetyWrap = document.getElementById('pp_muff_safety_wrap');
+        const muffSafetyCb = document.getElementById('pp_muff_safety');
+        if (muffSafetyWrap) muffSafetyWrap.style.display = kickingRecovers ? 'block' : 'none';
+        if (!kickingRecovers && muffSafetyCb && muffSafetyCb.checked){
+          // Switching away from a kicking-team recovery clears it rather
+          // than leaving a hidden checkbox to decide the play.
+          muffSafetyCb.checked = false;
+          const t = document.getElementById('pp_muff_safety_toggle');
+          if (t){ t.textContent = 'Recovered in our own end zone — SAFETY'; t.style.background = '#fff';
+                  t.style.color = '#555'; t.style.borderColor = '#ccc'; }
+        }
+        // A safety ends the play in the end zone -- there is no takeover
+        // spot to give, because the next thing is a free kick.
+        const muffSafetyOn = !!(muffSafetyCb && muffSafetyCb.checked);
+        const mSpot = document.getElementById('pp_muff_spot_wrap');
+        if (mSpot) mSpot.style.display = (kickingRecovers && !muffSafetyOn) ? 'block' : 'none';
+        // Either safety hides the general takeover spot as well. A free
+        // kick follows, so asking where the next drive starts is asking
+        // about a play that has not happened yet.
+        const blockSafetyOn = !!(document.getElementById('pp_punt_safety') || {}).checked && blocked;
+        if (muffSafetyOn || blockSafetyOn){
+          if (genSpot) genSpot.style.display = 'none';
+          currentSpotGetter = null;
+        }
         updatePuntTdVisibility();
       };
       document.getElementById('pp_punt_touchback').addEventListener('change', (e) => {
@@ -5236,6 +5327,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           puntSafetyToggle.style.color = cb.checked ? '#fff' : '#555';
           puntSafetyToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
           puntSafetyToggle.textContent = cb.checked ? '✓ In the end zone — safety' : 'In the end zone — safety';
+          refreshPuntMode();
+        });
+      }
+      // The same control on the muffed-snap path. It calls
+      // refreshPuntMode as well, because turning it on has to take the
+      // takeover-spot field away -- a safety is followed by a free kick,
+      // so there is no spot to give.
+      const muffSafetyToggle = document.getElementById('pp_muff_safety_toggle');
+      if (muffSafetyToggle){
+        muffSafetyToggle.addEventListener('click', () => {
+          const cb = document.getElementById('pp_muff_safety');
+          cb.checked = !cb.checked;
+          muffSafetyToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
+          muffSafetyToggle.style.color = cb.checked ? '#fff' : '#555';
+          muffSafetyToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
+          muffSafetyToggle.textContent = cb.checked ? '\u2713 Recovered in our own end zone — SAFETY' : 'Recovered in our own end zone — SAFETY';
+          refreshPuntMode();
         });
       }
     }
@@ -5636,7 +5744,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const muffRec = (document.getElementById('pp_muff_rec') || {}).value;
           const recNum = (muffRec || '').trim() || '?';
           const muffRet = yards('pp_muff_retyds') || '0';
-          code = sel.punter + 'pm ' + yds + ' ' + recTeamTok + ' ' + recNum + ' ' + muffRet + (td ? ' td' : '');
+          // Kicking team recovers in their own end zone: two points to
+          // the receiving team. No return and no takeover spot -- the
+          // play ended where it was recovered and a free kick follows.
+          const muffSafety = (document.getElementById('pp_muff_safety') || {}).checked &&
+            recTeamTok === 'k';
+          code = muffSafety
+            ? sel.punter + 'pm ' + yds + ' k ' + recNum + ' 0 sf'
+            : sel.punter + 'pm ' + yds + ' ' + recTeamTok + ' ' + recNum + ' ' + muffRet + (td ? ' td' : '');
           roles = { punter: { team: off, num: sel.punter, yards: parseInt(yds) || 0 }, playType: 'punt' };
           if (recNum !== '?'){
             // Recovering a muff is not a defensive stat and not a
@@ -5737,7 +5852,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // ensuing spot to state, and demanding one would deadlock the entry.
     // A touchback needs no special case: prefillTouchbackSpot has already
     // clicked the side and filled the 20, so the check passes.
-    if ((type === 'kickoff' || type === 'punt') && !td){
+    // A SAFETY IS EXEMPT. The play ends in the end zone and a FREE KICK
+    // follows, so there is no takeover spot to give -- demanding one made
+    // the blocked-punt safety unenterable from 13 Aug 2026 until this was
+    // found on 14 Aug while building the same option for a muffed snap.
+    // The pre-existing path broke silently because nothing tested it.
+    //
+    // Detected by any checked safety toggle on the panel rather than by
+    // naming pp_punt_safety and pp_muff_safety: a third one added later
+    // would otherwise reintroduce exactly this bug.
+    const safetyOn = !!document.querySelector(
+      '#playPanel input[type="checkbox"][id$="_safety"]:checked');
+    if ((type === 'kickoff' || type === 'punt') && !td && !safetyOn){
       // buildAndReview has no `panel` in scope -- the panel-building code
       // is a different function -- so look it up here rather than relying
       // on a closure that does not reach this far.
