@@ -102,6 +102,19 @@ async function run() {
   click(win, doc.getElementById('pp_review'));
   click(win, doc.getElementById('saveBtn'));
 
+  // AN UNNAMED COMPLETION -- the case the Unknown bucket exists for.
+  // Without one in the fixture, dropping the bucket entirely still
+  // reconciles (there is no unattributed yardage to lose) and the
+  // reconciliation assertions below pass while proving nothing. Verified
+  // by mutation: removing the bucket must fail this file.
+  h.evalIn('pushAndPersist({id:nextId++,text:"reset",effect:{forcePossession:"teamA"},quarter:1}); renderAll();');
+  setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 30 });
+  click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+  typeInto(win, doc.getElementById('pp_passer_manual'), '7');
+  typeInto(win, doc.getElementById('pp_yards'), '26');
+  click(win, doc.getElementById('pp_review'));
+  click(win, doc.getElementById('saveBtn'));
+
   const rows = h.db.plays.map((r, i) =>
     Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
   h.close();
@@ -124,10 +137,41 @@ async function run() {
         fail(page, who + ' should have ' + want.rec + ' catches, has ' + (got.rec || 0));
       }
     }
-    // An unnamed incompletion must credit nobody rather than inventing a row.
-    const phantom = Object.keys(recv).filter(n => !EXPECTED[n]);
+    // AN UNNAMED PASS GOES TO 'Unknown', AND NOWHERE ELSE.
+    // ------------------------------------------------------------------
+    // This originally asserted that an unnamed pass created NO receiving
+    // row at all. That was right about the danger and wrong about the
+    // remedy: the danger is a REAL PLAYER being credited with a throw
+    // nobody saw him take, and leaving the row out entirely bought that
+    // safety at the price of the check a stat sheet lives by -- passing
+    // yards equalling the sum of receiving yards. A coach comparing
+    // Passing 245 with Receiving 198 cannot tell a missing entry from a
+    // bug.
+    //
+    // Changed 14 Aug 2026 on Andy's call: unnamed passes bucket to
+    // 'Unknown', so the columns reconcile and the gap is stated instead
+    // of hidden. The original intent survives intact -- no real player is
+    // credited, which is what the assertion below still enforces.
+    const phantom = Object.keys(recv).filter(n => !EXPECTED[n] && n !== 'Unknown');
     if (phantom.length) {
-      fail(page, 'an unnamed incompletion created receiving rows: ' + phantom.join(','));
+      fail(page, 'an unnamed pass credited a real player: ' + phantom.join(',') +
+           " -- it must go to 'Unknown' or nowhere");
+    }
+
+    // THE CHECK THE WHOLE THING EXISTS FOR: the two columns reconcile.
+    const box = JSON.parse(v.evalIn('JSON.stringify(computeBoxScore(plays))')).teamA;
+    const sum = (o, k) => Object.keys(o).reduce((t, n) => t + (o[n][k] || 0), 0);
+    if (sum(box.passing, 'yds') !== sum(box.receiving, 'yds')) {
+      fail(page, 'passing yards (' + sum(box.passing, 'yds') + ') do not equal receiving yards (' +
+           sum(box.receiving, 'yds') + ') — that equality is the first thing anyone checks on a stat sheet');
+    }
+    if (sum(box.passing, 'att') !== sum(box.receiving, 'tgt')) {
+      fail(page, 'attempts (' + sum(box.passing, 'att') + ') do not equal targets (' +
+           sum(box.receiving, 'tgt') + ')');
+    }
+    if (sum(box.passing, 'comp') !== sum(box.receiving, 'rec')) {
+      fail(page, 'completions (' + sum(box.passing, 'comp') + ') do not equal receptions (' +
+           sum(box.receiving, 'rec') + ')');
     }
     v.close();
   }
