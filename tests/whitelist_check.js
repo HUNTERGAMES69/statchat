@@ -311,6 +311,90 @@ async function run() {
     h.close();
   }
 
+  // --- AFTER A TOUCHDOWN, ONLY THE TRY -----------------------------------
+  // Added 14 Aug 2026. A touchdown does NOT set endsDrive -- the drive is
+  // not over until the try is taken -- so the existing awaitingKickoff
+  // gate deliberately did not fire, and every play button stayed live in
+  // a gap where a rush or a punt cannot happen.
+  //
+  // The gate keys on SIX POINTS, not on effect.td, and that distinction
+  // is the point of the second half of this test: effect.td is set on
+  // scrimmage touchdowns only, so an interception, fumble or kick
+  // returned all the way carries score.points 6 with no td flag. Keying
+  // on td let a pick-six through with every button enabled.
+  {
+    const { enterPlay, setDrive, typeInto } = require('./ui_driver');
+    const btnState = (h) => {
+      const out = {};
+      h.document.querySelectorAll('.ptypeBtn').forEach(b => { out[b.dataset.type] = !b.disabled; });
+      return out;
+    };
+    const check = (label, st) => {
+      const allowed = ['pat', 'twopt'];
+      Object.keys(st).forEach(t => {
+        const should = allowed.includes(t);
+        if (st[t] !== should){
+          fail('after a touchdown', label + ': ' + t + ' is ' + (st[t] ? 'enabled' : 'disabled') +
+               ', expected ' + (should ? 'enabled' : 'disabled') +
+               ' — only the try can follow a touchdown');
+        }
+      });
+    };
+
+    // 1. a scrimmage touchdown, which DOES set effect.td
+    {
+      const h = await bootGamePage();
+      setDrive(h, { down: 1, distance: 10, side: 'opp', yardline: 6 });
+      enterPlay(h, { type: 'rush', carrier: '22', yards: '6', td: true });
+      check('rushing TD', btnState(h));
+      h.close();
+    }
+
+    // 2. a DEFENSIVE touchdown, which does not. This is the one that was
+    //    getting through.
+    {
+      const h = await bootGamePage();
+      const { window: win, document: doc } = h;
+      setDrive(h, { down: 2, distance: 8, side: 'own', yardline: 30 });
+      // The interception panel is reached from the PASS panel's outcome
+      // switch, not a top-level button -- there is no .ptypeBtn for it.
+      click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+      click(win, [...doc.querySelectorAll('.pp-outcome-switch')]
+        .find(b => /Intercepted/.test(b.textContent)));
+      typeInto(win, doc.getElementById('pp_passer_manual'), '7');
+      typeInto(win, doc.getElementById('pp_credit_manual'), '55');
+      typeInto(win, doc.getElementById('pp_yards'), '30');
+      click(win, doc.getElementById('pp_td_toggle'));
+      click(win, doc.getElementById('pp_review'));
+      click(win, doc.getElementById('saveBtn'));
+      const last = h.db.plays[h.db.plays.length - 1];
+      if (last && last.effect && last.effect.td){
+        fail('after a touchdown', 'this fixture assumes a returned touchdown carries NO ' +
+             'effect.td — it now does, so the test no longer covers the case it was ' +
+             'written for and the gate should be re-checked');
+      }
+      check('interception returned for a TD', btnState(h));
+      h.close();
+    }
+
+    // 3. and a THREE-point score must NOT gate to the try -- a field goal
+    //    is followed by a kickoff, not a PAT.
+    {
+      const h = await bootGamePage();
+      setDrive(h, { down: 4, distance: 5, side: 'opp', yardline: 20 });
+      enterPlay(h, { type: 'fg', kicker: '3', yards: '37', result: 'g' });
+      const st = btnState(h);
+      if (st.pat || st.twopt){
+        fail('after a touchdown', 'a made field goal enabled the try buttons — three points ' +
+             'are followed by a kickoff, and only six compel a try');
+      }
+      if (!st.kickoff){
+        fail('after a touchdown', 'a made field goal should leave the kickoff available');
+      }
+      h.close();
+    }
+  }
+
   return failures;
 }
 
