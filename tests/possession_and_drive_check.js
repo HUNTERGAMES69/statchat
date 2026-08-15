@@ -228,6 +228,25 @@ async function run() {
            'drive ended with the punt, as every punt does, so this double counts');
     }
 
+    // THE RECOVERER'S NUMBER IS OPTIONAL AND THE TEAM IS NOT.
+    // The first fix shipped and did not work in a real game, because the
+    // recovery role was only written when a number had been typed --
+    // leaving the recoverer blank threw away the TEAM the coach had
+    // chosen on a radio, and the engine could not see a turnover had
+    // happened. Named and unnamed must count identically.
+    const muffKickingUnnamed = await punt((w, d) => {
+      typeInto(w, d.getElementById('pp_yards'), '40');
+      click(w, d.getElementById('pp_muffed_toggle'));
+      click(w, d.querySelector('input[name=pp_punt_muffrec][value="k"]'));
+      click(w, d.querySelector('.pp_muffspot_side[data-side="opp"]'));
+      typeInto(w, d.getElementById('pp_muffspot_yardline'), '30');
+    });
+    if (muffKickingUnnamed.teamB !== 1){
+      fail('muffed punt', 'the same muff with NO recoverer named charged ' +
+           muffKickingUnnamed.teamB + ' turnovers instead of 1 — the number is optional, ' +
+           'the team is not, and a blank number must not discard it');
+    }
+
     const muffReceiving = await punt((w, d) => {
       typeInto(w, d.getElementById('pp_yards'), '40');
       click(w, d.getElementById('pp_muffed_toggle'));
