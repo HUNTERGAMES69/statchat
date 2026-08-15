@@ -104,6 +104,7 @@ const REQUIRED = [
   ['Att / Rush Yds',     ['rushAtt', 'rushYards']],
   ['Total Plays',        ['plays', 'totalPlays']],
   ['Turnovers',          ['turnovers']],
+  ['Time of possession',  ['timeOfPossession']],
   ['Penalties',          ['penalties', 'penaltyCount', 'penaltyYards']],
   ['3rd Down',           ['thirdDownConv', 'thirdDownAtt', 'thirdDownPct']],
 
@@ -111,7 +112,12 @@ const REQUIRED = [
   ['drive RUSH',         ['rushYards', 'yards']],
   ['drive PASS',         ['passYards', 'yards']],
   ['drive YARDS',        ['yards', 'totalYards']],
-  ['drive TOP',          ['timeOfPossession']],
+  // NOT 'drive TOP'. Dropped from the drive row 14 Aug 2026: a drive's
+  // own time of possession only accrues once a closing clock event is
+  // entered, so a live drive reads 0:00 for as long as anyone would be
+  // looking at it. What was there reported the team's cumulative total
+  // under a drive-scoped name, which is worse than absent.
+  // Cumulative TOP is checked in the team block above.
 
   // the banner
   ['score',              ['homeScore', 'awayScore', 'score']],
