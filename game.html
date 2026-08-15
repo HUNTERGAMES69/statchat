@@ -4195,7 +4195,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<button type="button" id="pp_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button>' +
       '</div>';
     const blockedToggleHtml = (id, label) => '<input autocomplete="off" type="checkbox" id="' + id + '" style="display:none;">' +
-      '<button type="button" id="' + id + '_toggle" data-cb="' + id + '" data-label="' + (label || 'Blocked') + '" class="pp-blocked-toggle ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">' + (label || 'Blocked') + '</button>';
+      '<button type="button" id="' + id + '_toggle" data-cb="' + id + '" data-label="' + (label || 'Blocked') + '" class="pp-blocked-toggle ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + (label || 'Blocked') + '</button>';
 
     let html = '';
     if (type === 'rush') html = offBlock('carrier','Ball carrier') +
@@ -4345,12 +4345,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // they are the two answers to "what happened to the return" --
         // Touchback used to live up beside the returner picker, a whole
         // question away from the field it overrides.
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;">' +
-          '<div id="pp_ret_yds_wrap" style="margin-bottom:6px;">' + yardsBlockRet() + '</div>' +
-          '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_touchback', 'Touchback') + '</div>' +
-          '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_muffed', 'Muffed / fumbled catch') + '</div>' +
-          '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_onside', 'Onside kick') + '</div>' +
-          '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_ko_oob', 'Out of bounds') + '</div>' +
+        // THE FOUR OUTCOMES GET THEIR OWN ROW, AND IT NEVER WRAPS.
+        // ----------------------------------------------------------------
+        // They used to share a line with the return-yards box, which was
+        // fine with three of them and broke when Out of bounds made four:
+        // the last button dropped to a second line on its own, reading as
+        // a separate control rather than the fourth answer to one
+        // question.
+        //
+        // They are one question with four answers, so they are laid out
+        // as one: nowrap, equal widths, each button filling its share.
+        // Equal widths mean the row cannot reflow as labels change
+        // length, and a longer label shrinks the text rather than moving
+        // a button somewhere else.
+        '<div id="pp_ret_yds_wrap" style="margin-bottom:8px;">' + yardsBlockRet() + '</div>' +
+        '<div style="display:flex; gap:8px; flex-wrap:nowrap; margin-bottom:6px;">' +
+          ['pp_ko_touchback|Touchback', 'pp_ko_muffed|Muffed / fumbled catch',
+           'pp_ko_onside|Onside kick', 'pp_ko_oob|Out of bounds']
+            .map(spec => {
+              const [id, label] = spec.split('|');
+              return '<div style="flex:1 1 0; min-width:0;">' + blockedToggleHtml(id, label) + '</div>';
+            }).join('') +
         '</div>' +
         // An onside kick is a deliberate call, not a mistake, so it gets
         // its own control rather than being filed under Muffed. The
