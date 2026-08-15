@@ -129,6 +129,77 @@ async function run() {
     h.close();
   }
 
+  // --- THE CLOCK IS ASKED AT THE TOUCHDOWN, NOT AT THE TRY ---------------
+  // Andy's call, 14 Aug 2026, and the reason is a real one: a touchdown
+  // does not set endsDrive, so the prompt landed on the PAT and the
+  // scoring drive's time of possession swallowed the try with it. The
+  // number a coach wants is how long the DRIVE took.
+  //
+  // Three things are pinned. The touchdown asks. The try does not. And a
+  // SAFETY still does -- it also ends the drive for one-or-two points,
+  // which is why the test cannot simply be "small score ends the drive";
+  // what separates them is whether a touchdown came immediately before.
+  {
+    const asks = (h) => h.document.getElementById('confirmClockRow').style.display === 'block';
+    const review = (h, open) => {
+      open(h.window, h.document);
+      click(h.window, h.document.getElementById('pp_review'));
+      return asks(h);
+    };
+
+    const h = await bootGamePage();
+    h.window.confirm = () => true;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    click(h.window, h.document.getElementById('setClockUtilBtn'));
+    typeInto(h.window, h.document.getElementById('setclock_val'), '1200');
+    click(h.window, h.document.getElementById('setclock_save'));
+    setDrive(h, { down: 1, distance: 10, side: 'opp', yardline: 6 });
+
+    if (!review(h, (w, d) => {
+      click(w, d.querySelector('.ptypeBtn[data-type="rush"]'));
+      typeInto(w, d.getElementById('pp_carrier_manual'), '22');
+      typeInto(w, d.getElementById('pp_yards'), '6');
+      click(w, d.getElementById('pp_td_toggle'));
+    })) {
+      fail('touchdown clock', 'a touchdown does not ask for the clock — the scoring drive ' +
+           'then has no end, and its time of possession runs on into the try');
+    }
+    typeInto(h.window, h.document.getElementById('confirmClockInput'), '512');
+    click(h.window, h.document.getElementById('saveBtn'));
+
+    // The touchdown must actually CLOSE the possession, not merely ask.
+    const top = JSON.parse(h.evalIn('JSON.stringify(computeState().possessionTime)'));
+    if (top.teamA !== 408) {
+      fail('touchdown clock', 'took over at 12:00 and scored at 5:12, so the drive is 6:48 ' +
+           '(408s) — got ' + top.teamA + 's. A clock entered on a touchdown must write an ' +
+           'end-of-possession event; without one the clock is asked for and thrown away');
+    }
+
+    if (review(h, (w, d) => {
+      click(w, d.querySelector('.ptypeBtn[data-type="pat"]'));
+      typeInto(w, d.getElementById('pp_kicker_manual'), '3');
+      const r = d.querySelector('input[name=pp_patres][value="g"]');
+      if (r) click(w, r);
+    })) {
+      fail('touchdown clock', 'the PAT still asks for the clock — asking twice invites a ' +
+           'second reading that would reopen and re-close the drive');
+    }
+    h.close();
+
+    // A safety is one-or-two points and ends the drive, and MUST still ask.
+    const g = await bootGamePage();
+    g.window.confirm = () => true;
+    setDrive(g, { down: 2, distance: 8, side: 'own', yardline: 2 });
+    if (!review(g, (w, d) => {
+      click(w, d.querySelector('.ptypeBtn[data-type="safety"]'));
+      typeInto(w, d.getElementById('pp_credit_manual'), '55');
+    })) {
+      fail('touchdown clock', 'a safety no longer asks for the clock — it is a real end of ' +
+           'possession, and only a try following a touchdown should be skipped');
+    }
+    g.close();
+  }
+
   return failures;
 }
 
