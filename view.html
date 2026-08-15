@@ -505,13 +505,29 @@ function extractNameTag(rawName){
       // overflow:hidden) and the auto-fit stops shrinking at 0.5, so past
       // that the extra rows are silently clipped -- present in the data,
       // invisible on screen. Capped so the tile height is bounded.
+      // HOW MANY PLAYERS A CATEGORY TILE LISTS.
+      // ----------------------------------------------------------------
+      // Four, down from five on 14 Aug 2026. This panel auto-shrinks its
+      // type to fit whatever it is given, so every extra row is paid for
+      // in font size across ALL the tiles -- and a fifth name nobody can
+      // read from the sideline is worth less than four they can. The
+      // category total beside each header still covers everyone, so the
+      // rows that are cut are not lost, just not listed.
+      //
+      // Named rather than repeated: it was written as a literal 5 in two
+      // places inside this one helper, and the two had to agree or the
+      // cut list and the extras list would overlap or leave a gap.
+      const MAX_ROWS = 4;
       const MAX_TD_EXTRAS = 3;
       const capWithTdException = (sortedNums, obj, tdKey) => {
-        const top5 = sortedNums.slice(0, 5);
-        const extras = sortedNums.slice(5)
+        const top = sortedNums.slice(0, MAX_ROWS);
+        // Anyone below the cut who SCORED still appears. A touchdown is
+        // the one thing a coach will look for by name and not find in a
+        // yardage ranking -- a 2-yard plunge to win it ranks last.
+        const extras = sortedNums.slice(MAX_ROWS)
           .filter(n => (obj[n] && obj[n][tdKey]) > 0)
           .slice(0, MAX_TD_EXTRAS);
-        return top5.concat(extras);
+        return top.concat(extras);
       };
       // A row whose every displayed value is zero says nothing, and this
       // panel auto-shrinks to fit -- an empty row costs font size on the
@@ -623,8 +639,8 @@ function extractNameTag(rawName){
         // between sections makes each one legible on its own.
         const stSections = [];
         const pushIfRows = (hdrs, rows) => { if (rows.length) stSections.push(table(hdrs, rows)); };
-        pushIfRows(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, 5).filter(rowHasValue));
-        pushIfRows(['Punts','Avg','Long'], stPunting.slice(0, 5).filter(rowHasValue));
+        pushIfRows(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, MAX_ROWS).filter(rowHasValue));
+        pushIfRows(['Punts','Avg','Long'], stPunting.slice(0, MAX_ROWS).filter(rowHasValue));
         // Kickoffs: just the count and how many stayed in the end zone.
         // Individual kickoff distance is not reported anywhere and the
         // panel does not even ask for it, so a per-kicker yardage table
