@@ -395,6 +395,70 @@ async function run() {
     }
   }
 
+  // --- AN INCOMPLETE PASS HIDES THE YARDAGE CALCULATOR -------------------
+  // Reported from a real game, 14 Aug 2026. Marking a pass incomplete
+  // hid the yards field and the extra pass options but left the
+  // calculator on screen, still offering "Or enter tackled on" for a ball
+  // nobody caught.
+  //
+  // The second assertion is the one that matters. The calculator WRITES
+  // INTO the yards box, so a value computed before the toggle sat behind
+  // a hidden control and was read back at save time -- an incomplete pass
+  // carrying yardage. Hiding without clearing would have looked fixed.
+  {
+    const { typeInto } = require('./ui_driver');
+    const h = await bootGamePage();
+    const { window: win, document: doc } = h;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    typeInto(win, doc.getElementById('pp_passer_manual'), '7');
+    typeInto(win, doc.getElementById('pp_receiver_manual'), '80');
+
+    // Use the calculator first, so there is something to leak.
+    click(win, doc.querySelector('.calcSide[data-side="opp"]'));
+    typeInto(win, doc.getElementById('pp_calc_yardline'), '45');
+    if (!doc.getElementById('pp_yards').value){
+      fail('incomplete pass', 'the calculator did not fill the yards box, so this test is ' +
+           'no longer exercising the leak it was written for');
+    }
+
+    click(win, doc.getElementById('pp_incomplete_toggle'));
+    const calc = doc.getElementById('pp_calc_wrap');
+    if (!calc || calc.style.display !== 'none'){
+      fail('incomplete pass', 'the yardage calculator is still on screen — an incomplete ' +
+           'pass has no yardage to work out');
+    }
+    if (doc.getElementById('pp_yards').value){
+      fail('incomplete pass', 'the yards box still holds ' +
+           JSON.stringify(doc.getElementById('pp_yards').value) +
+           ' behind a hidden control, and it is read back at save time');
+    }
+    if (doc.getElementById('pp_calc_yardline').value){
+      fail('incomplete pass', 'the calculator still holds a yard line behind a hidden ' +
+           'control — untoggling would silently recompute a yardage');
+    }
+
+    click(win, doc.getElementById('pp_review'));
+    click(win, doc.getElementById('saveBtn'));
+    const saved = h.db.plays[h.db.plays.length - 1];
+    if (/for \d/.test(saved.text)){
+      fail('incomplete pass', 'the saved play carries yardage: ' + saved.text);
+    }
+
+    // Untoggling must bring both back, or the coach cannot correct a
+    // mis-tap without closing the panel.
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    typeInto(win, doc.getElementById('pp_passer_manual'), '7');
+    click(win, doc.getElementById('pp_incomplete_toggle'));
+    click(win, doc.getElementById('pp_incomplete_toggle'));
+    if (doc.getElementById('pp_calc_wrap').style.display === 'none' ||
+        doc.getElementById('pp_yards_wrap').style.display === 'none'){
+      fail('incomplete pass', 'untoggling Incomplete did not restore the yards field and ' +
+           'the calculator');
+    }
+    h.close();
+  }
+
   return failures;
 }
 
