@@ -89,6 +89,43 @@ function convertRow(row, numberFor, teamAbbrForA) {
   const jersey = id => (id && id !== 'NA') ? numberFor.get(id) : null;
   const gained = num(row.yards_gained);
 
+  // TWO-POINT CONVERSIONS.
+  // ------------------------------------------------------------------
+  // nflverse gives these `play_type` run or pass with
+  // `two_point_attempt` set, so before 14 Aug 2026 they fell straight
+  // through into the ordinary rush and pass branches below. That was
+  // wrong twice over: the two points never reached the score, AND the
+  // attempt was entered as a scrimmage play, inflating rushing and
+  // receiving totals with yardage NFHS keeps out of season stats
+  // altogether.
+  //
+  // It hid because run_qa's tier 1 skips `two_point_attempt` rows when
+  // comparing per-player yardage -- so the phantom attempt was never
+  // compared against anything.
+  //
+  // A conversion returned by the DEFENCE is dropped rather than
+  // guessed at: NFHS gives the defence no score on a try, so there is
+  // no StatChat play that means it.
+  if (truthy(row.two_point_attempt)) {
+    // 'g' good, 'x' failed. NOT 'n' -- that radio value does not exist,
+    // and the driver reported it honestly rather than silently entering
+    // the default, which is why this surfaced on the first failed try
+    // rather than as a wrong number months later.
+    const good = row.two_point_conv_result === 'success';
+    if (type === 'run') {
+      const carrier = jersey(row.rusher_player_id);
+      if (!carrier) return null;
+      return { kind: 'play', spec: { type: 'twopt', sub: 'rush', carrier, result: good ? 'g' : 'x' } };
+    }
+    if (type === 'pass') {
+      const passer = jersey(row.passer_player_id);
+      const receiver = jersey(row.receiver_player_id);
+      if (!passer || !receiver) return null;
+      return { kind: 'play', spec: { type: 'twopt', sub: 'pass', passer, receiver, result: good ? 'g' : 'x' } };
+    }
+    return null;
+  }
+
   // A touchdown on the row is NOT necessarily a touchdown by the player
   // who carried or caught it. Week 4 of 2023 turned up:
   //
@@ -106,6 +143,15 @@ function convertRow(row, numberFor, teamAbbrForA) {
   //
   // So: credit the touchdown only when the SCORER is the player being
   // credited with the play.
+  // Did the team WITHOUT the ball score on this play? That is a
+  // defensive or return touchdown -- an interception or fumble taken
+  // back, or a punt returned all the way. `scoredIt` below deliberately
+  // refuses these, because they are not a touchdown BY the player being
+  // credited with the play; they need their own branch, which is what
+  // this enables.
+  const defensiveTd = truthy(row.touchdown) && row.td_team &&
+    row.td_team !== 'NA' && row.posteam && row.td_team !== row.posteam;
+
   const scoredIt = (playerId) =>
     truthy(row.touchdown) &&
     row.td_team === row.posteam &&
@@ -115,6 +161,24 @@ function convertRow(row, numberFor, teamAbbrForA) {
   if (type === 'run') {
     const carrier = jersey(row.rusher_player_id);
     if (!carrier) return null;
+    // A fumble taken back for a score. Entered as StatChat's own fumble
+    // play so the six points reach the defence, rather than as a rush
+    // with a `fumble: 'lost'` flag that loses them.
+    if (truthy(row.fumble_lost) && defensiveTd) {
+      return { kind: 'play', spec: {
+        type: 'fumble', carrier, fumrec: 'opp',
+        credit: jersey(row.fumble_recovery_1_player_id) || undefined,
+        td: true
+      } };
+    }
+    // A SAFETY on a run: tackled in his own end zone. The two points
+    // belong to the defence and there is no yardage to record.
+    if (truthy(row.safety)) {
+      return { kind: 'play', spec: {
+        type: 'rush', carrier, yards: String(Math.abs(gained)),
+        loss: gained < 0, safety: true
+      } };
+    }
     return { kind: 'play', spec: {
       type: 'rush', carrier,
       yards: String(Math.abs(gained)),
@@ -128,21 +192,52 @@ function convertRow(row, numberFor, teamAbbrForA) {
     const passer = jersey(row.passer_player_id);
     if (!passer) return null;
     if (truthy(row.sack)) {
+      // A STRIP-SACK taken back for a score: the sack panel's own
+      // Fumbled branch, so the six points reach the defence. Checked
+      // before the plain sack, because a strip-sack is still a sack and
+      // would otherwise be entered as one and lose the touchdown.
+      if (truthy(row.fumble_lost) && defensiveTd) {
+        return { kind: 'play', spec: {
+          type: 'sack', passer, yards: String(Math.abs(gained)),
+          fumbled: true, fumrec: 'opp',
+          credit: jersey(row.fumble_recovery_1_player_id) || undefined,
+          retyds: String(num(row.return_yards) || 0),
+          fumTd: true
+        } };
+      }
+      // Sacked in his own end zone: two points to the defence. By far the
+      // most common way a safety happens, and both real examples checked
+      // (2023_03_IND_BAL, 2023_03_NE_NYJ) are exactly this.
       return { kind: 'play', spec: {
-        type: 'sack', passer, yards: String(Math.abs(gained))
+        type: 'sack', passer, yards: String(Math.abs(gained)),
+        safety: truthy(row.safety) || undefined
       } };
     }
     if (truthy(row.interception)) {
       return { kind: 'play', spec: {
         type: 'int', passer,
         credit: jersey(row.interception_player_id),
-        receiver: jersey(row.receiver_player_id)
+        receiver: jersey(row.receiver_player_id),
+        // Taken back all the way. Without this the interception was
+        // entered but its six points were not.
+        td: defensiveTd || undefined,
+        yards: defensiveTd ? String(num(row.return_yards) || 0) : undefined
       } };
     }
     const receiver = jersey(row.receiver_player_id);
     if (!truthy(row.complete_pass)) {
       return { kind: 'play', spec: {
         type: 'pass', passer, receiver, incomplete: true
+      } };
+    }
+    if (truthy(row.fumble_lost) && defensiveTd) {
+      // Caught, stripped, taken back. The catch itself still counts as
+      // receiving yardage, but the score belongs to the defence, so the
+      // fumble is what gets entered.
+      return { kind: 'play', spec: {
+        type: 'fumble', carrier: receiver, fumrec: 'opp',
+        credit: jersey(row.fumble_recovery_1_player_id) || undefined,
+        td: true
       } };
     }
     return { kind: 'play', spec: {
@@ -159,14 +254,33 @@ function convertRow(row, numberFor, teamAbbrForA) {
   if (type === 'punt') {
     const punter = jersey(row.punter_player_id);
     if (!punter) return null;
+    // A punt returned all the way. `defensiveTd` is the right test even
+    // here: on a punt the KICKING team is the team in possession, so a
+    // return touchdown is scored by the side without the ball.
     return { kind: 'play', spec: {
-      type: 'punt', punter, yards: String(num(row.kick_distance) || 0)
+      type: 'punt', punter, yards: String(num(row.kick_distance) || 0),
+      credit: defensiveTd ? jersey(row.punt_returner_player_id) : undefined,
+      retyds: defensiveTd ? String(num(row.return_yards) || 0) : undefined,
+      td: defensiveTd || undefined
     } };
   }
 
   if (type === 'field_goal') {
     const kicker = jersey(row.kicker_player_id);
     if (!kicker) return null;
+    // BLOCKED AND RETURNED for a score. The plain branch below has only
+    // made/missed, so this was entered as a miss and the six points
+    // vanished. 2023_01_DAL_NYG is the standing example.
+    if (defensiveTd) {
+      return { kind: 'play', spec: {
+        type: 'fg', kicker, yards: String(num(row.kick_distance) || 0),
+        blocked: true,
+        credit: jersey(row.fumble_recovery_1_player_id) ||
+                jersey(row.blocked_player_id) || undefined,
+        retyds: String(num(row.return_yards) || 0),
+        td: true
+      } };
+    }
     return { kind: 'play', spec: {
       type: 'fg', kicker,
       yards: String(num(row.kick_distance) || 0),

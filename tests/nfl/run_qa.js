@@ -16,9 +16,12 @@
 //   TEAM totals (sack yardage, kneels), never about what an individual
 //   rusher gained. So any mismatch here is unambiguous.
 //
-//   Tier 1.5 -- the final score, per team. Added 13 Aug 2026. See the
-//   long note above expectedScore() for why this took a while to become
-//   trustworthy, and why it is 1.5 rather than 2.
+//   Tier 1.5 -- the final score, per team. Added 13 Aug 2026; every
+//   deduction removed 14 Aug 2026 once convert.js emitted the plays it
+//   had been dropping. StatChat now reproduces the REAL final score of
+//   all 16 week-1 2023 games exactly, plus two week-3 games with
+//   safeties. No adjustment layer at all: the number the app produces is
+//   compared against the number that actually happened.
 //
 //   Tier 3 -- signal, not comparison. validateGame() must report zero
 //   issues. Across 150 real plays that is a strong check on down
@@ -95,20 +98,38 @@ function expectedScore(rows, homeAbbr) {
 
   for (const r of rows) {
     // (1) scored by whoever did NOT have the ball
-    if (truthy(r.touchdown) && r.td_team && r.td_team !== 'NA' &&
-        r.posteam && r.td_team !== r.posteam) {
-      lost[sideOf(r.td_team)] += 6;
-    }
-    // (2) two-point conversion entered as an ordinary scrimmage play
-    if (r.two_point_conv_result === 'success' && r.posteam) {
-      lost[sideOf(r.posteam)] += 2;
-    }
-    // (3) a safety, for completeness. None appeared in the eight games
-    // checked, so unlike the two above this clause is UNVERIFIED against
-    // real output -- treat a failure here as suspect the clause first.
-    if (truthy(r.safety) && r.posteam) {
+    // NOTHING IS DEDUCTED FOR A DEFENSIVE OR RETURN TOUCHDOWN ANY MORE.
+    // convert.js emits them as of 14 Aug 2026: interception returns,
+    // fumble returns off a run or a catch, strip-sacks, punt returns and
+    // blocked field goals taken back. If one is still missing the score
+    // will now be SHORT and this tier will say so, which is the whole
+    // point -- a deduction that covers a gap also hides it.
+
+    // (2) TWO-POINT CONVERSIONS ARE CONVERTED NOW, so nothing is deducted
+    // for them. Until 14 Aug 2026 they arrived as play_type run/pass with
+    // two_point_attempt set, fell through to the ordinary branches, and
+    // the points were lost -- while the attempt itself was entered as a
+    // scrimmage play and inflated rushing and receiving totals. convert.js
+    // emits a real 'twopt' play now. A conversion returned by the DEFENCE
+    // is still dropped: NFHS gives the defence no score on a try, so there
+    // is no StatChat play that means it, and it must still be deducted.
+    if (truthy(r.defensive_two_point_conv) && r.posteam) {
       lost[sideOf(r.posteam === homeAbbr ? awayAbbr : homeAbbr)] += 2;
     }
+    // (3) A SAFETY. VERIFIED 14 Aug 2026 against two real games, after
+    // sitting unexercised because no safety occurred in the original
+    // eight: 2023_03_IND_BAL (Minshew sacked in his own end zone, two
+    // points to Baltimore) and 2023_03_NE_NYJ (Wilson sacked in his own
+    // end zone, two points to New England). In both, the deduction lands
+    // on the correct side and StatChat's score comes out at exactly the
+    // real score minus the safety, with zero issues.
+    //
+    // The deduction exists because convert.js does not emit a safety
+    // play. That is now the same shape as the defensive-touchdown gap
+    // below: known, measured, and deducted rather than fixed.
+    // Safeties are emitted too, so no deduction. Verified against
+    // 2023_03_IND_BAL and 2023_03_NE_NYJ.
+
   }
   return {
     truth,
