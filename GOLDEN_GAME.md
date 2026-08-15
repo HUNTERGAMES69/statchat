@@ -141,6 +141,31 @@ mistake for a bug.*
 
 **Penalties** — Neville 1 for 10, Ruston 1 for 5.
 
+## One sequence to enter deliberately, off-script
+
+Not in the play list above, because it needs a clean drive of its own —
+but enter it once on Night 5, because it happens about once a season, it
+is entered under pressure, and getting it wrong is silent.
+
+**A pass intercepted, returned 10 yards, then fumbled back.** Two plays:
+
+1. **The interception.** Passer, intercepted by, return yards 10, and the
+   takeover spot set to **where the fumble happened** — NOT where the
+   return ended. Put the post-fumble spot here and the ball moves twice.
+2. **The fumble.** The standalone Fumble panel, with the INTERCEPTOR
+   typed as the carrier (he is the ball carrier now; the picker resolves
+   him from the defensive roster), recovered by the opponent, and the
+   recovery spot.
+
+Expect afterwards: possession back with the original offence, **two
+turnovers** — one each, which is correct rather than double counting —
+the interception credited to the defender, the fumble recovery to the
+recoverer, and the quarterback charged with the pick.
+
+If the intercepting team recovers their own fumble instead, it is the
+same two plays with "Recovered by own team", and possession simply stays
+with them.
+
 ## Two things to check rather than assume
 
 **Cal Sledge has 2 tackles and 1 fumble recovery, not 3 tackles.**
@@ -149,6 +174,13 @@ a different act from bringing the carrier down, and it is already counted
 in its own column. This chart originally said 3, which is what prompted
 the decision; the engine was changed on 13 Aug 2026 and
 `tests/tackles_check.js` now pins it.
+
+**Passing yards must equal total receiving yards.** Since 14 Aug 2026 a
+completion with no receiver named is credited to *Unknown* rather than
+left out, so the two columns reconcile. The view page shows both totals
+beside their table headers — if they disagree, stop and find out why.
+Attempts should equal targets, and completions should equal receptions,
+for the same reason.
 
 **Team TFL will exceed per-player TFL.** That is by design: team TFL
 counts every play that lost yardage, per-player counts only those where a
