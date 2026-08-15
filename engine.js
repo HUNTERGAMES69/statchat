@@ -117,6 +117,41 @@ function colorDistance(hexA, hexB){
   return Math.sqrt((a.r-b.r)**2 + (a.g-b.g)**2 + (a.b-b.b)**2);
 }
 
+// WCAG CONTRAST RATIO. This is what "can you read it" actually means.
+// ---------------------------------------------------------------------
+// luminance() above is Rec.601 luma -- a perceptual brightness, right for
+// "is this colour light or dark", and WRONG for contrast. safeTextColor
+// used to compare two luma values and keep the preference if they
+// differed by 0.35, which let #999999 sit on a navy banner: the gap is
+// 0.41, comfortably over the line, and the text is washed out and hard to
+// read at a glance. Reported from a real game on 14 Aug 2026.
+//
+// The fix is to measure the right thing. WCAG relative luminance
+// linearises each channel first, and contrast is a RATIO from 1:1
+// (identical) to 21:1 (black on white) -- not a difference. #999999 on
+// that navy is 2.6:1; the same navy with white is 10.9:1.
+function relLuminance(hex){
+  const h = normalizeHex(hex);
+  if (!h) return 0;
+  const ch = [h.slice(1,3), h.slice(3,5), h.slice(5,7)].map(x => {
+    const v = parseInt(x, 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+function contrastRatio(hexA, hexB){
+  const a = relLuminance(hexA), b = relLuminance(hexB);
+  const hi = Math.max(a, b), lo = Math.min(a, b);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+// The minimum a team's own colours have to clear to be used as given.
+// 4.5:1 is the WCAG standard for body text. The banner's text is large
+// enough that 3:1 would technically pass, but this same function colours
+// the report pages too, and a scoreboard read from the far side of a
+// field in daylight is not a laboratory.
+const MIN_CONTRAST = 4.5;
+
 function safeTextColor(bgHex, preferredHex){
   const bg = normalizeHex(bgHex), pref = normalizeHex(preferredHex);
   // No usable background: nothing to contrast against, so honour the
@@ -125,9 +160,23 @@ function safeTextColor(bgHex, preferredHex){
   // No usable preference: pick for legibility on the background rather
   // than defaulting to white on a pale field, which is what the
   // previous game.html guard did.
-  if (!pref) return luminance(bg) > 0.55 ? '#1a1a1a' : '#ffffff';
-  if (Math.abs(luminance(bg) - luminance(pref)) > 0.35) return pref;
-  return luminance(bg) > 0.55 ? '#1a1a1a' : '#ffffff';
+  // Black or white, whichever actually reads better on this background.
+  // Chosen by measuring both rather than by a luma threshold: a mid-tone
+  // sits near the old 0.55 cutoff and the wrong side of it is a coin
+  // toss, while comparing the two ratios is never ambiguous.
+  // PURE black or white, not the softer #1a1a1a used elsewhere in the
+  // app. This branch only fires on a pair that cannot be read, so its
+  // one job is maximum contrast -- and the difference is decisive on a
+  // mid-tone: #1a1a1a on a mid grey gives 4.35:1 and pure black gives
+  // 5.32:1. The worst possible background still clears 4.58:1 against
+  // one of the two, so the 4.5:1 floor is always reachable.
+  const fallback = () =>
+    contrastRatio(bg, '#000000') >= contrastRatio(bg, '#ffffff') ? '#000000' : '#ffffff';
+  if (!pref) return fallback();
+  // A team's own colours are used whenever they can be read. This is not
+  // a house style being imposed -- it rescues the pairs that cannot be.
+  if (contrastRatio(bg, pref) >= MIN_CONTRAST) return pref;
+  return fallback();
 }
 
 function rosterName(teamKey, num, order){
@@ -881,6 +930,8 @@ function buildContext(game, rosterRows, playRows, ourBranding){
 // The guard matters -- without it the browser throws on `module`.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    contrastRatio,
+    relLuminance,
     formatDuration,
     markerLabel,
     normalizeHex,
