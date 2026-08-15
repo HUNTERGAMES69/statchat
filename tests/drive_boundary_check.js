@@ -162,7 +162,12 @@ async function run() {
     const prev = v.document.getElementById('prevDriveLogScroll').textContent.replace(/\s+/g, ' ');
     if (!/RUSH\s*1\/12/.test(prev)) fail('punt', 'rush tile wrong: ' + prev.trim());
     if (!/PASS\s*1\/20/.test(prev)) fail('punt', 'pass tile wrong: ' + prev.trim());
-    if (!/YARDS\s*32/.test(prev)) fail('punt', 'yards tile wrong: ' + prev.trim());
+    // TOTAL plays/yards, matching the Current Drive tile. This asserted
+    // 'YARDS 32' until 14 Aug 2026, when the previous-drive tile still
+    // counted a different thing under a different name from the live one
+    // beside it -- the same four tiles in the same order, and only three
+    // of them comparable.
+    if (!/TOTAL\s*2\/32/.test(prev)) fail('punt', 'total tile wrong, expected 2/32: ' + prev.trim());
     // 10:00 -> 6:30 is 3:30 of possession. A broken drive split makes
     // this 0:00, so it doubles as a boundary check.
     if (!/TOP\s*3:30/.test(prev)) fail('punt', 'time of possession wrong: ' + prev.trim());
@@ -195,7 +200,16 @@ async function run() {
       fail('manual-flip', 'current drive begins on the flip marker itself: ' + current.trim());
     }
     const prev = v.document.getElementById('prevDriveLogScroll').textContent.replace(/\s+/g, ' ');
-    if (!/YARDS\s*8/.test(prev)) fail('manual-flip', 'previous drive yardage wrong: ' + prev.trim());
+    if (!/TOTAL\s*1\/8/.test(prev)) fail('manual-flip', 'previous drive total wrong, expected 1/8: ' + prev.trim());
+    // The two panels must carry the SAME labels. That is the requirement;
+    // the values above only demonstrate it on one drive.
+    const cur = v.document.getElementById('currentDriveTiles').textContent.replace(/\s+/g, ' ');
+    const labelsOf = t => (t.match(/RUSH|PASS|TOTAL|YARDS|TOP/g) || []).join(',');
+    if (cur && labelsOf(cur) !== labelsOf(prev)){
+      fail('manual-flip', 'the current and previous drive tiles do not match: current [' +
+           labelsOf(cur) + '] vs previous [' + labelsOf(prev) + '] — two drives side by ' +
+           'side are there to be compared');
+    }
     v.close();
   }
 
