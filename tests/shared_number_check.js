@@ -95,7 +95,11 @@ async function run() {
     setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 30 });
     click(win, doc.querySelector('.ptypeBtn[data-type="rush"]'));
     const fives = [...doc.querySelectorAll('.pp_carrier_pick')]
-      .filter(b => /#5\s/.test(b.textContent));
+      // data-num rather than the rendered label: the '#' was dropped from
+      // the button on 14 Aug 2026 and the number moved into its own
+      // element, so matching on text found nothing and reported it as
+      // "expected two #5 buttons, got 0".
+      .filter(b => b.dataset.num === '5');
 
     if (fives.length !== 2) {
       fail('game page', 'expected two #5 buttons, got ' + fives.length + ': ' +

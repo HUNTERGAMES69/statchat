@@ -42,7 +42,15 @@ async function oppWithBall(){
 }
 const nums = (h, type, cls) => {
   h.evalIn('renderPlayPanel("' + type + '")');
-  return [...h.document.querySelectorAll(cls)].map(b => (b.textContent.match(/#(\d+)/) || [])[1]);
+  // data-num, not a regex on the label. The button used to read
+  // "#8 Name" and the number was scraped out of it; treatment A dropped
+  // the '#' and split the number into its own element, and this returned
+  // a list of undefineds while reporting it as "seeded #8 missing" --
+  // a test failing for a rendering change and blaming the app.
+  //
+  // data-num is the attribute every click handler already reads, so it is
+  // both the stable handle and the one that matters.
+  return [...h.document.querySelectorAll(cls)].map(b => b.dataset.num);
 };
 
 async function run(){
