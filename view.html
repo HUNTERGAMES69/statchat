@@ -90,6 +90,13 @@
   .stat-category-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:start; }
   .stat-category-col { display:flex; flex-direction:column; min-width:0; }
   .stat-category-tile { background:#eef1f5; border:1px solid #c9d0d9; border-radius:6px; padding:calc(6px * var(--stat-scale, 1)) 8px calc(4px * var(--stat-scale, 1)); margin-bottom:calc(6px * var(--stat-scale, 1)); min-width:0; break-inside:avoid; }
+  /* Header row for a category tile: the chip on the left, its total on
+     the right. baseline alignment so the two read as one line. */
+  .stat-category-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin:0 0 3px; }
+  .stat-category-head .stat-category-label { margin:0; }
+  /* Same size as the label, no background, muted. A cross-check, not a
+     headline -- it must not compete with the players' own numbers. */
+  .stat-category-total { font-size:calc(11px * var(--stat-scale, 1)); font-weight:600; color:#8a94a6; letter-spacing:0.02em; }
   .stat-category-label { font-size:calc(11px * var(--stat-scale, 1)); font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.02em; margin:0 0 3px; background:#4a5568; display:inline-block; padding:2px 7px; border-radius:3px; }
   table.player-stat-table { width:100%; border-collapse:collapse; font-size:calc(13px * var(--stat-scale, 1)); }
   table.player-stat-table th { text-align:right; font-size:calc(10px * var(--stat-scale, 1)); color:#5b7ca8; font-weight:600; padding:1px 4px; white-space:nowrap; }
@@ -445,7 +452,31 @@ function extractNameTag(rawName){
       let leftHtml = '', rightHtml = '';
 
       const sum = (nums, obj, key) => nums.reduce((t, n) => t + ((obj[n] && obj[n][key]) || 0), 0);
-      const tile = (label, inner) => '<div class="stat-category-tile"><div class="stat-category-label">' + label + '</div>' + inner + '</div>';
+      // CATEGORY TOTAL beside the header, deliberately plain.
+      // ----------------------------------------------------------------
+      // It exists as a CHECK against the team tiles in the top-left quad:
+      // passing here should equal Comp/Pass Yds there, rushing should
+      // equal Att/Rush Yds, and receiving should equal passing now that
+      // an unnamed catch buckets to Unknown. Two numbers that must agree,
+      // computed by different paths, on one screen.
+      //
+      // Summed from the WHOLE bucket, not from the rows on screen: these
+      // tables show the top five (plus anyone with a touchdown), so a
+      // total added up from the visible rows would quietly disagree with
+      // the tile it is meant to check -- and would look like the bug it
+      // was put there to catch.
+      //
+      // Same font size as the label and no highlight, on purpose. It is a
+      // reference figure a scorer glances at, not a headline; anything
+      // louder competes with the players' own numbers.
+      const sumBucket = (bucket, key) =>
+        Object.keys(bucket).reduce((t, n) => t + ((bucket[n] || {})[key] || 0), 0);
+      const tile = (label, inner, total) =>
+        '<div class="stat-category-tile"><div class="stat-category-head">' +
+        '<div class="stat-category-label">' + label + '</div>' +
+        (total === undefined || total === null ? ''
+          : '<span class="stat-category-total">' + total + '</span>') +
+        '</div>' + inner + '</div>';
       // Sorts jersey numbers by a yardage-like field, descending, so the
       // category leader always sorts first.
       // TEAM is a bucket, not a player -- kneels, bad snaps and sack
@@ -514,7 +545,7 @@ function extractNameTag(rawName){
           const d = s.passing[n];
           const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
           return { name: n, values: [d.att||0, d.comp||0, compPct, d.yds||0, d.td||0, d.intThrown||0, d.sacked||0] };
-        }).filter(rowHasValue)));
+        }).filter(rowHasValue)), sumBucket(s.passing, 'yds'));
       }
       const rushSorted = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
       const rushNums = capWithTdException(rushSorted, s.rushing, 'td');
@@ -522,7 +553,7 @@ function extractNameTag(rawName){
         rushHtml += tile('Rushing', table(['Att','Yds','TD'], rushNums.map((n, i) => {
           const d = s.rushing[n];
           return { name: n, values: [d.att||0, d.yds||0, d.td||0] };
-        }).filter(rowHasValue)));
+        }).filter(rowHasValue)), sumBucket(s.rushing, 'yds'));
       }
       // A target alone does not earn a row on the live view. Adding targets
       // meant anyone thrown at once appeared with 0 catches and 0 yards,
@@ -539,7 +570,7 @@ function extractNameTag(rawName){
         recHtml += tile('Receiving', table(['Tgt','Rec','Yds','TD'], recNums.map((n, i) => {
           const d = s.receiving[n];
           return { name: n, values: [d.tgt||0, d.rec||0, d.yds||0, d.td||0] };
-        }).filter(rowHasValue)));
+        }).filter(rowHasValue)), sumBucket(s.receiving, 'yds'));
       }
       // kickoffs belongs in this gate too -- without it a pure kickoff
       // specialist never entered the loop at all, so the kickoff table
