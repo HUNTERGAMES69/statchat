@@ -73,8 +73,23 @@ const CASES = [
   // zone and downed, the defence takes over at their own 20 with no
   // return to record.
   ['int touchback',           { type: 'int', passer: '7', credit: '55', intTouchback: true }],
-  ['punt blocked, safety',    { type: 'punt', punter: '15', blocked: true, blockrec: 'own', safety: true,
-                               spot: { side: 'own', yardline: '40' } }],
+  // A muffed/bad snap recovered by the KICKING team in their own end
+  // zone -- two points, the mirror of the blocked-punt safety beside it.
+  ['punt muffed, safety',     { type: 'punt', punter: '15', yards: '0', muffed: true,
+                               muffrec: 'k', muffrecoverer: '15', safety: true }],
+  // NO SPOT, deliberately. A safety ends the play in the end zone and a
+  // FREE KICK follows, so there is no takeover spot to give. This entry
+  // was given one on 14 Aug 2026 while repairing fixtures that the new
+  // mandatory-spot rule had broken -- and that quietly papered over a
+  // real bug: the rule was demanding a spot here, making the blocked-punt
+  // safety unenterable. Supplying one made an unreachable path look
+  // reachable. If this ever needs a spot again to pass, the rule has
+  // regressed; do not add one.
+  // The MUFF safety, added to the probe 14 Aug 2026. Its blocked sibling
+  // was already here; this one was correct, wired, and covered by nothing
+  // -- which is a large part of why nobody could find it on the panel.
+  ['punt muffed, own rec, safety', { type:'punt', punter:'15', muffed:true, muffrec:'k', safety:true }],
+  ['punt blocked, safety',    { type: 'punt', punter: '15', blocked: true, blockrec: 'own', safety: true }],
 
   // --- Kicking ------------------------------------------------------
   ['field goal good',         { type: 'fg', kicker: '3', yards: '38', result: 'g' }],
