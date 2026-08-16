@@ -673,7 +673,21 @@ function isAdminMarker(p){
     }
 
     const { data: gameRows, error: gameError } = await supabaseClient
-      .from('games').select('*').eq('id', currentGameId).limit(1);
+      // NAMED COLUMNS, not '*'. Anonymous visitors are granted SELECT on
+      // fourteen columns of `games` and no more -- `created_by` and
+      // `broadcast_set_by` are account ids that a public scoreboard has
+      // no use for, and `guided_state` and `seed_starters` are the app's
+      // own working state.
+      //
+      // RLS is row-level: a policy alone would have handed over the whole
+      // row, and asking for '*' here would fail outright for a signed-out
+      // visitor. This list must stay a subset of the grant in
+      // sql/public_recap_sharing.sql.
+      .from('games').select('id, designator, game_date, home_team_name, away_team_name, ' +
+                            'our_team_is_home, quarter_length_seconds, status, ' +
+                            'opponent_logo_url, opponent_primary_color, ' +
+                            'opponent_secondary_color, final_score_us, final_score_opp, is_public')
+      .eq('id', currentGameId).limit(1);
     if (gameError || !gameRows || gameRows.length === 0){
       showView('errorView');
       // Signed out and empty almost always means the game is not shared,
