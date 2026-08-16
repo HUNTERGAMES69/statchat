@@ -1512,3 +1512,46 @@ straight off the play roles, which is right.
 - Absent beats zero for a derived figure
 - An effect two different actions write cannot distinguish them
 - A test that repeats the implementation's rule cannot catch it being wrong
+
+
+## A policy is not a column grant (15 August 2026)
+
+Public recap sharing needed both, and only one of them is obvious.
+
+**RLS is ROW-level.** A policy saying "anon may read this game" hands over
+the entire row -- `created_by`, `broadcast_set_by`, `guided_state`,
+`seed_starters`, every column the table has and every column it gains
+later. Restricting what `recap.html` asks for would not have helped:
+anyone can query the columns directly with the anon key, which is in the
+page source by design.
+
+So the policy is paired with a Postgres column grant: anon has SELECT on
+fourteen named columns of `games` and nothing else. `authenticated` is
+untouched, so the app's own pages keep using `select('*')`.
+
+The consequence to remember: **`recap.html` must ask for those fourteen
+by name.** `select('*')` now fails outright for a signed-out visitor,
+and the two lists have to be kept in step -- which is why the grant and
+the query each carry a comment pointing at the other.
+
+**The condition is `status = 'final' AND is_public = true`, never
+is_public alone.** Unlocking a shared game for corrections moves it out
+of final, and the public read stops matching until it is finalized again.
+Keying on the flag by itself would have made a LIVE game public the
+moment somebody unlocked one that had been shared.
+
+## The scraper has already gone (15 August 2026)
+
+A shared link previewed as "Game Recap / statchat.co" and the obvious fix
+-- set `document.title` from the game -- does nothing at all. iMessage,
+Slack and the rest build that card with a scraper that does not run
+JavaScript: it fetches the file, reads the `<head>`, and leaves before
+any Supabase call has been made.
+
+Static Open Graph tags fix the branding. Naming the GAME needs the HTML
+built on the server, which is now a TODO rather than a guess.
+
+Worth noting how the attempt failed: setting `document.title` earlier in
+`init()` broke seven suites, because `TEAMS` is not populated yet at that
+point. The page already set a per-game tab title further down -- so the
+line was redundant as well as misplaced, and the tests found both.
