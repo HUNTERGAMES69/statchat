@@ -479,16 +479,10 @@ function isAdminMarker(p){
     return '<div class="table-scroll">' + h + '</table></div>';
   }
 
-  // Categorical accent colors, purely for visually linking each leader
-  // card to its section below -- not semantic, so drawn from the
-  // general-purpose ramps (teal/coral/purple) rather than status colors.
-  const CATEGORY_ACCENT = {
-    passing: { edge: '#0F6E56', tint: '#E1F5EE', text: '#085041' },
-    rushing: { edge: '#993C1D', tint: '#FAECE7', text: '#712B13' },
-    receiving: { edge: '#534AB7', tint: '#EEEDFE', text: '#3C3489' }
-  };
-
-  function renderLeadersStrip(box){
+  // Takes a team key so the opponent gets the same strip. It was written
+  // for our side only and read box.teamA directly, which is the sort of
+  // thing that looks like a helper and is actually one team's code.
+  function renderLeadersStrip(box, teamKey){
     const categories = [
       { key: 'passing', label: 'Passing leader', unit: null,
         pick: (d) => d.yds||0, stat: (d) => [d.yds||0, 'yds'], sub: (d) => (d.comp||0)+'/'+(d.att||0)+', '+(d.td||0)+' TD' },
@@ -504,7 +498,7 @@ function isAdminMarker(p){
     ];
     let cards = '';
     categories.forEach(cat => {
-      const bucketObj = box.teamA[cat.key];
+      const bucketObj = box[teamKey][cat.key];
       // A LEADER MUST BE A PLAYER. TEAM is a bookkeeping bucket (sack
       // yardage, kneels) and Unknown is a completion whose receiver was
       // not recorded -- neither is somebody a coach can congratulate, and
@@ -526,8 +520,11 @@ function isAdminMarker(p){
       const leaderKey = nums.slice().sort((a,b) => cat.pick(bucketObj[b]) - cat.pick(bucketObj[a]))[0];
       const d = bucketObj[leaderKey];
       const [statVal, statUnit] = cat.stat(d);
-      const accent = CATEGORY_ACCENT[cat.key];
-      cards += '<div class="leader-card" style="border-left:3px solid ' + accent.edge + ';">' +
+      // NO CATEGORY ACCENT. The green/red/purple edges were chosen before
+      // the sections carried team colour, and a red bar beside a gold
+      // band is two schools' worth of colour in one card. The category is
+      // already named on the line above the number.
+      cards += '<div class="leader-card">' +
         '<div class="leader-label">' + cat.label + '</div>' +
         '<div class="leader-name">' + leaderKey + '</div>' +
         '<div class="leader-stat">' + statVal + ' <span>' + statUnit + '</span></div>' +
@@ -720,7 +717,11 @@ function isAdminMarker(p){
 
     function renderPlayerStatsSections(teamKey, box, useAccents){
       const teamName = TEAMS[teamKey].name;
-      const accent = (key) => useAccents ? CATEGORY_ACCENT[key] : undefined;
+      // The category accents are gone -- the tinted header rows and the
+      // coloured card edges fought the team band directly above them,
+      // which is two schemes of colour doing one job. playerTable still
+      // takes an accent argument, so nothing is passed.
+      const accent = () => undefined;
       let out = '';
       out += '<div class="section player-section">' + teamBand(teamKey, teamName + ' \u2014 Passing') +
         (playerTable(teamKey, box[teamKey].passing, ['Comp','Att','%','Yds','Y/C','Long','TD','Int','Sack'],
@@ -800,7 +801,7 @@ function isAdminMarker(p){
       return out;
     }
 
-    const leadersHtml = renderLeadersStrip(box);
+    const leadersHtml = renderLeadersStrip(box, 'teamA');
     const ourLogoHtml = TEAMS.teamA.logo ? '<img class="team-header-logo" src="' + TEAMS.teamA.logo + '">' : '';
     if (leadersHtml){
       // EACH TEAM'S SECTION STARTS A NEW PAGE.
@@ -821,11 +822,21 @@ function isAdminMarker(p){
     html += renderPlayerStatsSections('teamA', box, true);
 
     const oppLogoHtml = TEAMS.teamB.logo ? '<img class="team-header-logo" src="' + TEAMS.teamB.logo + '">' : '';
+    // The opponent gets the SAME leaders strip we do. It read as a bare
+    // name over a run of tables while our side had three cards, which
+    // made the two halves of the document look like different reports --
+    // and left the reader to find the opponent's best players by
+    // scanning columns.
+    //
+    // Falls back to just the name when the opponent has no stats worth
+    // leading with, which is the same condition our own strip uses.
+    const oppLeadersHtml = renderLeadersStrip(box, 'teamB');
     // The opponent DOES start a new page: it is the one break in the
     // document that means something, separating our stats from theirs
     // rather than falling wherever the paper runs out.
     html += '<div class="section page-break"><div class="team-header-row">' + oppLogoHtml +
-      '<div class="opp-header-name">' + TEAMS.teamB.name + '</div></div></div>';
+      (oppLeadersHtml || '<div class="opp-header-name">' + TEAMS.teamB.name + '</div>') +
+      '</div></div>';
     html += renderPlayerStatsSections('teamB', box, false);
 
     return html;
