@@ -492,6 +492,51 @@ async function run(){
     }
   }
 
+  // --- THE PER-GAME RESET RESTORES THE STATUS A NEW GAME HAS ------------
+  // Reported 16 Aug 2026: a game reset from the dashboard kept reading
+  // "In progress" for ever. The reset wrote status 'in_progress' while
+  // setting game_phase 'notStarted', and the dashboard label reads
+  // STATUS -- so the row said one thing and the phase said another.
+  //
+  // This suite covers Reset for PRODUCTION (account.html), not the
+  // per-game reset (dashboard.html), which is why nothing caught it.
+  // dashboard.html cannot be booted in the harness, so the invariant is
+  // checked at the source level instead: whatever status create_game.html
+  // gives a NEW game is the status the reset must restore.
+  //
+  // A reset game and a game that has never been opened should be
+  // indistinguishable. That is what reset means, and it is a rule that
+  // can be stated without a browser.
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const root = path.join(__dirname, '..');
+    const create = fs.readFileSync(path.join(root, 'create_game.html'), 'utf8');
+    const dash = fs.readFileSync(path.join(root, 'dashboard.html'), 'utf8');
+
+    const created = (create.match(/gamePayload\.status\s*=\s*'([a-z_]+)'/) || [])[1];
+    if (!created){
+      fail('game reset', 'could not find the status create_game.html gives a new game — ' +
+           'this check can no longer verify anything and needs re-pointing');
+    }
+
+    // The status written by resetGame(), which is the update that also
+    // clears the scores.
+    const m = dash.match(/status:\s*'([a-z_]+)',\s*game_phase:\s*'notStarted'/);
+    const restored = m && m[1];
+    if (!restored){
+      fail('game reset', 'could not find the status dashboard.html restores on a game ' +
+           'reset — the update was rewritten and this check needs re-pointing');
+    }
+
+    if (created && restored && created !== restored){
+      fail('game reset', 'a new game is created with status ' + JSON.stringify(created) +
+           ' but a reset game is left at ' + JSON.stringify(restored) +
+           '. The dashboard labels rows from status, so a reset game reads as ' +
+           'something it is not — it was showing "In progress" indefinitely');
+    }
+  }
+
   return failures;
 }
 
