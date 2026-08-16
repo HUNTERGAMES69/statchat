@@ -186,6 +186,81 @@ async function run() {
     h.close();
   }
 
+  // --- ENDING THE GAME BETWEEN OVERTIME SERIES --------------------------
+  // Reported 14 Aug 2026. The guided series panel comes up automatically
+  // when a series ends and disables the rest of the page while it is
+  // there -- including End game. So after the deciding series the only
+  // way forward was to set up a series nobody was going to play.
+  //
+  // The option lives in the panel itself now, and is offered only when
+  // the score is not level: a tie means another round, and finalizing
+  // would refuse it anyway. Hiding it beats refusing after the fact.
+  {
+    const { enterPlay, setDrive, click, typeInto } = require('./ui_driver');
+    const intoOt = async () => {
+      const h = await bootGamePage();
+      const { window: win, document: doc } = h;
+      win.confirm = () => true; win.alert = () => {};
+      h.evalIn("pushAndPersist({id:nextId++, text:'Q4', effect:{setQuarter:4}, quarter:4}); renderAll();");
+      setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 30 });
+      click(win, doc.getElementById('otUtilBtn'));
+      click(win, doc.getElementById('ot_pickA'));
+      await new Promise(r => setTimeout(r, 60));
+      click(win, doc.getElementById('ot_review'));
+      await new Promise(r => setTimeout(r, 80));
+      return h;
+    };
+
+    // One team ahead: the option is there and it finalizes.
+    {
+      const h = await intoOt();
+      const { window: win, document: doc } = h;
+      enterPlay(h, { type: 'rush', carrier: '22', yards: '10', td: true });
+      enterPlay(h, { type: 'pat', kicker: '3', result: 'g' });
+      await new Promise(r => setTimeout(r, 90));
+      click(win, doc.getElementById('ot_review'));
+      await new Promise(r => setTimeout(r, 90));
+      for (const y of ['1','2','1','1']) enterPlay(h, { type: 'rush', carrier: '30', yards: y });
+      await new Promise(r => setTimeout(r, 90));
+      const btn = doc.getElementById('ot_endgame');
+      if (!btn){
+        fail('overtime end game', 'no way to end the game from the between-series panel — it ' +
+             'disables the rest of the page, so the only way on was to start a series nobody ' +
+             'was going to play');
+      } else {
+        click(win, btn);
+        await new Promise(r => setTimeout(r, 150));
+        if (h.evalIn('gamePhase') !== 'ended'){
+          fail('overtime end game', 'ending from the panel did not finalize the game');
+        }
+        const dividers = JSON.parse(h.evalIn('JSON.stringify(plays.filter(p=>p.isDivider).map(p=>p.text))'));
+        if (dividers.indexOf('Final') === -1){
+          fail('overtime end game', 'no Final divider was written: ' + dividers.join(', '));
+        }
+        if (h.document.getElementById('guidedPanel').style.display !== 'none'){
+          fail('overtime end game', 'the guided panel is still up over a finished game — it ' +
+               'must be closed BEFORE finalizing, or the re-render puts it straight back');
+        }
+      }
+      h.close();
+    }
+
+    // Scores level: no option, and a line saying why.
+    {
+      const h = await intoOt();
+      for (const y of ['1','2','1','1']) enterPlay(h, { type: 'rush', carrier: '22', yards: y });
+      await new Promise(r => setTimeout(r, 90));
+      if (h.document.getElementById('ot_endgame')){
+        fail('overtime end game', 'the end-game option is offered with the scores level — the ' +
+             'game cannot end on a tie, so this refuses after the click instead of before');
+      }
+      if (!/Scores level/.test(h.document.getElementById('guidedContent').textContent)){
+        fail('overtime end game', 'nothing explains why the game cannot be ended yet');
+      }
+      h.close();
+    }
+  }
+
   return failures;
 }
 
