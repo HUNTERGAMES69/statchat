@@ -2011,3 +2011,114 @@ button and most of this came out of it.
   cannot detect it. One needs a distinguishing name before use.
 - [ ] `returner-overload` and `returner-name` mutants still survive
 - [ ] The Night 1 items that need the live Supabase instance
+
+---
+
+## 20. Offline capability — the "no internet required" objection (16 Aug 2026)
+
+Raised while working the go-to-market. TurboStats leads with "internet is
+not required," aimed at the case of visiting a small school with no
+usable connection. This section records the strategic answer, what already
+exists, the one real gap, and the two things that could go wrong.
+
+**Nothing here is scheduled.** It becomes work only if StatChat is sold,
+and item 4 below becomes mandatory the moment "works offline" appears on a
+website.
+
+### The strategic answer comes before the engineering one
+
+In the broadcast-crew vertical the objection is close to a non-sequitur,
+and it should be said out loud. **A streaming crew cannot stream without
+internet.** If they are pushing 1080p out of that press box they have
+bandwidth, and video is orders of magnitude more demanding than the feed's
+JSON. TurboStats' offline pitch is aimed at the sideline stat keeper at a
+small school, not at the booth. For this buyer it answers a question
+nobody in the room has.
+
+The sentence to have ready:
+
+> "If you can stream the game, you can run StatChat. The question isn't
+> whether you have internet — you can't broadcast without it. The question
+> is what happens when it hiccups, and the answer is nothing: entry keeps
+> going and catches up on its own."
+
+That reframes a binary we lose into a reliability question we win.
+
+The objection IS real for the stats-only tier, where the buyer is a
+statistician who may genuinely be at a venue with no signal. Different
+audience, different answer, and the build below is what makes that answer
+honest.
+
+### What already exists
+
+Confirmed in live use 7 Aug 2026 and recorded in §2:
+
+- Offline entry, reload recovery, drain, undo-while-queued, duplicate
+  handling
+- Game-row writes merge pending fields and retry every 5s, flushing on
+  wake and reconnect (12 Aug)
+- Undo correctly refused offline for plays the server already has
+
+**Entry already survives losing the connection mid-game.** That is most of
+the claim, and it is a stronger position than a web app is usually assumed
+to have.
+
+### The one real gap: no service worker
+
+Already recorded twice in this file. Reloading while genuinely offline
+fails — the page itself cannot be fetched, so a scorer who refreshes at
+the wrong moment is locked out until the connection returns. Queued plays
+survive, but entry stops. Cold-starting at a venue with no signal is
+likewise impossible.
+
+That is the whole hole. Closing it is roughly three things:
+
+1. **Service worker caching the app shell** — the fourteen pages plus
+   `engine.js`, `team-icon.js` and assets.
+2. **"Download for offline" on the dashboard** — pre-cache the game row
+   and both rosters on Thursday, so a cold start at a dead-signal venue
+   works. People understand this pattern from Spotify and Google Maps.
+3. **Verify the cached Supabase session survives a cold offline start.**
+   MFA at sign-in is the thing to check: it must not demand a round trip
+   when the laptop is opened in a concrete press box.
+
+**Small relative to what is already built, because the engine is
+client-side.** `computeState`, `computeBoxScore` and `findDriveStarts` all
+run in the browser and recompute from the log. Nothing about the box
+score, drives or stat package needs a server. Most apps claiming offline
+have to reimplement server logic on the client; StatChat never had server
+logic to reimplement.
+
+### Broadcast-specific addition, optional
+
+If the scoring laptop and vMix are the same machine — common for small
+crews — `broadcast.html` can be driven from the local log via
+BroadcastChannel or IndexedDB instead of `api/feed.js`, making the overlay
+path fully offline too. That is genuine parity with TurboStats' HDMI
+green-screen locality.
+
+Two machines on a LAN is a harder problem and probably not worth solving.
+
+### Warning 1 — the service worker is the riskiest thing we could add
+
+A worker serving last week's `game.html` on a Friday night is exactly the
+stale-file failure we have been burned by repeatedly, except now the
+browser is doing it deliberately and there is no upload step to blame.
+
+- **Network-first with cache fallback for HTML**, not cache-first
+- **Version the cache to a build hash**
+- **Put a visible version stamp in the UI** so what is actually running
+  can be confirmed at a glance
+
+### Warning 2 — the offline queue has no automated cover
+
+§2 already records this, including that the offline queue *fails in a way
+nobody notices until plays are missing after a game.*
+
+Today that is test debt. **The moment "works offline" becomes a sales
+claim it is a commercial liability** — the failure is silent, and the
+customer discovers it on Saturday morning with a coach asking where the
+third quarter went.
+
+- [ ] `tests/offline_queue_check.js` must exist before the claim goes on
+  a website. Not before then; it is not urgent for a single-team season.
