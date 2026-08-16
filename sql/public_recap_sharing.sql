@@ -42,6 +42,29 @@ alter table public.games
   add column if not exists is_public boolean not null default false;
 
 
+-- 1b. COLUMN GRANTS ---------------------------------------------------
+-- RLS is ROW-level. A policy alone hands over the whole row, so anon
+-- could query created_by and broadcast_set_by -- account ids a public
+-- scoreboard has no use for -- along with guided_state and seed_starters,
+-- which are the app's own working state.
+--
+-- These grants cut it to the fourteen columns the recap renders.
+-- `authenticated` is untouched: the app's other pages keep using
+-- select('*') exactly as before.
+--
+-- recap.html asks for these fourteen by name. If this list changes, that
+-- query changes with it.
+
+revoke select on public.games from anon;
+
+grant select (id, designator, game_date, home_team_name, away_team_name,
+              our_team_is_home, quarter_length_seconds, status,
+              opponent_logo_url, opponent_primary_color,
+              opponent_secondary_color, final_score_us, final_score_opp,
+              is_public)
+  on public.games to anon;
+
+
 -- 2. READ POLICIES ----------------------------------------------------
 -- The condition is always BOTH final AND is_public, never is_public
 -- alone. That pairing is what stops a shared game becoming visible while
@@ -123,6 +146,14 @@ create policy "admins set game visibility"
 
 
 -- 5. VERIFY -----------------------------------------------------------
+-- Expect 14. If this drops, anon has lost a column the recap asks for by
+-- name and the page will fail for signed-out visitors.
+
+select count(*) as anon_columns_on_games
+from information_schema.column_privileges
+where grantee = 'anon' and table_schema = 'public'
+  and table_name = 'games' and privilege_type = 'SELECT';
+
 -- Expect: shared_games = 0 immediately after running this file, because
 -- the column defaults to false and nothing has been shared yet.
 
