@@ -63,8 +63,16 @@
   .leader-card .leader-label { font-size:11px; color:#999; margin-bottom:4px; }
   .leader-card .leader-name { font-weight:700; font-size:14px; color:#1a1a1a; }
   .leader-card .leader-stat { font-size:20px; font-weight:800; margin-top:2px; color:#1a1a1a; }
-  .team-header-row { display:flex; align-items:center; gap:16px; }
-  .team-header-logo { width:56px; height:56px; object-fit:contain; flex-shrink:0; }
+  /* LOGO ABOVE THE NAME, both centred, with the leaders beside them.
+     The logo used to sit alone to the left of the cards and the team was
+     never named on its own page -- a sheet of rushing numbers said whose
+     it was only in the coloured band further down. */
+  .team-header-row { display:flex; align-items:center; gap:20px; }
+  .team-identity { display:flex; flex-direction:column; align-items:center;
+                   gap:6px; flex-shrink:0; min-width:96px; }
+  .team-header-logo { width:56px; height:56px; object-fit:contain; }
+  .team-identity-name { font-weight:800; font-size:15px; color:#1a1a1a;
+                        text-align:center; line-height:1.2; }
   .team-header-row .leaders-strip { flex:1; margin-bottom:0; }
   .opp-header-name { font-weight:700; font-size:18px; color:#1a1a1a; }
   .leader-card .leader-stat span { font-size:11px; color:#888; font-weight:600; }
@@ -195,7 +203,28 @@
   .team-band .tb-sub { margin-left:auto; font-weight:600; letter-spacing:0.06em;
                        opacity:0.85; text-transform:none; font-size:11px; }
   .sec-title, .team-band { page-break-after:avoid; break-after:avoid; }
+  /* RUNNING FOOTER. position:fixed inside a print context repeats the
+     element on every sheet -- the only reliable way to get a footer on
+     each page without a print engine. Hidden on screen, where the page
+     has no bottom to sit at. */
+  .print-footer { display:none; }
+  /* The end mark is in the NORMAL flow, so it lands wherever the content
+     finishes -- which is the last page, and only the last page. There is
+     no CSS selector for "the final sheet", so this is the mechanism. */
+  .print-endmark { display:none; }
   @media print {
+    /* Room for the running footer, so it never sits on top of a table. */
+    @page { margin-bottom: 16mm; }
+    .print-footer { display:block; position:fixed; bottom:6mm; left:0; right:0;
+                    text-align:center; font-size:9px; color:#9aa3b2;
+                    letter-spacing:0.04em; }
+    .print-endmark { display:flex; align-items:center; justify-content:center;
+                     gap:10px; margin:26px 0 0; padding-top:14px;
+                     border-top:1px solid #e6e6e6; }
+    .print-endmark img { width:34px; height:34px; border-radius:6px; }
+    .print-endmark .em-text { font-size:11px; color:#7c8794; line-height:1.4; }
+    .print-endmark .em-text b { display:block; color:#4a5563; font-size:12px; }
+
     /* BACKGROUNDS MUST BE TOLD TO PRINT.
        Browsers drop background colours from printed output by default --
        an ink-saving default from the era of text documents. So the team
@@ -220,19 +249,33 @@
     .section { page-break-inside:avoid; break-inside:avoid; }
     .page-break { page-break-before:always; break-before:always; }
     /* PAGE ONE HOLDS THREE THINGS: the scoreboard, how the points were
-       scored, and how the game was won. They only fit together if the
-       print sizes are pulled in -- at screen sizes the team comparison
-       alone is most of a sheet.
+       scored, and how the game was won.
+       The team pages that follow have the opposite problem -- four short
+       tables on a sheet built for far more -- so the sizes below are set
+       to FILL rather than to fit. Bigger rows, more air between sections,
+       and a leaders strip with room to breathe.
        These are print-only; nothing on screen changes. */
-    .sec-head { margin:20px 0 10px; }
-    .sec-title { font-size:16px; }
-    .sec-sub { font-size:11px; }
-    .scoring-summary table th, .scoring-summary table td { padding:4px 8px; }
-    .scoring-summary .ss-score { line-height:1.25; }
-    .team-compare .col-head { font-size:13px; padding-bottom:6px; }
-    .team-compare .stat-row > div { padding:3px 0; font-size:12.5px; }
-    .team-compare .stat-label { font-size:10.5px; }
-    .team-band { margin:22px 0 9px; }
+    .sec-head { margin:22px 0 12px; }
+    .sec-title { font-size:17px; }
+    .sec-sub { font-size:11.5px; }
+    .scoring-summary table th, .scoring-summary table td { padding:6px 9px; }
+    .scoring-summary .ss-score { line-height:1.3; }
+    .team-compare .col-head { font-size:13px; padding-bottom:7px; }
+    .team-compare .stat-row > div { padding:5px 0; font-size:13px; }
+    .team-compare .stat-label { font-size:11px; }
+
+    /* The team pages. These rows carried 5px of padding on a page that
+       was two-thirds empty -- the numbers were legible and the sheet
+       looked unfinished, which is a worse problem than being tight. */
+    .team-band { margin:30px 0 14px; padding:10px 15px; font-size:12.5px; }
+    table.player-table { font-size:12.5px; }
+    table.player-table th, table.player-table td { padding:7px 8px; }
+    .leaders-strip { gap:14px; }
+    .leader-card { padding:14px 16px; }
+    .leader-card .leader-stat { font-size:23px; }
+    .team-identity-name { font-size:14px; }
+    .team-header-logo { width:52px; height:52px; }
+    .section { padding:15px 16px; margin-bottom:14px; }
 
     /* CONDENSED FOR PAPER. The on-screen spacing is built for scrolling,
        where air between sections is what makes them readable. On a
@@ -280,6 +323,8 @@
 </style>
 </head>
 <body>
+  <div class="print-footer">Generated with StatChat &nbsp;&middot;&nbsp; www.statchat.co</div>
+
   <div class="wrap">
     <div id="loading">Loading…</div>
     <div id="errorView" class="hidden">
@@ -828,7 +873,13 @@ function isAdminMarker(p){
     }
 
     const leadersHtml = renderLeadersStrip(box, 'teamA');
-    const ourLogoHtml = TEAMS.teamA.logo ? '<img class="team-header-logo" src="' + TEAMS.teamA.logo + '">' : '';
+    // Logo over the name, as one unit. Either half can be missing -- a
+    // team with no logo still gets named, which is the half that matters.
+    const identity = (teamKey) => '<div class="team-identity">' +
+      (TEAMS[teamKey].logo ? '<img class="team-header-logo" src="' + TEAMS[teamKey].logo + '">' : '') +
+      '<div class="team-identity-name">' + TEAMS[teamKey].name + '</div>' +
+    '</div>';
+    const ourLogoHtml = identity('teamA');
     if (leadersHtml){
       // EACH TEAM'S SECTION STARTS A NEW PAGE.
       // ------------------------------------------------------------
@@ -847,7 +898,7 @@ function isAdminMarker(p){
     }
     html += renderPlayerStatsSections('teamA', box, true);
 
-    const oppLogoHtml = TEAMS.teamB.logo ? '<img class="team-header-logo" src="' + TEAMS.teamB.logo + '">' : '';
+    const oppLogoHtml = identity('teamB');
     // The opponent gets the SAME leaders strip we do. It read as a bare
     // name over a run of tables while our side had three cards, which
     // made the two halves of the document look like different reports --
@@ -861,9 +912,17 @@ function isAdminMarker(p){
     // document that means something, separating our stats from theirs
     // rather than falling wherever the paper runs out.
     html += '<div class="section page-break"><div class="team-header-row">' + oppLogoHtml +
-      (oppLeadersHtml || '<div class="opp-header-name">' + TEAMS.teamB.name + '</div>') +
+      oppLeadersHtml +
       '</div></div>';
     html += renderPlayerStatsSections('teamB', box, false);
+
+    // THE END MARK, in normal flow so it lands on the last page and only
+    // the last page. CSS has no "final sheet" selector; this is how you
+    // get one.
+    html += '<div class="print-endmark">' +
+      '<img src="logo.png" alt="StatChat">' +
+      '<div class="em-text"><b>Generated with StatChat</b>www.statchat.co</div>' +
+    '</div>';
 
     return html;
   }

@@ -120,7 +120,28 @@
   .team-band .tb-sub { margin-left:auto; font-weight:600; letter-spacing:0.06em;
                        opacity:0.85; text-transform:none; font-size:11px; }
   .sec-title, .team-band { page-break-after:avoid; break-after:avoid; }
+  /* RUNNING FOOTER. position:fixed inside a print context repeats the
+     element on every sheet -- the only reliable way to get a footer on
+     each page without a print engine. Hidden on screen, where the page
+     has no bottom to sit at. */
+  .print-footer { display:none; }
+  /* The end mark is in the NORMAL flow, so it lands wherever the content
+     finishes -- which is the last page, and only the last page. There is
+     no CSS selector for "the final sheet", so this is the mechanism. */
+  .print-endmark { display:none; }
   @media print {
+    /* Room for the running footer, so it never sits on top of a table. */
+    @page { margin-bottom: 16mm; }
+    .print-footer { display:block; position:fixed; bottom:6mm; left:0; right:0;
+                    text-align:center; font-size:9px; color:#9aa3b2;
+                    letter-spacing:0.04em; }
+    .print-endmark { display:flex; align-items:center; justify-content:center;
+                     gap:10px; margin:26px 0 0; padding-top:14px;
+                     border-top:1px solid #e6e6e6; }
+    .print-endmark img { width:34px; height:34px; border-radius:6px; }
+    .print-endmark .em-text { font-size:11px; color:#7c8794; line-height:1.4; }
+    .print-endmark .em-text b { display:block; color:#4a5563; font-size:12px; }
+
     /* BACKGROUNDS MUST BE TOLD TO PRINT.
        Browsers drop background colours from printed output by default --
        an ink-saving default from the era of text documents. So the team
@@ -147,6 +168,8 @@
 </style>
 </head>
 <body>
+  <div class="print-footer">Generated with StatChat &nbsp;&middot;&nbsp; www.statchat.co</div>
+
   <div class="wrap">
     <div id="loading">Loading…</div>
     <div id="errorView" class="hidden">
@@ -843,6 +866,10 @@ function isAdminMarker(p){
     }
     html += '<div class="section">' + teamBand('teamA', TEAMS.teamA.name + ' \u2014 Special Teams') + (stHtml || '<p class="no-stats">No special teams stats recorded.</p>') + '</div>';
 
+    html += '<div class="print-endmark">' +
+      '<img src="logo.png" alt="StatChat">' +
+      '<div class="em-text"><b>Generated with StatChat</b>www.statchat.co</div>' +
+    '</div>';
     return html;
   }
 
