@@ -115,6 +115,12 @@
   /* .status-loss was declared twice, identically, here and beside
      .status-win. Harmless but misleading -- the second looked like an
      override of the first. One copy, up there with its siblings. */
+  /* Amber and permanent. The risk it warns about -- creating a game into
+     the wrong season -- lasts as long as the season is wrong, so a toast
+     that fades would be the wrong shape. */
+  .season-notice { background:#fff8e6; border:1px solid #e0b400; border-radius:6px;
+                   padding:9px 12px; margin:0 0 12px; font-size:13px; color:#5a4300;
+                   line-height:1.5; }
   .status-notstarted { color:#999; font-weight:600; }
   .empty-state { color:#999; padding:16px 0; }
   #appSplash { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000; background:#fff; transition:opacity 0.3s; }
@@ -170,6 +176,9 @@
     </div>
 
     <div class="card">
+      <!-- Shown only when the selected season is not the current one.
+           Filled by renderSeasonNotice(). -->
+      <p id="seasonNotice" class="hidden season-notice"></p>
       <div class="games-head" style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
         <div>
           <h1 style="font-size:20px; margin:0;">Games</h1>
@@ -329,7 +338,12 @@
         logo.src = team.logo_url;
         logo.style.display = 'inline-block';
       }
-      if (team.current_season_year) seasonYear = team.current_season_year;
+      if (team.current_season_year){
+        seasonYear = team.current_season_year;
+        // Kept so the notice below can say what the CURRENT season is,
+        // not merely that this is not it.
+        currentSeasonYear = team.current_season_year;
+      }
       applySplash(team);
       try { localStorage.setItem('statchat_branding', JSON.stringify({ logo_url: team.logo_url, primary_color: team.primary_color })); } catch (e){}
     }
@@ -337,6 +351,27 @@
   }
 
   let allGames = [];
+  let currentSeasonYear = null;
+
+  // THE DASHBOARD OPENS ON THE SEASON YOU WERE LAST LOOKING AT.
+  // ---------------------------------------------------------------------
+  // Not always the current one: mid-week work is often in a past season --
+  // checking last year's numbers, fixing an old game -- and being thrown
+  // back to the current season on every load makes that a chore.
+  //
+  // Per browser rather than per account, because it is a view preference
+  // and not data. A wrapped read: private mode and blocked storage both
+  // throw here, and neither should stop the dashboard loading.
+  const SEASON_KEY = 'statchat_last_season';
+  function rememberSeason(y){
+    try { localStorage.setItem(SEASON_KEY, String(y)); } catch (e) {}
+  }
+  function lastSeason(){
+    try {
+      const v = parseInt(localStorage.getItem(SEASON_KEY), 10);
+      return Number.isFinite(v) ? v : null;
+    } catch (e) { return null; }
+  }
 
   document.getElementById('refreshGamesBtn').addEventListener('click', refreshGames);
 
@@ -371,7 +406,12 @@
     if (!years.includes(defaultSeasonYear)) years.unshift(defaultSeasonYear);
     const picker = document.getElementById('seasonPicker');
     picker.innerHTML = years.map(y => '<option value="' + y + '">' + y + ' season</option>').join('');
-    picker.value = defaultSeasonYear;
+    // The season last looked at, when it still exists. A remembered year
+    // whose games have since been deleted would otherwise select nothing
+    // and show an empty dashboard for no visible reason.
+    const remembered = lastSeason();
+    picker.value = (remembered !== null && years.includes(remembered))
+      ? remembered : defaultSeasonYear;
     picker.addEventListener('change', renderForSelectedSeason);
     renderForSelectedSeason();
     hideSplash();
@@ -404,6 +444,8 @@
 
   function renderForSelectedSeason(){
     const selectedYear = parseInt(document.getElementById('seasonPicker').value);
+    rememberSeason(selectedYear);
+    renderSeasonNotice(selectedYear);
     const games = allGames.filter(g => g.season_year === selectedYear);
     renderSummary(games);
     // Rendered from the SAME array as the list, so the record and the rows
@@ -411,6 +453,39 @@
     // selector changes.
     renderSeasonRecord(games);
     renderGames(games);
+  }
+
+  // A STANDING NOTICE WHENEVER THIS IS NOT THE CURRENT SEASON.
+  // ---------------------------------------------------------------------
+  // The dashboard now reopens wherever you left it, which is convenient
+  // and quietly dangerous: a game created while the picker sits on 2024
+  // is a 2024 game, and nothing on screen would have said so.
+  //
+  // Amber and permanent rather than a toast: the risk lasts as long as
+  // the season is wrong, so the warning should too.
+  function renderSeasonNotice(selectedYear){
+    const el = document.getElementById('seasonNotice');
+    if (!el) return;
+    if (!currentSeasonYear || selectedYear === currentSeasonYear){
+      el.classList.add('hidden');
+      el.innerHTML = '';
+      return;
+    }
+    const past = selectedYear < currentSeasonYear;
+    el.innerHTML = '<strong>You are looking at the ' + selectedYear + ' season.</strong> ' +
+      'The current season is ' + currentSeasonYear + '. ' +
+      (past ? 'Anything you create here will belong to ' + selectedYear + '.'
+            : 'This season is ahead of the current one.') +
+      ' <button type="button" id="goCurrentSeason" class="secondary" ' +
+      'style="margin-left:8px; padding:4px 10px; font-size:12px;">Go to ' +
+      currentSeasonYear + '</button>';
+    el.classList.remove('hidden');
+    const btn = document.getElementById('goCurrentSeason');
+    if (btn) btn.addEventListener('click', () => {
+      const picker = document.getElementById('seasonPicker');
+      picker.value = String(currentSeasonYear);
+      renderForSelectedSeason();
+    });
   }
 
   function renderSummary(games){
