@@ -684,7 +684,10 @@ function isAdminMarker(p){
 
   async function init(){
     const params = new URLSearchParams(window.location.search);
-    const currentGameId = params.get('id');
+    // ?id= normally, but the share route /g/<id> has no query string --
+    // api/share.js injects the id as window.__SHARE_ID when it serves
+    // this page with the game's own link-preview tags.
+    const currentGameId = params.get('id') || window.__SHARE_ID || null;
     if (!currentGameId){
       showView('errorView');
       document.getElementById('errorMsg').textContent = 'No game specified.';
@@ -782,8 +785,23 @@ function isAdminMarker(p){
   // The RLS policy requires final AND is_public, so this cannot expose a
   // game that is unlocked for corrections later: unlocking flips it out
   // of final and the public read stops matching.
-  function setupShare(game){
+  async function setupShare(game){
     if (!isAdmin) return;
+    // share_token is fetched HERE, not with the main game query, and the
+    // reason matters: anon is granted fourteen named columns of `games`
+    // and share_token is not one of them. Asking for it above would have
+    // failed the whole query for exactly the signed-out visitors this
+    // feature exists for.
+    //
+    // An admin is `authenticated`, which still has full select, so this
+    // second call is cheap and only ever runs for them.
+    try {
+      const { data } = await supabaseClient
+        .from('games').select('share_token').eq('id', game.id).limit(1);
+      game.share_token = (data && data[0] && data[0].share_token) || null;
+    } catch (e) {
+      game.share_token = null;
+    }
     const btn = document.getElementById('shareBtn');
     const panel = document.getElementById('sharePanel');
     const linkRow = document.getElementById('shareLinkRow');
@@ -791,12 +809,36 @@ function isAdminMarker(p){
     const msg = document.getElementById('shareMsg');
     if (!btn || !panel) return;
     btn.classList.remove('hidden');
-    linkEl.value = window.location.origin + '/recap.html?id=' + game.id;
+    // The SHARE route, not the recap URL. /g/<id> is served by
+    // api/share.js, which builds the <head> before a link-preview scraper
+    // sees it -- so the card names the game and the score instead of
+    // reading "Game Recap".
+    //
+    // recap.html?id= keeps working for anyone who was already sent one;
+    // this only changes what new links look like.
+    // A TOKEN, minted when sharing is switched on. The url therefore
+    // carries no database key, and "stop sharing" clears the token so an
+    // old link stays dead even if the game is shared again later -- a new
+    // token is minted, and the one somebody kept no longer resolves.
+    const shareUrl = () => game.share_token
+      ? window.location.origin + '/g/' + game.share_token
+      : '';
+    // Url-safe, from the browser's crypto source. 16 bytes is far beyond
+    // guessing, and the token is only ever a locator: RLS still decides
+    // whether the data may be read.
+    const mintToken = () => {
+      const b = new Uint8Array(16);
+      (window.crypto || window.msCrypto).getRandomValues(b);
+      return btoa(String.fromCharCode.apply(null, b))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    };
+    linkEl.value = shareUrl();
 
     const paint = (isPublic) => {
       panel.querySelectorAll('input[name=shareState]').forEach(r => {
         r.checked = (r.value === (isPublic ? 'public' : 'private'));
       });
+      linkEl.value = shareUrl();
       linkRow.classList.toggle('hidden', !isPublic);
       btn.textContent = isPublic ? 'Shared' : 'Share';
     };
@@ -807,8 +849,13 @@ function isAdminMarker(p){
       radio.addEventListener('change', async () => {
         const wantPublic = radio.value === 'public';
         msg.textContent = 'Saving…';
+        // A fresh token every time sharing is turned on, and null when it
+        // is turned off. That is what makes revoking real: re-sharing
+        // does not resurrect the previous link.
+        const nextToken = wantPublic ? mintToken() : null;
         const { error } = await supabaseClient
-          .from('games').update({ is_public: wantPublic }).eq('id', game.id);
+          .from('games').update({ is_public: wantPublic, share_token: nextToken })
+          .eq('id', game.id);
         if (error){
           // Say it failed and put the switch back. Leaving it showing the
           // state you asked for, when the database refused, is how a game
@@ -819,11 +866,13 @@ function isAdminMarker(p){
           return;
         }
         game.is_public = wantPublic;
+        game.share_token = nextToken;
         paint(wantPublic);
         msg.textContent = wantPublic
-          ? 'Anyone with this link can now read this recap. Turning sharing off stops ' +
-            'future visits — it cannot retract a copy somebody has already taken.'
-          : 'Sharing is off. The link now shows a "not shared" message.';
+          ? 'Anyone with this link can now read this recap. Turning sharing off kills this ' +
+            'link for good — sharing again creates a new one. Neither can retract a copy ' +
+            'somebody has already taken.'
+          : 'Sharing is off and that link is dead. Sharing again will create a new one.';
       });
     });
     document.getElementById('copyShareLink').addEventListener('click', async () => {

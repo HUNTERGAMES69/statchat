@@ -1848,7 +1848,55 @@ button and most of this came out of it.
 - [x] PDF: sections never split; recap keeps the team block on page one
 - [x] Roughing the passer moved to Personal foul / conduct
 
+### Public recap sharing — closed 15 Aug 2026
+
+- [x] `games.is_public`, defaulting to false, plus anon SELECT policies on
+  `games`, `plays`, `game_rosters` and `teams`. Every read policy requires
+  **`status = 'final'` AND `is_public = true`** — never `is_public` alone,
+  so unlocking a shared game for corrections takes it out of `final` and
+  the public read stops matching.
+- [x] **Column grants**, not just a policy. RLS is row-level, so a policy
+  alone handed anon the whole `games` row — including `created_by` and
+  `broadcast_set_by`, which are account ids. Anon now has fourteen named
+  columns; `authenticated` is untouched. `recap.html` asks for those
+  fourteen by name and must stay a subset of the grant.
+- [x] Admin-only UPDATE policy, so a `view` account cannot publish.
+- [x] Share control on the recap page beside Download PDF. The admin gate
+  fails closed — an errored role lookup is not read as permission.
+- [x] Signed-out visitors are no longer redirected. An unshared game
+  returns no rows and says so.
+- [x] `noindex, nofollow` on the recap: the link should reach the people
+  it was sent to, not become a searchable page of minors' names.
+- [x] SHARED badge on the dashboard row. The recap page can tell you about
+  the game you are looking at; only the list tells you which games are
+  still public in March.
+- [x] Open Graph tags so a shared link previews as StatChat with a logo
+  rather than a bare domain.
+- [x] SQL kept in `sql/public_recap_sharing.sql`, checks first.
+
 ### Still open
+
+- [x] **Server-rendered share route — done 15 Aug 2026.** `/g/<id>`,
+  rewritten by `vercel.json` to `api/share.js`, which looks the game up
+  with the service key, checks final AND is_public itself (the service
+  key bypasses RLS, so the condition is written out rather than relied
+  upon), and returns recap.html with the game's own tags injected:
+  *Neville 28 — Sterlington 21*.
+
+  Three things that were not obvious:
+    - **`<base href>` is required.** The recap loads `engine.js`,
+      `team-icon.js` and `logo.png` by relative path; at `/g/<id>` those
+      resolve to `/g/engine.js` and 404. Without it the page is blank.
+    - **The id has no query string to come from.** It is injected as
+      `window.__SHARE_ID` and recap.html falls back to it.
+    - **The file's own og: tags are stripped first.** Two sets in one
+      head is undefined — some scrapers take the first, some the last.
+
+  Serves the page rather than redirecting: a redirect after the scraper
+  has taken the tags is cloaking, and some scrapers follow it and preview
+  the destination anyway.
+
+  `recap.html?id=` still works, so links already sent are unaffected.
 
 - [ ] `.gitignore` and `tests/ui_driver.js` are not uploaded.
   **ui_driver matters**: the repo copy is missing the punt-muff branch
