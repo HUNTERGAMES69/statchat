@@ -163,6 +163,19 @@
        must not be separated from the totals row that explains it. */
     .section h2 { page-break-after:avoid; break-after:avoid; }
     table.player-table { page-break-inside:avoid; break-inside:avoid; }
+    /* THE SCORING SUMMARY IS ALLOWED TO BREAK, unlike every other
+       section. It is the one table here with no upper bound on length --
+       a 70-point game has a lot of rows -- and forcing it whole either
+       leaves most of a page empty or, once it exceeds a page, gets the
+       rule ignored and breaks somewhere arbitrary anyway.
+       So: break between ROWS, never inside one, and repeat the header on
+       each page. display:table-header-group is what makes a thead repeat;
+       without it the second page is a column of numbers with no labels. */
+    .scoring-summary, .scoring-summary table { page-break-inside:auto; break-inside:auto; }
+    .scoring-summary thead { display:table-header-group; }
+    .scoring-summary tr { page-break-inside:avoid; break-inside:avoid; }
+    .scoring-summary h2 { page-break-after:avoid; break-after:avoid; }
+
     /* THE TEAM BLOCK STAYS WITH THE BOX SCORE.
        Removing the forced page-break was not enough. Every .section
        carries break-inside:avoid, so the browser is free to decide the
@@ -558,7 +571,7 @@ function isAdminMarker(p){
     // above states and does not explain.
     const scoring = scoringSummary(plays);
     if (scoring.length){
-      html += '<div class="section"><h2>Scoring Summary</h2>' +
+      html += '<div class="section scoring-summary"><h2>Scoring Summary</h2>' +
         '<table class="player-table"><thead><tr>' +
           '<th style="width:44px;">Qtr</th><th>Team</th><th>Play</th>' +
           '<th style="width:74px; text-align:right;">Score</th>' +
@@ -573,8 +586,12 @@ function isAdminMarker(p){
             '<td>' + (e.quarter >= 5 ? 'OT' : 'Q' + e.quarter) + '</td>' +
             '<td style="font-weight:700;">' + TEAMS[e.team].name + '</td>' +
             '<td>' + e.text + detail + '</td>' +
-            '<td style="text-align:right; font-weight:700;">' +
-              e.teamA + '\u2013' + e.teamB + '</td>' +
+            // Named, not "7-0". A bare pair leaves a reader working out
+            // which number is whose from the home/away line at the top of
+            // the page -- and getting it backwards on an away game.
+            '<td style="text-align:right; font-weight:700; white-space:nowrap;">' +
+              TEAMS.teamA.name + ' ' + e.teamA + '<br>' +
+              TEAMS.teamB.name + ' ' + e.teamB + '</td>' +
           '</tr>';
         }).join('') +
         '</tbody></table></div>';

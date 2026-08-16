@@ -367,6 +367,27 @@ function countPossessions(playsList){
 // The running score is recomputed as the walk proceeds rather than read
 // from state, so the number beside each entry is the score AT THAT
 // MOMENT, not at the end.
+// Replace bare "#12" tokens in a play's stored text with the player's
+// name from the CURRENT roster.
+// ---------------------------------------------------------------------
+// A play's text is generated when it is saved, so a play entered before
+// the roster was uploaded -- or through manual entry -- has the jersey
+// number baked into it for ever. The roster may know the name now.
+//
+// playerName() returns '#N' unchanged when nobody is on that number, so
+// an unresolvable token is left exactly as it was rather than blanked.
+//
+// Both players in "#1 pass to #6" are on the same team, so one team key
+// resolves the whole line.
+function resolveNumbersInText(text, team){
+  const t = String(text || '');
+  if (t.indexOf('#') === -1 || !team || !TEAMS[team]) return t;
+  return t.replace(/#(\d+)/g, function(whole, num){
+    const nm = playerName(team, num);
+    return (nm && nm !== '#' + num) ? nm : whole;
+  });
+}
+
 function scoringSummary(playsList){
   const list = playsList || plays;
   const out = [];
@@ -431,7 +452,7 @@ function scoringSummary(playsList){
       quarter: p.quarter || walkQuarter,
       team: sc.team,
       points: sc.points,
-      text: p.text || '',
+      text: resolveNumbersInText(p.text, sc.team),
       isTouchdown: sc.points === 6,
       // A touchdown with no try after it stays blank rather than claiming
       // a kick that was never entered.
@@ -1156,6 +1177,7 @@ if (typeof module !== 'undefined' && module.exports) {
     countPossessions,
     countTurnovers,
     scoringSummary,
+    resolveNumbersInText,
     computeState,
     computeBoxScore,
     buildContext

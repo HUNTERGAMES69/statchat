@@ -111,6 +111,19 @@
        So the whole group is wrapped and kept together. If it is too tall
        for the space left it moves entire, which is the behaviour asked
        for -- a section is never split. */
+    /* The scoring summary OPTS OUT of the blanket avoid rules above. It
+       is the one table with no upper bound on length, and forcing it
+       whole either strands most of a page or -- once it is taller than a
+       page -- gets ignored and breaks arbitrarily.
+       Break between rows, never inside one, and repeat the header:
+       display:table-header-group is what makes a thead repeat, and
+       without it page two is numbers with no labels. */
+    .scoring-summary, .scoring-summary table.stat-table {
+      page-break-inside:auto; break-inside:auto; }
+    .scoring-summary thead { display:table-header-group; }
+    .scoring-summary tr { page-break-inside:avoid; break-inside:avoid; }
+    .scoring-summary .section-title { page-break-after:avoid; break-after:avoid; }
+
     .st-subsection { page-break-inside:avoid; break-inside:avoid; }
     .stat-group { page-break-inside:avoid; break-inside:avoid; }
   }
@@ -707,7 +720,7 @@ function isAdminMarker(p){
     // page whole.
     const scoring = scoringSummary(plays);
     if (scoring.length){
-      html += '<div class="stat-group"><div class="section-title">Scoring Summary</div>' +
+      html += '<div class="stat-group scoring-summary"><div class="section-title">Scoring Summary</div>' +
         '<table class="stat-table"><thead><tr>' +
           '<th style="width:44px;">Qtr</th><th>Team</th><th>Play</th>' +
           '<th style="width:78px; text-align:right;">Score</th>' +
@@ -718,8 +731,12 @@ function isAdminMarker(p){
             '<td>' + (e.quarter >= 5 ? 'OT' : 'Q' + e.quarter) + '</td>' +
             '<td style="font-weight:700;">' + TEAMS[e.team].name + '</td>' +
             '<td style="text-align:left;">' + e.text + detail + '</td>' +
-            '<td style="text-align:right; font-weight:700;">' +
-              e.teamA + '\u2013' + e.teamB + '</td>' +
+            // Named, not "7-0". A bare pair leaves a reader working out
+            // which number is whose from the home/away line at the top of
+            // the page -- and getting it backwards on an away game.
+            '<td style="text-align:right; font-weight:700; white-space:nowrap;">' +
+              TEAMS.teamA.name + ' ' + e.teamA + '<br>' +
+              TEAMS.teamB.name + ' ' + e.teamB + '</td>' +
           '</tr>';
         }).join('') +
         '</tbody></table></div>';
