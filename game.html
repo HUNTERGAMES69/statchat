@@ -4271,12 +4271,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // for a fake looked unlike every other panel in the app.
           '<div style="margin-top:8px;">' + blockedToggleHtml(idPrefix + '_incomplete', 'Incomplete') + '</div>' +
         '</div>' +
-        fieldLabel('Enter yards') +
-        '<span style="display:inline-flex; align-items:center; gap:8px;">' +
-          '<input autocomplete="off" type="text" id="' + idPrefix + '_yards" style="width:80px;">' +
-          '<button type="button" class="lossToggle ptoggle" data-for="' + idPrefix + '_yards" ' +
-            'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button>' +
-        '</span>' +
+        // The yards box and the calculator share a row, exactly as they do
+        // on the rush and pass panels: they are two ways of answering one
+        // question, and sitting them side by side is what says so. The
+        // calculator itself is MOVED into the slot below when the fake
+        // opens -- there is only one, and it belongs wherever the live
+        // yards box is.
+        '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">' +
+          '<div>' + fieldLabel('Enter yards') +
+            '<span style="display:inline-flex; align-items:center; gap:8px;">' +
+              '<input autocomplete="off" type="text" id="' + idPrefix + '_yards" style="width:80px;">' +
+              '<button type="button" class="lossToggle ptoggle" data-for="' + idPrefix + '_yards" ' +
+                'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button>' +
+            '</span>' +
+          '</div>' +
+          '<div id="' + idPrefix + '_calc_slot"></div>' +
+        '</div>' +
         '<div style="margin-top:10px;">' +
           '<input autocomplete="off" type="checkbox" id="' + idPrefix + '_td" style="display:none;">' +
           '<button type="button" id="' + idPrefix + '_td_toggle" style="width:100%; padding:12px; ' +
@@ -4951,8 +4961,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // panel would need its own ids and its own wiring, and two of
           // them could disagree. One control, pointed at whichever yards
           // box is live.
+          // MOVED, not just retargeted. Left where the kick panel put it,
+          // the calculator sat above the fake block entirely -- a control
+          // filling a box three sections further down. Its home is
+          // remembered on first use so un-toggling puts it back exactly,
+          // rather than appending it to the end of the panel.
           const calc = document.getElementById('pp_calc_wrap');
-          if (calc) calc.style.display = '';
+          if (calc){
+            if (!calc.__home){
+              calc.__home = { parent: calc.parentNode, next: calc.nextSibling };
+            }
+            const slot = document.getElementById(pre + '_calc_slot');
+            if (e.target.checked && slot){
+              slot.appendChild(calc);
+            } else if (!e.target.checked && calc.__home.parent){
+              calc.__home.parent.insertBefore(calc, calc.__home.next);
+            }
+            calc.style.display = '';
+          }
           panel.dataset.calcTarget = e.target.checked ? (pre + '_yards') : 'pp_yards';
           const cs = panel.__spotCalc;
           if (cs){
