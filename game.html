@@ -4626,8 +4626,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (!wrap) return;
       const ylEl = document.getElementById('pp_calc_yardline');
       const readout = document.getElementById('pp_calc_readout');
-      const yardsEl = document.getElementById('pp_yards');
-      const lossBtn = panel.querySelector('.lossToggle[data-for="pp_yards"]');
+      // WHICH yards box the calculator fills is not fixed for the life of
+      // the panel. On a fake punt or fake field goal the kick's own yards
+      // box is hidden and the play becomes a rush or a pass with its own
+      // yardage -- so the calculator has to follow, or a coach working out
+      // "tackled on the 41" has nowhere to put the answer.
+      //
+      // Looked up on each use rather than captured once. Retargeting is
+      // then a single dataset write in wireFake below, and there is no
+      // stale element reference to go wrong when the fake is toggled.
+      const targetId = () => panel.dataset.calcTarget || 'pp_yards';
+      const yardsEl = () => document.getElementById(targetId());
+      const lossBtn = () => panel.querySelector('.lossToggle[data-for="' + targetId() + '"]');
       // A SACK CANNOT GAIN YARDS, and the sack panel is the only place the
       // calculator runs without a LOSS toggle beside it -- its box is
       // labelled "Yards lost" and holds a positive magnitude, which is the
@@ -4640,7 +4650,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // that plainly meant a gain -- the worst possible outcome, because
       // the number looks deliberate.
       //
-      // Absence of lossBtn is NOT the test to use: the punt and field goal
+      // Absence of lossBtn() is NOT the test to use: the punt and field goal
       // panels also lack one, and a "gain" there is an ordinary kick
       // distance. It has to key off the play type.
       //
@@ -4680,7 +4690,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             markerLabel(cur) + ' — a sack cannot gain yards. Check the yard line.';
           return;
         }
-        yardsEl.value = String(Math.abs(gain));
+        yardsEl().value = String(Math.abs(gain));
 
         // ON A PUNT, THE LANDING SPOT IS ALSO THE TAKEOVER SPOT.
         // ----------------------------------------------------------------
@@ -4716,40 +4726,40 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
         // Tinted so it is obvious the number was worked out rather than
         // typed -- a locked grey box just looks broken.
-        yardsEl.style.background = '#eef6f1';
-        yardsEl.style.borderColor = '#1a7a4c';
-        yardsEl.style.fontWeight = '700';
+        yardsEl().style.background = '#eef6f1';
+        yardsEl().style.borderColor = '#1a7a4c';
+        yardsEl().style.fontWeight = '700';
         // The sign comes out of the arithmetic, so LOSS is driven from
         // here rather than left for the coach to set as well -- having
         // both would double-negate exactly like a typed "-5" plus LOSS.
-        if (lossBtn){
+        if (lossBtn()){
           // Highlight it, but do not grey it out. LOSS is the calculator
           // ANSWERING the question, and a dimmed button reads as "not
           // available" rather than "this is what happened" -- the one
           // place the coach most wants confirmation that a negative was
           // understood as a negative.
-          lossBtn.classList.toggle('picked', gain < 0);
-          lossBtn.disabled = true;
-          lossBtn.style.opacity = '';
+          lossBtn().classList.toggle('picked', gain < 0);
+          lossBtn().disabled = true;
+          lossBtn().style.opacity = '';
         }
-        setDisabled(yardsEl, true);
+        setDisabled(yardsEl(), true);
         readout.textContent = 'from ' + markerLabel(cur) + ' to ' + markerLabel(newPos) +
           '  =  ' + (gain >= 0 ? '+' : '') + gain;
       }
       function releaseYards(){
-        setDisabled(yardsEl, false);
-        yardsEl.style.background = '';
-        yardsEl.style.borderColor = '';
-        yardsEl.style.fontWeight = '';
-        if (lossBtn) setDisabled(lossBtn, false);
+        setDisabled(yardsEl(), false);
+        yardsEl().style.background = '';
+        yardsEl().style.borderColor = '';
+        yardsEl().style.fontWeight = '';
+        if (lossBtn()) setDisabled(lossBtn(), false);
       }
 
       sideBtns.forEach(b => b.addEventListener('click', () => { side = b.dataset.side; paintSides(); recompute(); }));
       ylEl.addEventListener('input', recompute);
       // Typing yards directly clears the calculator, so the two inputs
       // can never disagree about the same play.
-      yardsEl.addEventListener('input', () => {
-        if (!yardsEl.disabled && ylEl.value){ ylEl.value = ''; readout.textContent = ''; }
+      yardsEl().addEventListener('input', () => {
+        if (!yardsEl().disabled && ylEl.value){ ylEl.value = ''; readout.textContent = ''; }
       });
       paintSides();
       recompute();
@@ -4825,8 +4835,31 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // spot only applies when the ball changes hands -- neither has
           // any meaning on a fake, and both were still on screen asking
           // to be filled in.
+          // THE CALCULATOR FOLLOWS THE FAKE rather than disappearing with
+          // the kick. It used to be hidden outright, on the reasoning that
+          // it measures where a kick came down -- true of a punt, and
+          // beside the point once the play is a rush or a pass. Working
+          // out "tackled on the 41" is exactly as useful on a fake as on
+          // any scrimmage play, and it was the one panel that could not
+          // do it.
+          //
+          // Retargeted, not duplicated: a second calculator on the same
+          // panel would need its own ids and its own wiring, and two of
+          // them could disagree. One control, pointed at whichever yards
+          // box is live.
           const calc = document.getElementById('pp_calc_wrap');
-          if (calc) calc.style.display = e.target.checked ? 'none' : '';
+          if (calc) calc.style.display = '';
+          panel.dataset.calcTarget = e.target.checked ? (pre + '_yards') : 'pp_yards';
+          const cs = panel.__spotCalc;
+          if (cs){
+            // "Or enter downed/received on" is a kick's question. Through
+            // setLabel rather than by reaching for the element, so this
+            // keeps working if the markup moves -- and defaultLabel is
+            // already the panel's own resting text.
+            cs.setLabel(e.target.checked ? 'Or enter tackled on' : cs.defaultLabel);
+            cs.releaseYards();
+            cs.recompute();
+          }
           const readout = document.getElementById('pp_calc_readout');
           if (readout) readout.style.display = e.target.checked ? 'none' : '';
           const spotWrap = document.getElementById('pp_spot_wrap');
