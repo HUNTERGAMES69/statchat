@@ -3215,9 +3215,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' +
       TEAMS.teamB.name + ' ' + state.scores.teamB + '.\n\n' +
       'This closes the first half and moves to halftime.');
-    if (!ok) return;
+    if (!ok) return false;
     const absSec = clockToAbsSeconds(state.quarter, '0:00');
-    if (!confirmClockAdvances(absSec, '0:00')) return;
+    if (!confirmClockAdvances(absSec, '0:00')) return false;
     pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
     pushAndPersist({ id: nextId++, text: 'End of 1st half', effect: {}, isDivider: true });
     gamePhase = 'halftime';
@@ -3376,11 +3376,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     return issues;
   }
 
-  document.getElementById('endGameBtn').addEventListener('click', async () => {
+  // FINALIZING LIVES IN A FUNCTION, not only in the End game button's
+  // handler. The guided overtime panel needs to offer the same thing --
+  // between series is exactly when a game finishes -- and a second copy
+  // of the tie check, the validation warning, the closing clock row and
+  // the Final divider would be four things to keep in step.
+  async function finalizeGame(){
     const state = computeState();
     if (state.scores.teamA === state.scores.teamB){
       alert('Score is tied ' + state.scores.teamA + '-' + state.scores.teamB + ' — the game can\'t end on a tie. Use "Start overtime" instead.');
-      return;
+      return false;
     }
     const issues = validateGame();
     if (issues.length){
@@ -3394,7 +3399,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         (issues.length > 8 ? '\n  • ...and ' + (issues.length - 8) + ' more' : '') +
         '\n\nOK — finalize anyway.\nCancel — go back and correct them first.'
       );
-      if (!proceed) return;
+      if (!proceed) return false;
     }
     const ok = confirm('End the game now? Final score: ' + TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' + TEAMS.teamB.name + ' ' + state.scores.teamB + '.\n\nThis locks in the game as final.');
     if (!ok) return;
@@ -3422,7 +3427,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     await setGameStatus('final', { us: state.scores.teamA, opp: state.scores.teamB });
     renderAll();
     updatePhaseUI();
-  });
+    return true;
+  }
+  document.getElementById('endGameBtn').addEventListener('click', finalizeGame);
 
   function renderGuided(){
     const panel = document.getElementById('guidedPanel');
@@ -3468,7 +3475,43 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           (opener ? ' starts overtime.' : ' starts their series.') +
           ' Starting spot (most rule sets: opponent\'s 10 — adjust to your association\'s format):</p>' +
         startingSpotFieldsHtml('ot_spot', 'Starting spot', team) +
-        '<div class="row" style="margin-top:12px;"><button class="primary" id="ot_review">Set drive</button></div>';
+        '<div class="row" style="margin-top:12px;">' +
+          '<button class="primary" id="ot_review">Set drive</button>' +
+          // END THE GAME FROM HERE. Between series is exactly when an
+          // overtime finishes -- one side is ahead after both have had
+          // the ball -- and this panel disables the rest of the page while
+          // it is up, so without this the only way out was to start a
+          // series nobody was going to play.
+          //
+          // Offered only when the score is NOT level: a tie means another
+          // round, and finalizeGame would refuse it anyway. Hiding the
+          // button is clearer than a refusal after the fact.
+          (st0.scores.teamA !== st0.scores.teamB
+            ? '<button class="secondary" id="ot_endgame" style="margin-left:8px;">End game — ' +
+              TEAMS[st0.scores.teamA > st0.scores.teamB ? 'teamA' : 'teamB'].name + ' win</button>'
+            : '<span style="margin-left:10px; font-size:13px; color:#888;">Scores level — another series is needed before the game can end.</span>') +
+        '</div>';
+      const endBtn = document.getElementById('ot_endgame');
+      if (endBtn){
+        endBtn.addEventListener('click', async () => {
+          // Close the guided flow BEFORE finalizing: finalizeGame renders
+          // and re-runs updatePhaseUI, which would otherwise see a series
+          // still awaiting and put this panel straight back up over a
+          // finished game.
+          guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
+          persistUiState();
+          renderGuided();
+          const done = await finalizeGame();
+          if (!done){
+            // Refused or cancelled -- put the panel back rather than
+            // leaving the scorer on a page with no way forward.
+            guided = { active: true, quarter: 5, kickingTeam: null, receivingTeam: team,
+                       step: 'otSpot', targetPhase: 'overtime' };
+            persistUiState();
+            renderGuided();
+          }
+        });
+      }
       const getReset = wireStartingSpot(content, 'ot_spot');
       // PREFILLED to the opponent's 10, the NFHS starting spot -- and the
       // same spot for both teams, every series. It was left blank, so the
