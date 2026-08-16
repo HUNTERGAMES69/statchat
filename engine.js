@@ -65,6 +65,21 @@ function normalizeHex(hex){
 // Genuinely unreadable input scores as black, so safeTextColor puts
 // white on it. A wrong-but-legible choice beats NaN, which produced a
 // choice that only LOOKED deliberate.
+// The quarter as a coach says it: Q1..Q4, then OT1, OT2, OT3.
+// ---------------------------------------------------------------------
+// Both banners used to inline `quarter <= 4 ? 'Q' + quarter : 'OT'`, which
+// gave every overtime period the same name -- fine for one, useless by the
+// third, when the only question anyone asks is which OT it is.
+//
+// Numbered from OT1 rather than plain "OT" for the first: a bare OT reads
+// as "some overtime" and has to be re-derived by anyone reading a log.
+function quarterLabel(state){
+  const q = (state && state.quarter) || 1;
+  if (q <= 4) return 'Q' + q;
+  const round = Math.max(1, Math.ceil(((state && state.otSeries) || 1) / 2));
+  return 'OT' + round;
+}
+
 // Seconds as M:SS. Lives here because THREE pages had their own copy and
 // the report pages had none, so adding time of possession to the recap
 // would have meant a fourth. Same reasoning as markerLabel and the colour
@@ -379,6 +394,15 @@ function computeState(playsList){
     quarter: 1,
     scores: { teamA: 0, teamB: 0 },
     possessionTime: { teamA: 0, teamB: 0 },
+    // How many SERIES overtime has run, counted from 1 once it starts and
+    // 0 before. NFHS overtime is played in rounds of one series each way,
+    // so the round a coach names is ceil(series / 2) -- OT1 covers the
+    // first two series, OT2 the next two.
+    //
+    // Counted here rather than derived from findDriveStarts because the
+    // banner needs it on every render and findDriveStarts walks the whole
+    // play list re-running computeState for each play.
+    otSeries: 0,
     down: null, distance: null, fieldPos: null, startSpot: null, statYards: 0,
     penalties: { teamA: { count: 0, yds: 0 }, teamB: { count: 0, yds: 0 } },
     // NFHS: three timeouts per team per half, and they do NOT carry
@@ -477,7 +501,14 @@ function computeState(playsList){
       state.possession = e.flipTo;
       state.down = null; state.distance = null; state.fieldPos = null; state.startSpot = null; state.statYards = 0;
     }
-    if (e.forcePossession){ state.possession = e.forcePossession; }
+    if (e.forcePossession){
+      // A forced possession in overtime opens a series. This is how the
+      // guided start hands the ball over, and how each subsequent series
+      // is set.
+      if (state.quarter >= 5 && e.forcePossession !== state.possession) state.otSeries++;
+      else if (state.quarter >= 5 && state.otSeries === 0) state.otSeries = 1;
+      state.possession = e.forcePossession;
+    }
     if (e.setQuarter){
       // Crossing into the second half (or into overtime) resets the
       // allowance. Guarded on the quarter actually changing so that
@@ -974,6 +1005,7 @@ if (typeof module !== 'undefined' && module.exports) {
     mixHex,
     contrastRatio,
     relLuminance,
+    quarterLabel,
     formatDuration,
     markerLabel,
     normalizeHex,

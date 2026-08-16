@@ -2613,7 +2613,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // Just the quarter. Which half it belongs to is obvious from the
     // number and only crowded the banner.
     document.getElementById('quarterText').textContent =
-      state.quarter <= 4 ? 'Q' + state.quarter : 'OT';
+      quarterLabel(state);
     document.getElementById('topText').innerHTML =
       // Labels greyed, values in full contrast. The whole line used to be
       // one flat #888 at 12px, so the numbers a coach actually reads --
@@ -2651,7 +2651,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // show them or the message is not actionable.
         const pnum = plays.indexOf(p) + 1;
         const ntag = pnum > 0 ? '<span style="color:#bbb; font-size:11px; margin-right:6px;">#' + pnum + '</span>' : '';
-        const qtag = p.quarter ? '<span style="color:#999; font-size:12px; margin-right:6px;">Q' + p.quarter + '</span>' : '';
+        // OT, not Q5 -- matching view.html. See the note there for why the
+        // round is not numbered on a per-play tag.
+        const qtag = p.quarter
+          ? '<span style="color:#999; font-size:12px; margin-right:6px;">' +
+            (p.quarter >= 5 ? 'OT' : 'Q' + p.quarter) + '</span>'
+          : '';
         // Controls only on the full log. The drive panels are a summary
         // view and putting destructive buttons there invites a mis-tap.
         const ctrls = withControls
@@ -3387,6 +3392,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         startingSpotFieldsHtml('ot_spot', 'Starting spot', team) +
         '<div class="row" style="margin-top:12px;"><button class="primary" id="ot_review">Set drive</button></div>';
       const getReset = wireStartingSpot(content, 'ot_spot');
+      // PREFILLED to the opponent's 10, the NFHS starting spot -- and the
+      // same spot for both teams, every series. It was left blank, so the
+      // one number that is fixed by rule had to be typed each time, from
+      // the one panel where a coach has least attention to spare.
+      //
+      // Editable, like every other prefill: associations vary, which is
+      // what the hint above already says. Filled rather than forced.
+      {
+        const yl = document.getElementById('ot_spot_yardline');
+        if (yl && !yl.value) yl.value = '10';
+        const oppBtn = content.querySelector('.ot_spot_side[data-side="opp"]');
+        if (oppBtn && !content.querySelector('.ot_spot_side.picked')) oppBtn.click();
+      }
       document.getElementById('ot_review').addEventListener('click', () => {
         const reset = getReset();
         if (!reset) return;

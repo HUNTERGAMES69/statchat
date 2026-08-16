@@ -863,7 +863,7 @@ function extractNameTag(rawName){
       // Just the quarter, matching game.html. Which half it belongs to is
       // obvious from the number and only crowded the banner.
       document.getElementById('quarterText').textContent =
-        state.quarter <= 4 ? 'Q' + state.quarter : 'OT';
+        quarterLabel(state);
     }
     const banner = document.getElementById('banner');
     banner.style.background = '#1a1a1a';
@@ -877,7 +877,19 @@ function extractNameTag(rawName){
       let marked = false;
       return list.map(p => {
         if (p.isDivider) return '<div style="text-align:center; font-size:14px; font-weight:600; color:#888; margin:8px 0; border-top:1px dashed #ccc; padding-top:6px;">' + p.text + '</div>';
-        const qtag = p.quarter ? '<span style="color:#999; font-size:12px; margin-right:6px;">Q' + p.quarter + '</span>' : '';
+        // A play in overtime is tagged OT, not Q5. The banner already
+        // said OT while every row beneath it said Q5, which is the same
+        // period under two names on one screen.
+        //
+        // Rounds are deliberately NOT numbered here: the tag is per PLAY
+        // and quarterLabel counts series up to the CURRENT state, so
+        // numbering a play from it would relabel the whole log every time
+        // a new series began. Which OT round is on the banner; the row
+        // only has to say it was overtime.
+        const qtag = p.quarter
+          ? '<span style="color:#999; font-size:12px; margin-right:6px;">' +
+            (p.quarter >= 5 ? 'OT' : 'Q' + p.quarter) + '</span>'
+          : '';
         const text = (p.text || '').replace(/TOUCHDOWN/g, '<strong>TOUCHDOWN</strong>');
         // The first NON-DIVIDER line, not simply the first entry: an "End
         // of 1st half" rule sitting on top would otherwise take the
