@@ -56,7 +56,7 @@
   .metric-group-row .metric-item .metric-val { font-size:20px; font-weight:700; }
   .metric-group-row .metric-item .metric-label { font-size:11px; color:#888; margin-left:4px; }
   .section-title { font-size:14px; font-weight:700; margin:22px 0 8px; text-transform:uppercase; letter-spacing:0.03em; color:#333; }
-  table.stat-table { width:100%; border-collapse:collapse; font-size:13px; background:#fff; margin-bottom:6px; }
+  table.stat-table { width:100%; border-collapse:collapse; font-size:13px; background:#fff; margin-bottom:10px; }
   table.stat-table th, table.stat-table td { padding:6px 8px; text-align:right; border:1px solid #eee; }
   table.stat-table th:first-child, table.stat-table td:first-child { text-align:left; }
   table.stat-table th { background:#f5f5f5; color:#555; font-weight:600; font-size:11px; text-transform:uppercase; }
@@ -107,7 +107,8 @@
      the document this is; the coloured band says whose numbers follow.
      Before this, both were the same small grey label and a reader had no
      way to tell a document section from a team's table. */
-  .sec-head { margin:0 0 14px; }
+  .sec-head { margin:34px 0 14px; }
+  .sec-head:first-child { margin-top:0; }
   /* The eyebrow names the document. It is PRINT ONLY: on screen you know
      which page you are on, but a sheet that has been printed and
      separated from the rest does not say where it came from. */
@@ -118,9 +119,17 @@
   .sec-sub { font-size:12px; color:#7c8794; margin:4px 0 0; font-variant-numeric:tabular-nums; }
   /* A team band carries its own colour inline; the text colour is chosen
      by contrast so a pale school cannot produce an unreadable band. */
+  /* The top margin is the important half. A band used to sit 12px below
+     the previous table, which itself had a 6px bottom margin -- so a
+     whole section ended and the next one began within 18px, and the page
+     read as one undifferentiated run of tables.
+     A band opens a section, so the space belongs ABOVE it. */
   .team-band { font-size:12px; font-weight:700; text-transform:uppercase;
                letter-spacing:0.12em; padding:9px 14px; border-radius:6px;
-               margin:0 0 12px; display:flex; align-items:center; gap:9px; }
+               margin:30px 0 12px; display:flex; align-items:center; gap:9px; }
+  /* ...but not when it is the first thing in its container, or every
+     section would open with a gap it did not need. */
+  .team-band:first-child { margin-top:0; }
   .team-band .tb-dot { width:9px; height:9px; border-radius:50%; }
   .team-band .tb-sub { margin-left:auto; font-weight:600; letter-spacing:0.06em;
                        opacity:0.85; text-transform:none; font-size:11px; }
@@ -892,7 +901,7 @@ function isAdminMarker(p){
               teamBlock('teamA', false) + teamBlock('teamB', true) +
             '</div>';
 
-    html += teamBand('teamA', TEAMS.teamA.name + ' \u2014 Passing') +
+    html += teamBand('teamA', 'Passing') +
       (statTable('teamA', box.teamA.passing, ['Comp','Att','%','Yds','Y/C','Long','TD','Int','Sacked','Rush TD','Fumble'],
         (d, n) => { const rd = box.teamA.rushing[n] || {};
           return [d.comp||0, d.att||0, d.att?Math.round(100*(d.comp||0)/d.att):0, d.yds||0, d.comp?(d.yds/d.comp).toFixed(1):'0.0', d.long||0, d.td||0, d.intThrown||0, d.sacked||0, rd.td||0, (d.fum||0)+(rd.fum||0)]; },
@@ -902,14 +911,14 @@ function isAdminMarker(p){
           return [comp, att, att?Math.round(100*comp/att):0, yds, comp?(yds/comp).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'intThrown'), sumStat(obj,'sacked'), rushTdTotal, fumTotal]; },
         'yds') || '<p class="no-stats">No passing stats recorded.</p>');
 
-    html += teamBand('teamA', TEAMS.teamA.name + ' \u2014 Receiving') +
+    html += teamBand('teamA', 'Receiving') +
       (statTable('teamA', box.teamA.receiving, ['Rec','Tgt','Catch %','Yds','Y/C','Long','TD','Fumble'],
         d => [d.rec||0, d.tgt||0, d.tgt?Math.round(100*(d.rec||0)/d.tgt)+'%':'—', d.yds||0, d.rec?(d.yds/d.rec).toFixed(1):'0.0', d.long||0, d.td||0, d.fum||0],
         (obj) => { const rec=sumStat(obj,'rec'), yds=sumStat(obj,'yds'), tgt=sumStat(obj,'tgt');
           return [rec, tgt, tgt?Math.round(100*rec/tgt)+'%':'—', yds, rec?(yds/rec).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
         'yds') || '<p class="no-stats">No receiving stats recorded.</p>');
 
-    html += teamBand('teamA', TEAMS.teamA.name + ' \u2014 Rushing') +
+    html += teamBand('teamA', 'Rushing') +
       (statTable('teamA', box.teamA.rushing, ['Att','Yds','Y/C','Long','TD','Fumble'],
         d => [d.att||0, d.yds||0, d.att?(d.yds/d.att).toFixed(1):'0.0', d.long||0, d.td||0, d.fum||0],
         (obj) => { const att=sumStat(obj,'att'), yds=sumStat(obj,'yds');
@@ -918,7 +927,7 @@ function isAdminMarker(p){
 
     const defOwn = box.teamB.oppDowns;
     const defNums = Object.keys(box.teamA.defense);
-    html += teamBand('teamA', TEAMS.teamA.name + ' \u2014 Defense');
+    html += teamBand('teamA', 'Defense');
     // TFL belongs in the gate too: a defence that made tackles for loss
     // but no sacks, picks or recoveries would otherwise report "no
     // defensive stats recorded" while holding a real number.
@@ -939,7 +948,7 @@ function isAdminMarker(p){
       .map(n => ({ name: n, d: box.teamA.defense[n] }))
       .sort((a, b) => (b.d.tackles || 0) - (a.d.tackles || 0));
     if (tacklers.length){
-      html += '<div class="stat-group">' + teamBand('teamA', TEAMS.teamA.name + ' \u2014 Tackles') +
+      html += '<div class="stat-group">' + teamBand('teamA', 'Tackles') +
         '<table class="stat-table"><tr><th></th><th>Tackles</th><th>TFL</th>' +
         '<th>Sacks</th><th>Int</th><th>Fum Rec</th></tr>' +
         tacklers.map(p => '<tr><td>' + p.name + '</td><td>' + (p.d.tackles || 0) +
@@ -954,7 +963,7 @@ function isAdminMarker(p){
     const koNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].kickoffs);
     const puntNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].punts);
     const kickNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].fgAtt || box.teamA.specialTeams[n].patAtt);
-    html += '<div class="stat-group">' + teamBand('teamA', TEAMS.teamA.name + ' \u2014 Special Teams');
+    html += '<div class="stat-group">' + teamBand('teamA', 'Special Teams');
     const stSub = (label, tableHtml) => tableHtml ? '<div class="st-subsection"><div class="st-subsection-label">' + label + '</div>' + tableHtml + '</div>' : '';
     let stHtml = '';
     if (koNums.length){
