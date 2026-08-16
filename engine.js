@@ -548,18 +548,38 @@ function computeState(playsList){
       state.timeouts[e.timeout.team] = Math.max(0, state.timeouts[e.timeout.team] - 1);
     }
     if (e.clockEvent){
-      const ce = e.clockEvent;
-      if (ce.type === 'start'){ pendingClockStart[ce.team] = ce.absSec; }
-      if (ce.type === 'end' && pendingClockStart[ce.team] !== null){
-        state.possessionTime[ce.team] += Math.max(0, ce.absSec - pendingClockStart[ce.team]);
-        pendingClockStart[ce.team] = null;
-      }
-      if (ce.type === 'transition'){
-        if (pendingClockStart[ce.outgoingTeam] !== null){
-          state.possessionTime[ce.outgoingTeam] += Math.max(0, ce.absSec - pendingClockStart[ce.outgoingTeam]);
-          pendingClockStart[ce.outgoingTeam] = null;
+      // TIME OF POSSESSION STOPS AT THE END OF REGULATION.
+      // ----------------------------------------------------------------
+      // Overtime is played in series, not against a running clock: each
+      // side simply gets the ball from the opponent's 10. There is no
+      // game clock to take time off, so any elapsed time recorded there
+      // is an artefact of the entry, not of the football -- and adding it
+      // to a team's total makes a 24-minute figure that cannot be
+      // reconciled against a 48-minute game.
+      //
+      // A possession that began in Q4 and is closed by an event carrying
+      // an overtime quarter contributes nothing either: this skips on the
+      // quarter of the EVENT, so the pending start from regulation is
+      // simply never paid out.
+      //
+      // Clearing those pending starts here as well would be dead code --
+      // written first, and removed when a mutation test showed nothing
+      // could tell the difference. The quarter never decreases within a
+      // replay, so once this fires it fires for every later event.
+      if (state.quarter < 5){
+        const ce = e.clockEvent;
+        if (ce.type === 'start'){ pendingClockStart[ce.team] = ce.absSec; }
+        if (ce.type === 'end' && pendingClockStart[ce.team] !== null){
+          state.possessionTime[ce.team] += Math.max(0, ce.absSec - pendingClockStart[ce.team]);
+          pendingClockStart[ce.team] = null;
         }
-        pendingClockStart[ce.incomingTeam] = ce.absSec;
+        if (ce.type === 'transition'){
+          if (pendingClockStart[ce.outgoingTeam] !== null){
+            state.possessionTime[ce.outgoingTeam] += Math.max(0, ce.absSec - pendingClockStart[ce.outgoingTeam]);
+            pendingClockStart[ce.outgoingTeam] = null;
+          }
+          pendingClockStart[ce.incomingTeam] = ce.absSec;
+        }
       }
     }
     if (e.setScores){ state.scores.teamA = e.setScores.teamA; state.scores.teamB = e.setScores.teamB; }
