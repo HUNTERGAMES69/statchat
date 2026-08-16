@@ -3486,7 +3486,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       document.getElementById('ot_review').addEventListener('click', () => {
         const reset = getReset();
         if (!reset) return;
-        pushAndPersist({ id: nextId++, text: 'Overtime — ' + TEAMS[team].name + ' ' + (opener ? 'to start at ' : 'series begins at ') + markerLabel(reset.fieldPos), effect: { forcePossession: team }, quarter: 5 });
+        // otSeriesStart marks this as the START of a series, which is what
+        // the round counter reads. A manual flip writes the same
+        // forcePossession effect and must NOT be mistaken for one.
+        pushAndPersist({ id: nextId++, text: 'Overtime — ' + TEAMS[team].name + ' ' + (opener ? 'to start at ' : 'series begins at ') + markerLabel(reset.fieldPos), effect: { forcePossession: team, otSeriesStart: true }, quarter: 5 });
         pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(reset.down) + ' & ' + togoLabel(reset.fieldPos, reset.distance) + ' at ' + markerLabel(reset.fieldPos) + ' (' + TEAMS[team].name + ')', effect: { isReset: true, down: reset.down, distance: reset.distance, fieldPos: reset.fieldPos }, quarter: 5 });
         guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
         persistUiState();

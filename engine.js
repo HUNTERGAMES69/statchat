@@ -506,19 +506,27 @@ function computeState(playsList){
       // A forced possession in overtime opens a series. This is how the
       // guided start hands the ball over, and how each subsequent series
       // is set.
-      // Counted against the SERIES team, not against possession. A series
-      // usually ends with the ball already in the other team's hands --
-      // a turnover on downs hands it over before the next series is set
-      // -- so comparing with possession saw no change and never counted
-      // the second series at all.
-      if (state.quarter >= 5 && e.forcePossession !== state.otSeriesTeam) state.otSeries++;
+      // ONLY A GUIDED SERIES MARKER OPENS A SERIES.
+      // ----------------------------------------------------------------
+      // Counted from an explicit otSeriesStart flag, not from the
+      // forcePossession effect itself. "Manual flip possession" writes
+      // the same effect, so a correction mid-series was indistinguishable
+      // from a new series and pushed the round on: one flip during
+      // series 2 and the banner read OT2 with three series played.
+      //
+      // Counted against the SERIES team rather than possession, because a
+      // series usually ends with the ball ALREADY in the other team's
+      // hands -- a turnover on downs hands it over before the next series
+      // is set, so comparing with possession saw no change at all.
+      if (state.quarter >= 5 && e.otSeriesStart &&
+          e.forcePossession !== state.otSeriesTeam) state.otSeries++;
       // WHOSE series this is, which is not the same as who currently has
       // the ball: a turnover inside a series hands the ball over without
       // ending the series, and a score leaves it with the team that just
       // scored. The next series belongs to the other team either way, so
       // it has to be tracked from the series START rather than inferred
       // from possession at the moment it ends.
-      if (state.quarter >= 5) state.otSeriesTeam = e.forcePossession;
+      if (state.quarter >= 5 && e.otSeriesStart) state.otSeriesTeam = e.forcePossession;
       state.possession = e.forcePossession;
     }
     if (e.setQuarter){
