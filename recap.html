@@ -198,15 +198,16 @@
     .scoring-summary tr { page-break-inside:avoid; break-inside:avoid; }
     .scoring-summary h2 { page-break-after:avoid; break-after:avoid; }
 
-    /* THE TEAM BLOCK STAYS WITH THE BOX SCORE.
-       Removing the forced page-break was not enough. Every .section
-       carries break-inside:avoid, so the browser is free to decide the
-       leaders strip does not fit and move the whole thing over -- which
-       it did, leaving page one holding the scoreboard and most of a sheet
-       of white.
-       break-after:avoid on the header says the opposite thing: do not
-       break HERE. It is a rule about the boundary rather than a hope
-       about the space. */
+    /* NOTHING BREAKS DIRECTLY AFTER THE SCOREBOARD.
+       The team sections now start their own pages, so this no longer
+       exists to hold the leaders strip up here -- it exists so the sheet
+       that carries the scoreboard also carries what follows it (the
+       scoring summary and the team comparison) rather than ending on a
+       card and half a page of white.
+       break-after:avoid is a rule about a BOUNDARY: do not break here.
+       break-inside:avoid, which every .section has, is only a hope about
+       space -- the browser is free to decide something does not fit and
+       move it, which is how page one ended up nearly empty once before. */
     .header { page-break-after:avoid; break-after:avoid; margin-bottom:10px; padding:14px; }
     .team-logo { height:40px; width:40px; }
     .team-score { font-size:34px; }
@@ -726,11 +727,20 @@ function isAdminMarker(p){
     const leadersHtml = renderLeadersStrip(box);
     const ourLogoHtml = TEAMS.teamA.logo ? '<img class="team-header-logo" src="' + TEAMS.teamA.logo + '">' : '';
     if (leadersHtml){
-      // NO page-break here. Our own leaders strip used to start a fresh
-      // page, which left page one holding nothing but the scoreboard --
-      // a whole sheet for six numbers. The box score and this team block
-      // belong together at the top, and there is room for both.
-      html += '<div class="section"><div class="team-header-row">' + ourLogoHtml + leadersHtml + '</div></div>';
+      // EACH TEAM'S SECTION STARTS A NEW PAGE.
+      // ------------------------------------------------------------
+      // This carried no break for a while, so that page one would not be
+      // just a scoreboard. In real exports that produced the opposite
+      // problem: the leaders strip and the first stat table landed at the
+      // foot of page one and the rest of the team spilled over, so a
+      // team's numbers were split across a fold with no heading on the
+      // far side.
+      //
+      // A team is now one unit -- leaders, then that team's tables --
+      // and it begins on a fresh sheet. Page one carries the scoreboard,
+      // the quarter line, the scoring summary and the team comparison,
+      // which is a full page in its own right.
+      html += '<div class="section page-break"><div class="team-header-row">' + ourLogoHtml + leadersHtml + '</div></div>';
     }
     html += renderPlayerStatsSections('teamA', box, true);
 
