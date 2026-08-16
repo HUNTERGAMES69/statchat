@@ -93,7 +93,28 @@
                  letter-spacing:0.08em; vertical-align:middle;
                  animation:onairPulse 2s ease-in-out infinite; }
   @keyframes onairPulse { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
-  .status-loss { color:#a32d2d; font-size:13px; }
+  /* SEASON RECORD BAND. On the TEAM card rather than the games list,
+     because a season record belongs to the team -- and because it has to
+     follow the season selector, which is easier to reason about as one
+     element than as a row inside a list. */
+  .season-record { background:#1a1a2e; color:#fff; border-radius:10px; padding:14px 18px;
+                   display:flex; align-items:center; gap:26px; margin:14px 0 0; }
+  .season-record .rec-big { font-size:30px; font-weight:500; line-height:1;
+                            font-variant-numeric:tabular-nums; }
+  .season-record .rec-val { font-size:16px; font-weight:700; line-height:1.2;
+                            font-variant-numeric:tabular-nums; }
+  .season-record .rec-lbl { font-size:10.5px; text-transform:uppercase;
+                            letter-spacing:0.05em; color:#9aa3b2; }
+  .season-record .rec-item { display:flex; flex-direction:column; gap:2px; }
+  @media (max-width: 700px) {
+    /* Spread rather than clustered: three items on a phone read better
+       apart than bunched at the left with dead space to the right. */
+    .season-record { gap:0; justify-content:space-between; padding:12px 14px; }
+    .season-record .rec-big { font-size:26px; }
+  }
+  /* .status-loss was declared twice, identically, here and beside
+     .status-win. Harmless but misleading -- the second looked like an
+     override of the first. One copy, up there with its siblings. */
   .status-notstarted { color:#999; font-weight:600; }
   .empty-state { color:#999; padding:16px 0; }
   #appSplash { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000; background:#fff; transition:opacity 0.3s; }
@@ -380,6 +401,10 @@
     const selectedYear = parseInt(document.getElementById('seasonPicker').value);
     const games = allGames.filter(g => g.season_year === selectedYear);
     renderSummary(games);
+    // Rendered from the SAME array as the list, so the record and the rows
+    // are always describing one set of games -- including when the season
+    // selector changes.
+    renderSeasonRecord(games);
     renderGames(games);
   }
 
@@ -393,6 +418,62 @@
     document.getElementById('seasonSummary').textContent =
       games.length + ' game(s) this season · ' + final + ' completed' +
       (inProgress > 0 ? ' · ' + inProgress + ' in progress' : '');
+  }
+
+  // SEASON RECORD, from the games already loaded for the list.
+  // ---------------------------------------------------------------------
+  // Counts FINAL games only. A game in progress has no result yet and one
+  // not started has no game yet -- folding either in would turn 3-0 into
+  // 3-4 and make the app look like it had lost four matches nobody
+  // played.
+  //
+  // Home and away come from our_team_is_home, which is the same field the
+  // list uses for its "Home ·" / "Away ·" line, so the split can never
+  // disagree with the rows beneath it.
+  function seasonRecord(games){
+    const r = { w:0, l:0, t:0, homeW:0, homeL:0, awayW:0, awayL:0, played:0 };
+    (games || []).forEach(g => {
+      if (g.status !== 'final') return;
+      if (g.final_score_us == null || g.final_score_opp == null) return;
+      r.played++;
+      const us = g.final_score_us, them = g.final_score_opp;
+      // A tie is possible in a game finalized before overtime was played,
+      // and it is neither a win nor a loss. Counted separately rather
+      // than silently filed as one of them.
+      if (us === them){ r.t++; return; }
+      const won = us > them;
+      if (won) r.w++; else r.l++;
+      if (g.our_team_is_home){ if (won) r.homeW++; else r.homeL++; }
+      else { if (won) r.awayW++; else r.awayL++; }
+    });
+    return r;
+  }
+
+  function renderSeasonRecord(games){
+    const el = document.getElementById('seasonRecord');
+    if (!el) return;
+    const r = seasonRecord(games);
+    // Nothing final yet: no band at all. "0-0" is not a record, it is the
+    // absence of one, and showing it reads as a result.
+    if (r.played === 0){ el.classList.add('hidden'); el.innerHTML = ''; return; }
+    const wl = (w, l) => w + '\u2013' + l;
+    const overall = r.t ? wl(r.w, r.l) + '\u2013' + r.t : wl(r.w, r.l);
+    el.innerHTML =
+      '<div class="season-record">' +
+        '<div class="rec-item">' +
+          '<span class="rec-big">' + overall + '</span>' +
+          '<span class="rec-lbl">' + r.played + ' played</span>' +
+        '</div>' +
+        '<div class="rec-item">' +
+          '<span class="rec-val">' + wl(r.homeW, r.homeL) + '</span>' +
+          '<span class="rec-lbl">Home</span>' +
+        '</div>' +
+        '<div class="rec-item">' +
+          '<span class="rec-val">' + wl(r.awayW, r.awayL) + '</span>' +
+          '<span class="rec-lbl">Away</span>' +
+        '</div>' +
+      '</div>';
+    el.classList.remove('hidden');
   }
 
   function renderGames(games){
