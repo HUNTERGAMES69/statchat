@@ -6412,7 +6412,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         pending.effect.score && (pending.effect.score.points === 1 || pending.effect.score.points === 2));
       const isTouchdown = !!(pending.effect && pending.effect.score &&
                              pending.effect.score.points === 6);
-      const needsClock = !isTry && (pending.flipEligible || isTouchdown ||
+      // NOT IN OVERTIME. There is no game clock to read: each side is
+      // handed the ball from the opponent's 10 and the series runs until
+      // it ends. Time of possession stops accruing at the end of
+      // regulation for the same reason, so a clock entered here is
+      // recorded and then ignored -- and asking for a number that does
+      // nothing is worse than not asking, because it looks like it
+      // matters.
+      const inOvertime = (computeState().quarter || 1) >= 5;
+      const needsClock = !isTry && !inOvertime && (pending.flipEligible || isTouchdown ||
         (pending.effect && (pending.effect.endsDrive || pending.effect.newPossession ||
                             pending.effect.flip)));
       document.getElementById('confirmClockRow').style.display = needsClock ? 'block' : 'none';
