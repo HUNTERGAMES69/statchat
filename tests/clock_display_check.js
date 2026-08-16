@@ -200,6 +200,74 @@ async function run() {
     g.close();
   }
 
+  // --- TIME OF POSSESSION STOPS AT THE END OF REGULATION ----------------
+  // Andy's call, 14 Aug 2026. Overtime is played in series, not against a
+  // running clock -- each side simply gets the ball from the opponent's
+  // 10 -- so any elapsed time recorded there is an artefact of the entry,
+  // not of the football. Adding it produced a total that could not be
+  // reconciled against the length of the game.
+  //
+  // The second half of this is the case that would have leaked: a
+  // possession OPENED in Q4 and closed by an event carrying an overtime
+  // quarter. Freezing accrual alone would still have paid that one out,
+  // because the pending start was already sitting there from regulation.
+  {
+    const h = await bootGamePage();
+    const { window: win, document: doc } = h;
+    win.confirm = () => true; win.alert = () => {};
+    h.evalIn("pushAndPersist({id:nextId++, text:'Q4', effect:{setQuarter:4}, quarter:4}); renderAll();");
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    click(win, doc.getElementById('setClockUtilBtn'));
+    typeInto(win, doc.getElementById('setclock_val'), '1200');
+    click(win, doc.getElementById('setclock_save'));
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '9' });
+    enterPlay(h, { type: 'punt', punter: '15', yards: '40',
+                   spot: { side: 'own', yardline: '25' }, clock: '9:30' });
+    const atHorn = JSON.parse(h.evalIn('JSON.stringify(computeState().possessionTime)'));
+    if (atHorn.teamA !== 150){
+      fail('overtime possession time', 'the regulation figure is wrong before overtime even ' +
+           'starts (expected 150s, got ' + atHorn.teamA + 's) — this fixture is not measuring ' +
+           'what it thinks');
+    }
+
+    click(win, doc.getElementById('otUtilBtn'));
+    click(win, doc.getElementById('ot_pickA'));
+    await new Promise(r => setTimeout(r, 60));
+    click(win, doc.getElementById('ot_review'));
+    await new Promise(r => setTimeout(r, 80));
+
+    // A full start/end pair inside overtime must add nothing.
+    h.evalIn("pushAndPersist({id:nextId++, text:'Clock — start', effect:{clockEvent:{type:'start',team:'teamA',absSec:2100}}, quarter:5});");
+    h.evalIn("pushAndPersist({id:nextId++, text:'Clock — end', effect:{clockEvent:{type:'end',team:'teamA',absSec:2280}}, quarter:5}); renderAll();");
+    const afterOt = JSON.parse(h.evalIn('JSON.stringify(computeState().possessionTime)'));
+    if (afterOt.teamA !== atHorn.teamA || afterOt.teamB !== atHorn.teamB){
+      fail('overtime possession time', 'overtime clock events changed the totals: ' +
+           JSON.stringify(atHorn) + ' -> ' + JSON.stringify(afterOt) +
+           '. There is no game clock in overtime, so there is no time to credit');
+    }
+    h.close();
+
+    // A possession opened in Q4 and closed in overtime pays out nothing.
+    const g = await bootGamePage();
+    g.window.confirm = () => true; g.window.alert = () => {};
+    g.evalIn("pushAndPersist({id:nextId++, text:'Q4', effect:{setQuarter:4}, quarter:4}); renderAll();");
+    setDrive(g, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    g.evalIn("pushAndPersist({id:nextId++, text:'Clock — start', effect:{clockEvent:{type:'start',team:'teamA',absSec:2400}}, quarter:4}); renderAll();");
+    click(g.window, g.document.getElementById('otUtilBtn'));
+    click(g.window, g.document.getElementById('ot_pickA'));
+    await new Promise(r => setTimeout(r, 60));
+    click(g.window, g.document.getElementById('ot_review'));
+    await new Promise(r => setTimeout(r, 80));
+    g.evalIn("pushAndPersist({id:nextId++, text:'Clock — end', effect:{clockEvent:{type:'end',team:'teamA',absSec:2880}}, quarter:5}); renderAll();");
+    const straddle = JSON.parse(g.evalIn('JSON.stringify(computeState().possessionTime)'));
+    if (straddle.teamA !== 0){
+      fail('overtime possession time', 'a possession opened in Q4 was paid out by an END event ' +
+           'in overtime: ' + straddle.teamA + 's. The pending start has to be dropped when ' +
+           'overtime begins, not merely left unclosed');
+    }
+    g.close();
+  }
+
   return failures;
 }
 
