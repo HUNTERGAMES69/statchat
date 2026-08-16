@@ -212,6 +212,38 @@ penalised team is the misreading that prompted the change.
   check is worthless unless the fixture contains the thing that would
   break it.
 
+## Added 15 August 2026
+
+- **`feed_fields_check.js` (new)** — the broadcast setup page lists every
+  field each feed view carries, and this builds the REAL feed from a game
+  exercising every stat type and compares. A documentation list that
+  nothing checks rots in the worst way: it is read once, the day before a
+  game, by somebody with no way to tell it is stale.
+  It also guards its own reading. If the page's `FEEDS` entry format
+  changes, the parser finds nothing and "no missing fields" becomes a
+  statement about an empty list — so that case fails explicitly. And if
+  any view comes back with zero rows, it says the fixture no longer
+  exercises it.
+- **Overtime** is covered across three suites now: `clock_display_check`
+  (possession time stops at the end of regulation, and the prompt is
+  suppressed), `phase_derivation_check` (ending the game from between
+  series, and that the option is hidden while the scores are level), and
+  the header labels through `engine.js`.
+- **`yardage_calculator_check`** covers the fake punt's calculator,
+  including WHERE it lives — retargeting it without moving it left the
+  arithmetic correct and attached to the wrong part of the screen.
+- **`possession_and_drive_check`** covers the muffed-punt turnover, with
+  its three neighbours asserted alongside it: a muff the receiving team
+  recovers, a blocked punt, and an ordinary punt. All three end a drive
+  and none is a turnover.
+- **`receiver_targets_check`** now also pins the column order on all four
+  surfaces — headers AND values, because moving one without the other
+  gives a table that looks right and is exactly wrong.
+- **`harness.js`** records `game_rosters` inserts into `db.roster`. It
+  accepted the row and then served the old roster back, reporting success
+  for work it never did. Same lesson as `delete()` being a no-op: a mock
+  that silently ignores an operation cannot test it.
+
 ## Untested, and known to be
 
 Recorded here rather than left implicit, because "no test failed" is
