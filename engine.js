@@ -403,6 +403,7 @@ function computeState(playsList){
     // banner needs it on every render and findDriveStarts walks the whole
     // play list re-running computeState for each play.
     otSeries: 0,
+    otSeriesTeam: null,
     down: null, distance: null, fieldPos: null, startSpot: null, statYards: 0,
     penalties: { teamA: { count: 0, yds: 0 }, teamB: { count: 0, yds: 0 } },
     // NFHS: three timeouts per team per half, and they do NOT carry
@@ -505,8 +506,19 @@ function computeState(playsList){
       // A forced possession in overtime opens a series. This is how the
       // guided start hands the ball over, and how each subsequent series
       // is set.
-      if (state.quarter >= 5 && e.forcePossession !== state.possession) state.otSeries++;
-      else if (state.quarter >= 5 && state.otSeries === 0) state.otSeries = 1;
+      // Counted against the SERIES team, not against possession. A series
+      // usually ends with the ball already in the other team's hands --
+      // a turnover on downs hands it over before the next series is set
+      // -- so comparing with possession saw no change and never counted
+      // the second series at all.
+      if (state.quarter >= 5 && e.forcePossession !== state.otSeriesTeam) state.otSeries++;
+      // WHOSE series this is, which is not the same as who currently has
+      // the ball: a turnover inside a series hands the ball over without
+      // ending the series, and a score leaves it with the team that just
+      // scored. The next series belongs to the other team either way, so
+      // it has to be tracked from the series START rather than inferred
+      // from possession at the moment it ends.
+      if (state.quarter >= 5) state.otSeriesTeam = e.forcePossession;
       state.possession = e.forcePossession;
     }
     if (e.setQuarter){

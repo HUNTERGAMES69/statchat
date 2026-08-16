@@ -2588,7 +2588,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // send the coach looking for a kick that never happens.
       downMsg = 'No active drive — ' + TEAMS[state.possession].name + ' needs to kick off next';
     } else if (state.quarter >= 5){
-      downMsg = 'No active drive — set the next overtime possession';
+      downMsg = 'No active drive — ' +
+        (state.otSeriesTeam ? TEAMS[otherTeam(state.otSeriesTeam)].name + ' start their series next'
+                            : 'set the next overtime possession');
     } else {
       downMsg = 'no active drive — ' + TEAMS[state.possession].name + ' ball';
     }
@@ -2899,6 +2901,55 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       !!(lastReal && lastReal.effect && lastReal.effect.score &&
          lastReal.effect.score.points === 6) &&
       (gamePhase === 'firstHalf' || gamePhase === 'secondHalf');
+    // AN OVERTIME SERIES THAT HAS ENDED RAISES THE NEXT ONE.
+    // ------------------------------------------------------------------
+    // Overtime is played in series, not as continuous football: when one
+    // ends the other team starts a fresh one from the same spot. Before
+    // this the app simply flipped possession and left the ball wherever
+    // the last one died -- so the second team took over on their own 3
+    // and no new drive began at all.
+    //
+    // The guided panel comes back rather than the app inserting a series
+    // by itself. It is the same shape as the opening kickoff and the
+    // second-half start: a moment the scorer confirms, with the spot
+    // prefilled and still editable, because associations differ on where
+    // a series starts and the app should not quietly decide.
+    //
+    // Not while a try is pending: a touchdown ends the series but the try
+    // is still to come, and asking for the next series over the top of it
+    // would put the PAT in the wrong one.
+    // A series ends in one of two shapes, and `down === null` only
+    // catches one of them:
+    //
+    //   - THE BALL CHANGES HANDS. An interception, a fumble, or a failure
+    //     on downs. The app hands the other team a fresh 1st & 10 at that
+    //     spot, so `down` is 1 and not null -- which is why the first
+    //     version of this never fired at all.
+    //   - THE SERIES SCORES. A field goal or a touchdown-and-try leaves
+    //     no live down, and possession stays with the team that scored.
+    //
+    // So the test is: the ball has left the series team, OR there is no
+    // live down. Either way this series is over and the other team's
+    // begins.
+    const otSeriesOver = !!st0.otSeriesTeam &&
+      (st0.possession !== st0.otSeriesTeam || st0.down === null);
+    const awaitingOtSeries = st0.quarter >= 5 && otSeriesOver &&
+      !awaitingTry && !disable &&
+      (gamePhase === 'firstHalf' || gamePhase === 'secondHalf');
+    if (awaitingOtSeries && !guided.active){
+      guided = { active: true, quarter: 5, kickingTeam: null,
+                 receivingTeam: otherTeam(st0.otSeriesTeam),
+                 // 'overtime', NOT 'secondHalf'. The guided self-heal below
+                 // cancels any flow tagged secondHalf when no half divider
+                 // is present -- correct for a second-half kickoff, and
+                 // fatal here: it tore this panel down the instant it
+                 // appeared, leaving the right words on screen with the
+                 // flow already dead behind them.
+                 step: 'otSpot', targetPhase: 'overtime' };
+      persistUiState();
+      renderGuided();
+    }
+
     document.querySelectorAll('.ptypeBtn').forEach(b => {
       const t = b.dataset.type;
       b.disabled = disable ||
@@ -3387,8 +3438,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     if (guided.step === 'otSpot'){
       const team = guided.receivingTeam;
+      // The same panel serves the FIRST series and every one after it.
+      // Only the sentence changes: "starts overtime" is true once, and
+      // reading it again at the top of the fourth series would be wrong.
+      const st0 = computeState();
+      const opener = !st0.otSeriesTeam;
       content.innerHTML =
-        '<p class="hint">' + TEAMS[team].name + ' starts overtime. Starting spot (most rule sets: opponent\'s 10 — adjust to your association\'s format):</p>' +
+        '<p class="hint">' + TEAMS[team].name +
+          (opener ? ' starts overtime.' : ' starts their series.') +
+          ' Starting spot (most rule sets: opponent\'s 10 — adjust to your association\'s format):</p>' +
         startingSpotFieldsHtml('ot_spot', 'Starting spot', team) +
         '<div class="row" style="margin-top:12px;"><button class="primary" id="ot_review">Set drive</button></div>';
       const getReset = wireStartingSpot(content, 'ot_spot');
@@ -3408,7 +3466,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       document.getElementById('ot_review').addEventListener('click', () => {
         const reset = getReset();
         if (!reset) return;
-        pushAndPersist({ id: nextId++, text: 'Overtime — ' + TEAMS[team].name + ' to start at ' + markerLabel(reset.fieldPos), effect: { forcePossession: team }, quarter: 5 });
+        pushAndPersist({ id: nextId++, text: 'Overtime — ' + TEAMS[team].name + ' ' + (opener ? 'to start at ' : 'series begins at ') + markerLabel(reset.fieldPos), effect: { forcePossession: team }, quarter: 5 });
         pushAndPersist({ id: nextId++, text: 'New drive — ' + ordinal(reset.down) + ' & ' + togoLabel(reset.fieldPos, reset.distance) + ' at ' + markerLabel(reset.fieldPos) + ' (' + TEAMS[team].name + ')', effect: { isReset: true, down: reset.down, distance: reset.distance, fieldPos: reset.fieldPos }, quarter: 5 });
         guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
         persistUiState();
@@ -3848,7 +3906,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   }
 
   document.getElementById('otUtilBtn').addEventListener('click', () => {
-    guided = { active: true, quarter: 5, kickingTeam: null, receivingTeam: null, step: 'otPickTeam', targetPhase: 'secondHalf' };
+    // 'overtime' for the same reason as the automatic series trigger: the
+    // secondHalf self-heal would cancel this flow in any game that has no
+    // half divider yet.
+    guided = { active: true, quarter: 5, kickingTeam: null, receivingTeam: null, step: 'otPickTeam', targetPhase: 'overtime' };
     persistUiState();
     renderGuided();
   });
