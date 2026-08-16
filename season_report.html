@@ -109,6 +109,9 @@
         <div class="actions">
           <button class="xls" id="downloadXlsBtn" type="button">Download XLS</button>
           <button class="pdf" id="downloadPdfBtn" type="button">Download PDF</button>
+          <p id="printFallback" class="no-print hidden"
+             style="flex:1 1 100%; margin:8px 0 0; padding:10px 12px; background:#fff8e6;
+                    border:1px solid #e0b400; border-radius:6px; font-size:13px; color:#5a4300;"></p>
         </div>
       </div>
       <div id="reportContent"></div>
@@ -890,7 +893,34 @@ function isAdminMarker(p){
   }
 
   if (window.Chart && window.ChartDataLabels) Chart.register(ChartDataLabels);
-  document.getElementById('downloadPdfBtn').addEventListener('click', () => window.print());
+  // Shared shape with recap.html: window.print() is a silent no-op in
+  // some mobile contexts (iOS in-app browsers, installed web apps), so
+  // the click watches for the browser telling us a dialog opened and
+  // explains what to do by hand if none did.
+  document.getElementById('downloadPdfBtn').addEventListener('click', () => {
+    const note = document.getElementById('printFallback');
+    if (note) note.classList.add('hidden');
+    let started = false;
+    const mark = () => { started = true; };
+    window.addEventListener('beforeprint', mark, { once: true });
+    let mq = null;
+    if (window.matchMedia){
+      mq = window.matchMedia('print');
+      if (mq.addListener) mq.addListener(mark);
+    }
+    try { window.print(); } catch (e) { started = false; }
+    setTimeout(() => {
+      window.removeEventListener('beforeprint', mark);
+      if (mq && mq.removeListener) mq.removeListener(mark);
+      if (started || !note) return;
+      note.textContent = 'Your browser did not open a print dialog. ' +
+        'On iPhone or iPad use the Share button, then Print, then pinch out on the ' +
+        'preview to save it as a PDF. On Android open the browser menu, then Print. ' +
+        'If you are inside another app — a message or an email — open this page in ' +
+        'Safari or Chrome first.';
+      note.classList.remove('hidden');
+    }, 1500);
+  });
 
 </script>
 </body>

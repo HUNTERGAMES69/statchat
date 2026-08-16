@@ -159,6 +159,10 @@
         <a href="dashboard.html">&larr; Back to dashboard</a>
         <button id="downloadBtn" type="button">Download PDF</button>
       </div>
+      <!-- Shown only if the print dialog never opened. See the handler. -->
+      <p id="printFallback" class="no-print hidden"
+         style="margin:0 0 12px; padding:10px 12px; background:#fff8e6;
+                border:1px solid #e0b400; border-radius:6px; font-size:13px; color:#5a4300;"></p>
       <div id="recapContent"></div>
     </div>
   </div>
@@ -667,7 +671,51 @@ function isAdminMarker(p){
     }
   }
 
-  document.getElementById('downloadBtn').addEventListener('click', () => window.print());
+  // DOWNLOAD PDF, AND SAY SO WHEN IT DOES NOT HAPPEN.
+  // --------------------------------------------------------------------
+  // window.print() is the right call -- it is what makes the print
+  // stylesheet do its work -- but on a phone it can be a silent no-op:
+  // iOS in-app browsers (the one inside Facebook, Slack, a mail client)
+  // and installed web apps define the function and then ignore it. The
+  // button appeared broken because nothing happened and nothing said why.
+  //
+  // There is no way to ask whether printing is supported, so this
+  // watches for the browser telling us it started. `beforeprint` fires,
+  // or on Safari the print media query matches, the moment a dialog
+  // opens. If neither has happened shortly after the click, the dialog
+  // did not open and the coach is told how to do it by hand.
+  //
+  // The timeout is generous on purpose: a slow phone rendering a long
+  // recap can take a moment to raise the dialog, and a false warning on
+  // a page that IS printing would be worse than none.
+  document.getElementById('downloadBtn').addEventListener('click', () => {
+    const note = document.getElementById('printFallback');
+    if (note) note.classList.add('hidden');
+    let started = false;
+    const mark = () => { started = true; };
+    window.addEventListener('beforeprint', mark, { once: true });
+    let mq = null;
+    if (window.matchMedia){
+      mq = window.matchMedia('print');
+      if (mq.addListener) mq.addListener(mark);
+    }
+    try {
+      window.print();
+    } catch (e) {
+      started = false;
+    }
+    setTimeout(() => {
+      window.removeEventListener('beforeprint', mark);
+      if (mq && mq.removeListener) mq.removeListener(mark);
+      if (started || !note) return;
+      note.textContent = 'Your browser did not open a print dialog. ' +
+        'On iPhone or iPad use the Share button, then Print, then pinch out on the ' +
+        'preview to save it as a PDF. On Android open the browser menu, then Print. ' +
+        'If you are inside another app — a message or an email — open this page in ' +
+        'Safari or Chrome first.';
+      note.classList.remove('hidden');
+    }, 1500);
+  });
 </script>
 </body>
 </html>
