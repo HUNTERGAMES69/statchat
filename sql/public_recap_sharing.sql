@@ -42,6 +42,29 @@ alter table public.games
   add column if not exists is_public boolean not null default false;
 
 
+-- 1a. THE SHARE TOKEN -------------------------------------------------
+-- The url a coach sends carries this, not the game's primary key.
+--
+-- It is not a password: RLS still decides whether the data may be read,
+-- and the game id is visible in the served page anyway. What the token
+-- buys is REVOCATION. Clearing it kills that specific link for good, and
+-- sharing again mints a new one -- so a link somebody kept does not come
+-- back to life the next time the game is shared. Toggling is_public
+-- alone would revive it.
+--
+-- Nullable, and null means "not shared". No default: tokens are minted
+-- by the share control when sharing is switched on.
+
+alter table public.games
+  add column if not exists share_token text;
+
+-- Unique among the tokens that exist. The partial index is deliberate --
+-- every unshared game has a null token, and nulls must not collide.
+create unique index if not exists games_share_token_key
+  on public.games (share_token)
+  where share_token is not null;
+
+
 -- 1b. COLUMN GRANTS ---------------------------------------------------
 -- RLS is ROW-level. A policy alone hands over the whole row, so anon
 -- could query created_by and broadcast_set_by -- account ids a public
@@ -54,6 +77,11 @@ alter table public.games
 --
 -- recap.html asks for these fourteen by name. If this list changes, that
 -- query changes with it.
+--
+-- share_token is deliberately NOT granted to anon. Nothing anonymous
+-- needs it -- api/share.js looks the game up with the service key, and a
+-- visitor already holds the token, it is in their url. Granting it would
+-- let anyone read every live share token in one query.
 
 revoke select on public.games from anon;
 
