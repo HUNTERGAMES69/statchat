@@ -314,10 +314,15 @@ function isAdminMarker(p){
     const categories = [
       { key: 'passing', label: 'Passing leader', unit: null,
         pick: (d) => d.yds||0, stat: (d) => [d.yds||0, 'yds'], sub: (d) => (d.comp||0)+'/'+(d.att||0)+', '+(d.td||0)+' TD' },
+      // Volume then touchdowns, matching the passing card's "13/18, 3 TD".
+      // The three cards sit side by side and were answering different
+      // questions: two of them ended on the longest single play, which is
+      // a highlight rather than a summary, and left a reader with no idea
+      // whether the man had scored. Touchdowns are what gets read out.
       { key: 'rushing', label: 'Rushing leader', unit: null,
-        pick: (d) => d.yds||0, stat: (d) => [d.yds||0, 'yds'], sub: (d) => (d.att||0)+' att, long of '+(d.long||0) },
+        pick: (d) => d.yds||0, stat: (d) => [d.yds||0, 'yds'], sub: (d) => (d.att||0)+' att, '+(d.td||0)+' TD' },
       { key: 'receiving', label: 'Receiving leader', unit: null,
-        pick: (d) => d.yds||0, stat: (d) => [d.yds||0, 'yds'], sub: (d) => (d.rec||0)+' rec, long of '+(d.long||0) }
+        pick: (d) => d.yds||0, stat: (d) => [d.yds||0, 'yds'], sub: (d) => (d.rec||0)+' rec, '+(d.td||0)+' TD' }
     ];
     let cards = '';
     categories.forEach(cat => {
@@ -331,13 +336,22 @@ function isAdminMarker(p){
       // one still leaves it at the top.
       const nums = Object.keys(bucketObj).filter(n => n !== 'TEAM' && n !== 'Unknown');
       if (!nums.length) return;
-      const leaderNum = nums.slice().sort((a,b) => cat.pick(bucketObj[b]) - cat.pick(bucketObj[a]))[0];
-      const d = bucketObj[leaderNum];
+      // THE BOX SCORE IS KEYED BY DISPLAY NAME, NOT BY JERSEY NUMBER.
+      // ----------------------------------------------------------------
+      // This was passed through playerName(), which looks a NUMBER up on
+      // the roster and falls back to '#' + whatever it was given. Handed
+      // a name it never matched, so every leader card read "#Parker
+      // Robinson" -- a hash in front of a man's name.
+      // computeBoxScore already resolves each bucket key to something
+      // printable (the player's name, or '#44' where nobody was
+      // recorded), so it is used as-is.
+      const leaderKey = nums.slice().sort((a,b) => cat.pick(bucketObj[b]) - cat.pick(bucketObj[a]))[0];
+      const d = bucketObj[leaderKey];
       const [statVal, statUnit] = cat.stat(d);
       const accent = CATEGORY_ACCENT[cat.key];
       cards += '<div class="leader-card" style="border-left:3px solid ' + accent.edge + ';">' +
         '<div class="leader-label">' + cat.label + '</div>' +
-        '<div class="leader-name">' + playerName('teamA', leaderNum) + '</div>' +
+        '<div class="leader-name">' + leaderKey + '</div>' +
         '<div class="leader-stat">' + statVal + ' <span>' + statUnit + '</span></div>' +
         '<div style="font-size:12px; color:#666; margin-top:3px; font-weight:500;">' + cat.sub(d) + '</div>' +
         '</div>';
