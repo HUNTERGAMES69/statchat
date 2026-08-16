@@ -97,6 +97,21 @@
     .section, .header { box-shadow:none; border:1px solid #ddd; }
     .section { page-break-inside:avoid; break-inside:avoid; }
     .page-break { page-break-before:always; break-before:always; }
+    /* CONDENSED FOR PAPER. The on-screen spacing is built for scrolling,
+       where air between sections is what makes them readable. On a
+       printed sheet the same air is what turns three pages into five,
+       and a coach reading a stat sheet is looking DOWN a column, not
+       resting between them. Screen values are untouched. */
+    .section { padding:12px 14px; margin-bottom:10px; border-radius:0; }
+    .section.player-section { margin-bottom:10px; }
+    .section h2 { margin:0 0 8px; }
+    table.player-table { font-size:11.5px; }
+    table.player-table th, table.player-table td { padding:4px 6px; }
+    /* A heading is never stranded at the foot of a page with its table
+       overleaf, and a table never breaks part-way down -- a player's line
+       must not be separated from the totals row that explains it. */
+    .section h2 { page-break-after:avoid; break-after:avoid; }
+    table.player-table { page-break-inside:avoid; break-inside:avoid; }
   }
 </style>
 </head>
@@ -501,11 +516,18 @@ function isAdminMarker(p){
     const leadersHtml = renderLeadersStrip(box);
     const ourLogoHtml = TEAMS.teamA.logo ? '<img class="team-header-logo" src="' + TEAMS.teamA.logo + '">' : '';
     if (leadersHtml){
-      html += '<div class="section page-break"><div class="team-header-row">' + ourLogoHtml + leadersHtml + '</div></div>';
+      // NO page-break here. Our own leaders strip used to start a fresh
+      // page, which left page one holding nothing but the scoreboard --
+      // a whole sheet for six numbers. The box score and this team block
+      // belong together at the top, and there is room for both.
+      html += '<div class="section"><div class="team-header-row">' + ourLogoHtml + leadersHtml + '</div></div>';
     }
     html += renderPlayerStatsSections('teamA', box, true);
 
     const oppLogoHtml = TEAMS.teamB.logo ? '<img class="team-header-logo" src="' + TEAMS.teamB.logo + '">' : '';
+    // The opponent DOES start a new page: it is the one break in the
+    // document that means something, separating our stats from theirs
+    // rather than falling wherever the paper runs out.
     html += '<div class="section page-break"><div class="team-header-row">' + oppLogoHtml +
       '<div class="opp-header-name">' + TEAMS.teamB.name + '</div></div></div>';
     html += renderPlayerStatsSections('teamB', box, false);
