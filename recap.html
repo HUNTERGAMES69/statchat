@@ -163,7 +163,36 @@
   .scoring-summary th.ss-score { text-align:right; }
   .scoring-summary .ss-away { color:#666; }
   .scoring-summary .ss-detail { color:#888; }
+  /* ===== SECTION HEADERS =====================================
+     Two levels, doing different jobs. The big header says which part of
+     the document this is; the coloured band says whose numbers follow.
+     Before this, both were the same small grey label and a reader had no
+     way to tell a document section from a team's table. */
+  .sec-head { margin:0 0 14px; }
+  /* The eyebrow names the document. It is PRINT ONLY: on screen you know
+     which page you are on, but a sheet that has been printed and
+     separated from the rest does not say where it came from. */
+  .sec-eyebrow { display:none; font-size:10.5px; font-weight:700; letter-spacing:0.16em;
+                 text-transform:uppercase; color:#9aa3b2; margin:0 0 3px; }
+  .sec-title { font-size:21px; font-weight:700; letter-spacing:-0.02em; color:#12161c;
+               margin:0; line-height:1.1; text-align:left; }
+  .sec-sub { font-size:12px; color:#7c8794; margin:4px 0 0; font-variant-numeric:tabular-nums; }
+  /* A team band carries its own colour inline; the text colour is chosen
+     by contrast so a pale school cannot produce an unreadable band. */
+  .team-band { font-size:12px; font-weight:700; text-transform:uppercase;
+               letter-spacing:0.12em; padding:9px 14px; border-radius:6px;
+               margin:0 0 12px; display:flex; align-items:center; gap:9px; }
+  .team-band .tb-dot { width:9px; height:9px; border-radius:50%; }
+  .team-band .tb-sub { margin-left:auto; font-weight:600; letter-spacing:0.06em;
+                       opacity:0.85; text-transform:none; font-size:11px; }
+  .sec-title, .team-band { page-break-after:avoid; break-after:avoid; }
   @media print {
+    /* The eyebrow appears only in print, on every section: a detached
+       page should say what document it belongs to. */
+    .sec-eyebrow { display:block; }
+    .sec-title { font-size:17px; }
+    .team-band { padding:7px 11px; }
+
     body { background:#fff; }
     .wrap { max-width:none; padding:0 24px; }
     .no-print { display:none !important; }
@@ -499,6 +528,38 @@ function isAdminMarker(p){
     return cards ? '<div class="leaders-strip">' + cards + '</div>' : '';
   }
 
+  const DOC_LABEL = 'Game Recap';
+
+  // SECTION HEADERS. Two levels, both built here so every section in this
+  // document is headed the same way and a new one cannot drift.
+  //
+  //   sectionHead()  document sections -- eyebrow, title, optional subtitle
+  //   teamBand()     anything belonging to a team -- coloured band
+  //
+  // The subtitle is optional and should carry a number the table itself
+  // does not total, or nothing at all. An empty line is worse than none.
+  function sectionHead(title, subtitle){
+    return '<div class="sec-head">' +
+      '<p class="sec-eyebrow">' + DOC_LABEL + '</p>' +
+      '<h2 class="sec-title">' + title + '</h2>' +
+      (subtitle ? '<p class="sec-sub">' + subtitle + '</p>' : '') +
+    '</div>';
+  }
+
+  function teamBand(teamKey, label, subtitle){
+    const t = TEAMS[teamKey] || {};
+    const bg = t.bg || '#1a1a2e';
+    // safeTextColor picks black or white by WCAG contrast, the same rule
+    // the live view uses -- so a gold school gets dark text rather than
+    // white on yellow.
+    const fg = (typeof safeTextColor === 'function') ? safeTextColor(bg) : '#ffffff';
+    const dot = fg === '#000000' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.85)';
+    return '<div class="team-band" style="background:' + bg + '; color:' + fg + ';">' +
+      '<span class="tb-dot" style="background:' + dot + ';"></span>' + label +
+      (subtitle ? '<span class="tb-sub">' + subtitle + '</span>' : '') +
+    '</div>';
+  }
+
   function renderRecap(){
     const box = computeBoxScore(plays);
     const finalState = computeState();
@@ -599,7 +660,13 @@ function isAdminMarker(p){
     const homeName = homeIsA ? TEAMS.teamA.name : TEAMS.teamB.name;
     const awayName = homeIsA ? TEAMS.teamB.name : TEAMS.teamA.name;
     if (scoring.length){
-      html += '<div class="section scoring-summary"><h2>Scoring Summary</h2>' +
+      // Extra space above: the scoring summary sits directly under the
+      // scoreboard card, and two bordered blocks butted together read as
+      // one confused unit.
+      html += '<div class="section scoring-summary" style="margin-top:22px;">' + sectionHead('Scoring Summary',
+        scoring.length + ' score' + (scoring.length === 1 ? '' : 's') + ' \u00b7 ' +
+        homeName + ' ' + (homeIsA ? finalState.scores.teamA : finalState.scores.teamB) + '\u2013' +
+        awayName + ' ' + (homeIsA ? finalState.scores.teamB : finalState.scores.teamA) + ' final') +
         '<table class="player-table"><thead><tr>' +
           '<th style="width:44px;">Qtr</th><th>Team</th><th>Play</th>' +
           '<th class="ss-score">Score</th>' +
@@ -633,7 +700,7 @@ function isAdminMarker(p){
         '</tbody></table></div>';
     }
 
-    html += '<div class="section"><h2>Team Stats</h2><div class="team-compare">' +
+    html += '<div class="section">' + sectionHead('Team Stats') + '<div class="team-compare">' +
       '<div class="col-head">' + tV.team.name + '</div><div></div><div class="col-head">' + tH.team.name + '</div>' +
       tV.rows.map((row, i) => '<div class="stat-row">' +
         '<div class="stat-val">' + row[1] + '</div>' +
@@ -646,21 +713,21 @@ function isAdminMarker(p){
       const teamName = TEAMS[teamKey].name;
       const accent = (key) => useAccents ? CATEGORY_ACCENT[key] : undefined;
       let out = '';
-      out += '<div class="section player-section"><h2>' + teamName + ' — Passing</h2>' +
+      out += '<div class="section player-section">' + teamBand(teamKey, teamName + ' \u2014 Passing') +
         (playerTable(teamKey, box[teamKey].passing, ['Comp','Att','%','Yds','Y/C','Long','TD','Int','Sack'],
           d => [d.comp||0, d.att||0, d.att ? Math.round(100*(d.comp||0)/d.att) : 0, d.yds||0, d.comp ? (d.yds/d.comp).toFixed(1) : '0.0', d.long||0, d.td||0, d.intThrown||0, d.sacked||0],
           (obj) => { const att=sumStat(obj,'att'), comp=sumStat(obj,'comp'), yds=sumStat(obj,'yds');
             return [comp, att, att?Math.round(100*comp/att):0, yds, comp?(yds/comp).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'intThrown'), sumStat(obj,'sacked')]; },
           'yds', null, accent('passing')) || '<p class="no-stats">No passing stats recorded.</p>') + '</div>';
 
-      out += '<div class="section player-section"><h2>' + teamName + ' — Rushing</h2>' +
+      out += '<div class="section player-section">' + teamBand(teamKey, teamName + ' \u2014 Rushing') +
         (playerTable(teamKey, box[teamKey].rushing, ['Att','Yds','Y/A','Long','TD','Fum'],
           d => [d.att||0, d.yds||0, d.att ? (d.yds/d.att).toFixed(1) : '0.0', d.long||0, d.td||0, d.fum||0],
           (obj) => { const att=sumStat(obj,'att'), yds=sumStat(obj,'yds');
             return [att, yds, att?(yds/att).toFixed(1):'0.0', maxStat(obj,'long'), sumStat(obj,'td'), sumStat(obj,'fum')]; },
           'yds', null, accent('rushing')) || '<p class="no-stats">No rushing stats recorded.</p>') + '</div>';
 
-      out += '<div class="section player-section"><h2>' + teamName + ' — Receiving</h2>' +
+      out += '<div class="section player-section">' + teamBand(teamKey, teamName + ' \u2014 Receiving') +
         (playerTable(teamKey, box[teamKey].receiving, ['Rec','Tgt','Catch %','Yds','Y/R','Long','TD','Fum'],
           d => [d.rec||0, d.tgt||0, d.tgt ? Math.round(100*(d.rec||0)/d.tgt) + '%' : '—', d.yds||0, d.rec ? (d.yds/d.rec).toFixed(1) : '0.0', d.long||0, d.td||0, d.fum||0],
           (obj) => { const rec=sumStat(obj,'rec'), yds=sumStat(obj,'yds'), tgt=sumStat(obj,'tgt');
@@ -691,7 +758,7 @@ function isAdminMarker(p){
           'it may be higher.</p>'
         : '';
 
-      out += '<div class="section player-section"><h2>' + teamName + ' — Defense</h2>' +
+      out += '<div class="section player-section">' + teamBand(teamKey, teamName + ' \u2014 Defense') +
              defTable + tackleTable + '</div>';
 
       const koNums = Object.keys(box[teamKey].specialTeams).filter(n => box[teamKey].specialTeams[n].kickoffs);
@@ -720,7 +787,7 @@ function isAdminMarker(p){
           (obj) => [sumStat(obj,'fgAtt'), sumStat(obj,'fgMade'), maxStat(obj,'fgLong'), sumStat(obj,'fgBlocked'), sumStat(obj,'patAtt'), sumStat(obj,'patMade'), sumStat(obj,'patBlocked')],
           'fgAtt', 'special'));
       }
-      out += '<div class="section player-section"><h2>' + teamName + ' — Special Teams</h2>' + (stHtml || '<p class="no-stats">No special teams stats recorded.</p>') + '</div>';
+      out += '<div class="section player-section">' + teamBand(teamKey, teamName + ' \u2014 Special Teams') + (stHtml || '<p class="no-stats">No special teams stats recorded.</p>') + '</div>';
       return out;
     }
 

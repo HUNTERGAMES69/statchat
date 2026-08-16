@@ -88,7 +88,36 @@
   .no-stats { color:#999; font-size:13px; font-style:italic; }
   .st-subsection { margin-top:14px; }
   .st-subsection-label { font-size:11px; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:0.03em; margin-bottom:4px; }
+  /* ===== SECTION HEADERS =====================================
+     Two levels, doing different jobs. The big header says which part of
+     the document this is; the coloured band says whose numbers follow.
+     Before this, both were the same small grey label and a reader had no
+     way to tell a document section from a team's table. */
+  .sec-head { margin:0 0 14px; }
+  /* The eyebrow names the document. It is PRINT ONLY: on screen you know
+     which page you are on, but a sheet that has been printed and
+     separated from the rest does not say where it came from. */
+  .sec-eyebrow { display:none; font-size:10.5px; font-weight:700; letter-spacing:0.16em;
+                 text-transform:uppercase; color:#9aa3b2; margin:0 0 3px; }
+  .sec-title { font-size:21px; font-weight:700; letter-spacing:-0.02em; color:#12161c;
+               margin:0; line-height:1.1; text-align:left; }
+  .sec-sub { font-size:12px; color:#7c8794; margin:4px 0 0; font-variant-numeric:tabular-nums; }
+  /* A team band carries its own colour inline; the text colour is chosen
+     by contrast so a pale school cannot produce an unreadable band. */
+  .team-band { font-size:12px; font-weight:700; text-transform:uppercase;
+               letter-spacing:0.12em; padding:9px 14px; border-radius:6px;
+               margin:0 0 12px; display:flex; align-items:center; gap:9px; }
+  .team-band .tb-dot { width:9px; height:9px; border-radius:50%; }
+  .team-band .tb-sub { margin-left:auto; font-weight:600; letter-spacing:0.06em;
+                       opacity:0.85; text-transform:none; font-size:11px; }
+  .sec-title, .team-band { page-break-after:avoid; break-after:avoid; }
   @media print {
+    /* The eyebrow appears only in print, on every section: a detached
+       page should say what document it belongs to. */
+    .sec-eyebrow { display:block; }
+    .sec-title { font-size:17px; }
+    .team-band { padding:7px 11px; }
+
     body { background:#fff; }
     .wrap { max-width:none; padding:0 20px; }
     .no-print { display:none !important; }
@@ -562,6 +591,38 @@ function isAdminMarker(p){
     }
   }
 
+  const DOC_LABEL = 'Season Report';
+
+  // SECTION HEADERS. Two levels, both built here so every section in this
+  // document is headed the same way and a new one cannot drift.
+  //
+  //   sectionHead()  document sections -- eyebrow, title, optional subtitle
+  //   teamBand()     anything belonging to a team -- coloured band
+  //
+  // The subtitle is optional and should carry a number the table itself
+  // does not total, or nothing at all. An empty line is worse than none.
+  function sectionHead(title, subtitle){
+    return '<div class="sec-head">' +
+      '<p class="sec-eyebrow">' + DOC_LABEL + '</p>' +
+      '<h2 class="sec-title">' + title + '</h2>' +
+      (subtitle ? '<p class="sec-sub">' + subtitle + '</p>' : '') +
+    '</div>';
+  }
+
+  function teamBand(teamKey, label, subtitle){
+    const t = TEAMS[teamKey] || {};
+    const bg = t.bg || '#1a1a2e';
+    // safeTextColor picks black or white by WCAG contrast, the same rule
+    // the live view uses -- so a gold school gets dark text rather than
+    // white on yellow.
+    const fg = (typeof safeTextColor === 'function') ? safeTextColor(bg) : '#ffffff';
+    const dot = fg === '#000000' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.85)';
+    return '<div class="team-band" style="background:' + bg + '; color:' + fg + ';">' +
+      '<span class="tb-dot" style="background:' + dot + ';"></span>' + label +
+      (subtitle ? '<span class="tb-sub">' + subtitle + '</span>' : '') +
+    '</div>';
+  }
+
   function renderSeasonReport(){
     const t = seasonAgg.totals, gamesPlayed = seasonAgg.perGame.length;
     const totalYds = t.rushYds + t.passYds, oppTotalYds = t.oppRushYds + t.oppPassYds;
@@ -573,7 +634,7 @@ function isAdminMarker(p){
       '<div class="record">' + seasonAgg.wins + '-' + seasonAgg.losses + (seasonAgg.ties ? '-' + seasonAgg.ties : '') +
       ' &middot; ' + gamesPlayed + ' games</div></div>';
 
-    html += '<div class="section"><div class="section-title">Season totals</div>' +
+    html += '<div class="section">' + sectionHead('Season totals') +
       '<div class="chart-row">' +
       '<div class="chart-col-metrics">' +
         [[t.pointsScored,'Points scored'],[per(t.pointsScored),'Scored/game'],[t.pointsAllowed,'Points allowed'],[per(t.pointsAllowed),'Allowed/game']]
@@ -587,7 +648,7 @@ function isAdminMarker(p){
       '<div class="chart-box"><canvas id="chartHalfYards"></canvas></div>' +
       '</div></div>';
 
-    html += '<div class="section"><div class="section-title">Run / pass mix</div>' +
+    html += '<div class="section">' + sectionHead('Run / pass mix') +
       '<div class="chart-row">' +
       '<div class="chart-col-metrics">' +
         [[t.rushAtt,'Rush att'],[t.passAtt,'Pass att']]
@@ -602,14 +663,14 @@ function isAdminMarker(p){
       '<div class="chart-box"><canvas id="chartRunPassYds"></canvas></div>' +
       '</div></div>';
 
-    html += '<div class="section page-break"><div class="section-title">Yards by game</div>' +
+    html += '<div class="section page-break">' + sectionHead('Yards by game') +
       '<div class="chart-box wide"><canvas id="chartYardsByGame"></canvas></div>' +
       '<div class="chart-box wide" style="margin-top:14px;"><canvas id="chartPassRushByGame"></canvas></div>' +
       '<div class="chart-box wide" style="margin-top:14px;"><canvas id="chartPassByHalf"></canvas></div>' +
       '<div class="chart-box wide" style="margin-top:14px;"><canvas id="chartRushByHalf"></canvas></div>' +
       '</div>';
 
-    html += '<div class="section"><div class="section-title">Discipline</div>' +
+    html += '<div class="section">' + sectionHead('Discipline') +
       '<div class="chart-row-3">' +
       '<div class="chart-col-metrics">' +
         [[t.turnovers,'Turnovers'],[per(t.turnovers),'Per game']]
@@ -637,7 +698,7 @@ function isAdminMarker(p){
     // The per-game figure is over the games that actually recorded a
     // clock, and says how many. Em dash rather than 0:00 when none did:
     // zero would claim they never had the ball.
-    html += '<div class="section"><div class="section-title">Efficiency</div>' +
+    html += '<div class="section">' + sectionHead('Efficiency') +
       '<div class="chart-row">' +
       '<div class="chart-col-metrics">' +
         [[t.topGames ? formatDuration(t.topSec) : '—','Time of poss.'],
@@ -682,28 +743,28 @@ function isAdminMarker(p){
       return '<div class="table-scroll">' + h + '</table></div>';
     };
 
-    html += '<div class="section page-break"><div class="section-title">' + TEAMS.teamA.name + ' — Passing</div>' +
+    html += '<div class="section">' + teamBand('teamA', TEAMS.teamA.name + ' \u2014 Passing') +
       seasonStatTable(seasonAgg.passing, ['Comp','Att','%','Yds','Y/C','Long','TD','Int','Sacked'],
         d => [d.comp||0, d.att||0, d.att?Math.round(100*(d.comp||0)/d.att):0, d.yds||0, d.comp?+(d.yds/d.comp).toFixed(1):0, d.long||0, d.td||0, d.intThrown||0, d.sacked||0],
         (obj, names) => { const att=names.reduce((t,n)=>t+(obj[n].att||0),0), comp=names.reduce((t,n)=>t+(obj[n].comp||0),0), yds=names.reduce((t,n)=>t+(obj[n].yds||0),0);
           return [comp, att, att?Math.round(100*comp/att):0, yds, comp?+(yds/comp).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].long||0)), names.reduce((t,n)=>t+(obj[n].td||0),0), names.reduce((t,n)=>t+(obj[n].intThrown||0),0), names.reduce((t,n)=>t+(obj[n].sacked||0),0)]; },
         'yds') + '</div>';
 
-    html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Receiving</div>' +
+    html += '<div class="section">' + teamBand('teamA', TEAMS.teamA.name + ' \u2014 Receiving') +
       seasonStatTable(seasonAgg.receiving, ['Rec','Tgt','Catch %','Yds','Y/C','Long','TD','Fum'],
         d => [d.rec||0, d.tgt||0, d.tgt?Math.round(100*(d.rec||0)/d.tgt)+'%':'—', d.yds||0, d.rec?+(d.yds/d.rec).toFixed(1):0, d.long||0, d.td||0, d.fum||0],
         (obj, names) => { const rec=names.reduce((t,n)=>t+(obj[n].rec||0),0), yds=names.reduce((t,n)=>t+(obj[n].yds||0),0), tgt=names.reduce((t,n)=>t+(obj[n].tgt||0),0);
           return [rec, tgt, tgt?Math.round(100*rec/tgt)+'%':'—', yds, rec?+(yds/rec).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].long||0)), names.reduce((t,n)=>t+(obj[n].td||0),0), names.reduce((t,n)=>t+(obj[n].fum||0),0)]; },
         'yds') + '</div>';
 
-    html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Rushing</div>' +
+    html += '<div class="section">' + teamBand('teamA', TEAMS.teamA.name + ' \u2014 Rushing') +
       seasonStatTable(seasonAgg.rushing, ['Att','Yds','Y/C','Long','TD','Fum'],
         d => [d.att||0, d.yds||0, d.att?+(d.yds/d.att).toFixed(1):0, d.long||0, d.td||0, d.fum||0],
         (obj, names) => { const att=names.reduce((t,n)=>t+(obj[n].att||0),0), yds=names.reduce((t,n)=>t+(obj[n].yds||0),0);
           return [att, yds, att?+(yds/att).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].long||0)), names.reduce((t,n)=>t+(obj[n].td||0),0), names.reduce((t,n)=>t+(obj[n].fum||0),0)]; },
         'yds') + '</div>';
 
-    html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Defense</div>' +
+    html += '<div class="section">' + teamBand('teamA', TEAMS.teamA.name + ' \u2014 Defense') +
       (seasonAgg.defense.int || seasonAgg.defense.fumRec || seasonAgg.defense.sacks || seasonAgg.defense.tfl
         ? '<table class="stat-table"><tr><th></th><th>Int</th><th>Fum Rec</th><th>Sacks</th><th>TFL</th></tr><tr><td>Defense</td><td>'+seasonAgg.defense.int+'</td><td>'+seasonAgg.defense.fumRec+'</td><td>'+seasonAgg.defense.sacks+'</td><td>'+seasonAgg.defense.tfl+'</td></tr></table>'
         : '<p class="no-stats">No defensive stats recorded.</p>') + '</div>';
@@ -717,8 +778,7 @@ function isAdminMarker(p){
       .sort((a, b) => (seasonAgg.tacklers[b].tackles || 0) -
                       (seasonAgg.tacklers[a].tackles || 0));
     if (seasonTacklers.length){
-      html += '<div class="section"><div class="section-title">' +
-        TEAMS.teamA.name + ' \u2014 Tackles</div>' +
+      html += '<div class="section">' + teamBand('teamA', TEAMS.teamA.name + ' \u2014 Tackles') +
         '<table class="stat-table"><tr><th></th><th>Tackles</th><th>TFL</th>' +
         '<th>Sacks</th><th>Int</th><th>Fum Rec</th></tr>' +
         seasonTacklers.map(n => {
@@ -761,7 +821,7 @@ function isAdminMarker(p){
           return [fa, fm, Math.max(0,...names.map(n=>obj[n].fgLong||0)), fa?Math.round(100*fm/fa)+'%':'—', names.reduce((t,n)=>t+(obj[n].fgBlocked||0),0), pa, pm, pa?Math.round(100*pm/pa)+'%':'—', names.reduce((t,n)=>t+(obj[n].patBlocked||0),0)]; },
         'fgAtt'));
     }
-    html += '<div class="section"><div class="section-title">' + TEAMS.teamA.name + ' — Special Teams</div>' + (stHtml || '<p class="no-stats">No special teams stats recorded.</p>') + '</div>';
+    html += '<div class="section">' + teamBand('teamA', TEAMS.teamA.name + ' \u2014 Special Teams') + (stHtml || '<p class="no-stats">No special teams stats recorded.</p>') + '</div>';
 
     return html;
   }
