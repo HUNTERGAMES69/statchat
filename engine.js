@@ -371,6 +371,18 @@ function scoringSummary(playsList){
   const list = playsList || plays;
   const out = [];
   const running = { teamA: 0, teamB: 0 };
+  // THE QUARTER IS DERIVED FROM THE MARKERS, not read off the play.
+  // ------------------------------------------------------------------
+  // p.quarter is a column written at save time, and it is null on any
+  // play saved before the app tracked it -- which made `p.quarter || 1`
+  // report an entire game as Q1. computeState() has always derived the
+  // quarter by walking setQuarter markers; this walk does the same, so
+  // the two can never disagree.
+  //
+  // The play's own column is still preferred when it HAS a value: a play
+  // inserted out of order carries its true quarter, and the marker walk
+  // would give it whatever the surrounding plays say.
+  let walkQuarter = 1;
 
   const tryText = (p) => {
     // What goes in the brackets. A missed try is worth saying: a 6 in the
@@ -395,6 +407,7 @@ function scoringSummary(playsList){
   for (let i = 0; i < list.length; i++){
     const p = list[i];
     const e = p.effect || {};
+    if (e.setQuarter) walkQuarter = e.setQuarter;
     const sc = e.score;
 
     // A TRY IS HANDLED BEFORE THE SCORE CHECK, because a MISSED try
@@ -415,7 +428,7 @@ function scoringSummary(playsList){
     if (!sc || !sc.team || !sc.points) continue;
     running[sc.team] += sc.points;
     out.push({
-      quarter: p.quarter || 1,
+      quarter: p.quarter || walkQuarter,
       team: sc.team,
       points: sc.points,
       text: p.text || '',
