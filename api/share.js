@@ -174,11 +174,19 @@ module.exports = async (req, res) => {
     '<meta property="og:url" content="' + esc(origin) + '/g/' + esc(token) + '">' +
     '<meta property="og:title" content="' + esc(title) + '">' +
     '<meta property="og:description" content="' + esc(description) + '">' +
-    '<meta property="og:image" content="' + esc(origin) + '/logo.png">' +
-    '<meta name="twitter:card" content="summary">' +
+    // The per-game scoreboard card, rendered by api/og.js from this same
+    // token. Dimensions are declared because several scrapers pick the
+    // card LAYOUT from them without downloading the image first -- and
+    // 1200x630 is what gets the wide card rather than the small square
+    // one the logo was producing.
+    '<meta property="og:image" content="' + esc(origin) + '/api/og?t=' + esc(token) + '">' +
+    '<meta property="og:image:width" content="1200">' +
+    '<meta property="og:image:height" content="630">' +
+    '<meta property="og:image:alt" content="' + esc(title) + '">' +
+    '<meta name="twitter:card" content="summary_large_image">' +
     '<meta name="twitter:title" content="' + esc(title) + '">' +
     '<meta name="twitter:description" content="' + esc(description) + '">' +
-    '<meta name="twitter:image" content="' + esc(origin) + '/logo.png">';
+    '<meta name="twitter:image" content="' + esc(origin) + '/api/og?t=' + esc(token) + '">';
 
   // The file's own og: tags are removed first. Two sets in one head is
   // undefined behaviour — some scrapers take the first, some the last —
