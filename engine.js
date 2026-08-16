@@ -388,6 +388,32 @@ function resolveNumbersInText(text, team){
   });
 }
 
+// Strip the team name that follows a player's name in brackets.
+// ---------------------------------------------------------------------
+// A play's text is written as "Parker Robinson (Neville) pass to Ze'Land
+// Young (Neville) for 4 -- TOUCHDOWN". In the log that qualifier once
+// earned its place, because the log is a single run of plays with both
+// sides mixed together.
+//
+// Everywhere it is now shown it is redundant: the scoring summary has a
+// TEAM column, and the live log is grouped by drive. It is also what
+// pushes most rows onto a second line -- two of them in a pass play.
+//
+// Only the two teams' own names are removed, so "(TEAM)" for a team rush
+// and anything else in brackets survives untouched.
+function stripTeamNames(text){
+  let t = String(text || '');
+  if (t.indexOf('(') === -1) return t;
+  ['teamA', 'teamB'].forEach(function(k){
+    const nm = TEAMS[k] && TEAMS[k].name;
+    if (!nm) return;
+    // Split/join rather than a built regex: a school name can contain
+    // characters a regex would read as syntax (St. Thomas More, Ze'Land).
+    t = t.split(' (' + nm + ')').join('');
+  });
+  return t;
+}
+
 function scoringSummary(playsList){
   const list = playsList || plays;
   const out = [];
@@ -452,7 +478,7 @@ function scoringSummary(playsList){
       quarter: p.quarter || walkQuarter,
       team: sc.team,
       points: sc.points,
-      text: resolveNumbersInText(p.text, sc.team),
+      text: stripTeamNames(resolveNumbersInText(p.text, sc.team)),
       isTouchdown: sc.points === 6,
       // A touchdown with no try after it stays blank rather than claiming
       // a kick that was never entered.
@@ -1178,6 +1204,7 @@ if (typeof module !== 'undefined' && module.exports) {
     countTurnovers,
     scoringSummary,
     resolveNumbersInText,
+    stripTeamNames,
     computeState,
     computeBoxScore,
     buildContext
