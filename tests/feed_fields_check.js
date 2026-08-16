@@ -36,7 +36,7 @@ function buildFeedViews(plays) {
   const src = fs.readFileSync(path.join(REPO, 'api', 'feed.js'), 'utf8');
   const body = src.slice(src.indexOf('const mmss'), src.indexOf('module.exports'));
   const buildViews = new Function('engine', `
-    const { computeState, computeBoxScore, countPossessions, countTurnovers, markerLabel } = engine;
+    const { computeState, computeBoxScore, countPossessions, countTurnovers, markerLabel, quarterLabel } = engine;
     ${body}
     return buildViews;
   `)(engine);
