@@ -2952,7 +2952,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     document.querySelectorAll('.ptypeBtn').forEach(b => {
       const t = b.dataset.type;
-      b.disabled = disable ||
+      // NO KICKOFFS IN OVERTIME. Each side is handed the ball; there is
+      // never a kick to record, and the button sitting live is an
+      // invitation to log a play that cannot happen.
+      //
+      // Punt goes with it: a series starts on the opponent's 10 and ends
+      // on a score or a turnover, so there is nowhere to punt to.
+      //
+      // FIELD GOAL IS DELIBERATELY LEFT LIVE -- see the note to Andy. It
+      // is how most overtime series end, and greying it would make the
+      // commonest overtime play unrecordable.
+      const otKickBanned = st0.quarter >= 5 && (t === 'kickoff' || t === 'punt');
+      b.disabled = disable || otKickBanned ||
         (awaitingTry && t !== 'pat' && t !== 'twopt') ||
         (awaitingKickoff && t !== 'kickoff');
     });
@@ -3425,6 +3436,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<button type="button" id="ot_pickA">' + TEAMS.teamA.name + '</button> ' +
         '<button type="button" id="ot_pickB">' + TEAMS.teamB.name + '</button>';
       function pickTeam(team){
+        // END OF REGULATION, written as a divider before the overtime
+        // marker. The log jumped straight from a Q4 play to an overtime
+        // one with nothing between them, so a reader had to work out
+        // where the game had actually finished -- and the drive tiles had
+        // no boundary to close the last regulation drive against.
+        //
+        // Same shape as "End of 1st half": a divider, no effect, so it
+        // carries no state of its own and undo removes it cleanly.
+        pushAndPersist({ id: nextId++, text: 'End of regulation', effect: {}, isDivider: true, quarter: 4 });
         pushAndPersist({ id: nextId++, text: 'Quarter marker — start of overtime', effect: { setQuarter: 5 }, quarter: 5 });
         guided.receivingTeam = team;
         guided.step = 'otSpot';

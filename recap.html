@@ -328,12 +328,24 @@ function isAdminMarker(p){
     // Quarter-by-quarter scoring, derived from each play's own quarter
     // and scoring effect -- nothing pre-computes this today, so it's
     // built here directly from the play log.
+    // OVERTIME GETS ITS OWN COLUMN. The clamp here was Math.min(4, ...),
+    // which folded every overtime point into Q4 -- a game won on an
+    // overtime touchdown read as a 4th-quarter one, and the quarter line
+    // was simply wrong about when the game was decided.
     const quarterScores = { teamA: [0,0,0,0], teamB: [0,0,0,0] };
+    const otScores = { teamA: 0, teamB: 0 };
     plays.forEach(p => {
-      const q = Math.min(4, Math.max(1, p.quarter || 1)) - 1;
-      if (p.effect && p.effect.score) quarterScores[p.effect.score.team][q] += p.effect.score.points;
-      if (p.effect && p.effect.scoreAdjust) quarterScores[p.effect.scoreAdjust.team][q] += p.effect.scoreAdjust.pts;
+      const qn = Math.max(1, p.quarter || 1);
+      const add = (team, pts) => {
+        if (qn >= 5) otScores[team] += pts;
+        else quarterScores[team][qn - 1] += pts;
+      };
+      if (p.effect && p.effect.score) add(p.effect.score.team, p.effect.score.points);
+      if (p.effect && p.effect.scoreAdjust) add(p.effect.scoreAdjust.team, p.effect.scoreAdjust.pts);
     });
+    // Shown only when overtime happened, so an ordinary game keeps its
+    // five-column line rather than carrying an empty OT column.
+    const hadOt = plays.some(p => (p.quarter || 1) >= 5);
 
     const teamHtml = (teamKey) => {
       const team = TEAMS[teamKey];
@@ -387,9 +399,12 @@ function isAdminMarker(p){
         '<div class="vs-sep">@</div>' +
         '<div class="team-block">' + (TEAMS[homeKey].logo ? '<img class="team-logo" src="'+TEAMS[homeKey].logo+'">' : '') + '<div class="team-name">' + TEAMS[homeKey].name + '</div><div class="team-score">' + finalState.scores[homeKey] + '</div></div>' +
       '</div>' +
-      '<table class="quarter-table"><tr><th></th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Final</th></tr>' +
-      '<tr><td>' + TEAMS[visitorKey].name + '</td>' + quarterScores[visitorKey].map(v=>'<td>'+v+'</td>').join('') + '<td>' + finalState.scores[visitorKey] + '</td></tr>' +
-      '<tr><td>' + TEAMS[homeKey].name + '</td>' + quarterScores[homeKey].map(v=>'<td>'+v+'</td>').join('') + '<td>' + finalState.scores[homeKey] + '</td></tr>' +
+      '<table class="quarter-table"><tr><th></th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th>' +
+        (hadOt ? '<th>OT</th>' : '') + '<th>Final</th></tr>' +
+      '<tr><td>' + TEAMS[visitorKey].name + '</td>' + quarterScores[visitorKey].map(v=>'<td>'+v+'</td>').join('') +
+        (hadOt ? '<td>' + otScores[visitorKey] + '</td>' : '') + '<td>' + finalState.scores[visitorKey] + '</td></tr>' +
+      '<tr><td>' + TEAMS[homeKey].name + '</td>' + quarterScores[homeKey].map(v=>'<td>'+v+'</td>').join('') +
+        (hadOt ? '<td>' + otScores[homeKey] + '</td>' : '') + '<td>' + finalState.scores[homeKey] + '</td></tr>' +
       '</table></div>';
 
     html += '<div class="section"><h2>Team Stats</h2><div class="team-compare">' +

@@ -560,11 +560,21 @@ function isAdminMarker(p){
     const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
     const playsFor = (teamKey) => plays.filter(p => p.team === teamKey && p.roles && scrimmageTypes.includes(p.roles.playType)).length;
 
+    // The ON-SCREEN quarter line. The XLS export above keeps its own
+    // copy and already separated overtime; this one clamped with
+    // Math.min(4, ...) and folded overtime into Q4 -- so the exported
+    // spreadsheet and the page a coach was reading disagreed about the
+    // same game.
     const quarterScores = { teamA: [0,0,0,0], teamB: [0,0,0,0] };
+    const otScores = { teamA: 0, teamB: 0 };
     plays.forEach(p => {
-      const q = Math.min(4, Math.max(1, p.quarter || 1)) - 1;
-      if (p.effect && p.effect.score) quarterScores[p.effect.score.team][q] += p.effect.score.points;
-      if (p.effect && p.effect.scoreAdjust) quarterScores[p.effect.scoreAdjust.team][q] += p.effect.scoreAdjust.pts;
+      const qn = Math.max(1, p.quarter || 1);
+      const add = (team, pts) => {
+        if (qn >= 5) otScores[team] += pts;
+        else quarterScores[team][qn - 1] += pts;
+      };
+      if (p.effect && p.effect.score) add(p.effect.score.team, p.effect.score.points);
+      if (p.effect && p.effect.scoreAdjust) add(p.effect.scoreAdjust.team, p.effect.scoreAdjust.pts);
     });
 
     const teamMetrics = (teamKey) => {
@@ -603,9 +613,17 @@ function isAdminMarker(p){
       '<div class="sub">' + (gameLabel || '') + (gameDate ? ' &middot; ' + new Date(gameDate + 'T00:00:00').toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'}) : '') + '</div>' +
       '</div>';
 
-    html += '<table class="quarter-table"><tr><th></th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Final</th></tr>' +
-      '<tr><td>' + TEAMS[visitorKey].name + '</td>' + quarterScores[visitorKey].map(v=>'<td>'+v+'</td>').join('') + '<td>' + finalState.scores[visitorKey] + '</td></tr>' +
-      '<tr><td>' + TEAMS[homeKey].name + '</td>' + quarterScores[homeKey].map(v=>'<td>'+v+'</td>').join('') + '<td>' + finalState.scores[homeKey] + '</td></tr>' +
+    // otScores was computed above and then never rendered, so overtime
+    // points were absent from the quarter line while still counting in
+    // Final -- the row did not add up, which on a printed stat sheet is
+    // the kind of thing a coach spots and stops trusting the page over.
+    const hadOt = plays.some(p => (p.quarter || 1) >= 5);
+    html += '<table class="quarter-table"><tr><th></th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th>' +
+      (hadOt ? '<th>OT</th>' : '') + '<th>Final</th></tr>' +
+      '<tr><td>' + TEAMS[visitorKey].name + '</td>' + quarterScores[visitorKey].map(v=>'<td>'+v+'</td>').join('') +
+        (hadOt ? '<td>' + otScores[visitorKey] + '</td>' : '') + '<td>' + finalState.scores[visitorKey] + '</td></tr>' +
+      '<tr><td>' + TEAMS[homeKey].name + '</td>' + quarterScores[homeKey].map(v=>'<td>'+v+'</td>').join('') +
+        (hadOt ? '<td>' + otScores[homeKey] + '</td>' : '') + '<td>' + finalState.scores[homeKey] + '</td></tr>' +
       '</table>';
 
     const teamBlock = (teamKey, allowedLabel) => {
