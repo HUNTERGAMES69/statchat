@@ -1874,6 +1874,16 @@ button and most of this came out of it.
   rather than a bare domain.
 - [x] SQL kept in `sql/public_recap_sharing.sql`, checks first.
 
+### Also closed 15 Aug 2026
+
+- [x] Season report: time of possession moved from Discipline to
+  **Efficiency**. Keeping the ball describes how a team controlled a
+  game, the same question third and fourth down conversion answers --
+  it was sitting with Penalties and Sacks allowed, which are mistakes.
+- [x] `TEST_WEEK.md` gains **Night 6b — Public sharing**. The feature
+  shipped with no automated coverage, and it is the only part of the app
+  where a mistake is visible outside the building.
+
 ### Still open
 
 - [x] **Server-rendered share route — done 15 Aug 2026.** `/g/<id>`,

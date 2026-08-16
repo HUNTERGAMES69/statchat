@@ -167,6 +167,8 @@ or an error in the chart, and both are worth knowing.
       are verified as present and nothing more
 - [ ] If the game went to overtime, check the OT column appears and the
       quarter row adds up to the final score
+- [ ] Season report: **time of possession is in the Efficiency section**,
+      not with Penalties. Keeping the ball is not a mistake
 
 **The biggest coverage hole in the app.** PDF and XLS export have no
 automated coverage at all, and the stat package is what coaches actually
@@ -183,6 +185,55 @@ receive.
 **Pass:** a coach could read the PDF and find nothing to query.
 
 ---
+
+## Night 6b — Public sharing (45 min)
+
+Shipped 15 Aug 2026 and covered by no automated test at all. It is also
+the only part of StatChat where a mistake is visible OUTSIDE the
+building, so it gets a pass of its own rather than being folded into
+reports.
+
+Every one of these is a two-window job: signed in on one, and a
+**private / incognito window** on the other. A normal second window still
+carries your session and will happily show you a game that is not
+actually shared — which is the exact failure this is looking for.
+
+- [ ] Share a finished game. The button should read **Shared** and show a
+      `/g/<token>` link
+- [ ] Open that link in a **private window**. The recap must load, with
+      no sign-in prompt and no "Back to dashboard" link
+- [ ] Confirm the private window shows **no Share button**. If it does,
+      the admin gate is failing open
+- [ ] Turn sharing off. Reload the private window: expect the neutral
+      "not shared" page, and check it does NOT name either team
+- [ ] Share the SAME game again. The new link must **differ** from the
+      first, and the first must still be dead — that is the whole point
+      of the token
+- [ ] Try a made-up token, and the game's raw UUID as a token. Both
+      should give the same neutral page
+- [ ] Open a game that is **unlocked for corrections** while shared. It
+      must not be publicly readable — the policy needs final AND public
+- [ ] Check the **dashboard SHARED badge** appears on the right game, and
+      only on shared ones
+- [ ] `select count(*) from games where is_public` — does the number match
+      what you believe you have shared?
+
+**The link preview** — the part that cannot be tested from a browser tab:
+
+- [ ] `https://statchat.co/api/og?t=<token>` in a browser. The card should
+      render: both teams white, the winner's rule in their colour, the
+      date legible
+- [ ] Send the `/g/` link to yourself in **iMessage**. Expect the score as
+      the title and the scoreboard image
+- [ ] Paste it into **Slack**, which shows the description where iMessage
+      does not
+- [ ] Send a link for an **unshared** game and confirm the card gives
+      nothing away
+- [ ] A game with a **dark opponent colour** (navy, black): the mark
+      should keep the true colour and gain a ring, not turn pale
+
+**If a preview looks stale**, that is caching, not a bug — iMessage keys
+on the url. Test with a different game rather than chasing it.
 
 ## Night 7 — Resilience, then freeze (90 min)
 
