@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- A shared recap carries the names of minors on both teams. The link
+       is meant to reach the people it was sent to; it is not meant to be
+       crawled, indexed and searchable for ever. -->
+  <meta name="robots" content="noindex, nofollow">
 <meta charset="UTF-8">
 <!-- Without this every page load logs a 404 for /favicon.ico.
      Harmless, but a red console error should MEAN something. -->
@@ -13,7 +17,7 @@
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; color:#1a1a1a; }
   .wrap { max-width:900px; margin:0 auto; padding:24px 24px 60px; box-sizing:border-box; }
   .hidden { display:none !important; }
-  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+  .topbar { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
   .topbar a { color:#555; text-decoration:none; font-size:14px; font-weight:600; }
   .topbar button { background:#1a7a4c; color:#fff; border:none; border-radius:8px; padding:10px 18px; font-size:14px; font-weight:700; cursor:pointer; }
   .msg { padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:14px; }
@@ -156,8 +160,30 @@
     </div>
     <div id="mainView" class="hidden">
       <div class="topbar no-print">
-        <a href="dashboard.html">&larr; Back to dashboard</a>
+        <!-- Hidden for a signed-out visitor: it would bounce them to a
+             login screen, which is exactly what sharing is meant to
+             avoid. -->
+        <a href="dashboard.html" id="backLink" class="hidden">&larr; Back to dashboard</a>
+        <span id="topbarSpacer" style="flex:1;"></span>
+        <button id="shareBtn" type="button" class="hidden">Share</button>
         <button id="downloadBtn" type="button">Download PDF</button>
+      </div>
+      <div id="sharePanel" class="no-print hidden"
+           style="margin:0 0 14px; padding:14px; background:#fff; border:1px solid #ddd;
+                  border-radius:8px;">
+        <div style="font-weight:700; margin-bottom:8px;">Share this recap</div>
+        <label style="display:block; margin-bottom:6px; font-size:14px;">
+          <input type="radio" name="shareState" value="private"> Private &mdash; only signed-in accounts
+        </label>
+        <label style="display:block; margin-bottom:10px; font-size:14px;">
+          <input type="radio" name="shareState" value="public"> Anyone with the link
+        </label>
+        <div id="shareLinkRow" class="hidden">
+          <input type="text" id="shareLink" readonly
+                 style="width:100%; font-size:12px; padding:7px 8px; margin-bottom:8px;">
+          <button type="button" id="copyShareLink" class="secondary">Copy link</button>
+        </div>
+        <p id="shareMsg" style="font-size:12px; color:#666; margin:8px 0 0;"></p>
       </div>
       <!-- Shown only if the print dialog never opened. See the handler. -->
       <p id="printFallback" class="no-print hidden"
@@ -189,13 +215,40 @@
     return ok;
   }
 
+  // THIS PAGE IS READABLE WITHOUT AN ACCOUNT when a game has been shared.
+  // ---------------------------------------------------------------------
+  // Signed out no longer means "go away". It means "try to load, and let
+  // the database decide": the RLS policy grants anon a row only when the
+  // game is BOTH final and flagged public, so an unshared game simply
+  // comes back empty and the page says so.
+  //
+  // A signed-out visitor is never redirected. Bouncing someone holding a
+  // valid link to a login screen is the failure this whole feature exists
+  // to avoid.
+  let isAdmin = false;
+  // Whether anyone is signed in at all. Taken from the auth event rather
+  // than asked for again later: getSession() is a second round trip to
+  // answer a question we were just told the answer to.
+  let hasSession = false;
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION'){
+      hasSession = !!session;
       if (session){
         guardMinRoleOrRedirect(session.user.id, 'view').then(ok => {
-          if (ok) init();
+          if (!ok) return;
+          // The share control is ADMIN ONLY, and this gate fails closed:
+          // anything other than a confirmed admin leaves it hidden. A
+          // visitor must never be shown a Stop sharing button, and an
+          // errored role lookup must not be read as permission.
+          supabaseClient.from('profiles').select('role').eq('id', session.user.id).limit(1)
+            .then(({ data }) => { isAdmin = !!(data && data[0] && data[0].role === 'admin'); })
+            .catch(() => { isAdmin = false; })
+            .then(() => init());
         });
-      } else { window.location.href = '/'; }
+      } else {
+        isAdmin = false;
+        init();
+      }
     } else if (event === 'SIGNED_OUT'){
       window.location.href = '/';
     }
@@ -623,10 +676,24 @@ function isAdminMarker(p){
       .from('games').select('*').eq('id', currentGameId).limit(1);
     if (gameError || !gameRows || gameRows.length === 0){
       showView('errorView');
-      document.getElementById('errorMsg').textContent = gameError ? gameError.message : 'That game could not be found.';
+      // Signed out and empty almost always means the game is not shared,
+      // not that the id is wrong -- RLS returns no rows either way, so the
+      // message has to cover both without accusing the visitor of a bad
+      // link.
+      document.getElementById('errorMsg').textContent = gameError
+        ? gameError.message
+        : (hasSession
+            ? 'That game could not be found.'
+            : 'This recap is not shared, or the link is no longer valid. ' +
+              'If you have a StatChat account, sign in to view it.');
       return;
     }
     const game = gameRows[0];
+    setupShare(game);
+    {
+      const back = document.getElementById('backLink');
+      if (back && hasSession) back.classList.remove('hidden');
+    }
     gameLabel = game.designator;
     gameDate = game.game_date;
     quarterLengthSec = game.quarter_length_seconds || 720;
@@ -669,6 +736,72 @@ function isAdminMarker(p){
       document.getElementById('errorMsg').textContent = 'This recap could not be built: ' + err.message;
       console.error(err);
     }
+  }
+
+  // THE SHARE CONTROL. Admin only, and rendered only once a game has
+  // loaded -- there is nothing to share until we know it exists.
+  // --------------------------------------------------------------------
+  // The switch writes ONE column, games.is_public. The link is the recap
+  // URL that already exists, so a link already sent keeps working if
+  // sharing is turned back on, and stops working when it is turned off.
+  // That is what people expect a share toggle to do.
+  //
+  // The RLS policy requires final AND is_public, so this cannot expose a
+  // game that is unlocked for corrections later: unlocking flips it out
+  // of final and the public read stops matching.
+  function setupShare(game){
+    if (!isAdmin) return;
+    const btn = document.getElementById('shareBtn');
+    const panel = document.getElementById('sharePanel');
+    const linkRow = document.getElementById('shareLinkRow');
+    const linkEl = document.getElementById('shareLink');
+    const msg = document.getElementById('shareMsg');
+    if (!btn || !panel) return;
+    btn.classList.remove('hidden');
+    linkEl.value = window.location.origin + '/recap.html?id=' + game.id;
+
+    const paint = (isPublic) => {
+      panel.querySelectorAll('input[name=shareState]').forEach(r => {
+        r.checked = (r.value === (isPublic ? 'public' : 'private'));
+      });
+      linkRow.classList.toggle('hidden', !isPublic);
+      btn.textContent = isPublic ? 'Shared' : 'Share';
+    };
+    paint(!!game.is_public);
+
+    btn.addEventListener('click', () => panel.classList.toggle('hidden'));
+    panel.querySelectorAll('input[name=shareState]').forEach(radio => {
+      radio.addEventListener('change', async () => {
+        const wantPublic = radio.value === 'public';
+        msg.textContent = 'Saving…';
+        const { error } = await supabaseClient
+          .from('games').update({ is_public: wantPublic }).eq('id', game.id);
+        if (error){
+          // Say it failed and put the switch back. Leaving it showing the
+          // state you asked for, when the database refused, is how a game
+          // gets believed private while it is not.
+          msg.innerHTML = '<span style="color:#a32d2d;">Could not change sharing: ' +
+            error.message + '</span>';
+          paint(!!game.is_public);
+          return;
+        }
+        game.is_public = wantPublic;
+        paint(wantPublic);
+        msg.textContent = wantPublic
+          ? 'Anyone with this link can now read this recap. Turning sharing off stops ' +
+            'future visits — it cannot retract a copy somebody has already taken.'
+          : 'Sharing is off. The link now shows a "not shared" message.';
+      });
+    });
+    document.getElementById('copyShareLink').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(linkEl.value);
+        msg.textContent = 'Link copied.';
+      } catch (e) {
+        linkEl.select();
+        msg.textContent = 'Press and hold to copy the link above.';
+      }
+    });
   }
 
   // DOWNLOAD PDF, AND SAY SO WHEN IT DOES NOT HAPPEN.
