@@ -103,6 +103,16 @@
        that, and the browser ignores the rule rather than looping. */
     .section-title { page-break-after:avoid; break-after:avoid; }
     table.stat-table { page-break-inside:avoid; break-inside:avoid; }
+    /* Special Teams and Tackles are not ONE table -- they are a heading
+       followed by several. The two rules above keep the heading with the
+       first table and each table whole, and still let the group split
+       between its own subsections: Kickoffs on one page, Punting alone
+       on the next under no heading at all.
+       So the whole group is wrapped and kept together. If it is too tall
+       for the space left it moves entire, which is the behaviour asked
+       for -- a section is never split. */
+    .st-subsection { page-break-inside:avoid; break-inside:avoid; }
+    .stat-group { page-break-inside:avoid; break-inside:avoid; }
   }
 </style>
 </head>
@@ -749,7 +759,7 @@ function isAdminMarker(p){
       .map(n => ({ name: n, d: box.teamA.defense[n] }))
       .sort((a, b) => (b.d.tackles || 0) - (a.d.tackles || 0));
     if (tacklers.length){
-      html += '<div class="section-title">' + TEAMS.teamA.name + ' — Tackles</div>' +
+      html += '<div class="stat-group"><div class="section-title">' + TEAMS.teamA.name + ' — Tackles</div>' +
         '<table class="stat-table"><tr><th></th><th>Tackles</th><th>TFL</th>' +
         '<th>Sacks</th><th>Int</th><th>Fum Rec</th></tr>' +
         tacklers.map(p => '<tr><td>' + p.name + '</td><td>' + (p.d.tackles || 0) +
@@ -758,13 +768,13 @@ function isAdminMarker(p){
           '</td></tr>').join('') +
         '</table><p class="no-stats" style="margin-top:4px; font-size:11px;">' +
         'Counts only plays where a tackler was named. The team TFL above ' +
-        'counts every play for a loss, so it may be higher.</p>';
+        'counts every play for a loss, so it may be higher.</p></div>';
     }
 
     const koNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].kickoffs);
     const puntNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].punts);
     const kickNums = Object.keys(box.teamA.specialTeams).filter(n => box.teamA.specialTeams[n].fgAtt || box.teamA.specialTeams[n].patAtt);
-    html += '<div class="section-title">' + TEAMS.teamA.name + ' — Special Teams</div>';
+    html += '<div class="stat-group"><div class="section-title">' + TEAMS.teamA.name + ' — Special Teams</div>';
     const stSub = (label, tableHtml) => tableHtml ? '<div class="st-subsection"><div class="st-subsection-label">' + label + '</div>' + tableHtml + '</div>' : '';
     let stHtml = '';
     if (koNums.length){
@@ -787,7 +797,7 @@ function isAdminMarker(p){
           return [fa, fm, maxStat(obj,'fgLong'), fa?Math.round(100*fm/fa)+'%':'—', sumStat(obj,'fgBlocked'), pa, pm, pa?Math.round(100*pm/pa)+'%':'—', sumStat(obj,'patBlocked')]; },
         'fgAtt', 'special'));
     }
-    html += stHtml || '<p class="no-stats">No special teams stats recorded.</p>';
+    html += (stHtml || '<p class="no-stats">No special teams stats recorded.</p>') + '</div>';
 
     return html;
   }
