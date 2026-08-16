@@ -914,7 +914,39 @@
     return data.publicUrl;
   }
 
-  document.getElementById('createGameBtn').addEventListener('click', async () => {
+  // CREATING A GAME TAKES A FEW SECONDS AND USED TO LOOK LIKE NOTHING.
+  // ---------------------------------------------------------------------
+  // It is not one call: the team name is read, the game row is inserted,
+  // a logo may be uploaded, old roster rows are deleted and a snapshot of
+  // every player is written. On a 91-player roster over a phone
+  // connection that is a real pause with no sign of life -- so a coach
+  // presses the button again, and a second press creates a SECOND GAME.
+  // A silent slow button is worse than a slow one.
+  //
+  // The work is in a function rather than inline in the listener for one
+  // reason: it has eight early returns, and inside a function every one
+  // of them lands in the `finally` below. Guarding each return by hand
+  // would leave the button stuck disabled the first time one was missed.
+  let creating = false;
+
+  function setCreatingState(on, label){
+    const btn = document.getElementById('createGameBtn');
+    if (!btn) return;
+    if (on){
+      if (!btn.dataset.idleLabel) btn.dataset.idleLabel = btn.textContent;
+      btn.disabled = true;
+      btn.style.opacity = '0.65';
+      btn.style.cursor = 'progress';
+      btn.textContent = label || 'Working…';
+    } else {
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.cursor = '';
+      if (btn.dataset.idleLabel) btn.textContent = btn.dataset.idleLabel;
+    }
+  }
+
+  async function createOrSaveGame(){
     const designator = document.getElementById('designator').value.trim();
     const seasonYearRaw = document.getElementById('seasonYear').value;
     const seasonYear = parseInt(seasonYearRaw);
@@ -1010,6 +1042,11 @@
     ].map(r => Object.assign({ game_id: gameId }, r));
 
     if (rosterRows.length > 0){
+      // The longest step by far on a full roster, and the one worth
+      // naming: "Saving roster (91 players)…" tells a coach the pause is
+      // proportional to what they uploaded rather than something being
+      // stuck.
+      setCreatingState(true, 'Saving roster (' + rosterRows.length + ' players)…');
       const { error: rosterError } = await supabaseClient.from('game_rosters').insert(rosterRows);
       if (rosterError){
         showMsg('setupMsg', 'Game saved, but roster snapshot failed: ' + rosterError.message, 'error');
@@ -1018,7 +1055,33 @@
     }
 
     showMsg('setupMsg', editGameId ? 'Changes saved.' : 'Game created.', 'success');
+    // Deliberately NOT re-enabled here. The page is about to navigate, and
+    // a button that goes live again for 800ms at the end is an invitation
+    // to press it once more.
     setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
+    return 'navigating';
+  }
+
+  document.getElementById('createGameBtn').addEventListener('click', async () => {
+    // The flag, not just the disabled attribute. A second click can be
+    // dispatched in the same tick as the first, before the browser has
+    // applied `disabled` -- which is exactly the double-press this exists
+    // to stop.
+    if (creating) return;
+    creating = true;
+    setCreatingState(true, editGameId ? 'Saving…' : 'Creating game…');
+    let outcome = null;
+    try {
+      outcome = await createOrSaveGame();
+    } catch (err) {
+      // An unexpected throw must not leave the button dead. Say so and
+      // let them try again.
+      showMsg('setupMsg', 'Could not save: ' + (err && err.message ? err.message : err), 'error');
+    } finally {
+      creating = false;
+      // Left disabled only when the page is on its way to the dashboard.
+      if (outcome !== 'navigating') setCreatingState(false);
+    }
   });
 </script>
 </body>
