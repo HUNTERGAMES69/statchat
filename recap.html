@@ -553,6 +553,33 @@ function isAdminMarker(p){
         (hadOt ? '<td>' + otScores[homeKey] + '</td>' : '') + '<td>' + finalState.scores[homeKey] + '</td></tr>' +
       '</table></div>';
 
+    // SCORING SUMMARY, between the box score and the team stats. It
+    // answers "how did the points get there", which the quarter line
+    // above states and does not explain.
+    const scoring = scoringSummary(plays);
+    if (scoring.length){
+      html += '<div class="section"><h2>Scoring Summary</h2>' +
+        '<table class="player-table"><thead><tr>' +
+          '<th style="width:44px;">Qtr</th><th>Team</th><th>Play</th>' +
+          '<th style="width:74px; text-align:right;">Score</th>' +
+        '</tr></thead><tbody>' +
+        scoring.map(e => {
+          // The score column is always OUR team first, matching the
+          // scoreboard at the top. Reading one order at the top of the
+          // page and another halfway down is how a reader loses trust in
+          // both.
+          const detail = e.detail ? ' <span style="color:#888;">(' + e.detail + ')</span>' : '';
+          return '<tr>' +
+            '<td>' + (e.quarter >= 5 ? 'OT' : 'Q' + e.quarter) + '</td>' +
+            '<td style="font-weight:700;">' + TEAMS[e.team].name + '</td>' +
+            '<td>' + e.text + detail + '</td>' +
+            '<td style="text-align:right; font-weight:700;">' +
+              e.teamA + '\u2013' + e.teamB + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    }
+
     html += '<div class="section"><h2>Team Stats</h2><div class="team-compare">' +
       '<div class="col-head">' + tV.team.name + '</div><div></div><div class="col-head">' + tH.team.name + '</div>' +
       tV.rows.map((row, i) => '<div class="stat-row">' +

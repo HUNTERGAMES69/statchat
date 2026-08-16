@@ -701,6 +701,30 @@ function isAdminMarker(p){
         (hadOt ? '<td>' + otScores[homeKey] + '</td>' : '') + '<td>' + finalState.scores[homeKey] + '</td></tr>' +
       '</table>';
 
+    // SCORING SUMMARY, directly under the quarter line it explains.
+    // Wrapped in .stat-group so it cannot split across a page break --
+    // a scoring summary broken in half is worse than one on the next
+    // page whole.
+    const scoring = scoringSummary(plays);
+    if (scoring.length){
+      html += '<div class="stat-group"><div class="section-title">Scoring Summary</div>' +
+        '<table class="stat-table"><thead><tr>' +
+          '<th style="width:44px;">Qtr</th><th>Team</th><th>Play</th>' +
+          '<th style="width:78px; text-align:right;">Score</th>' +
+        '</tr></thead><tbody>' +
+        scoring.map(e => {
+          const detail = e.detail ? ' <span style="color:#888;">(' + e.detail + ')</span>' : '';
+          return '<tr>' +
+            '<td>' + (e.quarter >= 5 ? 'OT' : 'Q' + e.quarter) + '</td>' +
+            '<td style="font-weight:700;">' + TEAMS[e.team].name + '</td>' +
+            '<td style="text-align:left;">' + e.text + detail + '</td>' +
+            '<td style="text-align:right; font-weight:700;">' +
+              e.teamA + '\u2013' + e.teamB + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    }
+
     const teamBlock = (teamKey, allowedLabel) => {
       const m = teamMetrics(teamKey);
       const groups = [

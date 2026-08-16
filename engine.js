@@ -348,6 +348,88 @@ function countPossessions(playsList){
   return counts;
 }
 
+// SCORING SUMMARY — how the points actually got on the board.
+// =====================================================================
+// Every report had a quarter line and a box score, and nothing that said
+// WHO scored and WHEN. That is the first thing a game story leads with
+// and the first thing anybody asks.
+//
+// Nothing here is computed: every scoring play already carries its team,
+// its points and its text. This assembles them.
+//
+// A TOUCHDOWN AND ITS TRY ARE ONE ENTRY, which is how scoring summaries
+// are written everywhere -- "Roberson 4 run (Lyon kick)". They are two
+// plays in the log, so the try is folded into the touchdown before it and
+// not listed again. A try that follows nothing (which should not happen)
+// is left as its own line rather than dropped, because losing points
+// silently is worse than an odd-looking row.
+//
+// The running score is recomputed as the walk proceeds rather than read
+// from state, so the number beside each entry is the score AT THAT
+// MOMENT, not at the end.
+function scoringSummary(playsList){
+  const list = playsList || plays;
+  const out = [];
+  const running = { teamA: 0, teamB: 0 };
+
+  const tryText = (p) => {
+    // What goes in the brackets. A missed try is worth saying: a 6 in the
+    // quarter line with no explanation reads like a mistake.
+    //
+    // Deliberately string matching rather than a regex. tests/
+    // engine_standalone_check.js scans this file for identifiers it uses
+    // without defining -- the guard that stops api/feed.js throwing on a
+    // browser-only global -- and it cannot parse regex literals, so
+    // /GOOD|CONVERSION/ was read as two undefined globals. Teaching it to
+    // skip regexes turned out to eat real code as well, and a working
+    // guard is worth more than a tidier three lines here.
+    const t = String(p.text || '').toUpperCase();
+    const failed = t.indexOf('NO GOOD') !== -1 || t.indexOf('FAILED') !== -1 ||
+                   t.indexOf('MISSED') !== -1 || t.indexOf('BLOCKED') !== -1;
+    const good = !failed && (t.indexOf('GOOD') !== -1 || t.indexOf('CONVERSION') !== -1);
+    const two = (p.effect.score && p.effect.score.points === 2);
+    if (!good) return two ? 'two-point failed' : 'kick failed';
+    return two ? 'two-point good' : 'kick good';
+  };
+
+  for (let i = 0; i < list.length; i++){
+    const p = list[i];
+    const e = p.effect || {};
+    const sc = e.score;
+
+    // A TRY IS HANDLED BEFORE THE SCORE CHECK, because a MISSED try
+    // scores nothing and would otherwise be skipped entirely -- leaving
+    // the touchdown above it with a blank where "(kick failed)" belongs.
+    // Blank is ambiguous: it reads as "no try was entered" rather than
+    // "the kick was missed", and those are different facts.
+    const isTry = (p.roles && (p.roles.playType === 'pat' || p.roles.playType === 'twopt'));
+    if (isTry && out.length && out[out.length - 1].isTouchdown){
+      if (sc && sc.team && sc.points) running[sc.team] += sc.points;
+      const prev = out[out.length - 1];
+      prev.detail = tryText(p);
+      prev.teamA = running.teamA;
+      prev.teamB = running.teamB;
+      continue;
+    }
+
+    if (!sc || !sc.team || !sc.points) continue;
+    running[sc.team] += sc.points;
+    out.push({
+      quarter: p.quarter || 1,
+      team: sc.team,
+      points: sc.points,
+      text: p.text || '',
+      isTouchdown: sc.points === 6,
+      // A touchdown with no try after it stays blank rather than claiming
+      // a kick that was never entered.
+      detail: '',
+      teamA: running.teamA,
+      teamB: running.teamB
+    });
+  }
+  return out;
+}
+
 function countTurnovers(playsList){
   const counts = { teamA: 0, teamB: 0 };
   playsList.forEach(p => {
@@ -1060,6 +1142,7 @@ if (typeof module !== 'undefined' && module.exports) {
     findDriveStarts,
     countPossessions,
     countTurnovers,
+    scoringSummary,
     computeState,
     computeBoxScore,
     buildContext
