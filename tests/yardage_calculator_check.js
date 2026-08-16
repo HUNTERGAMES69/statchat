@@ -219,6 +219,16 @@ async function run() {
              'rush or a pass like any other, and working out "tackled on the 41" is exactly ' +
              'as useful here');
       }
+      // ...and it has to be WHERE the fake is. Retargeting alone left it
+      // sitting in the kick panel's own layout, three sections above the
+      // box it was filling -- correct arithmetic attached to the wrong
+      // part of the screen. It belongs beside the fake's yards box, the
+      // same as on a rush or a pass.
+      const fakeBox = doc.getElementById('pp_puntfake_box');
+      if (calc && fakeBox && !fakeBox.contains(calc)){
+        fail('fake calculator', 'the calculator is not inside the fake block — it fills the ' +
+             'fake\'s yards box while sitting somewhere else on the panel');
+      }
       typeInto(win, doc.getElementById('pp_carrier_manual'), '22');
       click(win, doc.querySelector('.calcSide[data-side="own"]'));
       typeInto(win, doc.getElementById('pp_calc_yardline'), '41');
@@ -276,6 +286,20 @@ async function run() {
       if (doc.getElementById('pp_puntfake_yards').value){
         fail('fake calculator', 'the fake\'s yards box was still being filled after the fake ' +
              'was turned off');
+      }
+      // And it must go HOME, not merely leave the fake box: appending it
+      // to the end of the panel would satisfy "not inside the fake" while
+      // leaving the punt panel visibly rearranged.
+      const box = doc.getElementById('pp_puntfake_box');
+      const calcBack = doc.getElementById('pp_calc_wrap');
+      if (box && calcBack && box.contains(calcBack)){
+        fail('fake calculator', 'the calculator stayed in the fake block after the fake was ' +
+             'turned off');
+      }
+      const yardsRow = doc.getElementById('pp_yards');
+      if (calcBack && yardsRow && calcBack.parentNode !== yardsRow.closest('div').parentNode){
+        fail('fake calculator', 'the calculator did not return to its place beside the punt ' +
+             'distance box');
       }
       h.close();
     }
