@@ -263,6 +263,20 @@ function enterPlay(h, spec) {
         if (spec.retyds !== undefined) typeInto(win, q(doc, 'pp_blockretyds'), spec.retyds);
         if (spec.td) toggle(win, doc, 'pp_td_toggle');
       } else if (spec.safety) toggle(win, doc, 'pp_punt_safety_toggle');
+    } else if (spec.muffed) {
+      // A muffed or bad snap. `muffsafety` is only reachable once the
+      // KICKING team is the recoverer, which is why the radio is set
+      // first -- clicking the toggle while it is hidden would set a
+      // checkbox the coach cannot see.
+      if (spec.yards !== undefined) typeInto(win, q(doc, 'pp_yards'), spec.yards);
+      toggle(win, doc, 'pp_muffed_toggle');
+      radio(win, doc, 'pp_punt_muffrec', spec.muffrec || 'k');
+      if (spec.muffrecoverer !== undefined) typeInto(win, q(doc, 'pp_muff_rec'), spec.muffrecoverer);
+      if (spec.safety) {
+        click(win, q(doc, 'pp_muff_safety_toggle'));
+      } else if (spec.muffretyds !== undefined) {
+        typeInto(win, q(doc, 'pp_muff_retyds'), spec.muffretyds);
+      }
     } else {
       if (spec.yards !== undefined) typeInto(win, q(doc, 'pp_yards'), spec.yards);
       P('credit', spec.credit);
