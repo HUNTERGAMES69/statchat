@@ -247,6 +247,46 @@ async function run() {
     }
     h.close();
 
+    // ...and the app must stop ASKING once overtime starts. A clock
+    // entered there is recorded and then ignored by the rule above, and
+    // asking for a number that does nothing is worse than not asking:
+    // it looks like it matters, and a scorer under pressure will stop to
+    // find one.
+    {
+      const k = await bootGamePage();
+      const { window: w, document: d } = k;
+      w.confirm = () => true; w.alert = () => {};
+      k.evalIn("pushAndPersist({id:nextId++, text:'Q4', effect:{setQuarter:4}, quarter:4}); renderAll();");
+      setDrive(k, { down: 4, distance: 8, side: 'own', yardline: 30 });
+      click(w, d.querySelector('.ptypeBtn[data-type="punt"]'));
+      typeInto(w, d.getElementById('pp_punter_manual'), '15');
+      typeInto(w, d.getElementById('pp_yards'), '40');
+      click(w, d.querySelector('.pp_spot_side[data-side="own"]'));
+      typeInto(w, d.getElementById('pp_spot_yardline'), '25');
+      click(w, d.getElementById('pp_review'));
+      if (d.getElementById('confirmClockRow').style.display !== 'block'){
+        fail('overtime possession time', 'a punt in Q4 stopped asking for the clock — the ' +
+             'overtime suppression has caught regulation too');
+      }
+      click(w, d.getElementById('saveBtn'));
+
+      click(w, d.getElementById('otUtilBtn'));
+      click(w, d.getElementById('ot_pickA'));
+      await new Promise(r => setTimeout(r, 60));
+      click(w, d.getElementById('ot_review'));
+      await new Promise(r => setTimeout(r, 80));
+      click(w, d.querySelector('.ptypeBtn[data-type="rush"]'));
+      typeInto(w, d.getElementById('pp_carrier_manual'), '22');
+      typeInto(w, d.getElementById('pp_yards'), '10');
+      click(w, d.getElementById('pp_td_toggle'));
+      click(w, d.getElementById('pp_review'));
+      if (d.getElementById('confirmClockRow').style.display === 'block'){
+        fail('overtime possession time', 'an overtime touchdown still asks for the clock — ' +
+             'there is no game clock in overtime and the value would be discarded');
+      }
+      k.close();
+    }
+
     // A possession opened in Q4 and closed in overtime pays out nothing.
     const g = await bootGamePage();
     g.window.confirm = () => true; g.window.alert = () => {};
