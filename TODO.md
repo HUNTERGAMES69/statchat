@@ -1884,6 +1884,96 @@ button and most of this came out of it.
   shipped with no automated coverage, and it is the only part of the app
   where a mistake is visible outside the building.
 
+- [x] `TEST_WEEK.md` restructured, 15 Aug 2026. **Reset for production
+  cannot be rehearsed** — it deletes every game in every season, so the
+  old Night 1 instruction to run it "against a throwaway 2099 game"
+  would have destroyed the week's test data on the first evening. It and
+  Clear roster now form Night 8, which is going live. The backup line is
+  gone: backups are automated.
+
+### On the horizon — a second instance for beta testing
+
+- [ ] **Make the deployment clonable, so another organisation can beta
+  test alongside Neville.** Agreed 15 Aug 2026. Do this AFTER the test
+  week: it touches all fourteen pages, and the thing being tested should
+  stop moving first.
+
+  **The shape: a second INSTANCE, not multi-tenancy.** One GitHub repo,
+  two Vercel projects, two Supabase projects. Same code, different
+  environment. Separate database, separate users, separate rosters —
+  nothing the other organisation does can reach Neville's data, and both
+  run whatever is on `main`.
+
+  Real multi-tenancy — an `org_id` on every table, RLS scoped by it — is
+  the commercial path and the wrong shape for one beta partner. It would
+  touch every query, every policy, the roster, the teams table and the
+  feed, and it would put two organisations' data one policy mistake apart.
+
+  **Blocker 1 — credentials are hardcoded in 14 files.**
+
+      const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+
+  in account, broadcast, broadcast_setup, create_game, customize,
+  dashboard, game, index, recap, reports, roster, season_report,
+  stat_package and view. A second deployment would need all fourteen
+  edited, which means two divergent copies of the code — exactly what
+  makes shipping a fix to both painful.
+
+  Fix: extract to a single `config.js` that every page loads. Better
+  still, have a tiny Vercel function emit it from environment variables,
+  so both deployments run BYTE-IDENTICAL code and differ only in Vercel
+  env vars. That is the difference between "clone" and "fork".
+
+  **Blocker 2 — there is no schema in the repo.** `sql/` holds only the
+  sharing migration. The tables, RLS policies, roles and the profiles
+  trigger exist in the Supabase dashboard and nowhere else. A new project
+  has nothing to build from.
+
+  Fix: `pg_dump --schema-only` committed as `sql/schema.sql`, plus a
+  `sql/seed.sql` with the minimum that makes an empty instance usable —
+  one team row and the roles. **This is worth doing on its own merits.**
+  The schema currently exists in exactly one place, and that place is a
+  hosted dashboard.
+
+  The schema dump half is NOT waiting for the test week — it is on the
+  Night 1 checklist, because it costs half an hour and protects something
+  that currently cannot be rebuilt. `seed.sql` and `config.js` are the
+  parts that wait.
+
+  **Subdomains of statchat.co.** Andy's call: Neville stays on the apex
+  or `neville.statchat.co`, the beta partner gets their own subdomain.
+  Each Vercel project takes its own domain, so nothing is shared but the
+  code.
+
+  Two things to check when doing it, both already half-handled:
+    - `api/share.js` and `api/og.js` derive the origin from the request
+      headers, so share links and preview cards follow the subdomain with
+      no change.
+    - `recap.html` still has `https://nevillestatchat.vercel.app/logo.png`
+      hardcoded in its fallback og tags, and `broadcast.html` has the same
+      host in a comment. The fallback tags only show when api/share.js is
+      bypassed, but on a second instance they would advertise Neville.
+
+  **Environment values a new instance needs** (five):
+  `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `FEED_KEY` on the server; and
+  the Supabase URL plus publishable key on the client, which is what
+  `config.js` exists to carry.
+
+  **Deliverable:** a `DEPLOYING.md` that reads: create a Supabase project,
+  run `sql/schema.sql` then `sql/seed.sql`, create a Vercel project from
+  the same repo, set five environment variables, point the subdomain at
+  it. Twenty minutes, repeatable, and the same procedure for a third
+  organisation later.
+
+  Rough size: a couple of hours, most of it mechanical.
+
+- [x] **Standing rule: the schema is committed with every change**
+  (15 Aug 2026). `sql/README.md` sets out the four steps — numbered
+  migration, run it, re-dump `sql/schema.sql`, diff the dump. RLS
+  policies, grants, roles and indexes all count. The existing sharing SQL
+  is renamed `001_public_recap_sharing.sql`; migrations are numbered from
+  here and never edited once run.
+
 ### Still open
 
 - [x] **Server-rendered share route — done 15 Aug 2026.** `/g/<id>`,

@@ -17,24 +17,30 @@ clear it and nothing has to be untangled from real data later.
 
 ---
 
-## The nightly gate — 133 seconds, run it first, every night
+## The nightly gate — about 2.5 minutes, run it first, every night
 
 ```bash
-for t in run_scripted cross_surface picker_check clock_display_check drive_boundary_check \
-         possession_and_drive_check optional_players_check entry_integrity_check \
-         picker_behaviour_check takeover_spot_check yardage_calculator_check \
-         receiver_targets_check shared_number_check onside_kick_check game_export_check \
-         offline_queue_check phase_derivation_check realtime_check chart_data_check \
-         tackles_check season_filter_check whitelist_check fake_kick_check \
-         full_game_check engine_standalone_check reset_check; do
-  node tests/$t.js || echo "FAILED: $t"
+for f in tests/*.js; do
+  t=$(basename "$f" .js)
+  case "$t" in harness|ui_driver|scripted_game|mutation_check) continue ;; esac
+  node "$f" >/dev/null 2>&1 || echo "FAILED: $t"
 done
+echo done
 ```
+
+Deliberately a glob rather than a list of names. The old version
+enumerated 26 suites and was out of date within a week — there are 31
+now, and a hand-written list silently stops running the ones added since
+it was written, which is the worst possible failure for a gate.
+
+`mutation_check` is excluded because it takes about four minutes and
+mutates the working tree; it has its own line in Night 1. The other three
+are helpers, not suites.
 
 If it is red, that is the night's work. If it is green, it has told you
 almost nothing new — which is the point of everything below.
 
-**Be honest about what these 26 suites buy.** They check the app against
+**Be honest about what these 31 suites buy.** They check the app against
 ITSELF: that a play entered produces the state the engine expects. Only
 `nfl/run_qa.js` checks against the outside world. Nearly every bug found
 on 13 August was found by using the app or by reading code, not by the
@@ -54,13 +60,41 @@ week's value is in the human nights.
       `plays.game_id` ON DELETE CASCADE? Is `game_rosters.game_id`? This
       is the one thing no test can tell you, and both the production
       reset and the roster clear depend on it.
-- [ ] **Take a database backup.** Before any of the destructive tests.
-- [ ] Create a throwaway 2099 game and run **Reset for production**
-      against it. It has never been run for real.
-- [ ] Upload a roster, then **Clear roster for new season**, then confirm
-      a previously finished game still shows every player name.
+- [ ] **Dump the schema into the repo.** The tables, RLS policies, roles
+      and the profiles trigger currently exist in the Supabase dashboard
+      and NOWHERE ELSE. A schema that lives in exactly one place — and
+      that place is somebody else's hosted web app — cannot be rebuilt
+      and cannot be reviewed.
 
-**Pass:** gate green, cascade confirmed in writing, backup exists.
+      Connection string: Supabase → Project Settings → Database.
+
+      ```bash
+      pg_dump "postgres://postgres:[PASSWORD]@db.pboushzlcyfkssojpuut.supabase.co:5432/postgres" \
+        --schema-only --schema=public --no-owner --no-privileges \
+        -f sql/schema.sql
+      ```
+
+      Then READ IT before committing, for two reasons. First, confirm the
+      cascades from the item above appear in writing — that is a second,
+      independent check of the same thing. Second, a schema dump can
+      carry comments or defaults you would rather not publish; this repo
+      is not public today, but the file outlives that assumption.
+
+      Do this BEFORE Night 8. The reset deletes data, not schema, but a
+      dump taken while the app still has real games in it is the one that
+      proves the shape was right.
+
+      From then on the schema stays current with every change — the
+      procedure is in `sql/README.md`, and it is four steps: write a
+      numbered migration, run it, re-dump, diff the dump.
+
+**Backups are automated now** and no longer a checklist item. The
+destructive tests that used to live here — Reset for production and Clear
+roster — have moved to the very end of the week, for the reason set out
+there: they delete the data the rest of the week is testing with.
+
+**Pass:** gate green, cascade confirmed in writing, `sql/schema.sql`
+committed.
 
 ---
 
@@ -249,9 +283,50 @@ on the url. Test with a different game rather than chasing it.
 
 ---
 
+## Night 8 — Going live. Do these LAST, in this order (30 min)
+
+These two delete the data every other night is testing with, which is why
+they are last rather than first.
+
+**RESET FOR PRODUCTION CANNOT BE REHEARSED.** There is no way to run it
+against a throwaway game and leave the rest alone — it takes EVERY game
+in the table, in every season, unfinalizes the finished ones, deletes
+them all, then clears the roster and the season year:
+
+```js
+const ids = (allGames || []).map(g => g.id);   // no season filter
+await supabaseClient.from('games').delete().in('id', ids);
+```
+
+So running it IS going live. The earlier plan had it on Night 1 against a
+"throwaway 2099 game", which would have wiped the 2025 test games on the
+first evening and taken the week's material with them.
+
+- [ ] Everything from Nights 1–7 passes, and every defect is logged
+- [ ] You have read the season-report and stat-package exports you care
+      about, or exported them to PDF. **After the reset they are gone**
+- [ ] Confirm a recent automatic backup exists in Supabase → Database →
+      Backups. Not as a checklist ritual — as the thing you would restore
+      from if the delete goes wrong halfway
+- [ ] Note which games are shared: `select designator from games where
+      is_public`. Those links die with the games
+- [ ] **Run Reset for production.** Password, then the typed agreement
+- [ ] Confirm afterwards: no games, no roster, no season year — and that
+      the team name, colours, logo and every user account survived
+- [ ] Set the season year for the real season
+- [ ] Upload the real roster
+- [ ] **Clear roster for new season** is the OTHER destructive one. It is
+      not needed today — it belongs to next August — but test it now if
+      you want it proven: upload a throwaway roster, clear it, and confirm
+      a previously finished game still shows every player name from its
+      snapshot. Then upload the real roster again
+- [ ] Final gate run. Freeze
+
+---
+
 ## Definition of done
 
-- Seven nights complete, every defect logged
+- Nights 1–7 complete, every defect logged
 - Gate green on the final run
 - The golden game reconciles exactly
 - A PDF stat package you would hand a head coach

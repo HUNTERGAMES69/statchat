@@ -1555,3 +1555,51 @@ Worth noting how the attempt failed: setting `document.title` earlier in
 `init()` broke seven suites, because `TEAMS` is not populated yet at that
 point. The page already set a per-game tab title further down -- so the
 line was redundant as well as misplaced, and the tests found both.
+
+
+## An instance is not a tenant (15 August 2026)
+
+Andy wants another organisation beta testing alongside Neville. The
+obvious reading is multi-tenancy — an `org_id` on every table, RLS scoped
+by it — and it is the wrong answer for this.
+
+Two organisations in one database are one policy mistake apart. Two
+organisations in two databases cannot reach each other at all, whatever
+anybody writes. For a beta with one partner, isolation is worth more than
+the convenience of a single instance, and the cost is a second Supabase
+project.
+
+**What makes a deployment clonable is not the database, it is the
+configuration.** The Supabase url and publishable key are currently
+hardcoded in fourteen HTML files, which means a second deployment is a
+FORK — fourteen edits, a divergent copy, and every future fix applied
+twice. Extract them to one file and it becomes a CLONE: identical code,
+different environment variables.
+
+The other thing missing is the schema. `sql/` holds one migration; the
+tables, policies and roles live in the hosted dashboard and nowhere else.
+That is worth fixing regardless of cloning — a schema that exists in
+exactly one place, and that place is somebody else's web app, is a
+backup with extra steps.
+
+
+## The schema is committed, every time (15 August 2026)
+
+Standing rule, recorded in `sql/README.md` and repeated here because it is
+the kind of thing that decays quietly:
+
+**Every database change is committed before the session ends** — a
+numbered migration in `sql/`, and a re-dumped `sql/schema.sql`. That
+includes RLS policies, grants, roles and indexes, not just tables. Those
+are the ones that get clicked in a dashboard and forgotten.
+
+The step that earns the procedure is **diffing the dump afterwards**.
+`git diff sql/schema.sql` should show exactly what the migration claimed
+and nothing else. It catches two things nothing else will: a change made
+by hand in the table editor weeks ago, and a migration that did more than
+it said.
+
+A migration is never edited once it has run. If it was wrong, write
+another. An edited migration is a file that says one thing and did
+another, and any instance that ran the old version is now silently
+different — survivable with one deployment, not with three.
