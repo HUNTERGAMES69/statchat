@@ -200,6 +200,14 @@ async function run() {
       '.pp_passer_pick', 'pp_passer_manual',
       '.pp_receiver_pick', 'pp_receiver_manual',
       'pp_puntfake_yards', '.lossToggle',
+      // The yardage calculator, live on a fake since 14 Aug 2026. It used
+      // to be hidden with the rest of the kick fields, on the reasoning
+      // that it measures where a KICK came down -- but a fake is a rush
+      // or a pass, and working out "tackled on the 41" is exactly as
+      // useful here as on any scrimmage play. It is retargeted to the
+      // fake's own yards box rather than duplicated, which is what the
+      // assertions in yardage_calculator_check.js pin.
+      'pp_calc_yardline', '.calcSide', '.ptoggle',
       'pp_puntfake_incomplete_toggle', 'pp_puntfake_td_toggle',
       // NOT pp_credit_* -- on the punt panel those are the RETURNER
       // fields ("Returned by"), not a tackler. Allowing them here is how

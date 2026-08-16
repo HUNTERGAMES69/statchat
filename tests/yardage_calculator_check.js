@@ -187,6 +187,100 @@ async function run() {
     h.close();
   }
 
+  // --- THE CALCULATOR FOLLOWS A FAKE ------------------------------------
+  // Added 14 Aug 2026. A fake punt or fake field goal is a rush or a pass
+  // with its own yardage, and it was the one scrimmage-shaped play in the
+  // app with no calculator: the kick's own was hidden when the fake
+  // opened, on the reasoning that it measures where a kick came down.
+  //
+  // Retargeted rather than duplicated -- a second calculator on the panel
+  // would need its own ids and wiring, and two of them could disagree.
+  // The assertions below are mostly about that: the RIGHT box gets the
+  // answer and the other stays empty, in both directions.
+  {
+    const { typeInto } = require('./ui_driver');
+    const openFake = async () => {
+      const h = await bootGamePage();
+      const { window: win, document: doc } = h;
+      setDrive(h, { down: 4, distance: 6, side: 'own', yardline: 30 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="punt"]'));
+      typeInto(win, doc.getElementById('pp_punter_manual'), '15');
+      click(win, doc.getElementById('pp_punt_fake_toggle'));
+      return h;
+    };
+
+    // A gain: own 30 to own 41 is +11, into the FAKE's yards box.
+    {
+      const h = await openFake();
+      const { window: win, document: doc } = h;
+      const calc = doc.getElementById('pp_calc_wrap');
+      if (!calc || calc.style.display === 'none'){
+        fail('fake calculator', 'the yardage calculator is not available on a fake — it is a ' +
+             'rush or a pass like any other, and working out "tackled on the 41" is exactly ' +
+             'as useful here');
+      }
+      typeInto(win, doc.getElementById('pp_carrier_manual'), '22');
+      click(win, doc.querySelector('.calcSide[data-side="own"]'));
+      typeInto(win, doc.getElementById('pp_calc_yardline'), '41');
+      const fakeYds = doc.getElementById('pp_puntfake_yards').value;
+      const kickYds = doc.getElementById('pp_yards').value;
+      if (fakeYds !== '11'){
+        fail('fake calculator', 'tackled on own 41 from own 30 should be 11 in the fake\'s ' +
+             'yards box, got ' + JSON.stringify(fakeYds));
+      }
+      if (kickYds){
+        fail('fake calculator', 'the KICK distance box was filled instead of, or as well as, ' +
+             'the fake\'s: ' + JSON.stringify(kickYds) + '. One calculator, one target');
+      }
+      click(win, doc.getElementById('pp_review'));
+      click(win, doc.getElementById('saveBtn'));
+      const saved = h.db.plays[h.db.plays.length - 1];
+      if (!/FAKE PUNT/.test(saved.text) || !/for 11/.test(saved.text)){
+        fail('fake calculator', 'the saved play does not carry the worked-out yardage: ' + saved.text);
+      }
+      h.close();
+    }
+
+    // A loss: own 30 back to own 26. The sign comes out of the
+    // arithmetic, so LOSS must be set for us -- a coach setting it as
+    // well would double-negate.
+    {
+      const h = await openFake();
+      const { window: win, document: doc } = h;
+      typeInto(win, doc.getElementById('pp_carrier_manual'), '22');
+      click(win, doc.querySelector('.calcSide[data-side="own"]'));
+      typeInto(win, doc.getElementById('pp_calc_yardline'), '26');
+      const loss = doc.querySelector('.lossToggle[data-for="pp_puntfake_yards"]');
+      if (doc.getElementById('pp_puntfake_yards').value !== '4'){
+        fail('fake calculator', 'a 4-yard loss should read 4 with LOSS set, got ' +
+             JSON.stringify(doc.getElementById('pp_puntfake_yards').value));
+      }
+      if (!loss || !loss.classList.contains('picked')){
+        fail('fake calculator', 'LOSS was not set by the calculator on a losing fake — the ' +
+             'sign comes out of the arithmetic, and leaving it to the coach double-negates');
+      }
+      h.close();
+    }
+
+    // Toggling the fake back OFF returns the calculator to the kick.
+    {
+      const h = await openFake();
+      const { window: win, document: doc } = h;
+      click(win, doc.getElementById('pp_punt_fake_toggle'));
+      click(win, doc.querySelector('.calcSide[data-side="opp"]'));
+      typeInto(win, doc.getElementById('pp_calc_yardline'), '28');
+      if (!doc.getElementById('pp_yards').value){
+        fail('fake calculator', 'after un-toggling the fake the calculator no longer fills the ' +
+             'punt distance — it stayed pointed at a box that is now hidden');
+      }
+      if (doc.getElementById('pp_puntfake_yards').value){
+        fail('fake calculator', 'the fake\'s yards box was still being filled after the fake ' +
+             'was turned off');
+      }
+      h.close();
+    }
+  }
+
   return failures;
 }
 
