@@ -22,7 +22,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const engine = require('./_engine.js');
-const { countPossessions, countTurnovers } = engine;
+const { countPossessions, countTurnovers, quarterLabel } = engine;
 
 // ---------------------------------------------------------------- utils
 
@@ -148,8 +148,15 @@ function buildViews(ctx) {
       homeScore: (state.scores || {}).teamA || 0,
       awayTeam: sideName('teamB'),
       awayScore: (state.scores || {}).teamB || 0,
-      quarter: state.quarter >= 5 ? 'OT' : ('Q' + state.quarter),
+      // Through quarterLabel, so the scoreboard bug says OT1 / OT2 / OT3
+      // exactly as the app does. A flat 'OT' told a viewer nothing about
+      // which overtime they were watching, which by the third is the only
+      // thing anyone wants to know.
+      quarter: quarterLabel(state),
       quarterNumber: state.quarter,
+      // The overtime round on its own, for an operator who wants to build
+      // their own wording. 0 outside overtime, so a template can test it.
+      overtimeRound: state.quarter >= 5 ? Math.max(1, Math.ceil((state.otSeries || 1) / 2)) : 0,
       down: state.down || '',
       downOrdinal: state.down ? ['', '1st', '2nd', '3rd', '4th'][state.down] : '',
       distance: state.down ? distanceLabel : '',
@@ -193,7 +200,11 @@ function buildViews(ctx) {
     // One row: ticker text.
     lastplay: [{
       text: lastReal ? lastReal.text : '',
-      quarter: lastReal ? ('Q' + (lastReal.quarter || state.quarter)) : '',
+      // A play in overtime is tagged OT, not Q5 -- matching the drive log
+      // on both pages. Unnumbered on purpose: the tag belongs to the
+      // PLAY, and the round is a property of the current state, so
+      // numbering it here would relabel an old play as the game moved on.
+      quarter: lastReal ? ((lastReal.quarter || state.quarter) >= 5 ? 'OT' : 'Q' + (lastReal.quarter || state.quarter)) : '',
       team: lastReal ? sideName(lastReal.team) : ''
     }],
 
