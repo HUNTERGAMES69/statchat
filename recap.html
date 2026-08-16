@@ -141,6 +141,22 @@
     table.player-table { font-size:12px; }
     table.player-table th, table.player-table td { padding:5px 6px; }
   }
+  /* SCORING SUMMARY LAYOUT.
+     Everything left justified -- heading, column headers and cells --
+     and fixed column widths. Without the widths the Play column's
+     varying length shoves the score column around from row to row, and a
+     right-hand column that wanders is unreadable at a glance.
+     Alternating shade because the score cell is two lines tall: ten rows
+     of those run together, and the band gives the eye a line to follow
+     from a play across to the score it produced. */
+  .scoring-summary h2, .scoring-summary .section-title { text-align:left; }
+  .scoring-summary table th, .scoring-summary table td { text-align:left; vertical-align:top; }
+  .scoring-summary tbody tr:nth-child(odd) { background:#f7f8f9; }
+  .scoring-summary .ss-qtr { width:48px; }
+  .scoring-summary .ss-team { width:150px; font-weight:700; }
+  .scoring-summary .ss-score { width:132px; font-weight:700; white-space:nowrap; line-height:1.35; }
+  .scoring-summary .ss-away { color:#666; }
+  .scoring-summary .ss-detail { color:#888; }
   @media print {
     body { background:#fff; }
     .wrap { max-width:none; padding:0 24px; }
@@ -570,6 +586,11 @@ function isAdminMarker(p){
     // answers "how did the points get there", which the quarter line
     // above states and does not explain.
     const scoring = scoringSummary(plays);
+    // Which of our two team keys is at home. TEAMS.teamA is always OUR
+    // team; isHome says whether that is the home side for this fixture.
+    const homeIsA = !!TEAMS.teamA.isHome;
+    const homeName = homeIsA ? TEAMS.teamA.name : TEAMS.teamB.name;
+    const awayName = homeIsA ? TEAMS.teamB.name : TEAMS.teamA.name;
     if (scoring.length){
       html += '<div class="section scoring-summary"><h2>Scoring Summary</h2>' +
         '<table class="player-table"><thead><tr>' +
@@ -581,17 +602,25 @@ function isAdminMarker(p){
           // scoreboard at the top. Reading one order at the top of the
           // page and another halfway down is how a reader loses trust in
           // both.
-          const detail = e.detail ? ' <span style="color:#888;">(' + e.detail + ')</span>' : '';
+          const detail = e.detail ? ' <span class="ss-detail">(' + e.detail + ')</span>' : '';
           return '<tr>' +
-            '<td>' + (e.quarter >= 5 ? 'OT' : 'Q' + e.quarter) + '</td>' +
-            '<td style="font-weight:700;">' + TEAMS[e.team].name + '</td>' +
+            '<td class="ss-qtr">' + (e.quarter >= 5 ? 'OT' : 'Q' + e.quarter) + '</td>' +
+            '<td class="ss-team">' + TEAMS[e.team].name + '</td>' +
             '<td>' + e.text + detail + '</td>' +
             // Named, not "7-0". A bare pair leaves a reader working out
             // which number is whose from the home/away line at the top of
             // the page -- and getting it backwards on an away game.
-            '<td style="text-align:right; font-weight:700; white-space:nowrap;">' +
-              TEAMS.teamA.name + ' ' + e.teamA + '<br>' +
-              TEAMS.teamB.name + ' ' + e.teamB + '</td>' +
+            // HOME ALWAYS ON THE BOTTOM LINE, whoever that is. It is the
+            // convention every scoreboard uses, so the column reads the
+            // same way at home and away -- which does mean our own team
+            // moves between the two lines depending on the fixture.
+            //
+            // The away line is dimmed slightly so the pair reads as a top
+            // and a bottom rather than two equal numbers.
+            '<td class="ss-score">' +
+              '<span class="ss-away">' + awayName + ' ' + (homeIsA ? e.teamB : e.teamA) + '</span><br>' +
+              '<span>' + homeName + ' ' + (homeIsA ? e.teamA : e.teamB) + '</span>' +
+            '</td>' +
           '</tr>';
         }).join('') +
         '</tbody></table></div>';
