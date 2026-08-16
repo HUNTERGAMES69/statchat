@@ -637,13 +637,50 @@
       });
     });
 
+    // Whether a row menu should open upwards instead of down.
+    // Named and separated from the DOM work so the RULE can be reasoned
+    // about and tested without a browser: jsdom reports every rectangle
+    // as zero, so the decision is untestable while it is tangled up with
+    // getBoundingClientRect.
+    //
+    // Flip only when it genuinely does not fit below AND there is more
+    // room above. Flipping into an even smaller gap helps nobody, and a
+    // menu that flips on a screen where neither direction fits just moves
+    // the problem.
+    function menuShouldFlip(bottomGap, topGap, menuHeight){
+      const MARGIN = 8;
+      return bottomGap < MARGIN && topGap > menuHeight + MARGIN;
+    }
+
     body.querySelectorAll('.rowMenuBtn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const menu = body.querySelector('.rowMenu[data-id="' + btn.dataset.id + '"]');
         const isOpen = !menu.classList.contains('hidden');
         body.querySelectorAll('.rowMenu').forEach(m => m.classList.add('hidden'));
-        if (!isOpen) menu.classList.remove('hidden');
+        if (!isOpen){
+          menu.classList.remove('hidden');
+          // OPEN UPWARDS WHEN THERE IS NO ROOM BELOW.
+          // ------------------------------------------------------------
+          // The menu is anchored top:100%, so it always dropped down --
+          // fine for the first game in the list, and off the bottom of
+          // the screen for the last one. On a phone that is most of the
+          // list, and the items were unreachable.
+          //
+          // Measured after it is shown, because a hidden element has no
+          // height to measure. Reset to the default first: a menu opened
+          // once near the bottom would otherwise keep opening upwards
+          // after the page scrolled.
+          menu.style.top = '100%';
+          menu.style.bottom = 'auto';
+          const r = menu.getBoundingClientRect();
+          const bottomGap = window.innerHeight - r.bottom;
+          const topGap = btn.getBoundingClientRect().top;
+          if (menuShouldFlip(bottomGap, topGap, r.height)){
+            menu.style.top = 'auto';
+            menu.style.bottom = '100%';
+          }
+        }
       });
     });
     body.querySelectorAll('.resetGameBtn').forEach(btn => {
