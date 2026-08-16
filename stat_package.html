@@ -31,9 +31,27 @@
   .team-block { background:#fff; border:1px solid #ddd; padding:14px 16px; margin-bottom:16px; }
   .team-block-header { display:flex; align-items:center; gap:10px; font-weight:700; font-size:15px; margin-bottom:10px; padding-bottom:8px; border-bottom:2px solid #eee; }
   .team-block-logo { width:32px; height:32px; object-fit:contain; }
-  .metric-group { border-top:0.5px solid #eee; padding-top:12px; margin-top:12px; }
+  /* The group heading sits BESIDE its metrics, not above them, in a fixed
+     gutter. Six groups per team then line their headings up in a straight
+     column, so a reader finds EFFICIENCY by looking rather than by
+     reading down -- and each heading stops costing a line of its own,
+     which over six groups and two teams is most of a section on a printed
+     page.
+     Centred against the full two-line height of an item, so it reads as
+     belonging to the number AND its descriptor. Baseline alignment looked
+     right on a short row and drifted on a long one. */
+  .metric-group { border-top:0.5px solid #eee; padding-top:10px; margin-top:10px;
+                  display:flex; gap:18px; align-items:center; }
   .metric-group:first-child { border-top:none; padding-top:0; margin-top:0; }
-  .metric-group-label { font-size:11px; color:#999; text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px; }
+  /* 19px matches the value size exactly. The headings do not take over at
+     that size because the WEIGHT differs -- 500 against the values' 700 --
+     so the numbers stay the heaviest thing on the page, which is what a
+     stat sheet wants.
+     The 128px gutter is sized for EFFICIENCY, the longest label. A longer
+     group name would wrap or push the metrics; if one is ever added, size
+     this from the content instead. */
+  .metric-group-label { font-size:19px; font-weight:500; letter-spacing:0.05em;
+                        color:#1a1a2e; flex:0 0 128px; min-width:128px; }
   .metric-group-row { display:flex; gap:28px; flex-wrap:wrap; }
   .metric-group-row .metric-item .metric-val { font-size:20px; font-weight:700; }
   .metric-group-row .metric-item .metric-label { font-size:11px; color:#888; margin-left:4px; }
@@ -639,16 +657,22 @@ function isAdminMarker(p){
           [m.rushYds, 'Yds'], [m.rushAtt ? (m.rushYds/m.rushAtt).toFixed(1) : '0.0', 'Yds/att'], [m.rushTd, 'TD'] ] },
         { color: '#993556', label: 'Discipline', items: [
           [m.turnovers, 'Turnovers'], [m.sacked, 'Sacks allowed'], [m.penCount + '-' + m.penYds, 'Penalties'] ] },
-        // Time of possession sits with Efficiency rather than Discipline:
-        // it is a description of how the game was controlled, not of
-        // mistakes. Em dash when no clocks were entered -- 0:00 would
-        // claim they never had the ball.
-        { color: '#3C6E47', label: 'Possession', items: [
-          [m.top ? formatDuration(m.top) : '—', 'Time of possession'] ] },
         { color: '#999', label: 'Efficiency', items: [
           [m.own.d3Pct !== null ? m.own.d3conv+'/'+m.own.d3att+' ('+m.own.d3Pct+'%)' : '—', '3rd down'],
           [m.own.d4Pct !== null ? m.own.d4conv+'/'+m.own.d4att+' ('+m.own.d4Pct+'%)' : '—', '4th down'],
-          [m.own.explosive, '20yd+ plays'] ] }
+          [m.own.explosive, '20yd+ plays'] ] },
+        // Time of possession is its own group, not a Discipline one: it
+        // describes how the game was controlled, not what went wrong.
+        //
+        // LAST because it is the shortest -- one metric against a 128px
+        // heading leaves a lot of white to its right, and a block that
+        // tapers off at the end reads better than one that dips in the
+        // middle and picks back up.
+        //
+        // Em dash when no clocks were entered; 0:00 would claim they
+        // never had the ball.
+        { color: '#3C6E47', label: 'Possession', items: [
+          [m.top ? formatDuration(m.top) : '—', 'Time of possession'] ] }
       ];
       const groupHtml = groups.map(g => '<div class="metric-group">' +
         '<div class="metric-group-label">' + g.label + '</div>' +
