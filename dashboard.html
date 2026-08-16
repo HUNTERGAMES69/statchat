@@ -833,8 +833,19 @@
       return;
     }
 
+    // BACK TO 'setup', which is what a NEW game is created with
+    // (create_game.html sets gamePayload.status = 'setup').
+    //
+    // This wrote 'in_progress', so a reset game kept reading "In progress"
+    // on the dashboard for ever: the row said in_progress while
+    // game_phase said notStarted, and the dashboard label reads STATUS.
+    // The confirm text already promised "puts the game back to not
+    // started" -- it was the only part of the operation that did not.
+    //
+    // A reset game and a game that has never been opened should be
+    // indistinguishable, because that is what reset means.
     const { error: gameErr } = await supabaseClient.from('games').update({
-      status: 'in_progress', game_phase: 'notStarted', guided_state: null,
+      status: 'setup', game_phase: 'notStarted', guided_state: null,
       final_score_us: null, final_score_opp: null
     }).eq('id', gameId);
     if (gameErr){
