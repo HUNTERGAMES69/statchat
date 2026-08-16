@@ -2011,11 +2011,13 @@ function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
   // by sheer length -- the eye had to read past it to find the digits.
   // Now: number at 18px, name at 13px and slightly dimmed.
   //
-  // The number sits in a fixed-width right-aligned box with tabular
-  // figures, so 1 and 22 occupy identical space and every name starts at
-  // the same x. Down a column of buttons the numbers line up, which turns
-  // scanning from reading into looking at one place. Without
-  // tabular-nums the digits are proportional and the column drifts.
+  // NO reserved width for the digits. The first cut gave the number a
+  // fixed 2.1ch right-aligned box so the numbers would line up in a
+  // column -- which only pays off if the buttons stack with aligned left
+  // edges. They wrap and flow, so every button starts at a different x,
+  // the column never appears, and on a single digit the reserved space
+  // reads as inconsistent left padding instead. tabular-nums stays: it
+  // costs nothing and keeps the digits even.
   //
   // No '#' sigil. Every button had one, so it distinguished nothing and
   // cost a character in exactly the column being read.
@@ -2025,8 +2027,8 @@ function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
       (p.resolvedName ? ' data-resolved="' + p.resolvedName.replace(/"/g,'') + '"' : '') +
       (p.unit ? ' data-unit="' + p.unit + '"' : '') +
       ' style="margin:0 6px 6px 0; display:inline-flex; align-items:baseline; gap:9px;">' +
-      '<b style="font-size:18px; font-weight:800; font-variant-numeric:tabular-nums; ' +
-        'display:inline-block; min-width:2.1ch; text-align:right;">' + p.num + '</b>' +
+      '<b style="font-size:18px; font-weight:500; font-variant-numeric:tabular-nums; ' +
+        'letter-spacing:0.01em;">' + p.num + '</b>' +
       '<span style="font-size:13px; opacity:0.88;">' + (p.name||'') + '</span>' +
       (label ? '<span style="font-size:11px; opacity:0.62;">' + label + '</span>' : '') +
       '</button>';
