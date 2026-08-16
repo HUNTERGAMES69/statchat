@@ -1789,3 +1789,77 @@ none of it changes how a stat is computed except the Unknown bucket.
   foreign-key cascade, take a backup, run Reset for production against a
   throwaway 2099 game, and clear the roster and confirm a finished game
   keeps its names.
+
+---
+
+## 19. 15 August 2026 — overtime, print output, and a first real roster
+
+The longest session so far. Andy ran the first live test of the overtime
+button and most of this came out of it.
+
+### Overtime — closed
+
+- [x] **Series flow.** Overtime is played in series; the app treated it as
+  continuous football, so the second team inherited the ball wherever the
+  first team's drive died and no new drive began. The guided panel now
+  returns by itself when a series ends, names the team, and prefills the
+  opponent's 10.
+- [x] **`otSeriesTeam` tracked separately from possession** — they
+  disagree constantly. See `PROJECT_NOTES.md`.
+- [x] **OT1 / OT2 / OT3 in both headers**, via a shared `quarterLabel()`
+  in `engine.js` so the two banners cannot drift. Play rows in the drive
+  log say `OT` rather than `Q5`.
+- [x] **`otSeriesStart` flag** so a manual possession flip no longer
+  advances the round.
+- [x] **End of regulation** divider written when overtime starts.
+- [x] **End game from between series** — the panel disables the rest of
+  the page, so there was no way to finish. `finalizeGame()` extracted
+  rather than copied; offered only when one side is ahead.
+- [x] **Kickoff and Punt greyed out in overtime.** Field goal left live —
+  it is how most series end.
+- [x] **Time of possession stops at the end of regulation**, and the
+  clock prompt is suppressed there entirely.
+- [x] **OT column** in the recap and stat package quarter lines. Both had
+  been folding overtime points into Q4; the stat package's XLS export had
+  it right, so the spreadsheet and the page disagreed.
+- [x] **Feed reports overtime properly** — `quarter` gives OT1/OT2/OT3,
+  `lastplay` says OT not Q5, and a new `overtimeRound` field.
+
+### Entry and reporting — closed
+
+- [x] Clock asked at the **touchdown**, not the try, so a scoring drive's
+  time is the drive's rather than the drive plus the PAT
+- [x] After a touchdown, only PAT and 2PT are available. Keyed on six
+  points, not `effect.td` — returned touchdowns do not set that flag
+- [x] A muffed punt recovered by the kicking team is a **turnover**
+- [x] **Name an unknown number mid-game**, written to `game_rosters`, and
+  it applies to plays already entered
+- [x] **Blank positions accepted on roster import** — a real 95-player
+  roster had positions for 26
+- [x] Punt calculator fills the takeover spot, flipped
+- [x] Fake punt has a calculator, moved into the fake block
+- [x] Incomplete pass hides the calculator and clears what it held
+- [x] Previous drive tile shows plays/yards
+- [x] Comp/Att and Rec/Tgt order on all four surfaces
+- [x] `safeTextColor` uses **WCAG contrast**, not a luminance gap
+- [x] Drive cards coloured for whoever had the ball
+- [x] Picker buttons lead with the number; yardage labels dropped
+- [x] Stat package group headings 19px in a gutter, Possession last
+- [x] PDF: sections never split; recap keeps the team block on page one
+- [x] Roughing the passer moved to Personal foul / conduct
+
+### Still open
+
+- [ ] `.gitignore` and `tests/ui_driver.js` are not uploaded.
+  **ui_driver matters**: the repo copy is missing the punt-muff branch
+  that the uploaded `coverage_probe.js` depends on, so the gate is red
+  against the repo until it lands.
+- [ ] **Fake FIELD GOAL still has no calculator.** The FG panel never had
+  one to retarget. Same need as the fake punt.
+- [ ] Clipping and Tripping are personal fouls in NFHS and still sit under
+  "During the play". Andy's call.
+- [ ] Two players named "Kevin Anderson" (#44, #85) in the Sterlington
+  roster. The box score buckets by name, so they merge silently — the app
+  cannot detect it. One needs a distinguishing name before use.
+- [ ] `returner-overload` and `returner-name` mutants still survive
+- [ ] The Night 1 items that need the live Supabase instance

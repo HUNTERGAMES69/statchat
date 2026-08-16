@@ -99,7 +99,18 @@ even when the number it produced was right.
 - [ ] The mandatory takeover spot: confirm it refuses a half-filled one
 - [ ] Quarter marker in Q1 and Q3; greyed out in Q2, Q4 and overtime
 - [ ] End 1st half (check the score in the prompt), start 2nd half
-- [ ] Play into overtime and end the game there
+- [ ] Play into overtime and end the game there — **run the full
+      overtime sequence in `GOLDEN_GAME.md`**, which is now eight steps.
+      The first live test of that button found nine separate faults, so
+      it gets a deliberate pass rather than a glance
+- [ ] Punt muffed, recovered by the kicking team, **with and without
+      naming the recoverer**. Both must charge the receiving team a
+      turnover — the version that only worked when a recoverer was named
+      shipped and passed its test
+- [ ] Punt muffed, recovered by the kicking team **in their own end
+      zone**: the safety toggle is the third control in that branch
+- [ ] Enter a touchdown and confirm the clock is asked THERE, and that
+      the PAT does not ask again
 
 **Untested code paths to hit deliberately:** the out-of-bounds kickoff,
 and the kickoff outcome toggles in several orders — a deselected toggle
@@ -109,6 +120,13 @@ used to keep its tick.
 
 ## Night 4 — Pickers, rosters and shared numbers (60 min)
 
+- [ ] Type a jersey number that is NOT on the roster, then use
+      **Add to roster** on the confirm box. Check the name appears on
+      plays entered BEFORE you named him, and on the view page on a
+      second device
+- [ ] Upload a roster with positions for the starters only — blank
+      column C is accepted now, and the import says how many arrived
+      without one
 - [ ] Upload a real opponent roster from a programme. Confirm the format
       card appears first and the error box names any bad rows.
 - [ ] Include two players on one number and at least one blank position.
@@ -141,6 +159,14 @@ or an error in the chart, and both are worth knowing.
 ---
 
 ## Night 6 — Reports and exports (90 min)
+
+- [ ] **Export both PDFs and count the pages.** No section may split
+      across a page break, the recap's box score and team block must share
+      page one, and the opponent must start a new page. This is the one
+      area no test can check — jsdom has no layout engine, so the rules
+      are verified as present and nothing more
+- [ ] If the game went to overtime, check the OT column appears and the
+      quarter row adds up to the final score
 
 **The biggest coverage hole in the app.** PDF and XLS export have no
 automated coverage at all, and the stat package is what coaches actually

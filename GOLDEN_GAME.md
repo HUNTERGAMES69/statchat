@@ -166,6 +166,29 @@ If the intercepting team recovers their own fumble instead, it is the
 same two plays with "Recovered by own team", and possession simply stays
 with them.
 
+## Overtime, once, deliberately
+
+Worth a run of its own before the season, because the first live test of
+it found nine separate things.
+
+1. **Start overtime** with the scores level. The log should gain *End of
+   regulation* and the header should read **OT1**.
+2. Pick a team. The spot should arrive **prefilled to the opponent's 10**.
+3. Run a series to a score or a failure on downs. The guided panel should
+   come back **by itself**, naming the other team, prefilled again.
+4. Check the header goes to **OT2** on the THIRD series, not the second —
+   a round is a series each way.
+5. Check **Kickoff and Punt are greyed out** and Field goal is not.
+6. Check you are **not asked for a clock**, and that time of possession
+   on the view page has not moved since the end of Q4.
+7. With one side ahead, use **End game** from inside the panel. It should
+   finalize without setting up another series.
+8. On the recap and the stat package, the quarter line should carry an
+   **OT column**, and the row should add up to the final score.
+
+Then use **Manual flip possession** during a series and confirm the round
+does NOT advance — that one was wrong for a while.
+
 ## Two things to check rather than assume
 
 **Cal Sledge has 2 tackles and 1 fumble recovery, not 3 tackles.**

@@ -1384,3 +1384,131 @@ leave.
 Worth noticing how it hid: every OTHER toggle in the app stays put and
 lights up, so the inconsistency was invisible to anyone who had not just
 used a different panel. A convention is only as good as its exceptions.
+
+---
+
+# 14–15 August 2026
+
+## Overtime is not football with the clock off (15 August 2026)
+
+The app treated overtime as ordinary play in a fifth quarter. Almost
+everything that went wrong followed from that one assumption.
+
+Overtime is played in **series**. When one ends, the other team starts a
+fresh one from the same spot. Before this, the second team simply
+inherited the ball wherever the first team's drive died -- on their own 3
+in the first test -- and no new drive began at all.
+
+**The series is the unit, not the possession.** `otSeriesTeam` is tracked
+separately from `state.possession`, because they disagree constantly: an
+interception hands the ball over WITHOUT ending the series, and a score
+leaves it with the team that just scored. Whose series it is has to be
+recorded at the START and carried, not inferred from who holds the ball
+when it ends.
+
+Three things were got wrong on the way, each worth keeping:
+
+- **A series ends in two shapes.** The ball changes hands, OR the series
+  scores. The first attempt keyed on `down === null`, which only catches
+  the second -- after a turnover on downs the app hands the other team a
+  fresh 1st & 10, so `down` is 1 and the trigger never fired once.
+- **`forcePossession` is not a series marker.** "Manual flip possession"
+  writes the same effect, so a correction mid-series advanced the round.
+  The guided marker now carries an explicit `otSeriesStart` flag and the
+  counter reads only that. **An effect that two different actions write
+  cannot be used to tell them apart.**
+- **A guided self-heal cancelled the panel.** Any flow tagged
+  `targetPhase: 'secondHalf'` is torn down when no half divider exists --
+  right for a second-half kickoff, fatal for overtime. It left the
+  correct words on screen with the flow already dead behind them. Both
+  overtime flows now use their own target phase. This was a LATENT bug in
+  the existing Start-overtime button, not something the new work
+  introduced.
+
+**And the panel had no way out.** It opens automatically and disables the
+rest of the page, so after the deciding series the only way forward was
+to set up a series nobody was going to play. `finalizeGame()` was
+extracted from the End game button's handler -- rather than copied -- and
+the panel now offers it once one side is ahead.
+
+## Measure the thing you actually mean (14 August 2026)
+
+`safeTextColor` compared two LUMINANCE values and kept a team's colour if
+they differed by 0.35. Grey on a navy banner differs by 0.41, so it
+shipped, and it was unreadable. The threshold was not the problem; the
+measure was. `luminance()` is Rec.601 luma -- right for "is this light or
+dark", wrong for contrast.
+
+It now uses WCAG contrast ratio: channels linearised, contrast as a RATIO
+from 1:1 to 21:1, floor at 4.5. Team colours are still used whenever they
+can be read; this only rescues pairs that cannot be.
+
+**The test had the same bug.** `color_check` asserted a luminance gap of
+0.3 -- mirroring the implementation's own rule rather than the
+requirement. Both were wrong in the same direction, so the suite stayed
+green while grey text shipped. *A fixture that repeats the
+implementation's rule cannot catch the rule being wrong.*
+
+## A correct fix with nothing to work on (14 August 2026)
+
+A muffed punt recovered by the kicking team is a turnover and nothing
+counted it. `countTurnovers` was fixed, shipped, and still did not work
+in a real game -- because the recovery role was only written when a
+RECOVERER'S NUMBER had been typed. Leaving that blank, which the panel
+invites, threw away the TEAM the coach had chosen on a radio button.
+
+The log line read "recovered by Neville" while the saved data said
+nothing at all.
+
+Same shape as the returner and tackler fixes before it: **an optional
+field left blank must not discard the information given alongside it.**
+The number is optional; the team is not. My test named the recoverer, so
+it passed. Andy did not, so it did not.
+
+## A mutation test caught a comment lying (14 August 2026)
+
+Time of possession now stops at the end of regulation. The first version
+also cleared the pending clock starts when overtime began, with a comment
+explaining why that mattered -- and the mutant that removed the clearing
+SURVIVED. Nothing could tell the difference: the guard already skips the
+whole block, and the quarter never decreases within a replay.
+
+The code was dead and the comment described work it was not doing. Both
+removed. Worth remembering as the failure mode where the suite passes and
+the file still misleads the next reader.
+
+## Print is a different medium (15 August 2026)
+
+Two PDF problems, and the second was the instructive one.
+
+**A section split across pages** was fixed with `break-after: avoid` on
+headings and `break-inside: avoid` on tables -- in CSS rather than by
+wrapping eight call sites whose shapes differ. But Special Teams is not
+one table: it is a heading and SEVERAL, and the group still split between
+its own subsections. Kickoffs on one page, Punting alone on the next
+under no heading. That one needed a real wrapper.
+
+**`break-inside: avoid` is a hope about space; `break-after: avoid` is a
+rule about a boundary.** Removing the forced page break did not put the
+team block back on page one -- every section avoids breaking internally,
+so the browser was free to decide it did not fit and move the whole thing
+over. Only forbidding a break at that specific boundary fixed it.
+
+## Naming things after what they hold (15 August 2026)
+
+Every leader card read "#Parker Robinson". `playerName()` looks a jersey
+NUMBER up on the roster and falls back to `'#' + num` -- correct on its
+own terms. It was being handed a BOX SCORE KEY, and since the
+shared-number work those keys are display names, not numbers.
+
+The fallback did exactly what it says; the caller was wrong about what it
+was passing. Checked the other pages afterwards: they pass `r.kicker.num`
+straight off the play roles, which is right.
+
+## Standing conventions added this session
+
+- A control that vanishes when you use it is worse than one that refuses
+- Sum the whole bucket, never the rows on screen
+- Absent beats zero for a derived figure
+- An effect two different actions write cannot distinguish them
+- A test that repeats the implementation's rule cannot catch it being wrong
