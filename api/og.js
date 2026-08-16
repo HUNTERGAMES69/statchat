@@ -19,9 +19,12 @@
 //   marks and as a rule under the winner's score, so no pair of school
 //   colours can wreck the card the way two coloured halves could.
 //
-//   The winner is marked THREE ways: white type against the loser's grey,
-//   the coloured rule, and the score itself. At full size any one would
-//   do; shrunk to a Slack thumbnail it needs more than one.
+//   BOTH TEAMS ARE SET IN WHITE. The first version dimmed the loser to
+//   grey, which marked the winner three ways over — but it also made a
+//   real team's score look switched off, and the card is as much theirs
+//   as ours. The coloured rule under the winning score carries it on its
+//   own: it is a solid bar in a bright colour, which survives a thumbnail
+//   better than a difference between two greys would.
 
 import { ImageResponse } from '@vercel/og';
 
@@ -95,9 +98,15 @@ function markRing(hex) {
 }
 
 const FIELD = '#12161c';
-const DIM = '#98a2af';
 const RULE = '#252c36';
-const META = '#6c7683';
+// The FINAL · date line. Lifted from #6c7683 (about 4.2:1 on the field)
+// to roughly 6.5:1 -- it was the element most likely to disappear when a
+// card is shrunk to a Slack thumbnail.
+//
+// Not white: it is a LABEL, not a result. If everything on the card is
+// white then nothing is emphasised, and the scores stop being the loudest
+// thing, which is the one job this image has.
+const META = '#8b96a5';
 
 function initial(name) {
   const s = String(name || '').trim();
@@ -113,8 +122,9 @@ function prettyDate(d) {
     .toUpperCase();
 }
 
-// One team's column. `won` drives every difference between the two:
-// there is no second code path for the loser, so they cannot drift apart.
+// One team's column. `won` now drives exactly one thing — the rule under
+// the score — and there is still no second code path for the loser, so
+// the two columns cannot drift apart.
 function column(name, score, colour, won) {
   const mark = markColour(colour);
   const ring = markRing(colour);
@@ -131,14 +141,12 @@ function column(name, score, colour, won) {
       border: ring ? ('4px solid ' + ring) : 'none'
     }, initial(name)),
     h('div', {
-      fontSize: 41, fontWeight: 700, letterSpacing: 2,
-      color: won ? '#ffffff' : DIM,
+      fontSize: 41, fontWeight: 700, letterSpacing: 2, color: '#ffffff',
       // Long school names must not wrap into the score.
       maxWidth: 520, overflow: 'hidden', whiteSpace: 'nowrap'
     }, String(name || '').toUpperCase()),
     h('div', {
-      fontSize: 168, fontWeight: 600, lineHeight: 1,
-      color: won ? '#ffffff' : DIM
+      fontSize: 168, fontWeight: 600, lineHeight: 1, color: '#ffffff'
     }, String(score)),
     // The rule under the winner. An empty box of the same height for the
     // loser, so both columns stay vertically aligned.
