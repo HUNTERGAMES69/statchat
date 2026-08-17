@@ -312,6 +312,7 @@
           [t.td || 0, 'Total TD']
         ];
       },
+      volume: (t) => t.att || 0,
       value: (d) => d.yds || 0, trendLabel: 'Passing yards by game',
       headline: (t) => [
         [t.yds || 0, 'Yards'],
@@ -338,6 +339,7 @@
           [t.td || 0, 'Total TD']
         ];
       },
+      volume: (t) => t.att || 0,
       value: (d) => d.yds || 0, trendLabel: 'Rushing yards by game',
       headline: (t) => [
         [t.yds || 0, 'Yards'],
@@ -364,6 +366,7 @@
           [t.td || 0, 'Total TD']
         ];
       },
+      volume: (t) => t.tgt || t.rec || 0,
       value: (d) => d.yds || 0, trendLabel: 'Receiving yards by game',
       headline: (t) => [
         [t.yds || 0, 'Yards'],
@@ -393,6 +396,7 @@
       // POINTS, not field goals. A kicker who only takes extra points
       // has no field goals at all, and charting fgMade left him with an
       // empty graph beside a table reading 4 for 4.
+      volume: (t) => (t.fgAtt || 0) + (t.patAtt || 0),
       value: (d) => (d.fgMade || 0) * 3 + (d.patMade || 0),
       trendLabel: 'Kicking points by game',
       splits: (per, t) => [
@@ -417,6 +421,7 @@
       // Two series in one bar: kickoffs, with touchbacks stacked
       // inside. "Five kickoffs, one a touchback" is one fact, and two
       // charts would make the reader do the division.
+      volume: (t) => t.kickoffs || 0,
       value: (d) => d.kickoffs || 0,
       sub: (d) => d.touchbacks || 0, subLabel: 'Touchbacks',
       trendLabel: 'Kickoffs and touchbacks by game',
@@ -437,6 +442,7 @@
     { key: 'punting', label: 'Punting', bucket: 'specialTeams',
       has: (d) => (d.punts || 0) > 0,
       cols: [['Punts','punts'],['Yds','puntYds'],['Long','puntLong'],['Blocked','blocked']],
+      volume: (t) => t.punts || 0,
       value: (d) => d.punts || 0, trendLabel: 'Punts by game',
       splits: (per, t) => [
         [t.punts || 0, 'Punts'],
@@ -471,6 +477,7 @@
           [(t.int || 0) + (t.fumRec || 0), 'Takeaways']
         ];
       },
+      volume: (t) => t.tackles || 0,
       value: (d) => d.tackles || 0, trendLabel: 'Tackles by game',
       headline: (t) => [
         [t.tackles || 0, 'Tackles'],
@@ -678,7 +685,25 @@
       '</div></div>';
 
     let any = false;
-    CATEGORIES.forEach(c => {
+    // WHAT HE MOSTLY DOES COMES FIRST.
+    // ------------------------------------------------------------------
+    // The sections used to render in a fixed order, so a punter who threw
+    // once on a fake opened his report with Passing -- one attempt, above
+    // the forty punts that are his job.
+    //
+    // Ordered by VOLUME instead: how many times he did each thing. Those
+    // counts are comparable in a way yardage is not -- 12 punts against 1
+    // pass attempt is a clear ranking, where 480 punt yards against 14
+    // passing yards is comparing different units.
+    //
+    // The fixed order survives as the tie-break, so a player with equal
+    // counts still renders the same way every time rather than shuffling
+    // between loads.
+    const ordered = CATEGORIES
+      .map((c, i) => ({ c: c, i: i, vol: c.volume ? c.volume(season.byCat[c.key].total) : 0 }))
+      .sort((a, b) => (b.vol - a.vol) || (a.i - b.i))
+      .map(x => x.c);
+    ordered.forEach(c => {
       const acc = season.byCat[c.key];
       // A category the player never appears in is omitted entirely rather
       // than shown as a row of zeros. A lineman's report should not be
