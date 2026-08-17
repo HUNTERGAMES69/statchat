@@ -4513,7 +4513,33 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_int_tb" style="display:none;">' +
         '<button type="button" id="pp_int_tb_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Downed in the end zone — touchback</button></div>' +
         '<div id="pp_int_return_wrap">' + yardsBlock('Return yards (optional)') + tdBlock + '</div>' +
-        startingSpotFieldsHtml('pp_spot', null, def);
+        startingSpotFieldsHtml('pp_spot', null, def) +
+        // TAKEOVER SPOT CALCULATOR.
+        // ----------------------------------------------------------------
+        // The spot fields above are relative to the INTERCEPTING team --
+        // "own 12" means twelve yards from the goal line they are now
+        // defending. A scorer watching the play sees the defender go down
+        // on a yard line, on a side of the field, in the terms both teams
+        // are named by. Converting between those two under time pressure
+        // is exactly the arithmetic the punt calculator removed, and an
+        // interception is the play where possession has just flipped and
+        // the mental picture is least settled.
+        '<div id="pp_intspot_calc" style="margin-top:6px; margin-left:22px; padding-left:22px; ' +
+          'border-left:1px solid #d8d8d8;">' +
+          fieldLabel('Or enter tackled on') +
+          '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+            '<button type="button" class="ptoggle intSpotSide" data-side="off" ' +
+              'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+              TEAMS[computeState().possession].name + '</button>' +
+            '<button type="button" class="ptoggle intSpotSide" data-side="def" ' +
+              'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+              TEAMS[otherTeam(computeState().possession)].name + '</button>' +
+            '<input autocomplete="off" type="text" id="pp_intspot_yardline" placeholder="yard line" style="width:90px;">' +
+          '</span>' +
+          '<div id="pp_intspot_readout" style="font-size:14px; font-weight:600; color:#1a4d2e; ' +
+            'background:#eef6f1; border-left:3px solid #1a7a4c; border-radius:4px; ' +
+            'padding:7px 10px; margin-top:10px;"></div>' +
+        '</div>';
     else if (type === 'fumble') html = offBlock('carrier','Who fumbled') +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="own"> Recovered by own team</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="opp" checked> Recovered by opponent</label>' +
@@ -5153,6 +5179,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           if (rw) rw.style.display = on ? 'none' : '';
           const sw = document.getElementById('pp_spot_wrap');
           if (sw) sw.style.display = on ? 'none' : '';
+          // The calculator goes with the field it fills. A touchback is a
+          // fixed spot -- their own 20 -- so there is nothing to work out,
+          // and leaving the calculator up would let a scorer type into a
+          // box whose answer is already decided.
+          const cw = document.getElementById('pp_intspot_calc');
+          if (cw){
+            cw.style.display = on ? 'none' : '';
+            cw.querySelectorAll('input, button').forEach(el => { el.disabled = on; });
+          }
           const btn = document.getElementById('pp_int_tb_toggle');
           if (btn){
             btn.textContent = (on ? '\u2713 ' : '') + 'Downed in the end zone — touchback';
@@ -5167,6 +5202,50 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           refreshIntTb();
         });
         refreshIntTb();
+
+        // Wire the takeover spot calculator. It writes into the SAME
+        // fields the scorer could fill by hand, so nothing downstream
+        // needs to know it exists -- getReset() reads those fields either
+        // way.
+        (function wireIntSpotCalc(){
+          const ylEl = document.getElementById('pp_intspot_yardline');
+          const readout = document.getElementById('pp_intspot_readout');
+          const spotYl = document.getElementById('pp_spot_yardline');
+          if (!ylEl || !readout || !spotYl) return;
+          const st = computeState();
+          const off = st.possession, def = otherTeam(off);
+          const sideBtns = [...panel.querySelectorAll('.intSpotSide')];
+          let side = null;
+          const paint = () => sideBtns.forEach(b => b.classList.toggle('picked', b.dataset.side === side));
+
+          function recompute(){
+            const raw = (ylEl.value || '').trim();
+            const yl = parseInt(raw, 10);
+            if (!side){ readout.textContent = 'Pick whose side of the field he was tackled on.'; return; }
+            if (!raw){ readout.textContent = 'Enter the yard line he was brought down on.'; return; }
+            if (!Number.isFinite(yl) || yl < 0 || yl > 50){
+              readout.textContent = 'Yard line must be 0\u201350.';
+              return;
+            }
+            // The spot fields are relative to the intercepting team, which
+            // is the DEFENCE on this play. Their own side is the side the
+            // offence has been attacking.
+            const takeoverOwn = (side === 'def');
+            const teamName = takeoverOwn ? TEAMS[def].name : TEAMS[off].name;
+            readout.textContent = 'tackled on ' + teamName + ' ' + yl +
+              '  \u2192  ' + TEAMS[def].name + ' take over on their ' +
+              (takeoverOwn ? 'own ' : 'opponent\u2019s ') + yl;
+            spotYl.value = String(yl);
+            spotYl.dataset.fromCalc = '1';
+            const want = takeoverOwn ? 'own' : 'opp';
+            const btn = panel.querySelector('.pp_spot_side[data-side="' + want + '"]');
+            if (btn && !btn.classList.contains('picked')) btn.click();
+          }
+
+          recompute();
+          sideBtns.forEach(b => b.addEventListener('click', () => { side = b.dataset.side; paint(); recompute(); }));
+          ylEl.addEventListener('input', recompute);
+        })();
       }
     }
     // The rush and pass panels only need a spot when their fumble is lost,
