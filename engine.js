@@ -969,6 +969,20 @@ function computeBoxScore(playsList){
         if (r.kicker.touchback) s.touchbacks = (s.touchbacks||0) + 1;
       }
     }
+    // A TOUCHBACK RECORDED ON ITS OWN PLAY.
+    // ------------------------------------------------------------------
+    // The guided start-of-game flow cannot put the touchback on the kick:
+    // it writes the kick before anybody knows where the ball came down,
+    // and the outcome arrives as a separate play. That play carries
+    // kickoffTouchback instead, naming the kicker it belongs to.
+    //
+    // Counted as a TOUCHBACK ONLY -- the kickoff itself was already
+    // counted above, on the play that recorded the kick. Incrementing
+    // kickoffs here as well would report two kicks for one.
+    if (r.kickoffTouchback){
+      const s = bucket(r.kickoffTouchback.team, 'specialTeams', r.kickoffTouchback.num);
+      if (s) s.touchbacks = (s.touchbacks||0) + 1;
+    }
     if (r.kicker && type === 'fg'){
       const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
       if (s){

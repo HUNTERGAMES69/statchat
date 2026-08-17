@@ -3917,7 +3917,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           document.querySelector('input[name=gr_muffrec]:checked').value === 'k';
         const takingOver = kickingRecovers ? guided.kickingTeam : guided.receivingTeam;
 
-        let text, effect;
+        let text, effect, touchbackRole = null;
+        function kickoffJustRecorded(){
+          for (let i = plays.length - 1; i >= 0; i--){
+            const r = plays[i] && plays[i].roles;
+            if (r && r.playType === 'kickoff' && r.kicker) return r.kicker;
+          }
+          return null;
+        }
         if (onside){
           const recNum = (document.getElementById('gr_muff_rec').value || '').trim();
           const recName = recNum
@@ -3939,6 +3946,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         } else if (touchback){
           text = TEAMS[guided.receivingTeam].name + ' — TOUCHBACK';
           effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
+          // See game.html: the guided flow writes the kick and its outcome
+          // as two plays, so the touchback has to name the kicker it
+          // belongs to or it is never counted.
+          const koKick = kickoffJustRecorded();
+          if (koKick) touchbackRole = { team: koKick.team, num: koKick.num };
         } else {
           // No yardage given: say the kick was returned without claiming a
           // distance. "returns 0" would state something measured and false,
@@ -3950,7 +3962,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (td){ text += ' — TOUCHDOWN'; effect.score = { team: takingOver, points: 6 }; }
         pushAndPersist({ id: nextId++, text, effect, team: takingOver, quarter: guided.quarter,
           roles: Object.assign({ playType: 'kickoff_return' },
-            (!muffed && !onside && returnerNum) ? { defense: { team: guided.receivingTeam, num: returnerNum } } : {}) });
+            (!muffed && !onside && returnerNum) ? { defense: { team: guided.receivingTeam, num: returnerNum } } : {},
+            touchbackRole ? { kickoffTouchback: touchbackRole } : {}) });
         const receivingName = TEAMS[takingOver].name;
         const receivingTeamKey = takingOver;
         if (clockVal && clockAbsSec !== null){
