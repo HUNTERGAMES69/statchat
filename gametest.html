@@ -4224,51 +4224,143 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       one('int', 'Intercepted') + '</div>';
   }
 
-  // PROTOTYPE ONLY -- gametest.html.
-  // ---------------------------------------------------------------------
-  // ONE delegated listener on the document, rather than wiring buttons
-  // each time a panel is built. The panels are rebuilt constantly -- a
-  // fake toggle, a result radio, a side switch -- and a per-panel wiring
-  // would have to be re-run at every one of those points, which is
-  // exactly the kind of thing that gets missed on the fifth panel.
+  // ===================================================================
+  // PROTOTYPE ONLY -- gametest.html. THE YARDAGE WHEEL.
+  // ===================================================================
+  // Two columns, TENS and ONES, ten items each. Andy suggested 0-10 and
+  // 20-99; tens+ones covers the same ground with no gap at 11-19 and the
+  // same amount of travel -- a wheel of 80 items would be a scroll, not
+  // a flick.
   //
-  // Writing the value fires an 'input' event on purpose: the calculators
-  // listen for it to release their hold on a box, and the LOSS toggle
-  // and review path read the field afterwards. Setting .value alone is
-  // silent, and the field would look right while nothing else noticed.
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest && e.target.closest('.quickYd');
-    if (!btn) return;
-    const row = btn.closest('.quickYards');
-    if (!row) return;
-    const target = document.getElementById(row.dataset.for);
-    if (!target || target.disabled) return;
-    target.value = btn.dataset.val;
-    target.dispatchEvent(new Event('input', { bubbles: true }));
-    // Which number is showing, so a mis-tap is visible. Cleared from the
-    // siblings first: two lit buttons would say the box holds two values.
-    row.querySelectorAll('.quickYd').forEach(b => {
-      const on = b === btn;
-      b.style.background = on ? '#1a4d2e' : '#fff';
-      b.style.color = on ? '#fff' : '#333';
-      b.style.borderColor = on ? '#1a4d2e' : '#ccc';
-    });
-  });
+  // Native scroll-snap does the work. Momentum, rubber-banding and the
+  // feel of the thing under a finger are the browser's, and no library
+  // reproduces them faithfully. The only JavaScript is reading which row
+  // settled under the window.
+  const WHEEL_ROW = 46;          // px per row; also the snap interval
+  const WHEEL_VISIBLE = 3;       // rows in the window -- one centred, one either side
 
-  // Typing, or a calculator writing, takes the row's highlight off --
-  // otherwise a lit "5" sits under a box reading 23.
-  document.addEventListener('input', (e) => {
-    const t = e.target;
-    if (!t || !t.id) return;
-    const row = document.querySelector('.quickYards[data-for="' + t.id + '"]');
-    if (!row) return;
-    const shown = String(t.value || '').trim();
-    row.querySelectorAll('.quickYd').forEach(b => {
-      const on = b.dataset.val === shown;
-      b.style.background = on ? '#1a4d2e' : '#fff';
-      b.style.color = on ? '#fff' : '#333';
-      b.style.borderColor = on ? '#1a4d2e' : '#ccc';
+  let wheelEl = null, wheelTarget = null;
+
+  function buildWheel(){
+    if (wheelEl) return wheelEl;
+    const pad = WHEEL_ROW * Math.floor(WHEEL_VISIBLE / 2);
+    const column = (cls) =>
+      '<div class="ydWheelCol" data-col="' + cls + '" style="' +
+        'height:' + (WHEEL_ROW * WHEEL_VISIBLE) + 'px; overflow-y:auto; scroll-snap-type:y mandatory; ' +
+        'width:76px; -webkit-overflow-scrolling:touch; scrollbar-width:none;">' +
+        '<div style="height:' + pad + 'px;"></div>' +
+        [0,1,2,3,4,5,6,7,8,9].map(n =>
+          '<div class="ydWheelItem" data-val="' + n + '" style="height:' + WHEEL_ROW + 'px; ' +
+            'scroll-snap-align:center; display:flex; align-items:center; justify-content:center; ' +
+            'font-size:24px; font-weight:700; color:#9aa3b2;">' + n + '</div>').join('') +
+        '<div style="height:' + pad + 'px;"></div>' +
+      '</div>';
+
+    const el = document.createElement('div');
+    el.id = 'ydWheel';
+    el.style.cssText = 'position:absolute; z-index:9000; display:none; background:#fff; ' +
+      'border:1px solid #ccc; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.22); ' +
+      'padding:10px 12px 12px;';
+    el.innerHTML =
+      '<div style="display:flex; align-items:center; justify-content:space-between; ' +
+        'font-size:12px; font-weight:700; color:#8a8a8a; margin-bottom:6px;">' +
+        '<span>TENS</span><span>ONES</span></div>' +
+      '<div style="position:relative; display:flex; gap:10px;">' +
+        // The window: a band across both columns showing which row counts.
+        '<div style="position:absolute; left:-4px; right:-4px; top:' + pad + 'px; ' +
+          'height:' + WHEEL_ROW + 'px; border-top:2px solid #1a4d2e; border-bottom:2px solid #1a4d2e; ' +
+          'background:rgba(26,77,46,0.06); border-radius:6px; pointer-events:none;"></div>' +
+        column('tens') + column('ones') +
+      '</div>' +
+      '<div style="display:flex; gap:8px; margin-top:10px;">' +
+        '<button type="button" id="ydWheelDone" style="flex:1; padding:11px; border-radius:8px; ' +
+          'border:none; background:#1a4d2e; color:#fff; font-size:15px; font-weight:700; ' +
+          'cursor:pointer;">Done</button>' +
+      '</div>';
+    document.body.appendChild(el);
+
+    const cols = [...el.querySelectorAll('.ydWheelCol')];
+    const settled = (col) => Math.max(0, Math.min(9, Math.round(col.scrollTop / WHEEL_ROW)));
+
+    // Paint the settled row dark and the rest grey, so the value reads
+    // even when the window band is hard to see on a bright screen.
+    function paint(){
+      cols.forEach(col => {
+        const v = settled(col);
+        col.querySelectorAll('.ydWheelItem').forEach(it => {
+          const on = Number(it.dataset.val) === v;
+          it.style.color = on ? '#1a1a1a' : '#9aa3b2';
+          it.style.fontSize = on ? '28px' : '24px';
+        });
+      });
+    }
+
+    function apply(){
+      if (!wheelTarget) return;
+      const tens = settled(cols[0]), ones = settled(cols[1]);
+      wheelTarget.value = String(tens * 10 + ones);
+      // Fired so the calculators release their hold on the box and the
+      // review path sees the value. Setting .value alone is silent.
+      wheelTarget.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    cols.forEach(col => {
+      let t = null;
+      col.addEventListener('scroll', () => {
+        paint();
+        // Debounced rather than on scrollend: scrollend is not carried by
+        // every browser this has to run in, and a 90ms settle is well
+        // inside the time a finger takes to lift.
+        clearTimeout(t);
+        t = setTimeout(() => { paint(); apply(); }, 90);
+      });
     });
+    el.querySelector('#ydWheelDone').addEventListener('click', () => { apply(); closeWheel(); });
+    el._cols = cols;
+    el._paint = paint;
+    wheelEl = el;
+    return el;
+  }
+
+  function closeWheel(){
+    if (wheelEl) wheelEl.style.display = 'none';
+    wheelTarget = null;
+  }
+
+  function openWheel(target, anchor){
+    const el = buildWheel();
+    wheelTarget = target;
+    // Start where the box already is, so opening the wheel on a value of
+    // 7 and closing it again cannot change anything.
+    const cur = Math.abs(parseInt(target.value, 10));
+    const start = Number.isFinite(cur) ? Math.min(99, cur) : 0;
+    el._cols[0].scrollTop = Math.floor(start / 10) * WHEEL_ROW;
+    el._cols[1].scrollTop = (start % 10) * WHEEL_ROW;
+    el.style.display = 'block';
+    el._paint();
+    const r = anchor.getBoundingClientRect();
+    // Placed below the button, and flipped above it when there is not
+    // room -- on a laptop the play panel often sits near the bottom.
+    const w = el.offsetWidth || 200, h = el.offsetHeight || 240;
+    let left = window.scrollX + r.left;
+    left = Math.min(left, window.scrollX + document.documentElement.clientWidth - w - 8);
+    const below = window.scrollY + r.bottom + 6;
+    const fitsBelow = (r.bottom + h + 10) < window.innerHeight;
+    el.style.left = Math.max(window.scrollX + 8, left) + 'px';
+    el.style.top = (fitsBelow ? below : (window.scrollY + r.top - h - 6)) + 'px';
+  }
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest && e.target.closest('.wheelBtn');
+    if (btn){
+      const target = document.getElementById(btn.dataset.for);
+      if (target && !target.disabled) openWheel(target, btn);
+      e.preventDefault();
+      return;
+    }
+    // Anywhere else closes it, except inside the wheel itself.
+    if (wheelEl && wheelEl.style.display !== 'none' &&
+        !(e.target.closest && e.target.closest('#ydWheel'))) closeWheel();
   });
 
   function renderPlayPanel(type){
@@ -4337,38 +4429,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // ===================================================================
     // PROTOTYPE ONLY -- gametest.html. Not in game.html.
     // ===================================================================
-    // A row of tappable numbers above every yardage box, to find out
-    // whether tapping actually beats typing on a touchscreen laptop
-    // before anything is built four times over.
+    // A wheel picker for yardage, opened from a button beside the box.
     //
-    // The <input> REMAINS THE SOURCE OF TRUTH. The row writes into it and
-    // fires an 'input' event, so every calculator, LOSS toggle, review
-    // path and test that reads that field keeps working untouched. A
-    // control that replaced the input would have to be taught to every
-    // one of them.
-    //
-    // 0-10 plus 15 and 20: a row long enough to cover most plays and
-    // short enough to stay one line on a tablet. Everything else is still
-    // typed, which is the point -- this is an accelerator for the common
-    // case, not a replacement for the keyboard.
-    const QUICK_YARDS = [0,1,2,3,4,5,6,7,8,9,10,15,20];
-    const quickRowHtml = (targetId) =>
-      '<div class="quickYards" data-for="' + targetId + '" ' +
-        'style="display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 8px;">' +
-        QUICK_YARDS.map(n =>
-          '<button type="button" class="quickYd" data-val="' + n + '" ' +
-            'style="min-width:46px; padding:12px 10px; border-radius:8px; border:2px solid #ccc; ' +
-            'background:#fff; color:#333; font-size:16px; font-weight:700; cursor:pointer; ' +
-            'touch-action:manipulation;">' + n + '</button>').join('') +
-      '</div>';
-
+    // IN A POPOVER, NOT INLINE. The first attempt put a row of buttons
+    // under every yards field and pushed every panel around -- the
+    // controls below moved, and panels that fitted on a screen stopped
+    // fitting. Nothing here occupies layout space until it is asked for:
+    // the only permanent addition is one small button.
     const yardsBlock = (label, id, withLoss) => fieldLabel(label || 'Enter yards') +
       '<span style="display:inline-flex; align-items:center; gap:8px;">' +
         '<input autocomplete="off" type="text" inputmode="numeric" id="' + (id||'pp_yards') + '" style="width:80px;">' +
+        '<button type="button" class="wheelBtn" data-for="' + (id||'pp_yards') + '" ' +
+          'title="Pick with a wheel" ' +
+          'style="padding:8px 11px; border-radius:6px; border:2px solid #ccc; background:#fff; ' +
+          'font-size:15px; font-weight:700; color:#555; cursor:pointer; line-height:1; ' +
+          'touch-action:manipulation;">\u25CE</button>' +
         (withLoss ? '<button type="button" class="lossToggle ptoggle" data-for="' + (id||'pp_yards') + '" ' +
           'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button>' : '') +
-      '</span>' +
-      quickRowHtml(id || 'pp_yards');
+      '</span>';
     // LOSS is a sibling of the Incomplete/Fumbled/Safety toggles rather
     // than something tucked in beside the input, and carries their exact
     // styling. Nesting it next to the input gave it a different height
