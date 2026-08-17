@@ -213,7 +213,20 @@
     const panel = document.getElementById('panel');
     // Nothing to show is shown as NOTHING, not as an empty frame. A blank
     // panel sitting over the programme feed is worse than no panel.
-    if (!list.length){ panel.style.display = 'none'; return; }
+    if (!list.length){
+      panel.style.display = 'none';
+      if (params.get('debug') === '1'){
+        document.body.innerHTML = '<pre style="color:#fff; font:16px monospace; padding:24px;">' +
+          'No leaders to show.\n\nseason: ' + payload.season +
+          '\nresolved by: ' + (payload.resolvedBy || '?') +
+          '\ngames: ' + ((payload.games || []).length) +
+          '\nview: ' + viewKey +
+          (payload.reason ? '\nreason: ' + payload.reason : '') +
+          '\n\nA season with no finalized games has no leaders. Add ' +
+          '?season=YYYY to pick a different one.</pre>';
+      }
+      return;
+    }
 
     const b = payload.ourBranding || {};
     const bg = b.primary_color || '#1a1a2e';
@@ -250,10 +263,18 @@
       if (!r.ok) throw new Error('seasondata ' + r.status);
       render(await r.json());
     } catch (e){
-      // Silent by design. An overlay that prints an error is an error on
-      // the broadcast; one that shows nothing is a director cutting to a
-      // panel that does not appear, which he can see and work around.
+      // Silent ON AIR by design: an overlay that prints an error puts that
+      // error on the broadcast. But a blank page with no way to find out
+      // why cost an evening once, so ?debug=1 says what happened. vMix
+      // never has that parameter; a person testing the URL in a browser
+      // does.
       document.getElementById('panel').style.display = 'none';
+      if (params.get('debug') === '1'){
+        document.body.innerHTML = '<pre style="color:#fff; font:16px monospace; padding:24px;">' +
+          'No leaders shown.\n\n' + String(e && e.message ? e.message : e) +
+          '\n\nCheck /api/seasondata in a browser: it reports the season it ' +
+          'resolved and why.</pre>';
+      }
     }
   }
 
