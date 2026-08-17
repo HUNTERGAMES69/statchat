@@ -4645,10 +4645,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       //
       // Pale on purpose -- this is a status, not an alarm. A saturated
       // red would make every two yard loss look like a mistake.
+      // Colour and the end-zone toggles, shared by both modes. Defined
+      // here rather than inlined because the position branch below returns
+      // early and would otherwise skip all of it -- which is exactly the
+      // bug this replaced.
       const losing = inSafety || (!inTd && delta < 0);
-      readout.style.background = losing ? '#fdeceb' : '#eef6f1';
-      readout.style.borderLeftColor = losing ? '#a32d2d' : '#1a7a4c';
-      readout.style.color = losing ? '#8a2020' : '#1a4d2e';
+      function applyOutcome(){
+        readout.style.background = losing ? '#fdeceb' : '#eef6f1';
+        readout.style.borderLeftColor = losing ? '#a32d2d' : '#1a7a4c';
+        readout.style.color = losing ? '#8a2020' : '#1a4d2e';
+        const setT = (btnId, stateEl, want) => {
+          const btn = document.getElementById(btnId);
+          if (!btn) return;
+          const on = stateEl ? !!stateEl.checked
+                             : (btn.classList.contains('picked') ||
+                                (btn.textContent || '').indexOf('\u2713') === 0);
+          if (on === want) return;
+          stripSuppressClose = true;
+          try { btn.click(); } finally { stripSuppressClose = false; }
+        };
+        setT('pp_td_toggle', document.getElementById('pp_td'), inTd);
+        setT('pp_rush_safety_toggle', document.getElementById('pp_rush_safety'), inSafety);
+        setT('pp_pass_safety_toggle', document.getElementById('pp_pass_safety'), inSafety);
+      }
+      applyOutcome();
       // POSITION MODE: a yard-line box wants WHERE, not HOW FAR.
       // ------------------------------------------------------------------
       // Yard-line fields (a takeover spot, a calculator's spot) are 0-50
@@ -4683,10 +4703,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             }
           }
         }
-        readout.textContent = 'spot: ' + label(Math.max(0, Math.min(100, stripPos)));
-        readout.style.background = '#eef6f1';
-        readout.style.borderLeftColor = '#1a7a4c';
-        readout.style.color = '#1a4d2e';
+        // The spot is WHERE THE PLAY ENDED, which is the same fact the
+        // yards mode reports -- so it says the same things about it.
+        // ----------------------------------------------------------------
+        // This branch used to overwrite the colour with green and return
+        // before the outcome toggles ran. So sliding the calculator's strip
+        // into an end zone showed "spot: opp 0" and set nothing, and a
+        // backwards slide stayed green while the calculator underneath
+        // read -13.
+        //
+        // Two controls describing one play have to agree.
+        readout.textContent = 'spot: ' + label(Math.max(0, Math.min(100, stripPos))) +
+          (inTd ? '  \u2014  TOUCHDOWN' : inSafety ? '  \u2014  SAFETY'
+                : '   (' + (delta >= 0 ? '+' : '\u2212') + Math.abs(delta) + ')');
+        applyOutcome();
         return;
       }
 
@@ -4718,40 +4748,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           if (cy && cy.value) cy.value = '';
           if (typeof sc.releaseYards === 'function') sc.releaseYards();
         }
-        // REACHING AN END ZONE SETS THE OUTCOME.
-        // ----------------------------------------------------------------
-        // Dragging the marker past a goal line is an unambiguous statement
-        // about what happened, and leaving the scorer to then find the
-        // right toggle is asking them to say it twice. Both are set from
-        // here and, just as importantly, UNSET when the marker comes back
-        // out -- a touchdown left ticked after a correction is the kind of
-        // error that survives to the box score.
-        //
-        // Same suppression flag: these toggles live in the panel, so
-        // clicking them would otherwise close the strip.
-        // Two shapes of toggle in this app, and they cannot be clicked the
-        // same way:
-        //   pp_td_toggle          IS the button, and carries its own state
-        //   pp_rush_safety        is a hidden CHECKBOX; the button beside
-        //                         it is pp_rush_safety_toggle
-        // Clicking the checkbox does nothing -- the handler lives on the
-        // button -- so the safety silently never set while the touchdown
-        // worked, which is exactly the sort of near-miss that reads as
-        // "sometimes it works".
-        const setToggle = (btnId, stateEl, want) => {
-          const btn = document.getElementById(btnId);
-          if (!btn) return;
-          const on = stateEl ? !!stateEl.checked
-                             : (btn.classList.contains('picked') ||
-                                (btn.textContent || '').indexOf('\u2713') === 0);
-          if (on === want) return;
-          stripSuppressClose = true;
-          btn.click();
-          stripSuppressClose = false;
-        };
-        setToggle('pp_td_toggle', document.getElementById('pp_td'), inTd);
-        setToggle('pp_rush_safety_toggle', document.getElementById('pp_rush_safety'), inSafety);
-        setToggle('pp_pass_safety_toggle', document.getElementById('pp_pass_safety'), inSafety);
+        // The outcome toggles and the colour are set by applyOutcome()
+        // above, which both modes call. This used to be a second copy of
+        // the same logic, reachable only from the yards path -- which is
+        // why the position path set nothing.
         // At a goal line the yardage is the distance TO it, not past it:
         // a carry from the own 4 into the end zone is a four yard loss,
         // and one from the opponent 8 is an eight yard touchdown. The
