@@ -4691,6 +4691,33 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
 
       if (stripTarget){
+        // THE STRIP TAKES THE BOX BACK FROM THE CALCULATOR.
+        // ----------------------------------------------------------------
+        // The spot calculator DISABLES "Enter yards" whenever it holds a
+        // yard line -- the two are an either/or, and that is correct. But
+        // its own release is guarded by
+        //     if (!yardsEl().disabled && ylEl.value)
+        // which can never be true once it has disabled the box. So after
+        // any calculator use the yards field stayed locked, and the strip
+        // -- which writes into that same box -- looked like the thing that
+        // had locked it.
+        //
+        // Sliding a distance is the same statement as typing one: it means
+        // "the calculator's answer no longer applies". So the calculator is
+        // cleared and the box released, using the hook the panel already
+        // exposes for exactly this.
+        // Resolved by ID. `panel` is a local inside renderPlayPanel and is
+        // not in scope here, so the first version of this silently did
+        // nothing -- typeof panel was 'undefined' and the release never
+        // ran. The panel element carries __spotCalc, so ask the document
+        // for it.
+        const pnl = document.getElementById('playPanel');
+        const sc = pnl ? pnl.__spotCalc : null;
+        if (sc){
+          const cy = document.getElementById('pp_calc_yardline');
+          if (cy && cy.value) cy.value = '';
+          if (typeof sc.releaseYards === 'function') sc.releaseYards();
+        }
         // REACHING AN END ZONE SETS THE OUTCOME.
         // ----------------------------------------------------------------
         // Dragging the marker past a goal line is an unambiguous statement
