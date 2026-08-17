@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StatChat — Player Report</title>
+<style>
+  html, body { margin:0; padding:0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+         background:#f4f3ef; color:#1a1a1a; }
+  .wrap { max-width:960px; margin:0 auto; padding:24px 24px 60px; box-sizing:border-box; }
+  .hidden { display:none !important; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+  .topbar a { color:#555; text-decoration:none; font-size:14px; font-weight:600; }
+  .topbar button { border:none; border-radius:8px; padding:10px 18px; font-size:14px;
+                   font-weight:700; cursor:pointer; background:#1a7a4c; color:#fff; }
+  .card { background:#fff; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,0.06);
+          padding:20px 22px; margin-bottom:18px; }
+  .msg { padding:12px 14px; border-radius:8px; font-size:14px; }
+  .msg.error { background:#fdecea; color:#a32d2d; }
+
+  .pickers { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:18px; }
+  .picker { display:flex; flex-direction:column; gap:5px; }
+  .picker label { font-size:11px; font-weight:700; letter-spacing:0.06em;
+                  text-transform:uppercase; color:#8a8a8a; }
+  .picker select { padding:9px 11px; border:1px solid #ccc; border-radius:8px;
+                   font-size:14px; background:#fff; min-width:200px; }
+
+  /* Section headers, matching the other reports. */
+  .sec-head { margin:0 0 14px; }
+  .sec-eyebrow { display:none; font-size:10.5px; font-weight:700; letter-spacing:0.16em;
+                 text-transform:uppercase; color:#9aa3b2; margin:0 0 3px; }
+  .sec-title { font-size:21px; font-weight:700; letter-spacing:-0.02em; color:#12161c;
+               margin:0; line-height:1.1; }
+  .sec-sub { font-size:12px; color:#7c8794; margin:4px 0 0; font-variant-numeric:tabular-nums; }
+  .team-band { font-size:12px; font-weight:700; text-transform:uppercase;
+               letter-spacing:0.12em; padding:9px 14px; border-radius:6px;
+               margin:30px 0 12px; display:flex; align-items:center; gap:9px; }
+  .team-band:first-child { margin-top:0; }
+  .team-band .tb-dot { width:9px; height:9px; border-radius:50%; }
+  .team-band .tb-sub { margin-left:auto; font-weight:600; letter-spacing:0.06em;
+                       opacity:0.85; text-transform:none; font-size:11px; }
+
+  .player-head { display:flex; align-items:center; gap:16px; }
+  .player-logo { width:52px; height:52px; object-fit:contain; flex-shrink:0; }
+  .player-name { font-size:26px; font-weight:800; letter-spacing:-0.02em; line-height:1.1; }
+  .player-meta { font-size:13px; color:#7c8794; margin-top:3px; }
+
+  .totals { display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr));
+            gap:12px; margin-top:4px; }
+  .tot { background:#f7f8f9; border-radius:8px; padding:12px 14px; }
+  .tot .v { font-size:22px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
+  .tot .l { font-size:10.5px; text-transform:uppercase; letter-spacing:0.05em;
+            color:#8a8a8a; margin-top:5px; }
+
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:7px 9px; }
+  thead th { font-size:11px; text-transform:uppercase; letter-spacing:0.04em;
+             color:#888; font-weight:600; border-bottom:1.5px solid #e6e6e6; }
+  tbody tr:nth-child(odd) { background:#f7f8f9; }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
+  tfoot td { font-weight:700; border-top:1.5px solid #e6e6e6; }
+
+  /* The trend bar. A full charting library for one series per category
+     would be a dependency to keep working for very little; a div whose
+     width is a percentage says the same thing and cannot fail to load. */
+  .trend-row { display:flex; align-items:center; gap:10px; margin-bottom:5px; font-size:12px; }
+  .trend-row .g { width:74px; color:#7c8794; flex-shrink:0; }
+  .trend-row .bar-wrap { flex:1; background:#f0f1f3; border-radius:3px; height:16px; }
+  .trend-row .bar { height:16px; border-radius:3px; min-width:2px; }
+  .trend-row .v { width:52px; text-align:right; font-weight:700;
+                  font-variant-numeric:tabular-nums; flex-shrink:0; }
+  .no-stats { color:#999; font-size:13px; margin:0; }
+
+  @media (max-width: 700px) {
+    .wrap { padding:14px 12px 40px; }
+    .picker select { min-width:0; width:100%; }
+    .picker { flex:1 1 100%; }
+    .player-name { font-size:21px; }
+    table { font-size:12px; }
+    th, td { padding:6px 6px; }
+  }
+
+  .print-footer { display:none; }
+  .print-endmark { display:none; }
+  @media print {
+    body { background:#fff; }
+    .wrap { max-width:none; padding:0 24px; }
+    .no-print { display:none !important; }
+    .card { box-shadow:none; border:1px solid #ddd; page-break-inside:avoid;
+            break-inside:avoid; }
+    .sec-eyebrow { display:block; }
+    .team-band, .card, tbody tr {
+      -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    @page { margin-bottom: 16mm; }
+    .print-footer { display:block; position:fixed; bottom:6mm; left:0; right:0;
+                    text-align:center; font-size:9px; color:#9aa3b2;
+                    letter-spacing:0.04em; }
+    .print-endmark { display:flex; align-items:center; justify-content:center;
+                     margin:42mm 0 0; padding-top:18px;
+                     border-top:1px solid #e6e6e6;
+                     page-break-inside:avoid; break-inside:avoid; }
+    .print-endmark img { width:38px; height:38px; border-radius:7px; }
+  }
+</style>
+</head>
+<body>
+  <div class="print-footer">Generated with StatChat &nbsp;&middot;&nbsp; www.statchat.co</div>
+  <div class="wrap">
+    <div id="loading" class="card"><h1>Loading…</h1></div>
+    <div id="errorView" class="hidden"><p id="errorMsg" class="msg error"></p></div>
+
+    <div id="mainView" class="hidden">
+      <div class="topbar no-print">
+        <a href="reports.html">&larr; Back to reports</a>
+        <button id="downloadPdfBtn" type="button">Download PDF</button>
+      </div>
+      <p id="printFallback" class="no-print hidden"
+         style="margin:0 0 12px; padding:10px 12px; background:#fff8e6;
+                border:1px solid #e0b400; border-radius:6px; font-size:13px; color:#5a4300;"></p>
+
+      <div class="pickers no-print">
+        <div class="picker">
+          <label for="seasonPicker">Season</label>
+          <select id="seasonPicker"></select>
+        </div>
+        <div class="picker">
+          <label for="playerPicker">Player</label>
+          <select id="playerPicker"></select>
+        </div>
+      </div>
+
+      <div id="playerContent"></div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="team-icon.js"></script>
+<script src="engine.js"></script>
+<script>
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  const DOC_LABEL = 'Player Report';
+
+  function showView(name){
+    ['loading','errorView','mainView'].forEach(v =>
+      document.getElementById(v).classList.toggle('hidden', v !== name));
+  }
+  function showError(msg){
+    showView('errorView');
+    document.getElementById('errorMsg').textContent = msg;
+  }
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION'){
+      if (session){ init(); } else { window.location.href = '/'; }
+    } else if (event === 'SIGNED_OUT'){
+      window.location.href = '/';
+    }
+  });
+
+  // engine.js states at the top of the file what the host page must
+  // provide: TEAMS, plays, startingPossession, quarterLengthSec,
+  // TIMEOUTS_PER_HALF, isAdminMarker and otherTeam. They differ
+  // legitimately between pages -- game.html builds TEAMS from a live
+  // roster, the reports from a saved game -- so they live here rather
+  // than in the engine.
+  let plays = [], startingPossession = 'teamA', quarterLengthSec = 720;
+  const TEAMS = {};
+  let ourBranding = {};
+
+  function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+  const TIMEOUTS_PER_HALF = 3;
+  const TIMEOUTS_PER_OT = 1;
+
+  // Clock markers, quarter dividers and manual possession flips are
+  // announcements, not plays. A reset is a real event and is excluded.
+  function isAdminMarker(p){
+    if (!p) return true;
+    const e = p.effect || {};
+    if (e.isReset) return false;
+    return !!(e.clockEvent || e.setQuarter || e.forcePossession || p.isDivider);
+  }
+
+  // Every finalized game in the selected season, already reduced to what
+  // this page needs: one entry per game, holding that game's box score
+  // for OUR side only.
+  //
+  // The opponent's players are deliberately absent. A player report is
+  // about a player on this roster across a season; an opponent appears in
+  // one game and their numbers belong to that game's stat package.
+  let seasonGames = [];
+
+  function buildTeams(game, rosterRows, branding){
+    const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
+    const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    TEAMS.teamA = { name: ourName, bg: branding.primary_color || '#1a1a2e',
+      text: branding.secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{},
+      logo: branding.logo_url || null, isHome: !!game.our_team_is_home };
+    TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#8B0000',
+      text: game.opponent_secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{},
+      logo: game.opponent_logo_url || null, isHome: !game.our_team_is_home };
+    (rosterRows || []).forEach(r => {
+      const t = TEAMS[r.team_side];
+      if (!t) return;
+      const bucket = r.unit === 'defense' ? 'rosterDefense'
+                   : r.unit === 'special' ? 'rosterSpecialTeams' : 'rosterOffense';
+      t[bucket][String(r.jersey_number)] = r.player_name;
+      if (r.unit === 'offense' && r.position) t.posOffense[String(r.jersey_number)] = r.position;
+    });
+  }
+
+  // ---- categories -----------------------------------------------------
+  // Each entry says how to pull one player's line out of a box score and
+  // how to display it. Adding a category means adding one object here,
+  // not touching four render functions.
+  const CATEGORIES = [
+    { key: 'passing', label: 'Passing',
+      cols: [['Comp','comp'],['Att','att'],['Yds','yds'],['TD','td'],['Int','intThrown'],['Sacked','sacked']],
+      trend: 'yds', trendLabel: 'Passing yards',
+      headline: (t) => [
+        [t.yds || 0, 'Yards'],
+        [(t.comp || 0) + '/' + (t.att || 0), 'Comp/Att'],
+        [t.att ? Math.round(100 * (t.comp || 0) / t.att) + '%' : '—', 'Comp %'],
+        [t.td || 0, 'TD'],
+        [t.intThrown || 0, 'Int'],
+        [t.comp ? (t.yds / t.comp).toFixed(1) : '0.0', 'Yds/comp']
+      ] },
+    { key: 'rushing', label: 'Rushing',
+      cols: [['Att','att'],['Yds','yds'],['TD','td'],['Long','long'],['Fum','fum']],
+      trend: 'yds', trendLabel: 'Rushing yards',
+      headline: (t) => [
+        [t.yds || 0, 'Yards'],
+        [t.att || 0, 'Attempts'],
+        [t.att ? (t.yds / t.att).toFixed(1) : '0.0', 'Yds/att'],
+        [t.td || 0, 'TD'],
+        [t.long || 0, 'Long'],
+        [t.fum || 0, 'Fumbles']
+      ] },
+    { key: 'receiving', label: 'Receiving',
+      cols: [['Rec','rec'],['Tgt','tgt'],['Yds','yds'],['TD','td'],['Long','long'],['Fum','fum']],
+      trend: 'yds', trendLabel: 'Receiving yards',
+      headline: (t) => [
+        [t.yds || 0, 'Yards'],
+        [t.rec || 0, 'Receptions'],
+        [t.tgt || 0, 'Targets'],
+        [t.rec ? (t.yds / t.rec).toFixed(1) : '0.0', 'Yds/rec'],
+        [t.td || 0, 'TD'],
+        [t.long || 0, 'Long']
+      ] },
+    { key: 'defense', label: 'Defense',
+      cols: [['Tackles','tackles'],['TFL','tfl'],['Sacks','sacks'],['Int','int'],['Fum Rec','fumRec']],
+      trend: 'tackles', trendLabel: 'Tackles',
+      headline: (t) => [
+        [t.tackles || 0, 'Tackles'],
+        [t.tfl || 0, 'TFL'],
+        [t.sacks || 0, 'Sacks'],
+        [t.int || 0, 'Int'],
+        [t.fumRec || 0, 'Fum rec']
+      ] }
+  ];
+
+  function sectionHead(title, subtitle){
+    return '<div class="sec-head">' +
+      '<p class="sec-eyebrow">' + DOC_LABEL + '</p>' +
+      '<h2 class="sec-title">' + title + '</h2>' +
+      (subtitle ? '<p class="sec-sub">' + subtitle + '</p>' : '') +
+    '</div>';
+  }
+
+  function teamBand(label, subtitle){
+    const bg = (TEAMS.teamA && TEAMS.teamA.bg) || '#1a1a2e';
+    const fg = (typeof safeTextColor === 'function') ? safeTextColor(bg) : '#ffffff';
+    const dot = fg === '#000000' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.85)';
+    return '<div class="team-band" style="background:' + bg + '; color:' + fg + ';">' +
+      '<span class="tb-dot" style="background:' + dot + ';"></span>' + label +
+      (subtitle ? '<span class="tb-sub">' + subtitle + '</span>' : '') +
+    '</div>';
+  }
+
+  // ---- the player list ------------------------------------------------
+  // Names, because that is what computeBoxScore keys its buckets by. A
+  // player who changed jersey number mid-season is therefore ONE entry,
+  // which is right; two players who share a name are one entry, which is
+  // wrong and cannot be resolved here -- the box score merged them long
+  // before this page saw them.
+  function playerNames(){
+    const names = new Set();
+    seasonGames.forEach(g => {
+      CATEGORIES.forEach(c => Object.keys(g.box[c.key] || {}).forEach(n => {
+        // TEAM is the sentinel for a team rush -- a kneel or a bad snap.
+        // It is not a person and must not appear in a player picker.
+        if (n !== 'TEAM') names.add(n);
+      }));
+    });
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }
+
+  function playerSeason(name){
+    const out = { games: [], byCat: {} };
+    CATEGORIES.forEach(c => { out.byCat[c.key] = { total: {}, perGame: [] }; });
+    seasonGames.forEach(g => {
+      let appeared = false;
+      CATEGORIES.forEach(c => {
+        const line = (g.box[c.key] || {})[name];
+        if (!line) return;
+        appeared = true;
+        const acc = out.byCat[c.key];
+        acc.perGame.push({ game: g, line: line });
+        Object.keys(line).forEach(k => {
+          const v = line[k];
+          if (typeof v !== 'number') return;
+          // `long` is a best, not a running total -- summing it would
+          // report a season long of every long added together.
+          if (k === 'long') acc.total[k] = Math.max(acc.total[k] || 0, v);
+          else acc.total[k] = (acc.total[k] || 0) + v;
+        });
+      });
+      if (appeared) out.games.push(g);
+    });
+    return out;
+  }
+
+  function trendBars(perGame, field, colour){
+    if (!perGame.length) return '';
+    const vals = perGame.map(e => e.line[field] || 0);
+    // Scaled against the best game, not a fixed axis: the question a
+    // trend answers here is "which weeks were his best", and a bar chart
+    // scaled to an absolute maximum answers it badly for a lineman.
+    const max = Math.max.apply(null, vals.concat([1]));
+    return perGame.map((e, i) => {
+      const v = vals[i];
+      const pct = Math.max(0, Math.round(100 * v / max));
+      return '<div class="trend-row">' +
+        '<div class="g">' + e.game.label + '</div>' +
+        '<div class="bar-wrap"><div class="bar" style="width:' + pct + '%; background:' + colour + ';"></div></div>' +
+        '<div class="v">' + v + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderPlayer(name){
+    if (!name) return '<div class="card"><p class="no-stats">No players recorded this season.</p></div>';
+    const season = playerSeason(name);
+    const accent = (TEAMS.teamA && TEAMS.teamA.bg) || '#1a4d2e';
+    const logo = TEAMS.teamA && TEAMS.teamA.logo;
+
+    let html = '<div class="card">' +
+      '<div class="player-head">' +
+        (logo ? '<img class="player-logo" src="' + logo + '">' : '') +
+        '<div>' +
+          '<div class="player-name">' + name + '</div>' +
+          '<div class="player-meta">' + (TEAMS.teamA ? TEAMS.teamA.name : '') +
+            ' &middot; ' + season.games.length + ' game' + (season.games.length === 1 ? '' : 's') +
+            ' with recorded stats, of ' + seasonGames.length + ' played</div>' +
+        '</div>' +
+      '</div></div>';
+
+    let any = false;
+    CATEGORIES.forEach(c => {
+      const acc = season.byCat[c.key];
+      // A category the player never appears in is omitted entirely rather
+      // than shown as a row of zeros. A lineman's report should not be
+      // four empty tables and one real one.
+      if (!acc.perGame.length) return;
+      any = true;
+      const t = acc.total;
+      html += '<div class="card">' +
+        teamBand(c.label, acc.perGame.length + ' game' + (acc.perGame.length === 1 ? '' : 's')) +
+        '<div class="totals">' +
+          c.headline(t).map(([v, l]) =>
+            '<div class="tot"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>').join('') +
+        '</div>' +
+        '<table style="margin-top:16px;"><thead><tr><th>Game</th><th>Opponent</th>' +
+          c.cols.map(([h]) => '<th class="n">' + h + '</th>').join('') +
+        '</tr></thead><tbody>' +
+        acc.perGame.map(e => '<tr>' +
+          '<td>' + e.game.label + '</td>' +
+          '<td>' + e.game.opponent + '</td>' +
+          c.cols.map(([, f]) => '<td class="n">' + (e.line[f] || 0) + '</td>').join('') +
+        '</tr>').join('') +
+        '</tbody><tfoot><tr><td>Total</td><td></td>' +
+          c.cols.map(([, f]) => '<td class="n">' +
+            (f === 'long' ? (t.long || 0) : (t[f] || 0)) + '</td>').join('') +
+        '</tr></tfoot></table>' +
+        '<div style="margin-top:18px;">' +
+          '<div class="sec-sub" style="margin-bottom:8px;">' + c.trendLabel + ' by game</div>' +
+          trendBars(acc.perGame, c.trend, accent) +
+        '</div>' +
+      '</div>';
+    });
+
+    if (!any){
+      html += '<div class="card"><p class="no-stats">No recorded statistics for this player ' +
+        'in the selected season.</p></div>';
+    }
+
+    html += '<div class="print-endmark"><img src="logo.png" alt="StatChat"></div>';
+    return html;
+  }
+
+  function renderForSelectedPlayer(){
+    const name = document.getElementById('playerPicker').value;
+    document.getElementById('playerContent').innerHTML = renderPlayer(name);
+    document.title = 'Player Report — ' + (name || 'StatChat');
+  }
+
+  async function loadSeason(year){
+    seasonGames = [];
+    const { data: gameRows, error: gamesError } = await supabaseClient
+      .from('games').select('*').eq('season_year', year).eq('status', 'final')
+      .order('game_date', { ascending: true });
+    if (gamesError){ showError('Could not load games: ' + gamesError.message); return; }
+    if (!gameRows || !gameRows.length){
+      document.getElementById('playerPicker').innerHTML = '';
+      document.getElementById('playerContent').innerHTML =
+        '<div class="card"><p class="no-stats">No finalized games in this season yet.</p></div>';
+      return;
+    }
+
+    for (const game of gameRows){
+      const { data: rosterRows } = await supabaseClient
+        .from('game_rosters').select('*').eq('game_id', game.id);
+      const { data: raw } = await supabaseClient
+        .from('plays').select('*').eq('game_id', game.id)
+        .order('sequence_number', { ascending: true });
+      const gamePlays = (raw || []).map(p => ({
+        text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+        roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+      }));
+      buildTeams(game, rosterRows || [], ourBranding);
+      plays = gamePlays;
+      const box = computeBoxScore(gamePlays);
+      seasonGames.push({
+        id: game.id,
+        label: game.designator || '',
+        opponent: (game.our_team_is_home ? game.away_team_name : game.home_team_name) || '',
+        date: game.game_date,
+        box: box.teamA
+      });
+    }
+
+    const names = playerNames();
+    const picker = document.getElementById('playerPicker');
+    const previous = picker.value;
+    picker.innerHTML = names.map(n => '<option value="' + n + '">' + n + '</option>').join('');
+    // Keep the same player selected when the season changes, if he played
+    // in both -- switching seasons to follow one player is the likeliest
+    // reason to touch that control.
+    if (previous && names.includes(previous)) picker.value = previous;
+    renderForSelectedPlayer();
+  }
+
+  async function init(){
+    const { data: teamRows } = await supabaseClient
+      .from('teams').select('primary_color, secondary_color, logo_url, current_season_year')
+      .eq('is_our_team', true).limit(1);
+    ourBranding = (teamRows && teamRows[0]) || {};
+
+    const { data: allGames, error } = await supabaseClient
+      .from('games').select('season_year').eq('status', 'final');
+    if (error){ showError('Could not load seasons: ' + error.message); return; }
+    const years = [...new Set((allGames || []).map(g => g.season_year).filter(y => y))]
+      .sort((a, b) => b - a);
+    const params = new URLSearchParams(window.location.search);
+    const asked = parseInt(params.get('season'), 10);
+    const fallback = ourBranding.current_season_year || years[0];
+    const start = years.includes(asked) ? asked : (years.includes(fallback) ? fallback : years[0]);
+
+    const seasonPicker = document.getElementById('seasonPicker');
+    seasonPicker.innerHTML = years.map(y =>
+      '<option value="' + y + '">' + y + ' season</option>').join('');
+    if (start) seasonPicker.value = String(start);
+
+    showView('mainView');
+    if (!years.length){
+      document.getElementById('playerContent').innerHTML =
+        '<div class="card"><p class="no-stats">No finalized games yet.</p></div>';
+      return;
+    }
+
+    seasonPicker.addEventListener('change', () => loadSeason(parseInt(seasonPicker.value, 10)));
+    document.getElementById('playerPicker').addEventListener('change', renderForSelectedPlayer);
+    await loadSeason(parseInt(seasonPicker.value, 10));
+  }
+
+  // Same shape as the other report pages: window.print() is a silent
+  // no-op in some mobile contexts, so the click watches for a dialog and
+  // explains what to do by hand if none opened.
+  document.getElementById('downloadPdfBtn').addEventListener('click', () => {
+    const note = document.getElementById('printFallback');
+    if (note) note.classList.add('hidden');
+    let started = false;
+    const mark = () => { started = true; };
+    window.addEventListener('beforeprint', mark, { once: true });
+    let mq = null;
+    if (window.matchMedia){
+      mq = window.matchMedia('print');
+      if (mq.addListener) mq.addListener(mark);
+    }
+    try { window.print(); } catch (e) { started = false; }
+    setTimeout(() => {
+      window.removeEventListener('beforeprint', mark);
+      if (mq && mq.removeListener) mq.removeListener(mark);
+      if (started || !note) return;
+      note.textContent = 'Your browser did not open a print dialog. ' +
+        'On iPhone or iPad use the Share button, then Print, then pinch out on the ' +
+        'preview to save it as a PDF. On Android open the browser menu, then Print. ' +
+        'If you are inside another app — a message or an email — open this page in ' +
+        'Safari or Chrome first.';
+      note.classList.remove('hidden');
+    }, 1500);
+  });
+</script>
+</body>
+</html>
