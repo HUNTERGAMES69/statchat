@@ -7156,8 +7156,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       function recompute(){
         const raw = (ylEl.value || '').trim();
         const yl = parseInt(raw, 10);
-        if (!side || !raw || !Number.isFinite(yl) || yl < 0 || yl > 50 || st.fieldPos === null){
-          readout.textContent = '';
+        // EVERY EMPTY STATE SAYS WHY, the way the play panels' calculator
+        // does. A blank readout is a green sliver with nothing in it,
+        // which reads as broken rather than as waiting -- and gives no
+        // hint that a yard line is what it is waiting for.
+        if (st.fieldPos === null){
+          readout.textContent = 'Spot not set — enter yards lost directly.';
+          return;
+        }
+        if (!side){ readout.textContent = 'Pick which side of the field.'; return; }
+        if (!raw){
+          readout.textContent = 'Enter a yard line to work the loss out from the spot.';
+          return;
+        }
+        if (!Number.isFinite(yl) || yl < 0 || yl > 50){
+          readout.textContent = 'Yard line must be 0–50.';
           return;
         }
         // Possession-relative, the same convention computeState uses.
@@ -7183,6 +7196,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         yardsEl.style.fontWeight = '700';
       }
 
+      // Painted once on open so the box is never an empty sliver.
+      recompute();
       sideBtns.forEach(b => b.addEventListener('click', () => { side = b.dataset.side; paint(); recompute(); }));
       ylEl.addEventListener('input', recompute);
       // Typing in the yards box by hand takes it back from the calculator.
