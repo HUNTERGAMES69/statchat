@@ -4458,7 +4458,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // a finger can place. So a tap is a COARSE aim and the steppers beneath
   // do the last yard or two. That pairing is deliberate: neither half is
   // any good alone, and the stepper is the third pattern worth trying.
-  let stripEl = null, stripTarget = null, stripPos = null, stripStart = null;
+  let stripEl = null, stripTarget = null, stripTargetId = null,
+      stripPos = null, stripStart = null, stripMode = 'yards';
   // Set only while the strip is clicking something outside itself on
   // purpose. See paint().
   let stripSuppressClose = false;
@@ -4611,6 +4612,47 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       readout.style.background = losing ? '#fdeceb' : '#eef6f1';
       readout.style.borderLeftColor = losing ? '#a32d2d' : '#1a7a4c';
       readout.style.color = losing ? '#8a2020' : '#1a4d2e';
+      // POSITION MODE: a yard-line box wants WHERE, not HOW FAR.
+      // ------------------------------------------------------------------
+      // Yard-line fields (a takeover spot, a calculator's spot) are 0-50
+      // plus a side, not a distance. The same strip serves both: the
+      // marker means the same thing, only the number written differs.
+      if (stripMode === 'pos' && stripTarget){
+        const t = stripTargetId && document.getElementById(stripTargetId);
+        if (t){
+          const clamped = Math.max(0, Math.min(100, stripPos));
+          const ownSide = clamped <= 50;
+          t.value = String(ownSide ? clamped : 100 - clamped);
+          t.dispatchEvent(new Event('input', { bubbles: true }));
+          // The side control that belongs to this box. Found by walking up
+          // from the input rather than by a table of ids: there are five
+          // of these blocks with three different class names between them,
+          // and a table would be one more thing to keep in step.
+          let scope = t.parentElement, sideBtns = null;
+          for (let i = 0; i < 4 && scope; i++){
+            const found = scope.querySelectorAll('button[data-side]');
+            if (found.length){ sideBtns = [...found]; break; }
+            scope = scope.parentElement;
+          }
+          if (sideBtns){
+            // Two vocabularies in use: own/opp on most, off/def on the
+            // interception spot.
+            const want = ownSide ? ['own','def'] : ['opp','off'];
+            const btn = sideBtns.find(b => want.indexOf(b.dataset.side) !== -1);
+            if (btn && !btn.classList.contains('picked')){
+              stripSuppressClose = true;
+              btn.click();
+              stripSuppressClose = false;
+            }
+          }
+        }
+        readout.textContent = 'spot: ' + label(Math.max(0, Math.min(100, stripPos)));
+        readout.style.background = '#eef6f1';
+        readout.style.borderLeftColor = '#1a7a4c';
+        readout.style.color = '#1a4d2e';
+        return;
+      }
+
       if (stripTarget){
         // At a goal line the yardage is the distance TO it, not past it:
         // a carry from the own 4 into the end zone is a four yard loss,
@@ -4722,11 +4764,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   function closeStrip(){
     if (stripEl) stripEl.style.display = 'none';
-    stripTarget = null;
+    stripTarget = null; stripTargetId = null;
   }
 
-  function openStrip(target, anchor){
+  function openStrip(target, anchor, kind){
     const el = buildStrip();
+    stripMode = (kind === 'pos') ? 'pos' : 'yards';
     const st = computeState();
     if (st.fieldPos === null){
       // Without a spot there is no field to point at. Saying so beats
@@ -4735,6 +4778,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       return;
     }
     stripTarget = target;
+    stripTargetId = target.id;
     stripStart = st.fieldPos;
     const cur = parseInt(target.value, 10);
     stripPos = Number.isFinite(cur) ? Math.max(-10, Math.min(110, st.fieldPos + Math.abs(cur))) : st.fieldPos;
@@ -4809,7 +4853,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (sb){
       closeWheel(); closePad();
       const target = document.getElementById(sb.dataset.for);
-      if (target && !target.disabled) openStrip(target, sb);
+      if (target && !target.disabled) openStrip(target, sb, sb.dataset.kind);
       e.preventDefault();
       return;
     }
@@ -4847,7 +4891,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   //
   // PICKER_MODE is the ONLY difference between gametest.html and
   // gametest2.html.
-  const PICKER_MODE = 'keypad';        // 'keypad' | 'strip'
+  const PICKER_MODE = 'strip';         // 'keypad' | 'strip'
 
   // What kind of number is this box?
   //   clock  -- always the keypad, in both files. A wheel or a strip
