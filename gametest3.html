@@ -4400,9 +4400,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // The clock field is written as typed -- the app normalises a
       // colon-less entry itself, and re-formatting here would be a second
       // opinion on a conversion that already exists.
+      padWriting = true;
       t.value = buf === '' ? ''
         : (padKind === 'clock' ? buf : String(parseInt(buf, 10)));
       t.dispatchEvent(new Event('input', { bubbles: true }));
+      padWriting = false;
     };
 
     el.addEventListener('click', (e) => {
@@ -4433,6 +4435,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       paint();
     });
     el._reset = (start) => { buf = start; paint(); };
+    el._syncFromField = () => {
+      const t = padTargetId && document.getElementById(padTargetId);
+      if (!t) return;
+      const raw = String(t.value || '').replace(/[^0-9]/g, '');
+      buf = padKind === 'clock' ? raw.slice(0, 4) : raw.slice(0, 2);
+      paint();
+    };
     padEl = el;
     return el;
   }
@@ -4797,6 +4806,29 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     el.style.top = (fitsBelow ? (window.scrollY + r.bottom + 6)
                               : (window.scrollY + r.top - h - 6)) + 'px';
   }
+
+  // THE PAD FOLLOWS THE KEYBOARD.
+  // ---------------------------------------------------------------------
+  // The pad kept its own buffer and wrote it on Done. So a scorer who
+  // tapped a field, then typed 47 on the physical keyboard, saw the field
+  // read 47 and the pad's echo read 0 -- and pressing Done wiped the
+  // field, because the pad committed its own empty buffer over the top.
+  //
+  // That is DATA LOSS on the likeliest mixed action there is: tap in,
+  // type an odd number, confirm. Both routes now write into one buffer:
+  // a keystroke updates the pad, a tap updates the field, and Done can
+  // only ever commit what is already on screen.
+  //
+  // padWriting guards the feedback loop -- commit() dispatches 'input'
+  // itself, which would otherwise re-read the field and re-paint on every
+  // tap.
+  let padWriting = false;
+  document.addEventListener('input', (e) => {
+    if (padWriting) return;
+    if (!padEl || padEl.style.display === 'none') return;
+    if (!padTargetId || !e.target || e.target.id !== padTargetId) return;
+    padEl._syncFromField();
+  });
 
   function openPad(target, anchor, kind){
     padKind = kind || 'yards';
