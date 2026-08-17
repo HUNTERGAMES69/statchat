@@ -4727,20 +4727,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // default) or 'keypad'. Both are prototypes and both write into the
     // same input, so a panel can carry either and nothing downstream
     // notices -- which is what makes comparing them on real plays cheap.
+    // PROTOTYPE. Which launcher sits beside a yards box is decided HERE,
+    // from the panel type, rather than being passed in at each call site.
+    // The rush and pass panels have several yards boxes between them --
+    // the play, a fumble return, a pass fumble return -- and passing an
+    // argument at each one is how the fifth gets forgotten.
+    const yardsPicker = (type === 'rush' || type === 'pass') ? 'keypad' : 'wheel';
     const yardsBlock = (label, id, withLoss, picker) => fieldLabel(label || 'Enter yards') +
       '<span style="display:inline-flex; align-items:center; gap:8px;">' +
         '<input autocomplete="off" type="text" inputmode="numeric" id="' + (id||'pp_yards') + '" style="width:80px;">' +
-        // The strip is offered ALONGSIDE the wheel on the rush panel, not
-        // instead of it -- comparing two controls on the same play type
-        // is the only way to tell which is faster for the same numbers.
-        (picker === 'strip'
-          ? '<button type="button" class="stripBtn" data-for="' + (id||'pp_yards') + '" ' +
-            'title="Tap where the play ended" ' +
-            'style="padding:8px 11px; border-radius:6px; border:2px solid #ccc; background:#fff; ' +
-            'font-size:15px; font-weight:700; color:#555; cursor:pointer; line-height:1; ' +
-            'touch-action:manipulation;">\u25AD</button>'
-          : '') +
-        (picker === 'keypad'
+        ((picker || yardsPicker) === 'keypad'
           ? '<button type="button" class="padBtn" data-for="' + (id||'pp_yards') + '" ' +
             'title="Number pad" ' +
             'style="padding:8px 11px; border-radius:6px; border:2px solid #ccc; background:#fff; ' +
@@ -4827,6 +4823,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
             TEAMS[opp].name + '</button>' +
           '<input autocomplete="off" type="text" id="pp_calc_yardline" placeholder="yard line" style="width:90px;">' +
+          // PROTOTYPE: the field strip sits with the CALCULATOR, not with
+          // the yards box, because it answers the calculator's question --
+          // where did the play end -- rather than the box's. If it wins,
+          // it replaces the control it is standing next to.
+          ((type === 'rush' || type === 'pass')
+            ? '<button type="button" class="stripBtn" data-for="pp_yards" ' +
+              'title="Tap where the play ended" ' +
+              'style="padding:8px 11px; border-radius:6px; border:2px solid #ccc; background:#fff; ' +
+              'font-size:15px; font-weight:700; color:#555; cursor:pointer; line-height:1; ' +
+              'touch-action:manipulation;">\u25AD</button>'
+            : '') +
         '</span>' +
         spotCalcReadoutHtml() +
       '</div>';
@@ -4867,7 +4874,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // question and were only ever on the same line because they fit;
         // as soon as the calculator arrived they wrapped unpredictably and
         // nothing lined up with anything.
-        '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div>' + yardsBlock('Enter yards', null, true, 'strip') +
+        '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div>' + yardsBlock('Enter yards', null, true) +
           '<span style="display:inline-flex; align-items:center; gap:8px;">' +
             '<input autocomplete="off" type="text" id="pp_yards_dummy" style="display:none;">' +
           '</span></div>' + spotCalcHtml() + '</div>' +
@@ -4903,7 +4910,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // PROTOTYPE: the passing tree carries the KEYPAD, the rushing tree
         // the wheel, so the two can be compared on the same evening
         // against real plays rather than in the abstract.
-        '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap">' + yardsBlock('Enter yards', null, true, 'keypad') + '</div>' + spotCalcHtml() + '</div>' +
+        '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap">' + yardsBlock('Enter yards', null, true) + '</div>' + spotCalcHtml() + '</div>' +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
         '<div style="margin-bottom:6px;"><input autocomplete="off" type="checkbox" id="pp_incomplete" style="display:none;">' +
         '<button type="button" id="pp_incomplete_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
