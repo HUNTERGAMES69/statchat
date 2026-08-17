@@ -61,7 +61,18 @@ module.exports = async (req, res) => {
     if (gamesErr) throw gamesErr;
 
     if (!games || !games.length) {
-      res.status(200).json({ season, games: [], ourBranding, served: new Date().toISOString(), resolvedBy });
+      // NO FALLBACK TO ANOTHER SEASON, deliberately.
+      // ----------------------------------------------------------------
+      // Quietly answering with last season's leaders when this one has no
+      // finished games would put a panel on air labelled for a year
+      // nobody asked about. A season with nothing final has no leaders,
+      // and the overlay showing nothing is the correct answer.
+      //
+      // `reason` is for a person reading this endpoint directly. The
+      // overlay does not print it on air; ?debug=1 shows it in a browser.
+      res.status(200).json({ season, games: [], ourBranding,
+        reason: 'No finalized games found for this season',
+        served: new Date().toISOString(), resolvedBy });
       return;
     }
 
