@@ -79,7 +79,14 @@
   .cols .col { flex:1 1 0; max-width:76px; display:flex; flex-direction:column;
                justify-content:flex-end; align-items:center; gap:7px; height:100%; }
   .cols .cv { font-size:14px; font-weight:700; font-variant-numeric:tabular-nums; }
-  .cols .cb { width:100%; border-radius:5px 5px 0 0; min-height:3px; }
+  .cols .cb { width:100%; border-radius:5px 5px 0 0; min-height:3px;
+              display:flex; flex-direction:column; justify-content:flex-end; }
+  /* The inner series sits at the BASE of its bar: a touchback is part of
+     the kickoffs above it, not a separate quantity beside them. */
+  .cols .cb-sub { width:100%; border-radius:0 0 5px 5px; }
+  .chart-key { display:flex; align-items:center; gap:6px; margin-top:10px;
+               font-size:11.5px; color:#7c8794; }
+  .chart-key .sw { width:11px; height:11px; border-radius:3px; display:inline-block; }
   /* The labels mirror the columns exactly -- same gap, same flex basis,
      same cap -- or they drift out of line the moment the cap engages. */
   .col-labels { display:flex; gap:14px; padding:9px 4px 0; justify-content:flex-start; }
@@ -305,7 +312,7 @@
           [t.td || 0, 'Total TD']
         ];
       },
-      trend: 'yds', trendLabel: 'Passing yards',
+      value: (d) => d.yds || 0, trendLabel: 'Passing yards by game',
       headline: (t) => [
         [t.yds || 0, 'Yards'],
         [(t.comp || 0) + '/' + (t.att || 0), 'Comp/Att'],
@@ -331,7 +338,7 @@
           [t.td || 0, 'Total TD']
         ];
       },
-      trend: 'yds', trendLabel: 'Rushing yards',
+      value: (d) => d.yds || 0, trendLabel: 'Rushing yards by game',
       headline: (t) => [
         [t.yds || 0, 'Yards'],
         [t.att || 0, 'Attempts'],
@@ -357,7 +364,7 @@
           [t.td || 0, 'Total TD']
         ];
       },
-      trend: 'yds', trendLabel: 'Receiving yards',
+      value: (d) => d.yds || 0, trendLabel: 'Receiving yards by game',
       headline: (t) => [
         [t.yds || 0, 'Yards'],
         [t.rec || 0, 'Receptions'],
@@ -383,7 +390,11 @@
       has: (d) => (d.fgAtt || 0) + (d.patAtt || 0) > 0,
       cols: [['FG Att','fgAtt'],['FG Made','fgMade'],['Long','fgLong'],
              ['XP Att','patAtt'],['XP Made','patMade'],['Blk','fgBlocked']],
-      trend: 'fgMade', trendLabel: 'Field goals made',
+      // POINTS, not field goals. A kicker who only takes extra points
+      // has no field goals at all, and charting fgMade left him with an
+      // empty graph beside a table reading 4 for 4.
+      value: (d) => (d.fgMade || 0) * 3 + (d.patMade || 0),
+      trendLabel: 'Kicking points by game',
       splits: (per, t) => [
         [(t.fgMade || 0) + '/' + (t.fgAtt || 0), 'Field goals'],
         [t.fgAtt ? Math.round(100 * (t.fgMade || 0) / t.fgAtt) + '%' : '—', 'FG %'],
@@ -403,7 +414,12 @@
     { key: 'kickoffs', label: 'Kickoffs', bucket: 'specialTeams',
       has: (d) => (d.kickoffs || 0) > 0,
       cols: [['Kickoffs','kickoffs'],['Touchbacks','touchbacks']],
-      trend: 'kickoffs', trendLabel: 'Kickoffs',
+      // Two series in one bar: kickoffs, with touchbacks stacked
+      // inside. "Five kickoffs, one a touchback" is one fact, and two
+      // charts would make the reader do the division.
+      value: (d) => d.kickoffs || 0,
+      sub: (d) => d.touchbacks || 0, subLabel: 'Touchbacks',
+      trendLabel: 'Kickoffs and touchbacks by game',
       splits: (per, t) => [
         [t.kickoffs || 0, 'Kickoffs'],
         [t.touchbacks || 0, 'Touchbacks'],
@@ -421,7 +437,7 @@
     { key: 'punting', label: 'Punting', bucket: 'specialTeams',
       has: (d) => (d.punts || 0) > 0,
       cols: [['Punts','punts'],['Yds','puntYds'],['Long','puntLong'],['Blocked','blocked']],
-      trend: 'punts', trendLabel: 'Punts',
+      value: (d) => d.punts || 0, trendLabel: 'Punts by game',
       splits: (per, t) => [
         [t.punts || 0, 'Punts'],
         // Averaged over punts WITH a distance recorded, not all punts --
@@ -455,7 +471,7 @@
           [(t.int || 0) + (t.fumRec || 0), 'Takeaways']
         ];
       },
-      trend: 'tackles', trendLabel: 'Tackles',
+      value: (d) => d.tackles || 0, trendLabel: 'Tackles by game',
       headline: (t) => [
         [t.tackles || 0, 'Tackles'],
         [t.tfl || 0, 'TFL'],
@@ -548,19 +564,47 @@
   // Scaled to the player's OWN best game, not an absolute axis: the
   // question is which weeks were his, and a fixed scale answers that
   // badly for a player whose season high is 40 yards.
-  function trendChart(perGame, field, colour, accentBest){
+  // THE TREND CHART.
+  // ---------------------------------------------------------------------
+  // Takes a FUNCTION rather than a field name. A placekicker's story is
+  // not one column of the box score: a man who only kicks extra points
+  // has no field goals, and charting fgMade gave him an empty graph next
+  // to a table showing 4 for 4. Points scored covers both.
+  //
+  // `subFn` draws a second, inner series stacked at the base of each
+  // column -- touchbacks inside kickoffs -- so one bar answers "how many,
+  // and how many of those". Two separate charts would make the reader do
+  // the division.
+  //
+  // Columns on a wide screen, bars on a narrow one; both are rendered and
+  // CSS picks one. Measuring the viewport in JavaScript and re-rendering
+  // on resize is more moving parts than a chart of eight numbers is worth.
+  //
+  // Scaled to the player's OWN best game, not an absolute axis: the
+  // question is which weeks were his.
+  function trendChart(perGame, valueFn, colour, accentBest, subFn, subLabel){
     if (!perGame.length) return '';
-    const vals = perGame.map(e => e.line[field] || 0);
+    const vals = perGame.map(e => valueFn(e.line || {}) || 0);
+    const subs = subFn ? perGame.map(e => subFn(e.line || {}) || 0) : null;
     const max = Math.max.apply(null, vals.concat([1]));
     const bestAt = vals.indexOf(Math.max.apply(null, vals));
 
+    const inner = (i) => {
+      if (!subs || !vals[i] || !subs[i]) return '';
+      // Height is a share of the OUTER bar, not of the axis, because it
+      // sits inside it.
+      const share = Math.min(100, Math.round(100 * subs[i] / vals[i]));
+      return '<div class="cb-sub" style="height:' + share + '%; background:' + accentBest + ';">' +
+        '</div>';
+    };
+
     const cols = perGame.map((e, i) => {
       const pct = Math.max(2, Math.round(100 * vals[i] / max));
-      const isBest = i === bestAt && vals[i] > 0;
+      const isBest = !subs && i === bestAt && vals[i] > 0;
       return '<div class="col">' +
-        '<div class="cv">' + vals[i] + '</div>' +
+        '<div class="cv">' + vals[i] + (subs ? ' / ' + subs[i] : '') + '</div>' +
         '<div class="cb" style="height:' + pct + '%; background:' +
-          (isBest ? accentBest : colour) + ';"></div>' +
+          (isBest ? accentBest : colour) + ';">' + inner(i) + '</div>' +
       '</div>';
     }).join('');
 
@@ -569,20 +613,28 @@
 
     const bars = perGame.map((e, i) => {
       const pct = Math.max(2, Math.round(100 * vals[i] / max));
-      const isBest = i === bestAt && vals[i] > 0;
+      const isBest = !subs && i === bestAt && vals[i] > 0;
       return '<div class="bar-row">' +
         '<div class="g"><b>' + e.game.label + '</b><span>' + e.game.opponent + '</span></div>' +
         '<div class="bw"><div class="bb" style="width:' + pct + '%; background:' +
-          (isBest ? accentBest : colour) + ';">' + vals[i] + '</div></div>' +
+          (isBest ? accentBest : colour) + ';">' + vals[i] + (subs ? ' / ' + subs[i] : '') +
+        '</div></div>' +
       '</div>';
     }).join('');
+
+    const key = subs
+      ? '<div class="chart-key"><span class="sw" style="background:' + colour + ';"></span>' +
+        'Total<span class="sw" style="background:' + accentBest + '; margin-left:14px;"></span>' +
+        (subLabel || 'of which') + '</div>'
+      : '';
 
     return '<div class="trend-cols">' +
         '<div class="cols">' + cols + '</div>' +
         '<div class="col-labels">' + labels + '</div>' +
       '</div>' +
-      '<div class="trend-bars">' + bars + '</div>';
+      '<div class="trend-bars">' + bars + '</div>' + key;
   }
+
 
 
   function renderPlayer(name){
@@ -698,8 +750,8 @@
             (f === 'long' ? (t.long || 0) : (t[f] || 0)) + '</td>').join('') +
         '</tr></tfoot></table>' +
         '<div style="margin-top:18px;">' +
-          '<div class="sec-sub" style="margin-bottom:10px;">' + c.trendLabel + ' by game</div>' +
-          trendChart(fullSeries, c.trend, accent, best) +
+          '<div class="sec-sub" style="margin-bottom:10px;">' + c.trendLabel + '</div>' +
+          trendChart(fullSeries, c.value, accent, best, c.sub, c.subLabel) +
         '</div>' +
         // The split tiles: every one is derived from the game log in the
         // table above, so nothing here has to be trusted separately.
