@@ -63,15 +63,41 @@
   td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
   tfoot td { font-weight:700; border-top:1.5px solid #e6e6e6; }
 
-  /* The trend bar. A full charting library for one series per category
-     would be a dependency to keep working for very little; a div whose
-     width is a percentage says the same thing and cannot fail to load. */
-  .trend-row { display:flex; align-items:center; gap:10px; margin-bottom:5px; font-size:12px; }
-  .trend-row .g { width:74px; color:#7c8794; flex-shrink:0; }
-  .trend-row .bar-wrap { flex:1; background:#f0f1f3; border-radius:3px; height:16px; }
-  .trend-row .bar { height:16px; border-radius:3px; min-width:2px; }
-  .trend-row .v { width:52px; text-align:right; font-weight:700;
-                  font-variant-numeric:tabular-nums; flex-shrink:0; }
+  /* THE TREND CHART. Plain divs rather than a charting library: one
+     series per category does not justify a dependency that has to keep
+     loading, and a percentage width cannot fail to render. */
+  .cols { display:flex; align-items:flex-end; gap:14px; height:190px;
+          padding:0 4px; border-bottom:2px solid #e6e6e6; }
+  .cols .col { flex:1; display:flex; flex-direction:column; justify-content:flex-end;
+               align-items:center; gap:7px; height:100%; }
+  .cols .cv { font-size:14px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .cols .cb { width:100%; border-radius:5px 5px 0 0; min-height:3px; }
+  .col-labels { display:flex; gap:14px; padding:9px 4px 0; }
+  .col-labels div { flex:1; text-align:center; font-size:11.5px; color:#7c8794;
+                    line-height:1.35; overflow:hidden; }
+  .col-labels div b { display:block; color:#1a1a1a; font-weight:700; font-size:12.5px; }
+
+  /* The narrow-screen form. Both are in the DOM and CSS picks one --
+     measuring the viewport in JavaScript and re-rendering on resize is
+     more moving parts than a chart of eight numbers is worth. */
+  .trend-bars { display:none; }
+  .bar-row { display:flex; align-items:center; gap:14px; margin-bottom:10px; }
+  .bar-row .g { width:104px; font-size:13px; flex-shrink:0; }
+  .bar-row .g b { display:block; font-weight:700; }
+  .bar-row .g span { color:#8a8a8a; font-size:11px; }
+  .bar-row .bw { flex:1; background:#f2f3f5; border-radius:6px; height:34px; }
+  .bar-row .bb { height:34px; border-radius:6px; display:flex; align-items:center;
+                 justify-content:flex-end; padding-right:10px; color:#fff;
+                 font-weight:700; font-size:13px; box-sizing:border-box;
+                 font-variant-numeric:tabular-nums; }
+
+  /* Splits, filling the space the chart leaves. */
+  .splits { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));
+            gap:12px; margin-top:22px; }
+  .splits .sp { background:#f7f8f9; border-radius:8px; padding:13px 15px; }
+  .splits .sp .v { font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .splits .sp .l { font-size:10.5px; text-transform:uppercase; letter-spacing:0.05em;
+                   color:#8a8a8a; margin-top:4px; }
   .no-stats { color:#999; font-size:13px; margin:0; }
 
   @media (max-width: 700px) {
@@ -81,6 +107,13 @@
     .player-name { font-size:21px; }
     table { font-size:12px; }
     th, td { padding:6px 6px; }
+    /* THE FALLBACK. Twelve columns across a phone are threads; the
+       horizontal form is constrained by height instead, and there is
+       always more height. */
+    .trend-cols { display:none; }
+    .trend-bars { display:block; }
+    .bar-row .g { width:88px; }
+    .splits { grid-template-columns:repeat(2, 1fr); gap:10px; }
   }
 
   .print-footer { display:none; }
@@ -103,6 +136,11 @@
                      border-top:1px solid #e6e6e6;
                      page-break-inside:avoid; break-inside:avoid; }
     .print-endmark img { width:38px; height:38px; border-radius:7px; }
+    /* Print gets the columns whatever the screen was doing -- a sheet of
+       paper is always wide enough. */
+    .trend-cols { display:block !important; }
+    .trend-bars { display:none !important; }
+    .cols { height:150px; }
   }
 </style>
 </head>
@@ -223,6 +261,21 @@
   const CATEGORIES = [
     { key: 'passing', label: 'Passing',
       cols: [['Comp','comp'],['Att','att'],['Yds','yds'],['TD','td'],['Int','intThrown'],['Sacked','sacked']],
+            splits: (per, t) => {
+        const y = per.map(e => e.line.yds || 0);
+        return [
+          [per.length ? Math.round(t.yds / per.length) : 0, 'Yds / game'],
+          [Math.max.apply(null, y.concat([0])), 'Best game'],
+          // NOT concat([0]). That guard is right for a maximum -- a max is
+          // never below zero -- and wrong for a minimum, where it forces
+          // the answer to 0 and reported a 26-yard game as a quietest of
+          // nothing. The empty case is handled by the length check.
+          [y.length ? Math.min.apply(null, y) : 0, 'Quietest'],
+          [y.filter(v => v >= 200).length, '200+ yd games'],
+          [t.att ? (t.yds / t.att).toFixed(1) : '0.0', 'Yds / att'],
+          [t.td || 0, 'Total TD']
+        ];
+      },
       trend: 'yds', trendLabel: 'Passing yards',
       headline: (t) => [
         [t.yds || 0, 'Yards'],
@@ -234,6 +287,21 @@
       ] },
     { key: 'rushing', label: 'Rushing',
       cols: [['Att','att'],['Yds','yds'],['TD','td'],['Long','long'],['Fum','fum']],
+            splits: (per, t) => {
+        const y = per.map(e => e.line.yds || 0);
+        return [
+          [per.length ? Math.round(t.yds / per.length) : 0, 'Yds / game'],
+          [Math.max.apply(null, y.concat([0])), 'Best game'],
+          // NOT concat([0]). That guard is right for a maximum -- a max is
+          // never below zero -- and wrong for a minimum, where it forces
+          // the answer to 0 and reported a 26-yard game as a quietest of
+          // nothing. The empty case is handled by the length check.
+          [y.length ? Math.min.apply(null, y) : 0, 'Quietest'],
+          [y.filter(v => v >= 100).length, '100+ yd games'],
+          [t.att ? (t.yds / t.att).toFixed(1) : '0.0', 'Yds / att'],
+          [t.td || 0, 'Total TD']
+        ];
+      },
       trend: 'yds', trendLabel: 'Rushing yards',
       headline: (t) => [
         [t.yds || 0, 'Yards'],
@@ -245,6 +313,21 @@
       ] },
     { key: 'receiving', label: 'Receiving',
       cols: [['Rec','rec'],['Tgt','tgt'],['Yds','yds'],['TD','td'],['Long','long'],['Fum','fum']],
+            splits: (per, t) => {
+        const y = per.map(e => e.line.yds || 0);
+        return [
+          [per.length ? Math.round(t.yds / per.length) : 0, 'Yds / game'],
+          [Math.max.apply(null, y.concat([0])), 'Best game'],
+          // NOT concat([0]). That guard is right for a maximum -- a max is
+          // never below zero -- and wrong for a minimum, where it forces
+          // the answer to 0 and reported a 26-yard game as a quietest of
+          // nothing. The empty case is handled by the length check.
+          [y.length ? Math.min.apply(null, y) : 0, 'Quietest'],
+          [y.filter(v => v >= 100).length, '100+ yd games'],
+          [t.rec ? (t.yds / t.rec).toFixed(1) : '0.0', 'Yds / rec'],
+          [t.td || 0, 'Total TD']
+        ];
+      },
       trend: 'yds', trendLabel: 'Receiving yards',
       headline: (t) => [
         [t.yds || 0, 'Yards'],
@@ -256,6 +339,19 @@
       ] },
     { key: 'defense', label: 'Defense',
       cols: [['Tackles','tackles'],['TFL','tfl'],['Sacks','sacks'],['Int','int'],['Fum Rec','fumRec']],
+            // A defender has no yardage, so the same six tiles would be five
+      // zeros. Tackles is the volume stat and the splits follow it.
+      splits: (per, t) => {
+        const k = per.map(e => e.line.tackles || 0);
+        return [
+          [per.length ? (t.tackles / per.length).toFixed(1) : '0.0', 'Tackles / game'],
+          [Math.max.apply(null, k.concat([0])), 'Best game'],
+          [k.filter(v => v >= 10).length, '10+ tackle games'],
+          [t.tfl || 0, 'Total TFL'],
+          [t.sacks || 0, 'Total sacks'],
+          [(t.int || 0) + (t.fumRec || 0), 'Takeaways']
+        ];
+      },
       trend: 'tackles', trendLabel: 'Tackles',
       headline: (t) => [
         [t.tackles || 0, 'Tackles'],
@@ -327,28 +423,66 @@
     return out;
   }
 
-  function trendBars(perGame, field, colour){
+  // THE TREND: columns on a wide screen, bars on a narrow one.
+  // ---------------------------------------------------------------------
+  // Both are rendered, and CSS shows one. That is deliberate -- the
+  // alternative is measuring the viewport in JavaScript and re-rendering
+  // on resize, which is more moving parts for a chart of eight numbers.
+  //
+  // Columns read left-to-right as a season, which is what a trend is.
+  // Below 700px twelve of them would be threads, so the phone gets the
+  // horizontal bars instead, where the constraint is height and there is
+  // always more of that.
+  //
+  // Scaled to the player's OWN best game, not an absolute axis: the
+  // question is which weeks were his, and a fixed scale answers that
+  // badly for a player whose season high is 40 yards.
+  function trendChart(perGame, field, colour, accentBest){
     if (!perGame.length) return '';
     const vals = perGame.map(e => e.line[field] || 0);
-    // Scaled against the best game, not a fixed axis: the question a
-    // trend answers here is "which weeks were his best", and a bar chart
-    // scaled to an absolute maximum answers it badly for a lineman.
     const max = Math.max.apply(null, vals.concat([1]));
-    return perGame.map((e, i) => {
-      const v = vals[i];
-      const pct = Math.max(0, Math.round(100 * v / max));
-      return '<div class="trend-row">' +
-        '<div class="g">' + e.game.label + '</div>' +
-        '<div class="bar-wrap"><div class="bar" style="width:' + pct + '%; background:' + colour + ';"></div></div>' +
-        '<div class="v">' + v + '</div>' +
+    const bestAt = vals.indexOf(Math.max.apply(null, vals));
+
+    const cols = perGame.map((e, i) => {
+      const pct = Math.max(2, Math.round(100 * vals[i] / max));
+      const isBest = i === bestAt && vals[i] > 0;
+      return '<div class="col">' +
+        '<div class="cv">' + vals[i] + '</div>' +
+        '<div class="cb" style="height:' + pct + '%; background:' +
+          (isBest ? accentBest : colour) + ';"></div>' +
       '</div>';
     }).join('');
+
+    const labels = perGame.map(e =>
+      '<div><b>' + e.game.label + '</b>' + e.game.opponent + '</div>').join('');
+
+    const bars = perGame.map((e, i) => {
+      const pct = Math.max(2, Math.round(100 * vals[i] / max));
+      const isBest = i === bestAt && vals[i] > 0;
+      return '<div class="bar-row">' +
+        '<div class="g"><b>' + e.game.label + '</b><span>' + e.game.opponent + '</span></div>' +
+        '<div class="bw"><div class="bb" style="width:' + pct + '%; background:' +
+          (isBest ? accentBest : colour) + ';">' + vals[i] + '</div></div>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="trend-cols">' +
+        '<div class="cols">' + cols + '</div>' +
+        '<div class="col-labels">' + labels + '</div>' +
+      '</div>' +
+      '<div class="trend-bars">' + bars + '</div>';
   }
+
 
   function renderPlayer(name){
     if (!name) return '<div class="card"><p class="no-stats">No players recorded this season.</p></div>';
     const season = playerSeason(name);
     const accent = (TEAMS.teamA && TEAMS.teamA.bg) || '#1a4d2e';
+    // The best game is drawn in the team's SECOND colour, which is chosen
+    // to sit against the first. Falling back to the same colour would
+    // leave the highlight invisible rather than wrong.
+    const best = (TEAMS.teamA && TEAMS.teamA.text && TEAMS.teamA.text !== '#ffffff')
+      ? TEAMS.teamA.text : '#ffc72c';
     const logo = TEAMS.teamA && TEAMS.teamA.logo;
 
     let html = '<div class="card">' +
@@ -390,8 +524,14 @@
             (f === 'long' ? (t.long || 0) : (t[f] || 0)) + '</td>').join('') +
         '</tr></tfoot></table>' +
         '<div style="margin-top:18px;">' +
-          '<div class="sec-sub" style="margin-bottom:8px;">' + c.trendLabel + ' by game</div>' +
-          trendBars(acc.perGame, c.trend, accent) +
+          '<div class="sec-sub" style="margin-bottom:10px;">' + c.trendLabel + ' by game</div>' +
+          trendChart(acc.perGame, c.trend, accent, best) +
+        '</div>' +
+        // The split tiles: every one is derived from the game log in the
+        // table above, so nothing here has to be trusted separately.
+        '<div class="splits">' +
+          c.splits(acc.perGame, t).map(([v, l]) =>
+            '<div class="sp"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>').join('') +
         '</div>' +
       '</div>';
     });
