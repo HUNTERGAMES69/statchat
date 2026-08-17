@@ -4860,13 +4860,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (!id || input.type === 'hidden' || input.disabled) return null;
     if (/dummy/i.test(id)) return null;
     if (/clock/i.test(id) || id === 'setclock_val') return 'clock';
+    // A JERSEY NUMBER always gets the keypad, in both files.
+    // ------------------------------------------------------------------
+    // Every "or type #" box ends in _manual -- the ball carrier, the
+    // passer, the man who recovered a fumble, the returner, the kicker.
+    // A wheel or a field strip cannot express a jersey number: it is not
+    // a distance and not a place, it is a label the scorer already knows
+    // and is copying.
+    //
+    // Two digits, so 0-99 covers every roster the app has imported.
+    if (/_manual$/.test(id)) return 'jersey';
     if (/yardline/i.test(id)) return 'pos';
     if (/(yards|yds)$/i.test(id) || /(yards|yds)_/i.test(id) || /retyds/i.test(id)) return 'yards';
     return null;
   }
 
   function launcherFor(kind){
+    // Clock and jersey are keypad in BOTH files -- neither is a distance
+    // or a place, so neither the wheel nor the strip has anything to say
+    // about them.
     if (kind === 'clock') return { cls: 'padBtn', glyph: '\u2328', title: 'Number pad' };
+    if (kind === 'jersey') return { cls: 'padBtn', glyph: '\u2328', title: 'Jersey number' };
     return PICKER_MODE === 'strip'
       ? { cls: 'stripBtn', glyph: '\u25AD', title: 'Tap where the play ended' }
       : { cls: 'padBtn', glyph: '\u2328', title: 'Number pad' };
