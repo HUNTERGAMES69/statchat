@@ -4512,17 +4512,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           'background:rgba(255,199,44,0.30); pointer-events:none;"></div>' +
       '</div>' +
       '<div style="display:flex; align-items:center; gap:8px; margin-top:10px;">' +
-        // color:#222 is NOT optional. The app sets `button { color:#fff }`
-        // globally, so a button with a white background and no colour of
-        // its own is white text on white -- which is exactly how these
-        // rendered: two blank boxes. The Done button only escaped it by
-        // setting a colour for its dark background.
-        '<button type="button" class="stripStep" data-d="-1" style="flex:1; padding:12px; ' +
+        // LABELLED BY SCREEN DIRECTION, NOT BY SIGN.
+        // ----------------------------------------------------------------
+        // These used to read "-1 yd" and "+1 yd". On a drive going right
+        // that is fine; on one going left, "+1" moves the marker LEFT --
+        // the button and the thing it moves disagree, and the scorer has
+        // to hold the flip in their head to use it.
+        //
+        // An arrow means the same thing whichever way the drive faces:
+        // this button moves the marker that way. Whether that is a gain
+        // or a loss is already said, loudly, by the readout above --
+        // green or red, with a sign.
+        //
+        // color:#222 is NOT optional: the app sets `button { color:#fff }`
+        // globally, so a white button with no colour of its own is white
+        // on white. That is exactly how these first rendered.
+        '<button type="button" class="stripStep" data-dir="left" style="flex:1; padding:12px; ' +
           'border-radius:8px; border:2px solid #ccc; background:#fff; color:#222; ' +
-          'font-size:18px; font-weight:700; cursor:pointer;">&minus;1 yd</button>' +
-        '<button type="button" class="stripStep" data-d="1" style="flex:1; padding:12px; ' +
+          'font-size:20px; font-weight:700; cursor:pointer;">&larr; 1</button>' +
+        '<button type="button" class="stripStep" data-dir="right" style="flex:1; padding:12px; ' +
           'border-radius:8px; border:2px solid #ccc; background:#fff; color:#222; ' +
-          'font-size:18px; font-weight:700; cursor:pointer;">+1 yd</button>' +
+          'font-size:20px; font-weight:700; cursor:pointer;">1 &rarr;</button>' +
         '<button type="button" id="ydStripDone" style="flex:1.2; padding:12px; border-radius:8px; ' +
           'border:none; background:#1a4d2e; color:#fff; font-size:15px; font-weight:700; ' +
           'cursor:pointer;">Done</button>' +
@@ -4648,7 +4658,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     field.addEventListener('pointermove', (e) => { if (e.buttons) setFromEvent(e); });
     field.addEventListener('click', setFromEvent);
     el.querySelectorAll('.stripStep').forEach(b => b.addEventListener('click', () => {
-      stripPos = Math.max(SPAN_LO, Math.min(SPAN_HI, stripPos + Number(b.dataset.d)));
+      // A step is one yard ACROSS THE SCREEN. Which way that moves the
+      // yard line depends on the facing, which is the whole point of
+      // labelling them with arrows.
+      const screenDir = b.dataset.dir === 'right' ? 1 : -1;
+      const delta = stripFlip ? -screenDir : screenDir;
+      stripPos = Math.max(SPAN_LO, Math.min(SPAN_HI, stripPos + delta));
       paint();
     }));
     el.querySelector('#ydStripDone').addEventListener('click', closeStrip);
