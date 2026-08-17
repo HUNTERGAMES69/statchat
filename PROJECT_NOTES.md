@@ -1603,3 +1603,68 @@ A migration is never edited once it has run. If it was wrong, write
 another. An edited migration is a file that says one thing and did
 another, and any instance that ran the old version is now silently
 different — survivable with one deployment, not with three.
+
+## The picker's ambiguous list is gated on the starters list (17 August 2026)
+
+`offenseEligible()` builds two lists: resolved players, and the extra
+candidates a shared jersey number creates. The resolved list has always
+been gated on `visible` — seeded starters plus whoever has been
+discovered during the game. The ambiguous list was not.
+
+So it walked **every shared number on the roster** and admitted anyone
+whose recorded position fitted the role. On a St. Thomas More roster with
+92 players across 69 numbers, six seeded starters produced 28 buttons in
+the ball-carrier picker, and none of the extras were players anybody had
+named.
+
+Position tells you *whether* a player could fill the role. `visible`
+tells you whether anybody *expects* him to. Both are needed, and the
+comment above the branch said as much about position while stopping one
+step short.
+
+Two overrides still outrank the seed, deliberately: a player who has
+already filled the role in this game, and a seed that names him
+specifically rather than by number. Both are stronger statements than
+"not on the starters list", so they are tested first.
+
+## Shared numbers are reported at import, split three ways (17 August 2026)
+
+The roster importer validated each row on its own — number present, name
+present, position recognised — and never compared rows. A roster with 22
+shared numbers imported silently as "92 players loaded".
+
+It now says so, and the split is what makes it worth reading:
+
+- **A likely duplicate person** (`#81 Charles Tatman / Charlie Tatman`)
+  is one player entered twice. The answer is to delete a row.
+- **A same-side collision** (two receivers on `#89`) cannot be separated
+  by any rule. The pickers will ask, and naming the player in the likely
+  starters settles it for the game.
+- **A cross-side collision** (a running back and a safety on `#21`) needs
+  nothing at all. The position filter keeps them apart.
+
+Twenty of the twenty-two on that roster were the third kind. Reporting
+"22 shared numbers" would have been true and useless; the number that
+matters is the six that need a decision.
+
+## Touchbacks recorded on their own play (17 August 2026)
+
+The guided start-of-game flow writes the kick before anybody knows where
+the ball came down, so the outcome arrives as a separate play. The kickoff
+carried the kicker and no touchback; the outcome carried the touchback and
+no kicker. Neither play had both, so the stat package showed one kickoff
+at 0%.
+
+The outcome play now carries `kickoffTouchback: { team, num }`, read back
+off the kickoff just written rather than threaded through the guided
+state — the play *is* the record, and a second copy of the kicker in a
+state object is a second thing that can disagree. The engine counts it as
+a touchback only; the kickoff was already counted on the play that
+recorded the kick.
+
+`computeBoxScore` also infers a touchback from a `kickoff_return` play
+whose text says TOUCHBACK. That is a compatibility path for games already
+in the database, which cannot grow a role they were never saved with.
+Reading play text is not a habit to form — the role is the mechanism, and
+new plays use it — but the alternative was telling a scorer to re-enter
+the opening kickoff of every affected game.

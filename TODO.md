@@ -2012,113 +2012,40 @@ button and most of this came out of it.
 - [ ] `returner-overload` and `returner-name` mutants still survive
 - [ ] The Night 1 items that need the live Supabase instance
 
----
+## Input prototypes — awaiting a live test (17 August 2026)
 
-## 20. Offline capability — the "no internet required" objection (16 Aug 2026)
+`gametest.html`, `gametest2.html` and `gametest3.html` are three ways of
+entering numbers, to be compared over a full game. `game.html` is
+untouched by all three. See `HANDOFF.md` for what each one is and what to
+watch for.
 
-Raised while working the go-to-market. TurboStats leads with "internet is
-not required," aimed at the case of visiting a small school with no
-usable connection. This section records the strategic answer, what already
-exists, the one real gap, and the two things that could go wrong.
+- [ ] **Decide which input method wins**, then promote it into
+  `game.html` and delete the other two test files. If the field strip
+  wins it should also replace the four spot calculators, since it answers
+  the same question.
+- [ ] `inputmode="none"` in `gametest3.html` may not suppress the soft
+  keyboard in Safari. If it does not, that variant is untestable on an
+  iPad and the attribute should become `numeric`.
 
-**Nothing here is scheduled.** It becomes work only if StatChat is sold,
-and item 4 below becomes mandatory the moment "works offline" appears on a
-website.
+## Deferred from 17 August
 
-### The strategic answer comes before the engineering one
-
-In the broadcast-crew vertical the objection is close to a non-sequitur,
-and it should be said out loud. **A streaming crew cannot stream without
-internet.** If they are pushing 1080p out of that press box they have
-bandwidth, and video is orders of magnitude more demanding than the feed's
-JSON. TurboStats' offline pitch is aimed at the sideline stat keeper at a
-small school, not at the booth. For this buyer it answers a question
-nobody in the room has.
-
-The sentence to have ready:
-
-> "If you can stream the game, you can run StatChat. The question isn't
-> whether you have internet — you can't broadcast without it. The question
-> is what happens when it hiccups, and the answer is nothing: entry keeps
-> going and catches up on its own."
-
-That reframes a binary we lose into a reliability question we win.
-
-The objection IS real for the stats-only tier, where the buyer is a
-statistician who may genuinely be at a venue with no signal. Different
-audience, different answer, and the build below is what makes that answer
-honest.
-
-### What already exists
-
-Confirmed in live use 7 Aug 2026 and recorded in §2:
-
-- Offline entry, reload recovery, drain, undo-while-queued, duplicate
-  handling
-- Game-row writes merge pending fields and retry every 5s, flushing on
-  wake and reconnect (12 Aug)
-- Undo correctly refused offline for plays the server already has
-
-**Entry already survives losing the connection mid-game.** That is most of
-the claim, and it is a stronger position than a web app is usually assumed
-to have.
-
-### The one real gap: no service worker
-
-Already recorded twice in this file. Reloading while genuinely offline
-fails — the page itself cannot be fetched, so a scorer who refreshes at
-the wrong moment is locked out until the connection returns. Queued plays
-survive, but entry stops. Cold-starting at a venue with no signal is
-likewise impossible.
-
-That is the whole hole. Closing it is roughly three things:
-
-1. **Service worker caching the app shell** — the fourteen pages plus
-   `engine.js`, `team-icon.js` and assets.
-2. **"Download for offline" on the dashboard** — pre-cache the game row
-   and both rosters on Thursday, so a cold start at a dead-signal venue
-   works. People understand this pattern from Spotify and Google Maps.
-3. **Verify the cached Supabase session survives a cold offline start.**
-   MFA at sign-in is the thing to check: it must not demand a round trip
-   when the laptop is opened in a concrete press box.
-
-**Small relative to what is already built, because the engine is
-client-side.** `computeState`, `computeBoxScore` and `findDriveStarts` all
-run in the browser and recompute from the log. Nothing about the box
-score, drives or stat package needs a server. Most apps claiming offline
-have to reimplement server logic on the client; StatChat never had server
-logic to reimplement.
-
-### Broadcast-specific addition, optional
-
-If the scoring laptop and vMix are the same machine — common for small
-crews — `broadcast.html` can be driven from the local log via
-BroadcastChannel or IndexedDB instead of `api/feed.js`, making the overlay
-path fully offline too. That is genuine parity with TurboStats' HDMI
-green-screen locality.
-
-Two machines on a LAN is a harder problem and probably not worth solving.
-
-### Warning 1 — the service worker is the riskiest thing we could add
-
-A worker serving last week's `game.html` on a Friday night is exactly the
-stale-file failure we have been burned by repeatedly, except now the
-browser is doing it deliberately and there is no upload step to blame.
-
-- **Network-first with cache fallback for HTML**, not cache-first
-- **Version the cache to a build hash**
-- **Put a visible version stamp in the UI** so what is actually running
-  can be confirmed at a glance
-
-### Warning 2 — the offline queue has no automated cover
-
-§2 already records this, including that the offline queue *fails in a way
-nobody notices until plays are missing after a game.*
-
-Today that is test debt. **The moment "works offline" becomes a sales
-claim it is a commercial liability** — the failure is silent, and the
-customer discovers it on Saturday morning with a coach asking where the
-third quarter went.
-
-- [ ] `tests/offline_queue_check.js` must exist before the claim goes on
-  a website. Not before then; it is not urgent for a single-team season.
+- [ ] **Four separate yardage calculators.** Bad snap, FG tee and
+  interception each carry their own copy of the arithmetic, because the
+  shared one is declared inside `renderPlayPanel` and cannot be reached
+  from outside it. Hoisting it out was attempted and broke every play
+  panel — the blocks depend on helpers in that closure — and was
+  reverted. Worth doing properly, as one function taking the panel and a
+  target id.
+- [ ] **Paste-a-table roster import.** One input box: paste rows from a
+  spreadsheet, a web page or an email; split on tabs or commas; show what
+  was parsed before importing. Handles MaxPreps, Hudl and a coach's
+  emailed sheet without depending on any site's markup or terms. A
+  built-in PDF converter and a MaxPreps integration were both considered
+  and rejected — see `PROJECT_NOTES.md`.
+- [ ] **`Unknown` appears as a receiver** in an opponent's stat table
+  when targets were recorded against no name. Decide whether that row
+  belongs in an exported document.
+- [ ] **Penalty list length.** "During the play" holds sixteen
+  alphabetised entries, with the two most common passing fouls adjacent.
+  A passing-fouls sub-group or a type-to-filter box would help; Andy's
+  call whether it is a problem.
