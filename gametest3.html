@@ -4400,11 +4400,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // The clock field is written as typed -- the app normalises a
       // colon-less entry itself, and re-formatting here would be a second
       // opinion on a conversion that already exists.
+      // try/finally, NOT a bare pair of assignments.
+      // ----------------------------------------------------------------
+      // This dispatch runs other people's handlers -- calculators,
+      // prefills, panel redraws. If any of them throws, a bare
+      // `padWriting = false` on the next line never runs, the flag stays
+      // true for the rest of the session, and the pad silently stops
+      // following the keyboard. Nothing looks broken; it just quietly
+      // ignores you.
       padWriting = true;
-      t.value = buf === '' ? ''
-        : (padKind === 'clock' ? buf : String(parseInt(buf, 10)));
-      t.dispatchEvent(new Event('input', { bubbles: true }));
-      padWriting = false;
+      try {
+        t.value = buf === '' ? ''
+          : (padKind === 'clock' ? buf : String(parseInt(buf, 10)));
+        t.dispatchEvent(new Event('input', { bubbles: true }));
+      } finally {
+        padWriting = false;
+      }
     };
 
     el.addEventListener('click', (e) => {
@@ -4823,12 +4834,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // itself, which would otherwise re-read the field and re-paint on every
   // tap.
   let padWriting = false;
-  document.addEventListener('input', (e) => {
+  function syncPadFromKeyboard(e){
     if (padWriting) return;
     if (!padEl || padEl.style.display === 'none') return;
-    if (!padTargetId || !e.target || e.target.id !== padTargetId) return;
+    if (!padTargetId) return;
+    // Matched on the ID rather than on element identity: a panel redraw
+    // replaces the input, and a held reference would stop matching.
+    const t = e && e.target;
+    if (!t || t.id !== padTargetId) return;
     padEl._syncFromField();
-  });
+  }
+  // THREE listeners, on purpose.
+  // ---------------------------------------------------------------------
+  // 'input' is the one that should suffice, and does in every test here.
+  // But this has to work on a touchscreen laptop in a press box, and the
+  // cost of a missed keystroke is a wrong number in a box score -- so
+  // 'keyup' and 'change' are cheap belt and braces. Re-reading the field
+  // is idempotent: syncing twice for one keystroke produces exactly the
+  // same buffer as syncing once.
+  ['input', 'keyup', 'change'].forEach(evt =>
+    document.addEventListener(evt, syncPadFromKeyboard, true));
 
   function openPad(target, anchor, kind){
     padKind = kind || 'yards';
