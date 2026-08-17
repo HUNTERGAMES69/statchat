@@ -498,19 +498,19 @@
     }
     const season = playerSeason(name);
     const accent = (TEAMS.teamA && TEAMS.teamA.bg) || '#1a4d2e';
-    // THE BEST GAME IS A SHADE OF THE TEAM COLOUR, not the secondary.
-    // ------------------------------------------------------------------
-    // Using the secondary made Neville's best game a BLACK column among
-    // gold ones, which reads as a different statistic rather than the
-    // same one emphasised -- the secondary is chosen to sit against the
-    // primary, which is the opposite of what a highlight wants.
+    // THE BEST GAME IS THE TEAM'S SECONDARY COLOUR. Andy's call, and he
+    // is looking at it on a real season -- for Neville that is near-black
+    // against gold, which is a strong, unmissable highlight.
     //
-    // Mixing toward whichever of black or white contrasts with the team
-    // colour moves it in the readable direction whatever the school: a
-    // gold column darkens, a navy one lightens. Same hue, clearly the
-    // strongest bar.
-    const towards = (typeof safeTextColor === 'function') ? safeTextColor(accent) : '#000000';
-    const best = (typeof mixHex === 'function') ? mixHex(accent, towards, 0.42) : accent;
+    // The fallback matters for the schools where it would not work: a
+    // secondary of white would be an invisible column on a white card,
+    // so those fall back to a darkened shade of the team colour instead
+    // of a bar nobody can see.
+    const secondary = TEAMS.teamA && TEAMS.teamA.text;
+    const usable = secondary && secondary.toLowerCase() !== '#ffffff' &&
+                   secondary.toLowerCase() !== '#fff';
+    const best = usable ? secondary
+      : ((typeof mixHex === 'function') ? mixHex(accent, '#000000', 0.45) : accent);
     const logo = TEAMS.teamA && TEAMS.teamA.logo;
 
     let html = '<div class="card">' +
@@ -533,6 +533,44 @@
       if (!acc.perGame.length) return;
       any = true;
       const t = acc.total;
+      // THE CHART COVERS THE WHOLE SEASON, not only the games this player
+      // produced in.
+      // ----------------------------------------------------------------
+      // Plotting appearances alone dropped a game out of the middle of
+      // the season -- a back with no carries against Evangel simply had
+      // no bar there, so three games looked like two and the shape of the
+      // season was wrong.
+      //
+      // A game he played and did nothing in is a real data point. It is
+      // drawn at zero.
+      //
+      // The splits read from the SAME series, or the tiles would disagree
+      // with the picture directly above them -- "quietest 5" beside a
+      // chart plainly showing a zero.
+      // THE SERIES STARTS AT HIS FIRST APPEARANCE, not at week one.
+      // ----------------------------------------------------------------
+      // A transfer or a call-up who first plays in week five was not
+      // having four quiet games -- he was not on the field. Four leading
+      // zeros say the wrong thing, and they drag "yards per game" down
+      // by counting games he could not have played in.
+      //
+      // The anchor is his first appearance in ANY category, not in this
+      // one. A receiver who happened to carry the ball once in week six
+      // should still have his RECEIVING chart start in week one, because
+      // he was playing all along.
+      //
+      // Trailing games are NOT trimmed, and the asymmetry is deliberate:
+      // before his first appearance he demonstrably was not playing;
+      // after it, a zero could mean injured OR could mean a quiet night,
+      // and the app cannot tell the two apart. A zero it can defend is
+      // shown; one it cannot is not invented.
+      const firstIdx = season.games.length
+        ? seasonGames.findIndex(g => g.id === season.games[0].id)
+        : 0;
+      const fullSeries = seasonGames.slice(Math.max(0, firstIdx)).map(g => ({
+        game: g,
+        line: (g.box[c.key] || {})[name] || {}
+      }));
       html += '<div class="card">' +
         teamBand(c.label, acc.perGame.length + ' game' + (acc.perGame.length === 1 ? '' : 's')) +
         '<div class="totals">' +
@@ -553,12 +591,12 @@
         '</tr></tfoot></table>' +
         '<div style="margin-top:18px;">' +
           '<div class="sec-sub" style="margin-bottom:10px;">' + c.trendLabel + ' by game</div>' +
-          trendChart(acc.perGame, c.trend, accent, best) +
+          trendChart(fullSeries, c.trend, accent, best) +
         '</div>' +
         // The split tiles: every one is derived from the game log in the
         // table above, so nothing here has to be trusted separately.
         '<div class="splits">' +
-          c.splits(acc.perGame, t).map(([v, l]) =>
+          c.splits(fullSeries, t).map(([v, l]) =>
             '<div class="sp"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>').join('') +
         '</div>' +
       '</div>';
