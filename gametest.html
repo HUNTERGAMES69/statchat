@@ -4413,9 +4413,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // The clock field is written as typed -- the app normalises a
       // colon-less entry itself, and re-formatting here would be a second
       // opinion on a conversion that already exists.
-      t.value = buf === '' ? ''
-        : (padKind === 'clock' ? buf : String(parseInt(buf, 10)));
-      t.dispatchEvent(new Event('input', { bubbles: true }));
+      // try/finally, NOT a bare pair of assignments.
+      // ----------------------------------------------------------------
+      // This dispatch runs other people's handlers -- calculators,
+      // prefills, panel redraws. If any of them throws, a bare
+      // `padWriting = false` on the next line never runs, the flag stays
+      // true for the rest of the session, and the pad silently stops
+      // following the keyboard. Nothing looks broken; it just quietly
+      // ignores you.
+      padWriting = true;
+      try {
+        t.value = buf === '' ? ''
+          : (padKind === 'clock' ? buf : String(parseInt(buf, 10)));
+        t.dispatchEvent(new Event('input', { bubbles: true }));
+      } finally {
+        padWriting = false;
+      }
     };
 
     el.addEventListener('click', (e) => {
@@ -4446,6 +4459,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       paint();
     });
     el._reset = (start) => { buf = start; paint(); };
+    el._syncFromField = () => {
+      const t = padTargetId && document.getElementById(padTargetId);
+      if (!t) return;
+      const raw = String(t.value || '').replace(/[^0-9]/g, '');
+      buf = padKind === 'clock' ? raw.slice(0, 4) : raw.slice(0, 2);
+      paint();
+    };
     padEl = el;
     return el;
   }
@@ -4798,6 +4818,43 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     el.style.top = (fitsBelow ? (window.scrollY + r.bottom + 6)
                               : (window.scrollY + r.top - h - 6)) + 'px';
   }
+
+  // THE PAD FOLLOWS THE KEYBOARD.
+  // ---------------------------------------------------------------------
+  // The pad kept its own buffer and wrote it on Done. So a scorer who
+  // opened the pad, then typed 47 on the physical keyboard, saw the field
+  // read 47 and the pad's echo read 0 -- and pressing Done wiped the
+  // field, because the pad committed its own empty buffer over the top.
+  //
+  // That is DATA LOSS on the likeliest mixed action there is: open the
+  // pad, type an odd number, confirm. Both routes now write into one
+  // buffer: a keystroke updates the pad, a tap updates the field, and
+  // Done can only ever commit what is already on screen.
+  //
+  // padWriting guards the feedback loop -- commit() dispatches 'input'
+  // itself, which would otherwise re-read the field and re-paint on every
+  // tap.
+  let padWriting = false;
+  function syncPadFromKeyboard(e){
+    if (padWriting) return;
+    if (!padEl || padEl.style.display === 'none') return;
+    if (!padTargetId) return;
+    // Matched on the ID rather than on element identity: a panel redraw
+    // replaces the input, and a held reference would stop matching.
+    const t = e && e.target;
+    if (!t || t.id !== padTargetId) return;
+    padEl._syncFromField();
+  }
+  // THREE listeners, on purpose.
+  // ---------------------------------------------------------------------
+  // 'input' is the one that should suffice, and does in every test here.
+  // But this has to work on a touchscreen laptop in a press box, and the
+  // cost of a missed keystroke is a wrong number in a box score -- so
+  // 'keyup' and 'change' are cheap belt and braces. Re-reading the field
+  // is idempotent: syncing twice for one keystroke produces exactly the
+  // same buffer as syncing once.
+  ['input', 'keyup', 'change'].forEach(evt =>
+    document.addEventListener(evt, syncPadFromKeyboard, true));
 
   function openPad(target, anchor, kind){
     padKind = kind || 'yards';
