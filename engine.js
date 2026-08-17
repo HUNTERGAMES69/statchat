@@ -776,10 +776,14 @@ function computeBoxScore(playsList){
     if (!b[k]) b[k] = {};
     return b[k];
   }
+  // The kicker of the most recent kickoff, for crediting an outcome that
+  // was written as its own play. See the compatibility branch below.
+  let lastKickoffKicker = null;
   playsList.forEach(p => {
     const r = p.roles || {};
     const e = p.effect || {};
     const type = r.playType;
+    if (type === 'kickoff' && r.kicker) lastKickoffKicker = r.kicker;
 
     if (r.carrier && type === 'rush'){
       const s = bucket(r.carrier.team, 'rushing', r.carrier.num, r.carrier.name);
@@ -982,6 +986,31 @@ function computeBoxScore(playsList){
     if (r.kickoffTouchback){
       const s = bucket(r.kickoffTouchback.team, 'specialTeams', r.kickoffTouchback.num);
       if (s) s.touchbacks = (s.touchbacks||0) + 1;
+    } else if (type === 'kickoff_return' &&
+               String(p.text || '').toUpperCase().indexOf('TOUCHBACK') !== -1){
+      // TOUCHBACKS SAVED BEFORE THE ROLE EXISTED.
+      // ----------------------------------------------------------------
+      // kickoffTouchback is written at save time, so plays already in the
+      // database do not carry it and no amount of reloading will make
+      // them. Those games would have shown 0% for ever, and the only
+      // remedy would have been re-entering the opening kickoff.
+      //
+      // String matching rather than a regex, for the same reason as
+      // tryText() above: tests/engine_standalone_check.js scans this file
+      // for SCREAMING_CASE identifiers it uses without defining, and read
+      // /TOUCHBACK/ as an undefined global. That guard is worth more than
+      // the tidier expression.
+      //
+      // The old rows are still unambiguous: a kickoff_return play whose
+      // text says TOUCHBACK is one, and the kick it belongs to is the
+      // kickoff immediately before it. Reading the text is not something
+      // to make a habit of -- the role is the right mechanism and is what
+      // new plays use -- but here it recovers real data that is otherwise
+      // simply lost.
+      if (lastKickoffKicker){
+        const s = bucket(lastKickoffKicker.team, 'specialTeams', lastKickoffKicker.num);
+        if (s) s.touchbacks = (s.touchbacks||0) + 1;
+      }
     }
     if (r.kicker && type === 'fg'){
       const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
