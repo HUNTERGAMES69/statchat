@@ -80,7 +80,9 @@
   .opp-header-name { font-weight:700; font-size:18px; color:#1a1a1a; }
   .leader-card .leader-stat span { font-size:11px; color:#888; font-weight:600; }
   .team-compare { display:grid; grid-template-columns:1fr auto 1fr; gap:0 18px; }
-  .team-compare .col-head { font-weight:800; font-size:14px; text-align:center; padding-bottom:8px; border-bottom:2px solid #eee; margin-bottom:2px; }
+  .team-compare .col-head { font-weight:800; font-size:14px; text-align:center; padding-bottom:8px; border-bottom:2px solid #eee; margin-bottom:2px;
+                            display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .team-compare .col-head-logo { width:42px; height:42px; object-fit:contain; flex-shrink:0; display:block; }
   .team-compare .stat-row { display:contents; }
   .team-compare .stat-row > div { padding:6px 0; font-size:14px; border-bottom:1px solid #f2f2f2; }
   .team-compare .stat-label { text-align:center; color:#888; font-size:12px; text-transform:uppercase; letter-spacing:0.02em; }
@@ -639,6 +641,15 @@ function isAdminMarker(p){
     '</div>';
   }
 
+  // A Team Stats column head: crest over name, centred.
+  function colHead(teamKey, name){
+    const logo = TEAMS[teamKey] && TEAMS[teamKey].logo;
+    return '<div class="col-head">' +
+      (logo ? '<img class="col-head-logo" src="' + logo + '">' : '') +
+      '<div>' + name + '</div>' +
+    '</div>';
+  }
+
   function teamBand(teamKey, label, subtitle){
     const t = TEAMS[teamKey] || {};
     const bg = t.bg || '#1a1a2e';
@@ -794,7 +805,11 @@ function isAdminMarker(p){
     }
 
     html += '<div class="section">' + sectionHead('Team Stats') + '<div class="team-compare">' +
-      '<div class="col-head">' + tV.team.name + '</div><div></div><div class="col-head">' + tH.team.name + '</div>' +
+      // Logo above the name in each column head. The Team Stats page is
+      // two columns of numbers that look alike; the crest is what tells
+      // them apart at a glance, and it is the one page that carried no
+      // team mark at all.
+      colHead(visitorKey, tV.team.name) + '<div></div>' + colHead(homeKey, tH.team.name) +
       tV.rows.map((row, i) => '<div class="stat-row">' +
         '<div class="stat-val">' + row[1] + '</div>' +
         '<div class="stat-label">' + row[0] + '</div>' +
