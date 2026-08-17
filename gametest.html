@@ -4439,12 +4439,49 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // Yard numbers the way they are painted on a field: up to 50 and back
     // down. A strip labelled 0-100 would be a ruler, not a football field,
     // and the scorer is reading the real one.
-    const ticks = [10,20,30,40,50,40,30,20,10]
-      .map((n, i) => '<div style="position:absolute; left:' + ((i + 1) * 10) + '%; top:0; bottom:0; ' +
-        'width:1px; background:rgba(255,255,255,0.45);"></div>' +
-        '<div style="position:absolute; left:' + ((i + 1) * 10) + '%; top:50%; ' +
-        'transform:translate(-50%,-50%); color:rgba(255,255,255,0.9); font-size:11px; ' +
-        'font-weight:700; pointer-events:none;">' + n + '</div>').join('');
+    // THE STRIP INCLUDES BOTH END ZONES.
+    // ------------------------------------------------------------------
+    // It used to map 0-100 across the full width and then DRAW end zones
+    // on top of that same range -- so the shaded band at the left was
+    // really the 0 to 6 yard line, and dragging into it meant a play that
+    // ended on the 3, not a safety. The picture and the scale disagreed.
+    //
+    // The span is now -10 to 110: ten yards of end zone, the hundred, and
+    // ten more. Anything at or beyond a goal line IS in that end zone,
+    // which is what the drawing has been promising all along.
+    const SPAN_LO = -10, SPAN_HI = 110, SPAN = SPAN_HI - SPAN_LO;
+    // THE STRIP FACES THE WAY THE DRIVE IS FACING.
+    // ------------------------------------------------------------------
+    // fieldPos is possession-relative -- 0 is the goal line being
+    // defended, 100 the one being attacked -- so drawing it straight
+    // always put the attacking end on the right. Half the time that is
+    // the opposite of what the scorer is looking at, and a control that
+    // disagrees with the field in front of you is worse than no control:
+    // every drag is a mental flip.
+    //
+    // state.driveDir already says which way the possession team is going.
+    // It is recorded once per game and alternates by quarter, so this
+    // needs no new input.
+    //
+    // Only the DRAWING flips. Positions stay possession-relative
+    // throughout, so the arithmetic, the toggles and the value written to
+    // the box are untouched by which way the picture faces.
+    let stripFlip = false;
+    const pctOf = (pos) => {
+      const raw = 100 * (pos - SPAN_LO) / SPAN;
+      return stripFlip ? (100 - raw) : raw;
+    };
+    const ticks = [10,20,30,40,50,60,70,80,90]
+      .map(pos => {
+        const shown = pos <= 50 ? pos : (100 - pos);
+        return '<div class="ydStripTick" data-pos="' + pos + '" style="position:absolute; ' +
+          'left:' + pctOf(pos) + '%; top:0; bottom:0; ' +
+          'width:1px; background:rgba(255,255,255,0.45);"></div>' +
+          '<div class="ydStripTick" data-pos="' + pos + '" style="position:absolute; ' +
+          'left:' + pctOf(pos) + '%; top:50%; ' +
+          'transform:translate(-50%,-50%); color:rgba(255,255,255,0.9); font-size:11px; ' +
+          'font-weight:700; pointer-events:none;">' + shown + '</div>';
+      }).join('');
     el.innerHTML =
       '<div id="ydStripReadout" style="font-size:15px; font-weight:700; color:#1a4d2e; ' +
         'background:#eef6f1; border-left:3px solid #1a7a4c; border-radius:4px; ' +
@@ -4453,10 +4490,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         'background:#2f6b45; border-radius:6px; overflow:hidden; cursor:pointer; ' +
         'touch-action:none;">' +
         // End zones, so left and right are never ambiguous.
-        '<div style="position:absolute; left:0; top:0; bottom:0; width:6%; ' +
-          'background:rgba(0,0,0,0.28);"></div>' +
-        '<div style="position:absolute; right:0; top:0; bottom:0; width:6%; ' +
-          'background:rgba(0,0,0,0.28);"></div>' +
+        // Sized to the real ten yards, so the shading and the scale agree.
+        // Built unflipped and swapped at open time -- see setStripFacing.
+        '<div id="ydStripEzLeft" style="position:absolute; left:0; top:0; bottom:0; ' +
+          'width:8.3333%; background:rgba(0,0,0,0.34); display:flex; align-items:center; ' +
+          'justify-content:center; color:rgba(255,255,255,0.75); font-size:9px; ' +
+          'font-weight:700; letter-spacing:0.04em;">SAFETY</div>' +
+        '<div id="ydStripEzRight" style="position:absolute; right:0; top:0; bottom:0; ' +
+          'width:8.3333%; background:rgba(0,0,0,0.34); display:flex; align-items:center; ' +
+          'justify-content:center; color:rgba(255,255,255,0.75); font-size:9px; ' +
+          'font-weight:700; letter-spacing:0.04em;">TD</div>' +
         ticks +
         // Where the ball is now.
         '<div id="ydStripFrom" style="position:absolute; top:0; bottom:0; width:2px; ' +
@@ -4490,16 +4533,29 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     function paint(){
       if (stripStart === null || stripPos === null) return;
-      fromEl.style.left = stripStart + '%';
-      toEl.style.left = 'calc(' + stripPos + '% - 2px)';
-      const lo = Math.min(stripStart, stripPos), hi = Math.max(stripStart, stripPos);
-      gainEl.style.left = lo + '%';
-      gainEl.style.width = (hi - lo) + '%';
+      fromEl.style.left = pctOf(stripStart) + '%';
+      toEl.style.left = 'calc(' + pctOf(stripPos) + '% - 2px)';
+      // Left/width are screen quantities, so they come from the DRAWN
+      // percentages, not from the yard values -- when the strip is
+      // mirrored the lower yard line is the right-hand edge.
+      const a = pctOf(stripStart), b = pctOf(stripPos);
+      gainEl.style.left = Math.min(a, b) + '%';
+      gainEl.style.width = Math.abs(b - a) + '%';
       const delta = stripPos - stripStart;
-      readout.textContent = label(stripStart) + '  \u2192  ' + label(stripPos) +
-        '   =   ' + (delta >= 0 ? '+' : '\u2212') + Math.abs(delta) + ' yards';
+      const inTd = stripPos >= 100, inSafety = stripPos <= 0;
+      readout.textContent = inTd
+        ? (label(stripStart) + '  \u2192  end zone   =   TOUCHDOWN, ' + (100 - stripStart) + ' yards')
+        : inSafety
+          ? (label(stripStart) + '  \u2192  own end zone   =   SAFETY, ' + stripStart + ' yards lost')
+          : (label(stripStart) + '  \u2192  ' + label(stripPos) +
+             '   =   ' + (delta >= 0 ? '+' : '\u2212') + Math.abs(delta) + ' yards');
       if (stripTarget){
-        stripTarget.value = String(Math.abs(delta));
+        // At a goal line the yardage is the distance TO it, not past it:
+        // a carry from the own 4 into the end zone is a four yard loss,
+        // and one from the opponent 8 is an eight yard touchdown. The
+        // extra yards of end zone are not yardage anybody records.
+        const gained = inTd ? (100 - stripStart) : inSafety ? stripStart : Math.abs(delta);
+        stripTarget.value = String(gained);
         stripTarget.dispatchEvent(new Event('input', { bubbles: true }));
         // A play that lost ground has to say so. The yards box holds a
         // magnitude, and LOSS is how every panel here carries the sign --
@@ -4507,7 +4563,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // looks deliberate and is wrong.
         const loss = document.querySelector('.lossToggle[data-for="' + stripTarget.id + '"]');
         if (loss){
-          const want = delta < 0;
+          const want = inSafety || (!inTd && delta < 0);
           if (loss.classList.contains('picked') !== want){
             // THE FLAG IS LOAD-BEARING.
             // ------------------------------------------------------------
@@ -4525,23 +4581,73 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             stripSuppressClose = false;
           }
         }
+
+        // REACHING AN END ZONE SETS THE OUTCOME.
+        // ----------------------------------------------------------------
+        // Dragging the marker past a goal line is an unambiguous statement
+        // about what happened, and leaving the scorer to then find the
+        // right toggle is asking them to say it twice. Both are set from
+        // here and, just as importantly, UNSET when the marker comes back
+        // out -- a touchdown left ticked after a correction is the kind of
+        // error that survives to the box score.
+        //
+        // Same suppression flag: these toggles live in the panel, so
+        // clicking them would otherwise close the strip.
+        // Two shapes of toggle in this app, and they cannot be clicked the
+        // same way:
+        //   pp_td_toggle          IS the button, and carries its own state
+        //   pp_rush_safety        is a hidden CHECKBOX; the button beside
+        //                         it is pp_rush_safety_toggle
+        // Clicking the checkbox does nothing -- the handler lives on the
+        // button -- so the safety silently never set while the touchdown
+        // worked, which is exactly the sort of near-miss that reads as
+        // "sometimes it works".
+        const setToggle = (btnId, stateEl, want) => {
+          const btn = document.getElementById(btnId);
+          if (!btn) return;
+          const on = stateEl ? !!stateEl.checked
+                             : (btn.classList.contains('picked') ||
+                                (btn.textContent || '').indexOf('\u2713') === 0);
+          if (on === want) return;
+          stripSuppressClose = true;
+          btn.click();
+          stripSuppressClose = false;
+        };
+        setToggle('pp_td_toggle', document.getElementById('pp_td'), inTd);
+        setToggle('pp_rush_safety_toggle', document.getElementById('pp_rush_safety'), inSafety);
+        setToggle('pp_pass_safety_toggle', document.getElementById('pp_pass_safety'), inSafety);
       }
     }
 
     function setFromEvent(e){
       const r = field.getBoundingClientRect();
       const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
-      stripPos = Math.max(0, Math.min(100, Math.round(100 * x / r.width)));
+      const frac = stripFlip ? (1 - x / r.width) : (x / r.width);
+      stripPos = Math.max(SPAN_LO, Math.min(SPAN_HI, Math.round(SPAN_LO + SPAN * frac)));
       paint();
     }
     field.addEventListener('pointerdown', (e) => { field.setPointerCapture(e.pointerId); setFromEvent(e); });
     field.addEventListener('pointermove', (e) => { if (e.buttons) setFromEvent(e); });
     field.addEventListener('click', setFromEvent);
     el.querySelectorAll('.stripStep').forEach(b => b.addEventListener('click', () => {
-      stripPos = Math.max(0, Math.min(100, stripPos + Number(b.dataset.d)));
+      stripPos = Math.max(SPAN_LO, Math.min(SPAN_HI, stripPos + Number(b.dataset.d)));
       paint();
     }));
     el.querySelector('#ydStripDone').addEventListener('click', closeStrip);
+    // The tick marks and the end zone labels are drawn once, so both have
+    // to be re-laid when the facing changes. Everything else reads pctOf()
+    // live and needs nothing.
+    el._setFacing = (flip) => {
+      stripFlip = flip;
+      el.querySelectorAll('.ydStripTick').forEach(t => {
+        t.style.left = pctOf(Number(t.dataset.pos)) + '%';
+      });
+      const lz = el.querySelector('#ydStripEzLeft'), rz = el.querySelector('#ydStripEzRight');
+      // The attacking end zone is a touchdown and the defended one a
+      // safety, whichever side of the screen each happens to be on.
+      if (lz) lz.textContent = flip ? 'TD' : 'SAFETY';
+      if (rz) rz.textContent = flip ? 'SAFETY' : 'TD';
+    };
     el._paint = paint;
     stripEl = el;
     return el;
@@ -4564,7 +4670,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     stripTarget = target;
     stripStart = st.fieldPos;
     const cur = parseInt(target.value, 10);
-    stripPos = Number.isFinite(cur) ? Math.max(0, Math.min(100, st.fieldPos + Math.abs(cur))) : st.fieldPos;
+    stripPos = Number.isFinite(cur) ? Math.max(-10, Math.min(110, st.fieldPos + Math.abs(cur))) : st.fieldPos;
+    // driveDir is null until somebody records which way a team is kicking.
+    // Unflipped is then the honest default: it matches how fieldPos is
+    // stored, rather than guessing at a direction nobody has stated.
+    el._setFacing(st.driveDir === 'left');
     el.style.display = 'block';
     el._paint();
     const r = anchor.getBoundingClientRect();
