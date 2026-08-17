@@ -1720,6 +1720,25 @@ function offenseEligible(team, role){
   // point of the whole shared-number fix.
   const playedThisRole = roleKey ? lastUsedByIdentity(team, [roleKey]) : {};
   Object.keys(ambiguous).forEach(num => {
+    // A SHARED NUMBER DOES NOT EXCUSE A PLAYER FROM THE STARTERS LIST.
+    // ------------------------------------------------------------------
+    // This loop walked EVERY shared number on the roster and admitted
+    // anyone whose recorded position fitted the role. `visible` -- the
+    // seeded starters plus whoever has been discovered -- was never
+    // consulted, so a six-man starters list produced eleven buttons on a
+    // roster with twenty-two shared numbers, and none of the extras were
+    // players the coach had named.
+    //
+    // The rule was already written one line up for the resolved list.
+    // This is the same rule, applied to the half of the list that was
+    // missing it: position tells you WHETHER he could play the role,
+    // `visible` tells you whether anybody expects him to.
+    //
+    // Not a bare `return`, because two overrides below outrank the seed --
+    // a man who has ALREADY played this role, and a seed that names him
+    // specifically. Both are stronger statements than "not seeded", so
+    // they are tested first and this gate only stops the rest.
+    const inVisible = !!visible[num];
     ambiguous[num].forEach(entry => {
       const nm = typeof entry === 'string' ? entry : entry.name;
       const pos = (typeof entry === 'string' ? '' : (entry.position || '')).toUpperCase().trim();
@@ -1755,6 +1774,8 @@ function offenseEligible(team, role){
         ambiguousList.push({ num, name: nm, resolvedName: nm });
         return;
       }
+      // Neither override applied, so the starters list decides.
+      if (!inVisible) return;
       if (allowedPos && pos){
         // The entry's OWN position is more specific evidence than a
         // seed, which is keyed by number and so cannot tell these two

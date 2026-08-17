@@ -290,6 +290,40 @@
   // special buckets. Returns which numbers resolved cleanly and which
   // need a human decision -- same algorithm proven in the entry app,
   // just fed from whatever source (persistent roster or fresh upload).
+  function sharedNumbersHtml(info){
+    if (!info) return '';
+    const fmt = (g) => '#' + g.num + ' ' +
+      g.entries.map(e => e.name + (e.position ? ' (' + e.position + ')' : '')).join(' / ');
+    let out = '';
+    if (info.duplicatePeople.length){
+      out += '<p class="sub" style="margin:6px 0 0; color:#8a4b00;"><strong>' +
+        info.duplicatePeople.length + ' number' + (info.duplicatePeople.length === 1 ? '' : 's') +
+        ' looks like the same player entered twice.</strong> ' +
+        'Worth deleting the extra row before you import: ' +
+        info.duplicatePeople.slice(0, 4).map(fmt).join(' \u00b7 ') +
+        (info.duplicatePeople.length > 4 ? ' \u00b7 and ' + (info.duplicatePeople.length - 4) + ' more' : '') +
+        '</p>';
+    }
+    if (info.sameSide.length){
+      out += '<p class="sub" style="margin:6px 0 0; color:#8a4b00;"><strong>' +
+        info.sameSide.length + ' number' + (info.sameSide.length === 1 ? '' : 's') +
+        ' shared by players on the same side of the ball.</strong> ' +
+        'Nothing can tell these apart automatically, so the pickers will ask which one. ' +
+        'Naming them in the likely starters above settles it for the whole game: ' +
+        info.sameSide.slice(0, 6).map(fmt).join(' \u00b7 ') +
+        (info.sameSide.length > 6 ? ' \u00b7 and ' + (info.sameSide.length - 6) + ' more' : '') +
+        '</p>';
+    }
+    if (info.crossSide.length){
+      out += '<p class="sub" style="margin:6px 0 0;">' + info.crossSide.length +
+        ' number' + (info.crossSide.length === 1 ? ' is' : 's are') +
+        ' shared by an offensive and a defensive player. ' +
+        'These were logged correctly on both sides and need nothing from you \u2014 ' +
+        'each picker only offers the player who plays that role.</p>';
+    }
+    return out;
+  }
+
   function resolveByNumber(entries){
     const byNum = {};
     entries.forEach(en => {
@@ -298,7 +332,13 @@
       byNum[key].push(en);
     });
     const resolved = {}; // num -> { offense: entry|null, defense: entry|null, special: entry|null }
+  // The shared-number report. Kept out of the summary line itself because
+  // it is three sentences, not a clause, and the summary has to stay
+  // readable at a glance.
     const conflicts = []; // genuine collisions: 2+ people who'd occupy the SAME unit for this number
+    // Shared numbers, in three kinds. See the block below for why they are
+    // not one number.
+    const sharedInfo = { crossSide: [], sameSide: [], duplicatePeople: [] };
     const needsAssignment = []; // a single person whose position we don't recognize -- no collision, just needs one tag
     Object.keys(byNum).forEach(num => {
       const group = byNum[num];
@@ -328,8 +368,38 @@
       } else if (unknown.length === 1){
         needsAssignment.push({ num, entry: unknown[0] });
       }
+      // SHARED NUMBERS ARE COUNTED, AND SPLIT BY WHETHER THE CODE CAN
+      // SORT THEM OUT.
+      // ------------------------------------------------------------------
+      // Nothing used to be said about them at all. A roster with twenty-two
+      // shared numbers imported as a plain "92 players loaded", and the
+      // first anybody knew of it was a picker with extra buttons in it
+      // mid-game.
+      //
+      // The distinction is what makes the report worth reading. A number
+      // shared by a running back and a safety needs NOTHING: the position
+      // filter keeps them apart, and the ball-carrier picker only ever
+      // offers the back. A number shared by two receivers cannot be
+      // separated by any rule, and is a question for the coach.
+      //
+      // So: the first kind gets a count, the second gets named.
+      if (group.length > 1){
+        const units = new Set();
+        group.forEach(en => units.add(en.explicitUnit || posToUnit(en.position) || 'unknown'));
+        // Same-name pairs are a THIRD thing: one player entered twice, not
+        // two players sharing a number. The answer is to delete a row, so
+        // they are reported apart from both.
+        const norm = (n) => {
+          const parts = String(n || '').toLowerCase().replace(/[^a-z ]/g, '').split(/\s+/).filter(Boolean);
+          return parts.length ? (parts[0][0] + ' ' + parts[parts.length - 1]) : '';
+        };
+        const names = new Set(group.map(en => norm(en.name)));
+        if (names.size === 1) sharedInfo.duplicatePeople.push({ num, entries: group });
+        else if (units.size === 1) sharedInfo.sameSide.push({ num, entries: group });
+        else sharedInfo.crossSide.push({ num, entries: group });
+      }
     });
-    return { resolved, conflicts, needsAssignment };
+    return { resolved, conflicts, needsAssignment, sharedInfo };
   }
 
   // A conflict is "already handled" once a saved game_rosters row exists
@@ -566,7 +636,7 @@
     const entries = (players || [])
       .filter(p => p.default_jersey_number)
       .map(p => ({ number: p.default_jersey_number, name: p.name, position: p.primary_position, explicitUnit: null, playerId: p.id }));
-    let { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
+    let { resolved, conflicts, needsAssignment, sharedInfo } = resolveByNumber(entries);
 
     // In edit mode, resolveByNumber just re-picks a default (the first
     // entry) for every conflict, since it has no memory of what was
@@ -595,7 +665,8 @@
     ourConflictsList = conflicts;
     document.getElementById('ourRosterStatus').innerHTML =
       '<div class="roster-summary">' + entries.length + ' players loaded from your roster' +
-      (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>';
+      (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>' +
+      sharedNumbersHtml(sharedInfo);
     renderAssignmentUI('ourAssignments', 'our', needsAssignment, ourResolved);
     renderConflictUI('ourConflicts', 'our', conflicts, ourResolved);
     // A roster just became available, so any starter numbers already
@@ -770,7 +841,7 @@
           'A = number, B = name, C = position.', 'error');
         return;
       }
-      const { resolved, conflicts, needsAssignment } = resolveByNumber(entries);
+      const { resolved, conflicts, needsAssignment, sharedInfo } = resolveByNumber(entries);
       oppResolved = resolved;
       oppRosterTouched = true;
       oppRosterSkipped = false;
@@ -783,6 +854,7 @@
         // it here.
         (blankPositions ? ' — ' + blankPositions + ' with no position recorded' : '') +
         (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>' +
+        sharedNumbersHtml(sharedInfo) +
         (blankPositions
           ? '<p class="sub" style="margin:6px 0 0;">Players with no position are still fully usable: ' +
             'they appear in the rush, pass and tackle pickers, and can always be entered by typing ' +
