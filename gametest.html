@@ -4408,6 +4408,157 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     padTarget = null;
   }
 
+  // ===================================================================
+  // PROTOTYPE ONLY -- gametest.html. THE FIELD STRIP.
+  // ===================================================================
+  // The other two controls ask for a NUMBER. This one asks for a PLACE,
+  // which is what a scorer actually saw: the ball ended on the 38. The
+  // yardage is arithmetic the app can do.
+  //
+  // That is the same insight the four spot calculators are built on, so
+  // if this works it does not merely replace the wheel -- it replaces the
+  // calculator beside it, and the same control would serve punts, field
+  // goals, interceptions and bad snaps.
+  //
+  // A hundred yards across ~330px is 3.3px per yard, which is below what
+  // a finger can place. So a tap is a COARSE aim and the steppers beneath
+  // do the last yard or two. That pairing is deliberate: neither half is
+  // any good alone, and the stepper is the third pattern worth trying.
+  let stripEl = null, stripTarget = null, stripPos = null, stripStart = null;
+
+  function buildStrip(){
+    if (stripEl) return stripEl;
+    const el = document.createElement('div');
+    el.id = 'ydStrip';
+    el.style.cssText = 'position:absolute; z-index:9000; display:none; background:#fff; ' +
+      'border:1px solid #ccc; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.22); ' +
+      'padding:12px;';
+    // Yard numbers the way they are painted on a field: up to 50 and back
+    // down. A strip labelled 0-100 would be a ruler, not a football field,
+    // and the scorer is reading the real one.
+    const ticks = [10,20,30,40,50,40,30,20,10]
+      .map((n, i) => '<div style="position:absolute; left:' + ((i + 1) * 10) + '%; top:0; bottom:0; ' +
+        'width:1px; background:rgba(255,255,255,0.45);"></div>' +
+        '<div style="position:absolute; left:' + ((i + 1) * 10) + '%; top:50%; ' +
+        'transform:translate(-50%,-50%); color:rgba(255,255,255,0.9); font-size:11px; ' +
+        'font-weight:700; pointer-events:none;">' + n + '</div>').join('');
+    el.innerHTML =
+      '<div id="ydStripReadout" style="font-size:15px; font-weight:700; color:#1a4d2e; ' +
+        'background:#eef6f1; border-left:3px solid #1a7a4c; border-radius:4px; ' +
+        'padding:8px 10px; margin-bottom:10px;"></div>' +
+      '<div id="ydStripField" style="position:relative; height:56px; width:330px; ' +
+        'background:#2f6b45; border-radius:6px; overflow:hidden; cursor:pointer; ' +
+        'touch-action:none;">' +
+        // End zones, so left and right are never ambiguous.
+        '<div style="position:absolute; left:0; top:0; bottom:0; width:6%; ' +
+          'background:rgba(0,0,0,0.28);"></div>' +
+        '<div style="position:absolute; right:0; top:0; bottom:0; width:6%; ' +
+          'background:rgba(0,0,0,0.28);"></div>' +
+        ticks +
+        // Where the ball is now.
+        '<div id="ydStripFrom" style="position:absolute; top:0; bottom:0; width:2px; ' +
+          'background:#ffffff; opacity:0.85;"></div>' +
+        // Where the play ended.
+        '<div id="ydStripTo" style="position:absolute; top:-2px; bottom:-2px; width:4px; ' +
+          'background:#ffc72c; border-radius:2px; box-shadow:0 0 0 2px rgba(0,0,0,0.35);"></div>' +
+        // The ground gained, shaded between the two.
+        '<div id="ydStripGain" style="position:absolute; top:0; bottom:0; ' +
+          'background:rgba(255,199,44,0.30); pointer-events:none;"></div>' +
+      '</div>' +
+      '<div style="display:flex; align-items:center; gap:8px; margin-top:10px;">' +
+        '<button type="button" class="stripStep" data-d="-1" style="flex:1; padding:12px; ' +
+          'border-radius:8px; border:2px solid #ccc; background:#fff; font-size:19px; ' +
+          'font-weight:700; cursor:pointer;">\u2212 1</button>' +
+        '<button type="button" class="stripStep" data-d="1" style="flex:1; padding:12px; ' +
+          'border-radius:8px; border:2px solid #ccc; background:#fff; font-size:19px; ' +
+          'font-weight:700; cursor:pointer;">+ 1</button>' +
+        '<button type="button" id="ydStripDone" style="flex:1.2; padding:12px; border-radius:8px; ' +
+          'border:none; background:#1a4d2e; color:#fff; font-size:15px; font-weight:700; ' +
+          'cursor:pointer;">Done</button>' +
+      '</div>';
+    document.body.appendChild(el);
+
+    const field = el.querySelector('#ydStripField');
+    const readout = el.querySelector('#ydStripReadout');
+    const fromEl = el.querySelector('#ydStripFrom');
+    const toEl = el.querySelector('#ydStripTo');
+    const gainEl = el.querySelector('#ydStripGain');
+    const label = (pos) => pos <= 50 ? ('own ' + pos) : ('opp ' + (100 - pos));
+
+    function paint(){
+      if (stripStart === null || stripPos === null) return;
+      fromEl.style.left = stripStart + '%';
+      toEl.style.left = 'calc(' + stripPos + '% - 2px)';
+      const lo = Math.min(stripStart, stripPos), hi = Math.max(stripStart, stripPos);
+      gainEl.style.left = lo + '%';
+      gainEl.style.width = (hi - lo) + '%';
+      const delta = stripPos - stripStart;
+      readout.textContent = label(stripStart) + '  \u2192  ' + label(stripPos) +
+        '   =   ' + (delta >= 0 ? '+' : '\u2212') + Math.abs(delta) + ' yards';
+      if (stripTarget){
+        stripTarget.value = String(Math.abs(delta));
+        stripTarget.dispatchEvent(new Event('input', { bubbles: true }));
+        // A play that lost ground has to say so. The yards box holds a
+        // magnitude, and LOSS is how every panel here carries the sign --
+        // writing a bare 6 for a six yard loss is the one outcome that
+        // looks deliberate and is wrong.
+        const loss = document.querySelector('.lossToggle[data-for="' + stripTarget.id + '"]');
+        if (loss){
+          const want = delta < 0;
+          if (loss.classList.contains('picked') !== want) loss.click();
+        }
+      }
+    }
+
+    function setFromEvent(e){
+      const r = field.getBoundingClientRect();
+      const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+      stripPos = Math.max(0, Math.min(100, Math.round(100 * x / r.width)));
+      paint();
+    }
+    field.addEventListener('pointerdown', (e) => { field.setPointerCapture(e.pointerId); setFromEvent(e); });
+    field.addEventListener('pointermove', (e) => { if (e.buttons) setFromEvent(e); });
+    field.addEventListener('click', setFromEvent);
+    el.querySelectorAll('.stripStep').forEach(b => b.addEventListener('click', () => {
+      stripPos = Math.max(0, Math.min(100, stripPos + Number(b.dataset.d)));
+      paint();
+    }));
+    el.querySelector('#ydStripDone').addEventListener('click', closeStrip);
+    el._paint = paint;
+    stripEl = el;
+    return el;
+  }
+
+  function closeStrip(){
+    if (stripEl) stripEl.style.display = 'none';
+    stripTarget = null;
+  }
+
+  function openStrip(target, anchor){
+    const el = buildStrip();
+    const st = computeState();
+    if (st.fieldPos === null){
+      // Without a spot there is no field to point at. Saying so beats
+      // opening a strip whose left end means nothing.
+      alert('Set the current spot first — the strip measures from where the ball is.');
+      return;
+    }
+    stripTarget = target;
+    stripStart = st.fieldPos;
+    const cur = parseInt(target.value, 10);
+    stripPos = Number.isFinite(cur) ? Math.max(0, Math.min(100, st.fieldPos + Math.abs(cur))) : st.fieldPos;
+    el.style.display = 'block';
+    el._paint();
+    const r = anchor.getBoundingClientRect();
+    const w = el.offsetWidth || 360, h = el.offsetHeight || 200;
+    let left = window.scrollX + r.left;
+    left = Math.min(left, window.scrollX + document.documentElement.clientWidth - w - 8);
+    const fitsBelow = (r.bottom + h + 10) < window.innerHeight;
+    el.style.left = Math.max(window.scrollX + 8, left) + 'px';
+    el.style.top = (fitsBelow ? (window.scrollY + r.bottom + 6)
+                              : (window.scrollY + r.top - h - 6)) + 'px';
+  }
+
   function openPad(target, anchor){
     const el = buildPad();
     padTarget = target;
@@ -4450,15 +4601,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   document.addEventListener('click', (e) => {
     const wb = e.target.closest && e.target.closest('.wheelBtn');
     if (wb){
-      closePad();
+      closePad(); closeStrip();
       const target = document.getElementById(wb.dataset.for);
       if (target && !target.disabled) openWheel(target, wb);
       e.preventDefault();
       return;
     }
+    const sb = e.target.closest && e.target.closest('.stripBtn');
+    if (sb){
+      closeWheel(); closePad();
+      const target = document.getElementById(sb.dataset.for);
+      if (target && !target.disabled) openStrip(target, sb);
+      e.preventDefault();
+      return;
+    }
     const pb = e.target.closest && e.target.closest('.padBtn');
     if (pb){
-      closeWheel();
+      closeWheel(); closeStrip();
       const target = document.getElementById(pb.dataset.for);
       if (target && !target.disabled) openPad(target, pb);
       e.preventDefault();
@@ -4469,6 +4628,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         !(e.target.closest && e.target.closest('#ydWheel'))) closeWheel();
     if (padEl && padEl.style.display !== 'none' &&
         !(e.target.closest && e.target.closest('#ydPad'))) closePad();
+    if (stripEl && stripEl.style.display !== 'none' &&
+        !(e.target.closest && e.target.closest('#ydStrip'))) closeStrip();
   });
 
   function renderPlayPanel(type){
@@ -4551,6 +4712,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const yardsBlock = (label, id, withLoss, picker) => fieldLabel(label || 'Enter yards') +
       '<span style="display:inline-flex; align-items:center; gap:8px;">' +
         '<input autocomplete="off" type="text" inputmode="numeric" id="' + (id||'pp_yards') + '" style="width:80px;">' +
+        // The strip is offered ALONGSIDE the wheel on the rush panel, not
+        // instead of it -- comparing two controls on the same play type
+        // is the only way to tell which is faster for the same numbers.
+        (picker === 'strip'
+          ? '<button type="button" class="stripBtn" data-for="' + (id||'pp_yards') + '" ' +
+            'title="Tap where the play ended" ' +
+            'style="padding:8px 11px; border-radius:6px; border:2px solid #ccc; background:#fff; ' +
+            'font-size:15px; font-weight:700; color:#555; cursor:pointer; line-height:1; ' +
+            'touch-action:manipulation;">\u25AD</button>'
+          : '') +
         (picker === 'keypad'
           ? '<button type="button" class="padBtn" data-for="' + (id||'pp_yards') + '" ' +
             'title="Number pad" ' +
@@ -4678,7 +4849,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // question and were only ever on the same line because they fit;
         // as soon as the calculator arrived they wrapped unpredictably and
         // nothing lined up with anything.
-        '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div>' + yardsBlock('Enter yards', null, true) +
+        '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div>' + yardsBlock('Enter yards', null, true, 'strip') +
           '<span style="display:inline-flex; align-items:center; gap:8px;">' +
             '<input autocomplete="off" type="text" id="pp_yards_dummy" style="display:none;">' +
           '</span></div>' + spotCalcHtml() + '</div>' +
