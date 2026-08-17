@@ -4512,12 +4512,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           'background:rgba(255,199,44,0.30); pointer-events:none;"></div>' +
       '</div>' +
       '<div style="display:flex; align-items:center; gap:8px; margin-top:10px;">' +
+        // color:#222 is NOT optional. The app sets `button { color:#fff }`
+        // globally, so a button with a white background and no colour of
+        // its own is white text on white -- which is exactly how these
+        // rendered: two blank boxes. The Done button only escaped it by
+        // setting a colour for its dark background.
         '<button type="button" class="stripStep" data-d="-1" style="flex:1; padding:12px; ' +
-          'border-radius:8px; border:2px solid #ccc; background:#fff; font-size:19px; ' +
-          'font-weight:700; cursor:pointer;">-1 yd</button>' +
+          'border-radius:8px; border:2px solid #ccc; background:#fff; color:#222; ' +
+          'font-size:18px; font-weight:700; cursor:pointer;">&minus;1 yd</button>' +
         '<button type="button" class="stripStep" data-d="1" style="flex:1; padding:12px; ' +
-          'border-radius:8px; border:2px solid #ccc; background:#fff; font-size:19px; ' +
-          'font-weight:700; cursor:pointer;">+1 yd</button>' +
+          'border-radius:8px; border:2px solid #ccc; background:#fff; color:#222; ' +
+          'font-size:18px; font-weight:700; cursor:pointer;">+1 yd</button>' +
         '<button type="button" id="ydStripDone" style="flex:1.2; padding:12px; border-radius:8px; ' +
           'border:none; background:#1a4d2e; color:#fff; font-size:15px; font-weight:700; ' +
           'cursor:pointer;">Done</button>' +
@@ -4549,6 +4554,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           ? (label(stripStart) + '  \u2192  own end zone   =   SAFETY, ' + stripStart + ' yards lost')
           : (label(stripStart) + '  \u2192  ' + label(stripPos) +
              '   =   ' + (delta >= 0 ? '+' : '\u2212') + Math.abs(delta) + ' yards');
+      // THE READOUT CARRIES THE SIGN AS COLOUR.
+      // ----------------------------------------------------------------
+      // A minus sign is one glyph in a line of text, read at a glance on
+      // a sideline in the dark. The whole bar changing is not: green for
+      // ground gained, red for ground lost, and it registers before the
+      // words do.
+      //
+      // Pale on purpose -- this is a status, not an alarm. A saturated
+      // red would make every two yard loss look like a mistake.
+      const losing = inSafety || (!inTd && delta < 0);
+      readout.style.background = losing ? '#fdeceb' : '#eef6f1';
+      readout.style.borderLeftColor = losing ? '#a32d2d' : '#1a7a4c';
+      readout.style.color = losing ? '#8a2020' : '#1a4d2e';
       if (stripTarget){
         // At a goal line the yardage is the distance TO it, not past it:
         // a carry from the own 4 into the end zone is a four yard loss,
