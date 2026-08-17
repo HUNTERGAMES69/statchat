@@ -5096,6 +5096,36 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // than one that never appears.
   const TAP_OPENS_KEYPAD = true;
 
+  // ON A TOUCHSCREEN, READONLY -- NOT inputmode="none".
+  // ---------------------------------------------------------------------
+  // inputmode="none" is the correct attribute and WebKit has a long
+  // history of ignoring it, raising the system keyboard anyway. Rather
+  // than pin this to a Safari version -- which changes underneath us and
+  // cannot be checked from here -- the field is made readonly on touch
+  // devices, which suppresses the keyboard on every iOS version there has
+  // ever been.
+  //
+  // Nothing is lost by it. `readonly` still takes taps, still takes focus,
+  // and still accepts a programmatic `.value =` -- so the calculators, the
+  // touchdown prefill and the spot fills all keep working. What it removes
+  // is typing into the box, and on a bare iPad there was no keyboard to
+  // type with in the first place.
+  //
+  // ON THE LAPTOP NOTHING CHANGES. The query is for the PRIMARY pointer,
+  // so a trackpad laptop -- touchscreen or not -- reports `pointer: fine`
+  // and is left alone, keeping inputmode="none" and a typeable field.
+  // An iPad with a Magic Keyboard attached reports `fine` too, which is
+  // the behaviour we want: a keyboard is present, so let it be used.
+  //
+  // ?softkb=1 OPTS OUT, on the device, without another upload. It forces
+  // inputmode="numeric" and leaves the field typeable, so the same iPad
+  // can be tried both ways in one sitting -- and it is the escape hatch if
+  // the pad ever fails to open on a field that now has no other route in.
+  const FORCE_SOFT_KEYBOARD = /[?&]softkb=1(&|$)/.test(location.search);
+  const TOUCH_ONLY = !FORCE_SOFT_KEYBOARD &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+
   function attachPickers(root){
     (root || document).querySelectorAll('input[type="text"]').forEach(inp => {
       if (inp.dataset.pickerDone === '1') return;
@@ -5103,7 +5133,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (!kind) return;
       inp.dataset.pickerDone = '1';
       inp.dataset.pickerKind = kind;
-      inp.setAttribute('inputmode', TAP_OPENS_KEYPAD ? 'none' : 'numeric');
+      inp.setAttribute('inputmode',
+        (TAP_OPENS_KEYPAD && !FORCE_SOFT_KEYBOARD) ? 'none' : 'numeric');
+      // readOnly, not the attribute: the tap handler tests `fld.disabled`,
+      // and readonly is deliberately NOT disabled -- a disabled input
+      // receives no clicks at all, so the pad could never be opened.
+      if (TAP_OPENS_KEYPAD && TOUCH_ONLY) inp.readOnly = true;
       // Yardage AND yard-line fields keep a visible button, for the STRIP.
       // Both are questions about the field: how far, and where. Jersey
       // numbers and the clock are neither, so they have no button at all
