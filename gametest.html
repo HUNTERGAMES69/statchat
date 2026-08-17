@@ -4425,6 +4425,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // do the last yard or two. That pairing is deliberate: neither half is
   // any good alone, and the stepper is the third pattern worth trying.
   let stripEl = null, stripTarget = null, stripPos = null, stripStart = null;
+  // Set only while the strip is clicking something outside itself on
+  // purpose. See paint().
+  let stripSuppressClose = false;
 
   function buildStrip(){
     if (stripEl) return stripEl;
@@ -4468,10 +4471,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<div style="display:flex; align-items:center; gap:8px; margin-top:10px;">' +
         '<button type="button" class="stripStep" data-d="-1" style="flex:1; padding:12px; ' +
           'border-radius:8px; border:2px solid #ccc; background:#fff; font-size:19px; ' +
-          'font-weight:700; cursor:pointer;">\u2212 1</button>' +
+          'font-weight:700; cursor:pointer;">-1 yd</button>' +
         '<button type="button" class="stripStep" data-d="1" style="flex:1; padding:12px; ' +
           'border-radius:8px; border:2px solid #ccc; background:#fff; font-size:19px; ' +
-          'font-weight:700; cursor:pointer;">+ 1</button>' +
+          'font-weight:700; cursor:pointer;">+1 yd</button>' +
         '<button type="button" id="ydStripDone" style="flex:1.2; padding:12px; border-radius:8px; ' +
           'border:none; background:#1a4d2e; color:#fff; font-size:15px; font-weight:700; ' +
           'cursor:pointer;">Done</button>' +
@@ -4505,7 +4508,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const loss = document.querySelector('.lossToggle[data-for="' + stripTarget.id + '"]');
         if (loss){
           const want = delta < 0;
-          if (loss.classList.contains('picked') !== want) loss.click();
+          if (loss.classList.contains('picked') !== want){
+            // THE FLAG IS LOAD-BEARING.
+            // ------------------------------------------------------------
+            // This click BUBBLES to the document, where the outside-click
+            // handler saw a target outside the popover and closed the
+            // strip -- nulling stripTarget. Everything after the first
+            // backwards tap then updated the readout and wrote nothing,
+            // so the box froze on the first loss and never moved again.
+            //
+            // The LOSS toggle sits in the panel, not in the popover, so
+            // "is the target inside #ydStrip" cannot tell a real outside
+            // click from this one. Only the caller knows.
+            stripSuppressClose = true;
+            loss.click();
+            stripSuppressClose = false;
+          }
         }
       }
     }
@@ -4628,7 +4646,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         !(e.target.closest && e.target.closest('#ydWheel'))) closeWheel();
     if (padEl && padEl.style.display !== 'none' &&
         !(e.target.closest && e.target.closest('#ydPad'))) closePad();
-    if (stripEl && stripEl.style.display !== 'none' &&
+    if (!stripSuppressClose && stripEl && stripEl.style.display !== 'none' &&
         !(e.target.closest && e.target.closest('#ydStrip'))) closeStrip();
   });
 
