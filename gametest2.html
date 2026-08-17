@@ -4671,38 +4671,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
 
       if (stripTarget){
-        // At a goal line the yardage is the distance TO it, not past it:
-        // a carry from the own 4 into the end zone is a four yard loss,
-        // and one from the opponent 8 is an eight yard touchdown. The
-        // extra yards of end zone are not yardage anybody records.
-        const gained = inTd ? (100 - stripStart) : inSafety ? stripStart : Math.abs(delta);
-        stripTarget.value = String(gained);
-        stripTarget.dispatchEvent(new Event('input', { bubbles: true }));
-        // A play that lost ground has to say so. The yards box holds a
-        // magnitude, and LOSS is how every panel here carries the sign --
-        // writing a bare 6 for a six yard loss is the one outcome that
-        // looks deliberate and is wrong.
-        const loss = document.querySelector('.lossToggle[data-for="' + stripTarget.id + '"]');
-        if (loss){
-          const want = inSafety || (!inTd && delta < 0);
-          if (loss.classList.contains('picked') !== want){
-            // THE FLAG IS LOAD-BEARING.
-            // ------------------------------------------------------------
-            // This click BUBBLES to the document, where the outside-click
-            // handler saw a target outside the popover and closed the
-            // strip -- nulling stripTarget. Everything after the first
-            // backwards tap then updated the readout and wrote nothing,
-            // so the box froze on the first loss and never moved again.
-            //
-            // The LOSS toggle sits in the panel, not in the popover, so
-            // "is the target inside #ydStrip" cannot tell a real outside
-            // click from this one. Only the caller knows.
-            stripSuppressClose = true;
-            loss.click();
-            stripSuppressClose = false;
-          }
-        }
-
         // REACHING AN END ZONE SETS THE OUTCOME.
         // ----------------------------------------------------------------
         // Dragging the marker past a goal line is an unambiguous statement
@@ -4737,6 +4705,38 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         setToggle('pp_td_toggle', document.getElementById('pp_td'), inTd);
         setToggle('pp_rush_safety_toggle', document.getElementById('pp_rush_safety'), inSafety);
         setToggle('pp_pass_safety_toggle', document.getElementById('pp_pass_safety'), inSafety);
+        // At a goal line the yardage is the distance TO it, not past it:
+        // a carry from the own 4 into the end zone is a four yard loss,
+        // and one from the opponent 8 is an eight yard touchdown. The
+        // extra yards of end zone are not yardage anybody records.
+        const gained = inTd ? (100 - stripStart) : inSafety ? stripStart : Math.abs(delta);
+        stripTarget.value = String(gained);
+        stripTarget.dispatchEvent(new Event('input', { bubbles: true }));
+        // A play that lost ground has to say so. The yards box holds a
+        // magnitude, and LOSS is how every panel here carries the sign --
+        // writing a bare 6 for a six yard loss is the one outcome that
+        // looks deliberate and is wrong.
+        const loss = document.querySelector('.lossToggle[data-for="' + stripTarget.id + '"]');
+        if (loss){
+          const want = inSafety || (!inTd && delta < 0);
+          if (loss.classList.contains('picked') !== want){
+            // THE FLAG IS LOAD-BEARING.
+            // ------------------------------------------------------------
+            // This click BUBBLES to the document, where the outside-click
+            // handler saw a target outside the popover and closed the
+            // strip -- nulling stripTarget. Everything after the first
+            // backwards tap then updated the readout and wrote nothing,
+            // so the box froze on the first loss and never moved again.
+            //
+            // The LOSS toggle sits in the panel, not in the popover, so
+            // "is the target inside #ydStrip" cannot tell a real outside
+            // click from this one. Only the caller knows.
+            stripSuppressClose = true;
+            loss.click();
+            stripSuppressClose = false;
+          }
+        }
+
       }
     }
 
@@ -4885,7 +4885,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (sb){
       closeWheel(); closePad();
       const target = document.getElementById(sb.dataset.for);
-      if (target && !target.disabled) openStrip(target, sb, sb.dataset.kind);
+      // NOT gated on `disabled`.
+      // ----------------------------------------------------------------
+      // Selecting a touchdown DISABLES the yards box -- the app fills it
+      // from the spot, so there is nothing to type. But the strip is the
+      // control that would take the touchdown back off, and refusing to
+      // open on a disabled field meant that after one slide into the end
+      // zone the button simply stopped responding. Nothing said why; it
+      // looked like the strip had broken.
+      if (target) openStrip(target, sb, sb.dataset.kind);
       e.preventDefault();
       return;
     }
