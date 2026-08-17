@@ -219,11 +219,9 @@
                     text-align:center; font-size:9px; color:#9aa3b2;
                     letter-spacing:0.04em; }
     .print-endmark { display:flex; align-items:center; justify-content:center;
-                     gap:10px; margin:26px 0 0; padding-top:14px;
+                     margin:30px 0 0; padding-top:18px;
                      border-top:1px solid #e6e6e6; }
-    .print-endmark img { width:34px; height:34px; border-radius:6px; }
-    .print-endmark .em-text { font-size:11px; color:#7c8794; line-height:1.4; }
-    .print-endmark .em-text b { display:block; color:#4a5563; font-size:12px; }
+    .print-endmark img { width:38px; height:38px; border-radius:7px; }
 
     /* BACKGROUNDS MUST BE TOLD TO PRINT.
        Browsers drop background colours from printed output by default --
@@ -255,13 +253,21 @@
        to FILL rather than to fit. Bigger rows, more air between sections,
        and a leaders strip with room to breathe.
        These are print-only; nothing on screen changes. */
-    .sec-head { margin:22px 0 12px; }
+    /* Page one runs about two-thirds full, so these are set to spend the
+       space rather than save it. The scoreboard card and the scoring
+       summary were butted together; the summary's own rows were tight
+       enough that seven scores read as a block rather than seven events. */
+    .header { margin-bottom:26px; }
+    .scoring-summary { margin-top:30px !important; }
+    .sec-head { margin:22px 0 14px; }
     .sec-title { font-size:17px; }
     .sec-sub { font-size:11.5px; }
-    .scoring-summary table th, .scoring-summary table td { padding:6px 9px; }
-    .scoring-summary .ss-score { line-height:1.3; }
-    .team-compare .col-head { font-size:13px; padding-bottom:7px; }
-    .team-compare .stat-row > div { padding:5px 0; font-size:13px; }
+    /* 11px vertical: each score gets its own band of space, which is what
+       makes a scoring summary scannable rather than a wall. */
+    .scoring-summary table th, .scoring-summary table td { padding:11px 9px; }
+    .scoring-summary .ss-score { line-height:1.45; }
+    .team-compare .col-head { font-size:13.5px; padding-bottom:9px; }
+    .team-compare .stat-row > div { padding:8px 0; font-size:13px; }
     .team-compare .stat-label { font-size:11px; }
 
     /* The team pages. These rows carried 5px of padding on a page that
@@ -919,10 +925,17 @@ function isAdminMarker(p){
     // THE END MARK, in normal flow so it lands on the last page and only
     // the last page. CSS has no "final sheet" selector; this is how you
     // get one.
-    html += '<div class="print-endmark">' +
-      '<img src="logo.png" alt="StatChat">' +
-      '<div class="em-text"><b>Generated with StatChat</b>www.statchat.co</div>' +
-    '</div>';
+    // THE END MARK IS THE LOGO ONLY.
+    // ------------------------------------------------------------------
+    // It used to repeat "Generated with StatChat / www.statchat.co", which
+    // the running footer already prints on every sheet -- so the last page
+    // carried the same words twice, once here and once six lines below.
+    //
+    // The running footer cannot be suppressed on the final page (CSS has
+    // no "last sheet" selector), so the duplicate had to go from the half
+    // that CAN be changed. The logo sits above the footer line and the
+    // two read as one mark.
+    html += '<div class="print-endmark"><img src="logo.png" alt="StatChat"></div>';
 
     return html;
   }
