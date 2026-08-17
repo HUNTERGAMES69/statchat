@@ -475,7 +475,17 @@
 
 
   function renderPlayer(name){
-    if (!name) return '<div class="card"><p class="no-stats">No players recorded this season.</p></div>';
+    if (!name){
+      // The empty state carries the instruction. Distinguished from the
+      // genuinely-empty season below, which is a different message: one
+      // is waiting for the reader, the other has nothing to offer.
+      const anyone = playerNames().length;
+      return '<div class="card"><p class="no-stats">' +
+        (anyone
+          ? 'Select a player to see individual player statistics.'
+          : 'No players with recorded statistics in this season.') +
+        '</p></div>';
+    }
     const season = playerSeason(name);
     const accent = (TEAMS.teamA && TEAMS.teamA.bg) || '#1a4d2e';
     // The best game is drawn in the team's SECOND colour, which is chosen
@@ -548,7 +558,10 @@
   function renderForSelectedPlayer(){
     const name = document.getElementById('playerPicker').value;
     document.getElementById('playerContent').innerHTML = renderPlayer(name);
-    document.title = 'Player Report — ' + (name || 'StatChat');
+    document.title = name ? ('Player Report — ' + name) : 'StatChat — Player Report';
+    // Nothing to export until a player is chosen.
+    const pdf = document.getElementById('downloadPdfBtn');
+    if (pdf) pdf.classList.toggle('hidden', !name);
   }
 
   async function loadSeason(year){
@@ -589,11 +602,18 @@
     const names = playerNames();
     const picker = document.getElementById('playerPicker');
     const previous = picker.value;
-    picker.innerHTML = names.map(n => '<option value="' + n + '">' + n + '</option>').join('');
-    // Keep the same player selected when the season changes, if he played
+    // NOTHING IS SELECTED BY DEFAULT.
+    // ------------------------------------------------------------------
+    // Landing on whoever sorts first showed a real report for a player
+    // nobody asked about, which reads as "here are the stats" rather than
+    // "pick someone". The empty option is the prompt.
+    picker.innerHTML = '<option value="">Select a player</option>' +
+      names.map(n => '<option value="' + n + '">' + n + '</option>').join('');
+    // Keep the same player selected when the SEASON changes, if he played
     // in both -- switching seasons to follow one player is the likeliest
-    // reason to touch that control.
-    if (previous && names.includes(previous)) picker.value = previous;
+    // reason to touch that control, and re-picking him every time would
+    // be tedious. A first load has no previous, so it stays on the prompt.
+    picker.value = (previous && names.includes(previous)) ? previous : '';
     renderForSelectedPlayer();
   }
 
