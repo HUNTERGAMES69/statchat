@@ -373,10 +373,16 @@
     //
     // `has` decides whether a player belongs in this category at all,
     // since every kicker and punter shares the one bucket.
-    { key: 'specialTeams', label: 'Kicking', bucket: 'specialTeams',
-      has: (d) => (d.fgAtt || 0) + (d.patAtt || 0) + (d.kickoffs || 0) > 0,
+    // PLACEKICKING AND KICKING OFF ARE DIFFERENT JOBS.
+    // They share a bucket and often a player, but a field goal is a scoring
+    // attempt and a kickoff is a change of possession -- putting them in
+    // one section made "Field goals made by game" the trend for a man
+    // whose kickoffs were the story, and vice versa. Three sections, each
+    // with its own test for whether the player does that job at all.
+    { key: 'kicking', label: 'Placekicking', bucket: 'specialTeams',
+      has: (d) => (d.fgAtt || 0) + (d.patAtt || 0) > 0,
       cols: [['FG Att','fgAtt'],['FG Made','fgMade'],['Long','fgLong'],
-             ['XP Att','patAtt'],['XP Made','patMade'],['KO','kickoffs'],['TB','touchbacks']],
+             ['XP Att','patAtt'],['XP Made','patMade'],['Blk','fgBlocked']],
       trend: 'fgMade', trendLabel: 'Field goals made',
       splits: (per, t) => [
         [(t.fgMade || 0) + '/' + (t.fgAtt || 0), 'Field goals'],
@@ -391,8 +397,26 @@
         [t.fgAtt ? Math.round(100 * (t.fgMade || 0) / t.fgAtt) + '%' : '—', 'FG %'],
         [t.fgLong || 0, 'Long FG'],
         [(t.patMade || 0) + '/' + (t.patAtt || 0), 'XP'],
+        [t.patAtt ? Math.round(100 * (t.patMade || 0) / t.patAtt) + '%' : '—', 'XP %'],
+        [(t.fgMade || 0) * 3 + (t.patMade || 0), 'Points']
+      ] },
+    { key: 'kickoffs', label: 'Kickoffs', bucket: 'specialTeams',
+      has: (d) => (d.kickoffs || 0) > 0,
+      cols: [['Kickoffs','kickoffs'],['Touchbacks','touchbacks']],
+      trend: 'kickoffs', trendLabel: 'Kickoffs',
+      splits: (per, t) => [
         [t.kickoffs || 0, 'Kickoffs'],
-        [t.touchbacks || 0, 'Touchbacks']
+        [t.touchbacks || 0, 'Touchbacks'],
+        [t.kickoffs ? Math.round(100 * (t.touchbacks || 0) / t.kickoffs) + '%' : '—', 'Touchback %'],
+        [per.length ? (t.kickoffs / per.length).toFixed(1) : '0.0', 'Per game'],
+        [(t.kickoffs || 0) - (t.touchbacks || 0), 'Returned'],
+        [per.length ? Math.max.apply(null, per.map(e => e.line.kickoffs || 0)) : 0, 'Most in a game']
+      ],
+      headline: (t) => [
+        [t.kickoffs || 0, 'Kickoffs'],
+        [t.touchbacks || 0, 'Touchbacks'],
+        [t.kickoffs ? Math.round(100 * (t.touchbacks || 0) / t.kickoffs) + '%' : '—', 'TB %'],
+        [(t.kickoffs || 0) - (t.touchbacks || 0), 'Returned']
       ] },
     { key: 'punting', label: 'Punting', bucket: 'specialTeams',
       has: (d) => (d.punts || 0) > 0,
@@ -651,7 +675,12 @@
         return { game: g, line: (c.has && !c.has(raw)) ? {} : raw };
       });
       html += '<div class="card">' +
-        teamBand(c.label, acc.perGame.length + ' game' + (acc.perGame.length === 1 ? '' : 's')) +
+        // The band counts the SAME games the chart plots and the splits
+        // divide by -- games since his first appearance -- not just the
+        // ones he produced in. A punter who kicked off in one of two
+        // games read "1 game" beside a "per game" figure computed over
+        // two, and the two numbers sat four inches apart.
+        teamBand(c.label, fullSeries.length + ' game' + (fullSeries.length === 1 ? '' : 's')) +
         '<div class="totals">' +
           c.headline(t).map(([v, l]) =>
             '<div class="tot"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>').join('') +
