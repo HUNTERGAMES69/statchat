@@ -141,16 +141,35 @@
     .print-footer { display:block; position:fixed; bottom:6mm; left:0; right:0;
                     text-align:center; font-size:9px; color:#9aa3b2;
                     letter-spacing:0.04em; }
+    /* A SHORT MARGIN HERE, unlike the game recap.
+       42mm pushed the logo onto a sheet of its own -- a third page
+       holding a 38px image and nothing else. This report is two pages and
+       should stay two.
+       break-before:avoid is the part that actually enforces it: it tells
+       the browser not to start a new page immediately before the mark, so
+       it stays with the content it belongs to. */
     .print-endmark { display:flex; align-items:center; justify-content:center;
-                     margin:42mm 0 0; padding-top:18px;
+                     margin:24px 0 0; padding-top:16px;
                      border-top:1px solid #e6e6e6;
+                     page-break-before:avoid; break-before:avoid;
                      page-break-inside:avoid; break-inside:avoid; }
     .print-endmark img { width:38px; height:38px; border-radius:7px; }
     /* Print gets the columns whatever the screen was doing -- a sheet of
        paper is always wide enough. */
     .trend-cols { display:block !important; }
     .trend-bars { display:none !important; }
-    .cols { height:150px; }
+    .cols { height:132px; }
+    /* Pulled in so a player with three or four categories still lands in
+       two pages rather than spilling a card onto a third. */
+    .card { padding:14px 16px; margin-bottom:12px; }
+    .splits { gap:9px; margin-top:16px; }
+    .splits .sp { padding:10px 12px; }
+    .splits .sp .v { font-size:17px; }
+    th, td { padding:5px 8px; }
+    .team-band { margin:18px 0 10px; padding:7px 12px; }
+    .totals { gap:9px; }
+    .tot { padding:10px 12px; }
+    .tot .v { font-size:18px; }
   }
 </style>
 </head>
@@ -347,6 +366,56 @@
         [t.td || 0, 'TD'],
         [t.long || 0, 'Long']
       ] },
+    // Special teams is ONE bucket in the box score but two jobs on the
+    // field, so it is split here. A kicker's report opening with four
+    // punting zeros -- or the reverse -- reads as missing data rather
+    // than as a man who does not do that.
+    //
+    // `has` decides whether a player belongs in this category at all,
+    // since every kicker and punter shares the one bucket.
+    { key: 'specialTeams', label: 'Kicking', bucket: 'specialTeams',
+      has: (d) => (d.fgAtt || 0) + (d.patAtt || 0) + (d.kickoffs || 0) > 0,
+      cols: [['FG Att','fgAtt'],['FG Made','fgMade'],['Long','fgLong'],
+             ['XP Att','patAtt'],['XP Made','patMade'],['KO','kickoffs'],['TB','touchbacks']],
+      trend: 'fgMade', trendLabel: 'Field goals made',
+      splits: (per, t) => [
+        [(t.fgMade || 0) + '/' + (t.fgAtt || 0), 'Field goals'],
+        [t.fgAtt ? Math.round(100 * (t.fgMade || 0) / t.fgAtt) + '%' : '—', 'FG %'],
+        [t.fgLong || 0, 'Longest FG'],
+        [(t.patMade || 0) + '/' + (t.patAtt || 0), 'Extra points'],
+        [t.patAtt ? Math.round(100 * (t.patMade || 0) / t.patAtt) + '%' : '—', 'XP %'],
+        [(t.fgMade || 0) * 3 + (t.patMade || 0), 'Points scored']
+      ],
+      headline: (t) => [
+        [(t.fgMade || 0) + '/' + (t.fgAtt || 0), 'FG'],
+        [t.fgAtt ? Math.round(100 * (t.fgMade || 0) / t.fgAtt) + '%' : '—', 'FG %'],
+        [t.fgLong || 0, 'Long FG'],
+        [(t.patMade || 0) + '/' + (t.patAtt || 0), 'XP'],
+        [t.kickoffs || 0, 'Kickoffs'],
+        [t.touchbacks || 0, 'Touchbacks']
+      ] },
+    { key: 'punting', label: 'Punting', bucket: 'specialTeams',
+      has: (d) => (d.punts || 0) > 0,
+      cols: [['Punts','punts'],['Yds','puntYds'],['Long','puntLong'],['Blocked','blocked']],
+      trend: 'punts', trendLabel: 'Punts',
+      splits: (per, t) => [
+        [t.punts || 0, 'Punts'],
+        // Averaged over punts WITH a distance recorded, not all punts --
+        // a punt entered without yardage would otherwise drag the average
+        // down as though it had travelled nowhere.
+        [t.puntsWithYards ? (t.puntYds / t.puntsWithYards).toFixed(1) : '—', 'Yds / punt'],
+        [t.puntLong || 0, 'Longest'],
+        [per.length ? (t.punts / per.length).toFixed(1) : '0.0', 'Punts / game'],
+        [t.blocked || 0, 'Blocked'],
+        [t.puntYds || 0, 'Total yards']
+      ],
+      headline: (t) => [
+        [t.punts || 0, 'Punts'],
+        [t.puntsWithYards ? (t.puntYds / t.puntsWithYards).toFixed(1) : '—', 'Yds / punt'],
+        [t.puntLong || 0, 'Long'],
+        [t.puntYds || 0, 'Total yds'],
+        [t.blocked || 0, 'Blocked']
+      ] },
     { key: 'defense', label: 'Defense',
       cols: [['Tackles','tackles'],['TFL','tfl'],['Sacks','sacks'],['Int','int'],['Fum Rec','fumRec']],
             // A defender has no yardage, so the same six tiles would be five
@@ -399,7 +468,7 @@
   function playerNames(){
     const names = new Set();
     seasonGames.forEach(g => {
-      CATEGORIES.forEach(c => Object.keys(g.box[c.key] || {}).forEach(n => {
+      CATEGORIES.forEach(c => Object.keys(g.box[c.bucket || c.key] || {}).forEach(n => {
         // TEAM is the sentinel for a team rush -- a kneel or a bad snap.
         // It is not a person and must not appear in a player picker.
         if (n !== 'TEAM') names.add(n);
@@ -414,17 +483,25 @@
     seasonGames.forEach(g => {
       let appeared = false;
       CATEGORIES.forEach(c => {
-        const line = (g.box[c.key] || {})[name];
+        // Kicking and Punting share the specialTeams bucket, so `has`
+        // decides whether this player belongs in this category at all.
+        // Without it a punter would get an empty Kicking section and a
+        // kicker an empty Punting one.
+        const line = (g.box[c.bucket || c.key] || {})[name];
         if (!line) return;
+        if (c.has && !c.has(line)) return;
         appeared = true;
         const acc = out.byCat[c.key];
         acc.perGame.push({ game: g, line: line });
         Object.keys(line).forEach(k => {
           const v = line[k];
           if (typeof v !== 'number') return;
-          // `long` is a best, not a running total -- summing it would
-          // report a season long of every long added together.
-          if (k === 'long') acc.total[k] = Math.max(acc.total[k] || 0, v);
+          // ANY field whose name ends in "long" is a BEST, not a running
+          // total. Matching the literal name 'long' alone was not enough:
+          // fgLong and puntLong carry the same meaning under different
+          // names, and were being summed -- a 31-yard and a 24-yard field
+          // goal reported a season longest of 55.
+          if (/long$/i.test(k)) acc.total[k] = Math.max(acc.total[k] || 0, v);
           else acc.total[k] = (acc.total[k] || 0) + v;
         });
       });
@@ -567,10 +644,12 @@
       const firstIdx = season.games.length
         ? seasonGames.findIndex(g => g.id === season.games[0].id)
         : 0;
-      const fullSeries = seasonGames.slice(Math.max(0, firstIdx)).map(g => ({
-        game: g,
-        line: (g.box[c.key] || {})[name] || {}
-      }));
+      const fullSeries = seasonGames.slice(Math.max(0, firstIdx)).map(g => {
+        const raw = (g.box[c.bucket || c.key] || {})[name] || {};
+        // A game where he punted but did not kick contributes a zero to
+        // the kicking chart, not that game's punting numbers.
+        return { game: g, line: (c.has && !c.has(raw)) ? {} : raw };
+      });
       html += '<div class="card">' +
         teamBand(c.label, acc.perGame.length + ' game' + (acc.perGame.length === 1 ? '' : 's')) +
         '<div class="totals">' +
