@@ -4520,6 +4520,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<div id="ydStripReadout" style="font-size:15px; font-weight:700; color:#1a4d2e; ' +
         'background:#eef6f1; border-left:3px solid #1a7a4c; border-radius:4px; ' +
         'padding:8px 10px; margin-bottom:10px;"></div>' +
+      // WHICH WAY THE DRIVE IS GOING, said out loud.
+      // ----------------------------------------------------------------
+      // The strip already mirrors itself to match the drive, but nothing
+      // on it SAID so -- and a mirrored field looks exactly like an
+      // unmirrored one to somebody who has just glanced down. Getting it
+      // backwards costs a whole play, so the direction is stated rather
+      // than implied.
+      '<div id="ydStripDir" style="display:flex; align-items:center; gap:7px; ' +
+        'font-size:11px; font-weight:700; letter-spacing:0.06em; color:#7c8794; ' +
+        'text-transform:uppercase; margin-bottom:6px;"></div>' +
       '<div id="ydStripField" style="position:relative; height:56px; width:330px; ' +
         'background:#2f6b45; border-radius:6px; overflow:hidden; cursor:pointer; ' +
         'touch-action:none;">' +
@@ -4535,6 +4545,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           'justify-content:center; color:rgba(255,255,255,0.75); font-size:9px; ' +
           'font-weight:700; letter-spacing:0.04em;">TD</div>' +
         ticks +
+        // A row of faint chevrons across the turf, pointing downfield. The
+        // banner above says it in words; this says it where the eye
+        // already is -- on the field, mid-drag.
+        '<div id="ydStripChevrons" style="position:absolute; left:0; right:0; ' +
+          'top:0; bottom:0; display:flex; align-items:center; justify-content:space-around; ' +
+          'color:rgba(255,255,255,0.22); font-size:20px; font-weight:700; ' +
+          'pointer-events:none; user-select:none;"></div>' +
         // Where the ball is now.
         '<div id="ydStripFrom" style="position:absolute; top:0; bottom:0; width:2px; ' +
           'background:#ffffff; opacity:0.85;"></div>' +
@@ -4709,6 +4726,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       el.querySelectorAll('.ydStripTick').forEach(t => {
         t.style.left = pctOf(Number(t.dataset.pos)) + '%';
       });
+      // flip means the offence is attacking to the LEFT.
+      const arrow = flip ? '\u2190' : '\u2192';
+      const dirEl = el.querySelector('#ydStripDir');
+      if (dirEl){
+        const who = (typeof TEAMS === 'object' && TEAMS.teamA) ? '' : '';
+        dirEl.innerHTML =
+          '<span style="font-size:17px; color:#1a4d2e;">' + arrow + '</span>' +
+          '<span>' + (flip ? 'driving left' : 'driving right') + '</span>' +
+          '<span style="margin-left:auto; text-transform:none; font-weight:600; ' +
+            'letter-spacing:0; color:#9aa3b2;">tap where the play ended</span>';
+      }
+      const chev = el.querySelector('#ydStripChevrons');
+      // Six of them, so the direction reads at any width without the
+      // chevrons crowding the yard numbers.
+      if (chev) chev.textContent = new Array(6).fill(arrow).join('');
       const lz = el.querySelector('#ydStripEzLeft'), rz = el.querySelector('#ydStripEzRight');
       // The attacking end zone is a touchdown and the defended one a
       // safety, whichever side of the screen each happens to be on.
