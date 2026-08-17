@@ -4071,6 +4071,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       container.querySelectorAll('.' + idPrefix + '_side').forEach(x => x.classList.remove('picked'));
       b.classList.add('picked');
     }));
+    // A SCORER'S OWN EDIT WINS OVER THE CALCULATOR.
+    // --------------------------------------------------------------------
+    // The punt calculator prefills this box and keeps it in step when the
+    // calculator is corrected. The moment somebody types here themselves --
+    // because there was a return, and the drive did not start where the
+    // ball was downed -- that has to stop. Clearing the flag is what stops
+    // it; from then on the box is theirs.
+    const yl = document.getElementById(idPrefix + '_yardline');
+    if (yl) yl.addEventListener('input', () => { delete yl.dataset.fromCalc; });
     return function getReset(){
       const yardlineEl = document.getElementById(idPrefix + '_yardline');
       const yardline = yardlineEl ? yardlineEl.value.trim() : '';
@@ -4873,14 +4882,31 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // untouched, so it never overwrites a spot already given.
         if (type === 'punt'){
           const spotYl = document.getElementById('pp_spot_yardline');
-          const already = spotYl && spotYl.value.trim();
-          const sidePicked = panel.querySelector('.pp_spot_side.picked');
-          if (spotYl && !already && !sidePicked){
-            const takeover = 100 - newPos;            // flipped to the receiving team
-            const ownSide = takeover <= 50;
-            spotYl.value = String(ownSide ? takeover : 100 - takeover);
-            const btn = panel.querySelector('.pp_spot_side[data-side="' + (ownSide ? 'own' : 'opp') + '"]');
-            if (btn) btn.click();
+          if (spotYl){
+            // IT FOLLOWS THE CALCULATOR, including corrections.
+            // ----------------------------------------------------------
+            // This used to fill only once and only if the spot was
+            // completely untouched. Correcting the calculator -- "it was
+            // the 41, not the 13" -- updated the punt distance and left
+            // the takeover spot on the old number, which is worse than
+            // not prefilling at all: the distance and the spot then
+            // describe two different punts, and nothing on screen says so.
+            //
+            // A value the calculator wrote is the calculator's to change.
+            // A value the SCORER typed is not, which is what the flag
+            // below protects: once they edit the box by hand, the
+            // calculator stops touching it.
+            const ours = spotYl.dataset.fromCalc === '1';
+            const untouched = !spotYl.value.trim() && !panel.querySelector('.pp_spot_side.picked');
+            if (ours || untouched){
+              const takeover = 100 - newPos;          // flipped to the receiving team
+              const ownSide = takeover <= 50;
+              spotYl.value = String(ownSide ? takeover : 100 - takeover);
+              spotYl.dataset.fromCalc = '1';
+              const want = ownSide ? 'own' : 'opp';
+              const btn = panel.querySelector('.pp_spot_side[data-side="' + want + '"]');
+              if (btn && !btn.classList.contains('picked')) btn.click();
+            }
           }
         }
 
@@ -7057,8 +7083,38 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     panel.innerHTML =
       '<p style="font-size:13px; color:#888; margin:0 0 6px;">Bad snap — recorded as a team rush, ' +
       'so no player is charged with the attempt or the yardage.</p>' +
-      '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Yards lost</p>' +
-      '<input autocomplete="off" type="text" id="badsnap_yds" placeholder="0" style="width:80px;">' +
+      '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">' +
+        '<div>' +
+          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Yards lost</p>' +
+          '<input autocomplete="off" type="text" id="badsnap_yds" placeholder="0" style="width:80px;">' +
+        '</div>' +
+        // A CALCULATOR HERE TOO.
+        // ----------------------------------------------------------------
+        // A bad snap is the play where the yardage is hardest to eyeball:
+        // the ball is loose behind the line and the eye follows it, not
+        // the yard markers. A scorer who can see it recovered on the 12
+        // should not have to subtract under time pressure.
+        //
+        // The play panels' calculator could not be reused: it is declared
+        // inside renderPlayPanel and hoisting it out broke every panel
+        // that depends on that closure. This is the same arithmetic in
+        // about twenty lines rather than a refactor of four hundred.
+        '<div style="margin-left:22px; padding-left:22px; border-left:1px solid #d8d8d8;">' +
+          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Or enter recovered on</p>' +
+          '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+            '<button type="button" class="ptoggle bsCalcSide" data-side="own" ' +
+              'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+              TEAMS[computeState().possession].name + '</button>' +
+            '<button type="button" class="ptoggle bsCalcSide" data-side="opp" ' +
+              'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+              TEAMS[otherTeam(computeState().possession)].name + '</button>' +
+            '<input autocomplete="off" type="text" id="bs_calc_yardline" placeholder="yard line" style="width:90px;">' +
+          '</span>' +
+          '<div id="bs_calc_readout" style="font-size:14px; font-weight:600; color:#1a4d2e; ' +
+            'background:#eef6f1; border-left:3px solid #1a7a4c; border-radius:4px; ' +
+            'padding:7px 10px; margin-top:10px;"></div>' +
+        '</div>' +
+      '</div>' +
       '<div style="margin-top:10px;">' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="bs_rec" value="o" checked> Recovered by ' + TEAMS[computeState().possession].name + ' (keeps the ball)</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="bs_rec" value="d"> Recovered by ' + TEAMS[otherTeam(computeState().possession)].name + ' (change of possession)</label>' +
@@ -7080,6 +7136,63 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       document.getElementById('bs_def_box').style.display =
         panel.querySelector('input[name=bs_rec]:checked').value === 'd' ? 'block' : 'none';
     }));
+    // Wire the calculator. A bad snap loses ground from the current spot,
+    // so the arithmetic is one subtraction -- but it is the subtraction a
+    // scorer gets wrong, because fieldPos is possession-relative and the
+    // yard line on the field is not.
+    (function wireBadSnapCalc(){
+      const ylEl = document.getElementById('bs_calc_yardline');
+      const readout = document.getElementById('bs_calc_readout');
+      const yardsEl = document.getElementById('badsnap_yds');
+      if (!ylEl || !readout || !yardsEl) return;
+      const st = computeState();
+      const sideBtns = [...panel.querySelectorAll('.bsCalcSide')];
+      // Pre-select the side the ball is already on, so a snap recovered
+      // behind the line stays one number.
+      let side = st.fieldPos !== null ? (st.fieldPos <= 50 ? 'own' : 'opp') : null;
+      const paint = () => sideBtns.forEach(b => b.classList.toggle('picked', b.dataset.side === side));
+      paint();
+
+      function recompute(){
+        const raw = (ylEl.value || '').trim();
+        const yl = parseInt(raw, 10);
+        if (!side || !raw || !Number.isFinite(yl) || yl < 0 || yl > 50 || st.fieldPos === null){
+          readout.textContent = '';
+          return;
+        }
+        // Possession-relative, the same convention computeState uses.
+        const newPos = side === 'own' ? yl : (100 - yl);
+        const delta = newPos - st.fieldPos;
+        const here = st.fieldPos <= 50
+          ? 'own ' + st.fieldPos : 'opp ' + (100 - st.fieldPos);
+        const there = side === 'own' ? 'own ' + yl : 'opp ' + yl;
+        // A bad snap that GAINS ground is a real thing -- the ball squirts
+        // forward and somebody falls on it past the line -- but this box
+        // is labelled "Yards lost" and holds a positive magnitude. Saying
+        // so is better than writing a number that means the opposite.
+        if (delta > 0){
+          readout.textContent = 'from ' + here + ' to ' + there +
+            ' is a GAIN of ' + delta + ' — enter that as a team rush, not a loss';
+          return;
+        }
+        const lost = Math.abs(delta);
+        readout.textContent = 'from ' + here + ' to ' + there + '  =  ' + lost + ' yards lost';
+        yardsEl.value = String(lost);
+        yardsEl.style.background = '#eef6f1';
+        yardsEl.style.borderColor = '#1a7a4c';
+        yardsEl.style.fontWeight = '700';
+      }
+
+      sideBtns.forEach(b => b.addEventListener('click', () => { side = b.dataset.side; paint(); recompute(); }));
+      ylEl.addEventListener('input', recompute);
+      // Typing in the yards box by hand takes it back from the calculator.
+      yardsEl.addEventListener('input', () => {
+        yardsEl.style.background = '';
+        yardsEl.style.borderColor = '';
+        yardsEl.style.fontWeight = '';
+      });
+    })();
+
     document.getElementById('badsnap_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('badsnap_review').addEventListener('click', () => {
       const n = parseInt((document.getElementById('badsnap_yds').value || '').trim(), 10);
