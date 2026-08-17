@@ -70,7 +70,10 @@
   .team-header-row { display:flex; align-items:center; gap:20px; }
   .team-identity { display:flex; flex-direction:column; align-items:center;
                    gap:6px; flex-shrink:0; min-width:96px; }
-  .team-header-logo { width:56px; height:56px; object-fit:contain; }
+  /* flex-shrink:0 matters: this img sits inside a column flex box that
+     is itself a flex child, and without it a narrow row can squeeze the
+     logo to nothing rather than wrapping. */
+  .team-header-logo { width:56px; height:56px; object-fit:contain; flex-shrink:0; display:block; }
   .team-identity-name { font-weight:800; font-size:15px; color:#1a1a1a;
                         text-align:center; line-height:1.2; }
   .team-header-row .leaders-strip { flex:1; margin-bottom:0; }
@@ -218,9 +221,16 @@
     .print-footer { display:block; position:fixed; bottom:6mm; left:0; right:0;
                     text-align:center; font-size:9px; color:#9aa3b2;
                     letter-spacing:0.04em; }
+    /* Pushed down so the logo sits just above the running footer rather
+       than immediately under the last table.
+       This is a MARGIN, not a pin: CSS cannot anchor an element to the
+       bottom of the final printed sheet, so if the content happens to end
+       low on the page the logo moves to the next one. 42mm is chosen to
+       clear the common case without being so large it usually spills. */
     .print-endmark { display:flex; align-items:center; justify-content:center;
-                     margin:30px 0 0; padding-top:18px;
-                     border-top:1px solid #e6e6e6; }
+                     margin:42mm 0 0; padding-top:18px;
+                     border-top:1px solid #e6e6e6;
+                     page-break-inside:avoid; break-inside:avoid; }
     .print-endmark img { width:38px; height:38px; border-radius:7px; }
 
     /* BACKGROUNDS MUST BE TOLD TO PRINT.
@@ -257,15 +267,15 @@
        space rather than save it. The scoreboard card and the scoring
        summary were butted together; the summary's own rows were tight
        enough that seven scores read as a block rather than seven events. */
-    .header { margin-bottom:26px; }
-    .scoring-summary { margin-top:30px !important; }
+    .header { margin-bottom:46px; }
+    .scoring-summary { margin-top:46px !important; }
     .sec-head { margin:22px 0 14px; }
     .sec-title { font-size:17px; }
     .sec-sub { font-size:11.5px; }
     /* 11px vertical: each score gets its own band of space, which is what
        makes a scoring summary scannable rather than a wall. */
-    .scoring-summary table th, .scoring-summary table td { padding:11px 9px; }
-    .scoring-summary .ss-score { line-height:1.45; }
+    .scoring-summary table th, .scoring-summary table td { padding:17px 9px; }
+    .scoring-summary .ss-score { line-height:1.5; }
     .team-compare .col-head { font-size:13.5px; padding-bottom:9px; }
     .team-compare .stat-row > div { padding:8px 0; font-size:13px; }
     .team-compare .stat-label { font-size:11px; }
