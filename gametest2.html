@@ -24,7 +24,24 @@
   label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
   input:not([type=checkbox]):not([type=radio]), select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
   input[type=checkbox], input[type=radio] { width:auto; margin-right:6px; vertical-align:middle; }
-  button { padding:8px 12px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+  /* touch-action:manipulation -- DOUBLE-TAP ZOOM.
+     On iOS a second tap inside ~300ms is read as a double-tap and zooms
+     the page, so tapping the strip's arrows quickly to walk the marker a
+     few yards zoomed the field instead of moving it. `manipulation` opts
+     out of double-tap zoom (and the tap delay that comes with it) while
+     leaving pinch-zoom and scrolling alone, so the page can still be
+     zoomed deliberately.
+
+     It belongs on the `button` rule rather than on the two arrows,
+     because nothing about this is specific to them: there are 122 buttons
+     on this page and only the pad keys and the launchers had it. Any
+     control tapped twice quickly had the same problem -- the arrows are
+     just the ones that get tapped that way most.
+
+     user-select:none is the same tap, other symptom: iOS also treats a
+     double-tap as select-the-word, so a fast second tap could leave the
+     button's own label highlighted. */
+  button { padding:8px 12px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; cursor:pointer; touch-action:manipulation; -webkit-user-select:none; user-select:none; }
   button.primary { background:#1a7a4c; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
   button.danger { background:#fff; color:#a32d2d; border:1px solid #a32d2d; }
