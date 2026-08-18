@@ -2353,6 +2353,20 @@ function attachNameConfirm(inputId, getTeam, getOrder, onResolve){
       render();
     }));
   };
+  // 'input' AS WELL, so the name appears AS THE NUMBER IS TYPED.
+  // ---------------------------------------------------------------------
+  // Only 'blur' and 'change' were bound, and neither fires while you are
+  // still in the box -- so the only way to find out who #80 was, or to be
+  // offered the choice between two men wearing it, was to tab out and come
+  // back. A scorer entering a number between snaps does not tab.
+  //
+  // render() is idempotent: it rebuilds the box from the field's current
+  // value, so firing it per keystroke costs a redraw and settles on the
+  // same answer 'blur' would have reached. Typing 8 then 0 resolves #8
+  // briefly and then #80, which is the live feedback you want -- and the
+  // manual field's own 'input' listener is registered FIRST, so it has
+  // already set the number and cleared the stale name before this runs.
+  input.addEventListener('input', render);
   input.addEventListener('blur', render);
   input.addEventListener('change', render);
   if ((input.value || '').trim()) render();

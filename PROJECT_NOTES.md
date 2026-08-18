@@ -1825,3 +1825,31 @@ whitelist checks: prefer the failure someone will notice.
 `pp_calc_yardline` still reports no kind, correctly — it is `disabled` until
 the calculator is in use, and `attachPickers` sets `pickerDone` only AFTER a
 kind is found, so the MutationObserver picks it up the moment it is enabled.
+
+## Bind the event the user actually generates (17 August 2026)
+
+`attachNameConfirm` was bound to `blur` and `change`. Neither fires while
+you are still in the box, so typing a jersey number showed nothing: the only
+way to see who #80 was, or to be offered the choice between two men wearing
+it, was to tab out. A scorer entering a number between snaps does not tab.
+
+Binding `input` as well fixes it. `render()` rebuilds the box from the
+field's current value, so it is idempotent — firing per keystroke costs a
+redraw and settles on the same answer `blur` would have reached. Typing 8
+then 0 resolves #8 briefly and then #80, which is the live feedback wanted.
+Ordering is safe because the manual field's own `input` listener is
+registered first and has already set the number and cleared the stale name
+before `render` runs.
+
+This is the third bug this session from the same root: **the code listened
+for an event the interface never produced.** The keypad dispatched `input`
+but not `change`, so `attachNameConfirm` never resolved a name from the pad.
+`attachNameConfirm` listened for `change` but not `input`, so it never
+resolved one from the keyboard either. Both halves were individually
+defensible and together they left a gap that no test could see, because
+`ui_driver.js` dispatches both events on every write and therefore
+satisfies any listener regardless of which one the real control fires.
+
+The rule worth keeping: when wiring a listener, name the actual user action
+that produces it. "Types a number" is `input`. "Leaves the field" is `blur`.
+"Taps a pad key" is whatever the pad dispatches — go and read it.
