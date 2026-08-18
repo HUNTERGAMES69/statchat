@@ -1007,6 +1007,10 @@ function extractNameTag(rawName){
     const segment = plays.slice(startIdx, endIdx);
     const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
     let rushes = 0, rushYds = 0, passes = 0, passYds = 0, totalPlays = 0, totalYds = 0, scoringPlayText = null;
+    // Set only for a TOUCHDOWN, never a field goal -- a made FG has no
+    // PAT/2PT to follow, so tryOutcome must not even be searched for
+    // after one, let alone shown as though it belonged there.
+    let endedInTouchdown = false, tryOutcome = null;
     segment.forEach(p => {
       const e0 = p.effect || {};
       // A penalty is not a play, but its yardage genuinely moves the
@@ -1020,6 +1024,33 @@ function extractNameTag(rawName){
       }
       const r = p.roles;
       if (!r || p.team !== driveTeam) return;
+      // THE TRY THAT FOLLOWS THE TOUCHDOWN, still inside this same drive's
+      // segment -- a PAT/2PT never opens a new drive (no down, no reset,
+      // see findDriveStarts in engine.js), so it was already being walked
+      // over here and simply never inspected for its own outcome.
+      //
+      // Detected by playType === 'pat'/'twopt' specifically -- NOT by the
+      // presence of a .result field, which a field goal's kicker role
+      // also carries. An earlier version of this keyed on .result alone
+      // and silently swallowed made field goals: r.kicker.result === 'g'
+      // matched a FG too, this branch returned early, and the FG's own
+      // scoringPlayText capture below never ran. Caught by testing a made
+      // field goal specifically, not by re-reading the code -- the
+      // assumption that playType was absent from these roles was wrong,
+      // and the .generic `roles.playType = roles.playType || type` line
+      // in the submit code (which runs for every panel, this one
+      // included) is why.
+      const tryRole = r.playType === 'pat' ? r.kicker
+        : r.playType === 'twopt' ? (r.carrier || r.passer) : null;
+      if (tryRole){
+        // p.text is reused verbatim rather than re-derived -- it is
+        // already the exact, correct wording for every outcome this can
+        // have, including the edge cases (a blocked kick returned for two,
+        // a muffed hold, an intercepted 2-point pass) that a short summary
+        // written here would be liable to get wrong or leave out.
+        tryOutcome = { text: p.text, good: tryRole.result === 'g' };
+        return;
+      }
       if (scrimmageTypes.includes(r.playType)) totalPlays++;
       // A LOST fumble carries no statYds ON PURPOSE -- computeState skips
       // the flip for stat plays, so the yardage rides on roles instead
@@ -1050,7 +1081,8 @@ function extractNameTag(rawName){
         }
       }
       const isFgGood = r.playType === 'fg' && r.kicker && r.kicker.result === 'g';
-      if (p.effect && (p.effect.td || isFgGood)) scoringPlayText = p.text;
+      if (p.effect && p.effect.td){ scoringPlayText = p.text; endedInTouchdown = true; }
+      else if (p.effect && isFgGood){ scoringPlayText = p.text; }
     });
     const top = stateAtEnd.possessionTime[driveTeam] - stateBefore.possessionTime[driveTeam];
     let lastPlayText = null;
@@ -1062,7 +1094,13 @@ function extractNameTag(rawName){
         if (segment[i].text && !isAdminMarker(segment[i])){ lastPlayText = segment[i].text; break; }
       }
     }
-    return { team: driveTeam, rushes, rushYds, passes, passYds, totalPlays, totalYds, top, scoringPlayText, lastPlayText };
+    return { team: driveTeam, rushes, rushYds, passes, passYds, totalPlays, totalYds, top, scoringPlayText, lastPlayText,
+      // null unless the drive ended in a touchdown AND a try play was
+      // actually found in the segment -- a TD entered without its try
+      // yet (the scorer has not gotten to it) must not show a blank or
+      // a guess, it must show nothing, same as any other pending state
+      // in this app.
+      tryOutcome: endedInTouchdown ? tryOutcome : null };
   }
 
   function renderDriveSummary(summary){
@@ -1082,10 +1120,22 @@ function extractNameTag(rawName){
     ];
     const outcome = summary.scoringPlayText || summary.lastPlayText || 'No plays recorded';
     const outcomeColor = summary.scoringPlayText ? '#1a7a4c' : '#555';
+    // A SEPARATE, SMALLER LINE, not appended onto the touchdown text --
+    // the scoring line is already long once a player's full name is in
+    // it, and this tile has already been fixed once for wrapping (the
+    // clock hint, on the header line above). Colour carries the same
+    // good/bad meaning it does everywhere else in this app: green for
+    // the attempting team's own success, red for anything else, whether
+    // that is a miss, a block, an interception or a fumble.
+    const tryHtml = summary.tryOutcome
+      ? '<div style="font-size:12px; line-height:1.3; margin-top:2px; color:' +
+        (summary.tryOutcome.good ? '#1a7a4c' : '#a32d2d') + ';">' + summary.tryOutcome.text + '</div>'
+      : '';
     return '<div class="inline-stat-line">' +
       tiles.map(([label, val]) => '<span class="inline-stat-item"><b>' + label + '</b>' + val + '</span>').join('') +
       '</div>' +
-      '<div style="font-size:13px; line-height:1.3;"><strong>' + teamName + ':</strong> <span style="color:' + outcomeColor + '; font-weight:600;">' + outcome + '</span></div>';
+      '<div style="font-size:13px; line-height:1.3;"><strong>' + teamName + ':</strong> <span style="color:' + outcomeColor + '; font-weight:600;">' + outcome + '</span></div>' +
+      tryHtml;
   }
 
 
