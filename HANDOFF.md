@@ -284,3 +284,64 @@ PROJECT_NOTES, "The fixture is kinder than the field".
    carrying UNSEEDED shared numbers. Neither is representable in the current
    fixtures.
 3. Prototype decision (keypad vs strip) is still open and untouched.
+
+---
+
+# SESSION 2, CONTINUED — 18 August 2026
+
+## New standing rule — read this first, every session
+
+**Read the actual `engine.js` and HTML source for the area being touched
+before proposing an approach or writing any code.** Not a memory of a
+similar pattern elsewhere in the app — the real functions, the real
+effect shapes, the real precedent already in the file. Recorded in full,
+with the evidence, in `PROJECT_NOTES.md`'s opening section and in "Read
+the file, not your memory of the file (18 August 2026)."
+
+This was stated explicitly after three real bugs shipped in a single
+draft, all from pattern-matching against an EARLIER fix in the same
+session rather than reading the file being extended: a touchdown credited
+to the wrong team, a state-machine assumption (`newPossession` resets
+state like `flip` does) that is false and had already bitten the muffed-
+punt branch once with a comment saying so, and a checkbox silently
+unwired because the submit code that would have shown the gap was never
+re-read. All three were caught before shipping, only because asked to
+check rather than proceed.
+
+## Punt fumble-during-return — feature complete, NOT YET TEST-COVERED
+
+Built and verified this session, on top of the fumble-merge and picker
+work already in HANDOFF:
+
+- Return yardage is measured to where the ball was lost (fielded → fumble
+  spot), independent of where it is recovered. Andy confirmed this
+  explicitly: the recovery spot sets only the NEXT drive's starting spot.
+- Receiving team recovers their own fumble: ordinary flip, same as any
+  clean return, new-drive marker at the RECOVERY spot rather than the
+  return-end spot.
+- Kicking team recovers: NO flip (`flipEligible: false`), `newPossession:
+  true` instead, mirroring the muffed-punt branch exactly. Charged as a
+  turnover BY THE RECEIVING TEAM via `roles.recovery` — the same field and
+  mechanism `countTurnovers` already uses for a muffed punt the kicking
+  team recovers (dated 14 Aug 2026). No new turnover-counting code needed.
+- A touchdown on either recovery path is credited to WHOEVER RECOVERED
+  (`recTeam`, not hardcoded), and carries `effect.endsDrive: true`
+  alongside the score — required specifically for the kicking-team-
+  recovers case, since that path has no flip to null state otherwise.
+
+**Andy is now implementing and testing punts thoroughly himself before
+kickoff treatment is requested.** Do not build kickoff-return-fumble
+handling until asked. When it is asked for, the punt design is not a
+template to copy blind — re-read `computeState`'s kickoff-specific
+branches (onside recovery, kickoff touchback) before assuming the same
+flip/newPossession split applies unchanged; kickoff has its own guided
+flow (`gr_*` fields, `guided.receivingTeam`) that punt does not, and that
+difference has not been checked yet.
+
+**Not covered by any test suite.** Every scenario above was verified by
+hand this session — real UI drives, `computeState` and `countTurnovers`
+checked before and after, golden re-confirmed unchanged (50/50, byte-
+identical, since the feature is opt-in). None of it is a permanent
+regression case. `coverage_probe.js`'s CASES list is the right home for
+it: fielded either side of the 50, a fumble recovered by each team, a
+fumble-recovery touchdown on each side, and a negative/backward return.

@@ -6,6 +6,44 @@ that reasoning survives even if a chat is lost. Check this alongside
 `TODO.md` at the start of any session touching the game engine, stat
 computation, or reporting.
 
+## STANDING RULE — read the existing code before proposing or writing anything
+
+Before recommending an approach or writing a line of code, read the
+actual `engine.js` and HTML source for the area being touched — the
+real functions, the real effect shapes, the real precedent already
+in the file — not a plan built from memory of a similar-looking pattern
+elsewhere in the app. This applies to every change, however small it
+looks going in.
+
+This is not a style preference. On 17-18 August 2026 this exact
+shortcut produced concrete, real bugs, caught only because the rule
+was then enforced retroactively:
+
+- A punt-return-fumble touchdown credited to the wrong team, because
+  the score-crediting line was copied from the ordinary-return branch
+  above it without checking whether that team assignment still held.
+- The same play would have frozen the down/distance display on the
+  punting team's old down, because `effect.newPossession` was assumed
+  to reset state the way `effect.flip` does. It does not — read
+  directly, `newPossession` is consumed only by drive-boundary
+  detection; only `effect.endsDrive` (or a flip) nulls state in
+  `computeState`. The muffed-punt branch had already hit this exact
+  bug once, fixed it, and left a dated comment explaining why — a
+  comment that would have prevented the repeat entirely if read first.
+- A submit-side `td` checkbox was silently unwired on a new branch —
+  built, referenced, never actually appended to the token string — an
+  omission a first read of the surrounding submit code would have
+  caught immediately.
+
+Reading first is cheap. Reasoning from memory about how a similar
+piece of the app "probably" works is the direct cause of every one of
+the above, and of several earlier failures the same night: a deleted
+tap-handler, a stale two-gate picker fix, a `view.html` guess standing
+in for a fact the engine had started recording. See the dated entries
+below for the fuller accounts. The rule exists because the pattern
+repeated enough times in one session to be worth stating explicitly
+rather than leaving as an implied best practice.
+
 ## Sack yardage methodology (verified August 3-4, 2026)
 
 **Team-level totals subtract sack yardage from Pass Yards, not
@@ -1904,3 +1942,56 @@ golden file is good at answering, and the one nobody can answer by reading.
 `gametest.html` and `gametest2.html` are marked DEAD PROTOTYPE in a banner
 at the top of each. `gametest2` is worth keeping specifically because it
 still holds the field strip.
+
+## Read the file, not your memory of the file (18 August 2026)
+
+The standing rule at the top of this document exists because of tonight,
+specifically. Building touchdown handling for a punt-return fumble, the
+first draft was written by pattern-matching against the rush/pass/sack
+merge from earlier the same session — a similar-looking problem, solved
+correctly, a few hours before. It produced three real bugs, all avoidable
+by reading the actual file instead of a memory of a related fix in it:
+
+**The score went to the wrong team.** `score = { team: def, points: 6 }`
+was copied unedited from the branch above it, where a clean punt return
+can only ever belong to the receiving team. The new branch had two
+possible recovering teams. Reading `engine.js`'s `countTurnovers` and the
+muffed-punt (`pm`) branch directly showed the correct shape immediately:
+`recTeam = kickingRecovers ? off : def`, and the score credited to
+whichever team actually recovered — the exact pattern `pm` already used,
+sitting a few hundred lines away, unread until asked to check.
+
+**The state would have frozen on a stale down.** The kicking-team-recovers
+case uses no flip — the ball never changes hands, so there is nothing to
+hand over — and was written with `effect.newPossession: true` on the
+assumption that this resets state the way a flip does. It does not.
+Grepping `engine.js` for every consumer of `newPossession` found exactly
+one: drive-boundary detection in `findDriveStarts`, which affects reporting,
+not live state. The ONLY thing that nulls `down`/`distance`/`fieldPos` on a
+score without a flip is `effect.endsDrive`, read directly out of
+`computeState`'s effect-handling block. The muffed-punt branch had hit this
+same bug once already and fixed it, with a comment that says so verbatim:
+*"A touchdown ends the drive whichever side recovered. Without this a
+kicking-team recovery returned for a score left the old down and distance
+sitting on screen."* That sentence, read before writing rather than after
+being asked to check, would have prevented the bug outright.
+
+**The checkbox did nothing.** The submit-side code built a `fumrec:`
+token and never appended `td` to it at all — so checking "Touchdown" on
+this branch would have silently done nothing, regardless of how correctly
+`parseInput` handled the token once present. A single read of the
+surrounding submit code, which was already open, would have shown the
+omission immediately; it was found only because the other two bugs
+prompted a full re-read.
+
+All three were caught before shipping, this time, because the person
+using the app said stop treating this as urgent and re-read the code you
+are extending — not because the process caught itself. The lesson kept
+this session, repeatedly, in different shapes (`view.html`'s position
+guess standing in for a fact the engine could by then state directly; the
+picker's ambiguous list never actually gated on the starters list despite
+a comment claiming it was; a deleted tap handler that passed every syntax
+check because deleting live code produces syntactically valid code) is the
+same one: a plausible, similar-looking pattern is not evidence about what
+a specific piece of this codebase actually does. The file is authoritative.
+Memory of the file is not.
