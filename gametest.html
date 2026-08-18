@@ -7344,8 +7344,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const puntTb = document.getElementById('pp_punt_touchback') && document.getElementById('pp_punt_touchback').checked;
         const muffed = document.getElementById('pp_muffed') && document.getElementById('pp_muffed').checked;
         if (puntTb){
-          code = sel.punter + 'pt ' + yds + ' tb';
-          roles = { punter: { team: off, num: sel.punter, yards: parseInt(yds) || 0, blocked: false }, playType: 'punt' };
+          // A TOUCHBACK PUNT IS NOT A ZERO-YARD PUNT.
+          // ------------------------------------------------------------
+          // The yards box lives inside `pp_punt_normal`, which is hidden
+          // the moment Touchback is ticked -- so there was nowhere to type
+          // a distance and `yards('pp_yards')` fell through to '0'. Every
+          // touchback punt went on the books as a 0-yard punt, which drags
+          // a punter's average down by the length of his best kicks.
+          //
+          // The distance is not a judgement call: the ball is spotted on
+          // the receiving team's 20, so the punt travelled from the spot
+          // of the kick to there. fieldPos is possession-relative, so the
+          // 20 the ball ends on is 80 in the punting team's frame.
+          //
+          // Falls back to whatever is in the box if field position is
+          // unknown -- with no spot there is nothing to measure from, and
+          // inventing a number would be worse than the 0.
+          const tbYds = (state.fieldPos !== null)
+            ? String(Math.max(0, 80 - state.fieldPos))
+            : yds;
+          code = sel.punter + 'pt ' + tbYds + ' tb';
+          roles = { punter: { team: off, num: sel.punter, yards: parseInt(tbYds) || 0, blocked: false }, playType: 'punt' };
         } else if (muffed){
           const recTeamTok = document.querySelector('input[name=pp_punt_muffrec]:checked').value;
           const muffRec = (document.getElementById('pp_muff_rec') || {}).value;
