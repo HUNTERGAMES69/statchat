@@ -7114,9 +7114,29 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const recRaw = (document.getElementById('pp_ko_onside_rec') || {}).value;
         const recNum = (recRaw || '').trim() || '?';
         code = sel.kicker + 'ks ' + recTok + ' ' + recNum + (td ? ' td' : '');
-        // The parse branch supplies the roles, including onside:true on
-        // the kicker so the play can be told apart later.
-        roles = null;
+        // ROLES BUILT HERE, mirroring the muffed-kickoff branch exactly
+        // -- NOT left to parseInput's own return value. `pending.roles =
+        // roles` in buildAndReview unconditionally overwrites whatever
+        // parseInput returned with this submit-scope variable, and the
+        // fresh re-parse at save time explicitly carries `pending.roles`
+        // across unchanged rather than reading the fresh parse's own
+        // roles. So the comment this replaced -- "the parse branch
+        // supplies the roles" -- described an intention the wiring never
+        // actually honoured: setting `roles = null` here discarded
+        // parseInput's `{ kicker: {...}, playType: 'kickoff' }` entirely,
+        // and every onside kick ever saved carried NO roles at all --
+        // invisible to the kicker's own stat line, to countTurnovers, to
+        // every picker, to computeBoxScore. Confirmed empirically before
+        // writing this: driving an onside kick through the real UI and
+        // reading `pending.roles` directly showed `null`.
+        roles = { kicker: { team: off, num: sel.kicker, yards: 0, onside: true } };
+        // TEAM UNCONDITIONAL, matching the CORRECTED punt-muff shape --
+        // not the koMuffed pattern this was first written against, which
+        // turned out to still carry the pre-14-Aug bug. Caught only by
+        // cross-checking both punt variants before trusting either as a
+        // template.
+        roles.recovery = { team: recTok === 'k' ? off : def,
+                            num: recNum !== '?' ? recNum : undefined };
       } else if (isTouchback){
         code = sel.kicker + 'ko ' + yds + ' tb';
         roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0, touchback: true } };
@@ -7127,11 +7147,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const muffRet = yards('pp_ko_muff_retyds') || '0';
         code = sel.kicker + 'km ' + yds + ' ' + recTeamTok + ' ' + recNum + ' ' + muffRet + (td ? ' td' : '');
         roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds) || 0 } };
-        if (recNum !== '?'){
-          // Recovering a muff is neither a defensive nor a receiving
-          // stat, so it is recorded for the log only.
-          roles.recovery = { team: recTeamTok === 'k' ? off : def, num: recNum };
-        }
+        // WHICH TEAM RECOVERED IS NOT OPTIONAL. Only the NUMBER is.
+        // ------------------------------------------------------------
+        // This gated the whole role on a typed number, which is exactly
+        // the bug the punt muff branch was fixed for on 14 Aug 2026 --
+        // and this branch was never brought up to date with that fix.
+        // Found by cross-checking BOTH punt muff variants against this
+        // one rather than trusting a single copied pattern: the radio
+        // button already answers which team recovered, so leaving the
+        // recoverer blank (which the panel invites, for exactly the same
+        // reason as punt -- a coach who can't read the number on a pile)
+        // must not throw the team away with it. countTurnovers reads
+        // r.recovery.team; with no team on an unnamed recovery, a real
+        // turnover went uncounted every time nobody was credited.
+        roles.recovery = { team: recTeamTok === 'k' ? off : def,
+                            num: recNum !== '?' ? recNum : undefined };
       } else {
         const retyds = yards('pp_retyds');
         // The returner is optional: a coach often can't read the number

@@ -525,6 +525,32 @@ function countTurnovers(playsList){
       const receiving = otherTeam(r.punter.team);
       counts[receiving] = (counts[receiving] || 0) + 1;
     }
+
+    // A MUFFED KICKOFF OR ONSIDE KICK RECOVERED BY THE KICKING TEAM.
+    // ------------------------------------------------------------------
+    // The exact same gap as the punt rule above, on the same play family
+    // (playType 'kickoff' covers an ordinary return, a muff, AND an
+    // onside kick) -- never fixed here when it was fixed for punt. Found
+    // by reading this function directly, not reported from a game: a
+    // muffed kickoff and an onside kick the kicking team recovers both
+    // already write roles.recovery correctly, and neither had ever been
+    // read by anything counting turnovers.
+    //
+    // Charged to the RECEIVING team, for the same reason as the punt
+    // rule: they are the ones who lost it. The kicking team's own
+    // "drive" was the kick itself, which is not a possession they are
+    // giving up in the down/distance sense, so charging them would
+    // invent a turnover that never happened on their side.
+    //
+    // The test is that the recoverer is on the SAME team as the kicker.
+    // A muff or onside kick the receiving team recovers themselves is
+    // not a turnover -- they keep the ball, exactly as they would have
+    // anyway.
+    if (r.playType === 'kickoff' && r.kicker && r.recovery &&
+        r.recovery.team === r.kicker.team){
+      const receiving = otherTeam(r.kicker.team);
+      counts[receiving] = (counts[receiving] || 0) + 1;
+    }
   });
   return counts;
 }
