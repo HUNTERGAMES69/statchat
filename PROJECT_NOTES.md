@@ -1671,54 +1671,109 @@ the opening kickoff of every affected game.
 
 ## A number nobody reads is a number nobody checks (17 August 2026)
 
-The rush/pass/sack fumble split wrote two plays for one snap for two
-weeks. Thirty-one suites, a property-based fuzzer and 93 NFL games ran
-over it every time.
+The rush/pass/sack fumble split wrote two plays for one snap for two weeks.
+Thirty-one suites, a property-based fuzzer and 93 NFL games ran over it
+every time.
 
 The instinct is to call that a coverage gap. It was not. `ui_driver.js`
-drives all three fumble toggles -- `pp_rush_fumbled_toggle`,
-`pp_pass_fumbled_toggle`, `pp_sack_fumbled_toggle` -- with their recovery
-radios, and `coverage_probe.js` walked every one of those paths on every
-run. The broken path was exercised constantly.
+drives all three fumble toggles and `coverage_probe.js` walked every one of
+those paths on every run. The broken path was exercised constantly.
 
 It survived because **the probe reports and nothing asserted**. Searching
-the whole suite for `d3att`, `d4att` or `oppDowns` returns nothing: the
-down-conversion table is computed by the engine, printed in the stat
-package, and checked by no test. `full_game_check.js` computes a play
-count and `console.log`s it. `coverage_probe.js` describes itself as
-reporting "what actually happened". The bug was printed on every run, in
-output no assertion read.
+the suite for `d3att`, `d4att` or `oppDowns` returns nothing: the
+down-conversion table is computed, printed in the stat package, and checked
+by no test. `full_game_check.js` computes a play count and `console.log`s
+it. The bug was printed on every run, in output no assertion read.
 
-Two things follow, and they are different:
+**Exercising a path is not testing it.** A test that drives code and prints
+the result is a demo; the assertion is the test. Coverage counts measure the
+wrong thing — this bug sat inside covered code.
 
-**Exercising a path is not testing it.** A test that drives code and
-prints the result is a demo. The assertion is the test. Coverage counts
-measure the wrong thing -- this bug sat inside covered code.
+**And it produced plausible numbers.** Nothing crashed, nothing was NaN, no
+known invariant broke. A phantom failed third down looks exactly like a real
+one. Wrongness that looks like data can only be caught by checking a number
+against something independent — the 14 Aug principle applied to the down
+table, where it never had been.
 
-**The bug produced plausible numbers.** Nothing crashed, nothing was NaN,
-no invariant the suite knew about was violated. A phantom failed third
-down looks exactly like a real one. Wrongness that looks like data can
-only be caught by checking a number against something independent, which
-is the Aug 14 principle -- a number that cannot be cross-checked is a
-number nobody trusts -- applied to the down table, where it had never
-been applied.
+`tests/accuracy_check.js` answers both in two layers. Invariants are
+absolute and catch a number wrong the day it was written. The golden
+snapshot is relative and catches a number that moves without anybody meaning
+it to. Neither subsumes the other: a golden generated against a bug defends
+that bug forever, which is exactly why the invariants sit beside it. It
+freezes the box score, not only the roles feeding it — otherwise the sack
+sign error made while writing the fix would have passed, since the roles
+looked right and only the printed number was wrong.
 
-`tests/accuracy_check.js` is the answer to both, in two layers that fail
-for different reasons. Invariants are absolute and catch a number that
-was wrong the day it was written. The golden snapshot is relative and
-catches a number that moves without anybody meaning it to. Neither
-subsumes the other: a golden file generated against a bug defends that
-bug forever, which is precisely why the invariants sit beside it.
+## The fixture is kinder than the field (17 August 2026)
 
-**The snapshot freezes the box score, not just its inputs.** Fingerprinting
-roles and effects would have caught the split, because the split changed
-the inputs. It would NOT have caught the sign error made while fixing it
--- `computeBoxScore` subtracts sack yardage from team rushing, so storing
-the loss negative credits the offense with it. The roles looked right and
-the printed number was wrong. `computeBoxScore` runs inside the harness
-page, so the fingerprint now records what the report pages would actually
-print.
+Four bugs got past `accuracy_check.js` on the day it was written. Every one
+had the same cause: the test fixtures cannot express the conditions the app
+actually meets.
 
-Both layers were watched to fail before being trusted: reverting the
-fumble fix trips all seven fumble paths on the invariant, and flipping
-that sack sign trips four paths on the golden.
+- **`view.html` guessed rush-vs-pass from roster position.** The harness
+  receiver has a proper `WR`, so the guess and the fact agreed and the
+  golden ran green. A real opponent roster has players with no position.
+- **The keypad dispatched only `input`.** `ui_driver.js` dispatches `input`
+  AND `change`, as a real keyboard does. The driver emulated a keyboard
+  faithfully; the pad emulated half of one, so no test could see it.
+- **The picker's ambiguous list ignored the starters gate.** No fixture had
+  a seeded team that also carried unseeded shared numbers.
+- **Half-yardage splits in two report pages** dropped merged-fumble yardage.
+  `accuracy_check` boots `game.html` and never opens a report page.
+
+The pattern is not bad luck. A fixture is written by the same person, on the
+same day, with the same picture in their head as the code — so it encodes
+the assumptions the code makes rather than the mess the field supplies. The
+cases that break things are the ones nobody thought to represent: a player
+with no position, a roster uploaded twice, a number two brothers share, an
+input method that fires half the events.
+
+Practical consequences, in order of value:
+
+1. **Fixtures should be built from real exports, not invented.** The
+   opponent roster in `picker_behaviour_check.js` is the good example — it
+   is deliberately awkward, and its comments say why each row is awkward.
+   Everything else should look like that.
+2. **Emulate the interface, not the intent.** `ui_driver` should fire what
+   the real control fires. Where it fires more, it hides bugs.
+3. **A check that only boots one page can only defend one page.** Three of
+   the four above lived on surfaces `accuracy_check` never loads.
+
+## Ask the play, do not guess from the roster (17 August 2026)
+
+A fumble used to carry no record of what play it ended, so two places
+inferred rush-vs-pass from the carrier's listed position. That is a guess
+standing in for a fact that was simply not recorded.
+
+Once the merged fumble play carried `roles.attempt`, the fact existed and
+both guesses became wrong answers waiting to happen — a running back's
+catch-and-fumble booked as a rush, a receiver with no position on file
+booked as a rush. Both now read `attempt` and keep the position guess only
+as a fallback for plays saved before the field existed.
+
+The general form: when a heuristic exists because information was missing,
+adding that information does not retire the heuristic. Someone has to go
+back and remove it, and the place to look is wherever the old comment
+explains why the guess was necessary.
+
+## Two lists glued are not one list sorted (17 August 2026)
+
+The offensive picker returned `ambiguousList.concat(resolved)`. Each half
+was correctly ordered by recency; the whole was not. Every shared-number
+player outranked every resolved one, so the man who caught a pass on the
+previous snap sat below two players who had not touched the ball.
+
+Nobody chose that rule. It fell out of building the list in two passes, and
+it survived because both halves were individually right and the tests only
+ever asserted within a half.
+
+Merging needs care, because the halves measure recency differently for a
+good reason: a shared number must be attributed by IDENTITY or one catch
+promotes both men wearing the jersey. Both indexes store a play index into
+`plays`, so they compare directly — but the branch must be keyed on whether
+the NUMBER is shared, not on the shape of the list item. The first attempt
+branched on `typeof item === 'object'`; both lists hold objects, so every
+resolved player was looked up in the identity index, every rank came back
+undefined, and the sort ran and changed nothing. It failed silently and
+looked like the merge had simply not worked — the same "guard that quietly
+does nothing" as the three bugs recorded in HANDOFF.

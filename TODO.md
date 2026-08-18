@@ -2050,19 +2050,71 @@ watch for.
   A passing-fouls sub-group or a type-to-filter box would help; Andy's
   call whether it is a problem.
 
-## A fumble during a return has no branch (17 August 2026)
+## 19. 17 August 2026 — fumble merge, picker, and a QC layer
 
-- [ ] **Add a fumble branch to the four return paths**: interception,
-  punt return, kickoff return, FG block return. Copy the
-  `pp_rush_fumbled` pattern — Fumbled toggle, recovery own / opponent /
-  touchback, takeover spot, optional return yards, return touchdown.
-  Note the asymmetry: on a return fumble the recovering team may be the
-  team that just lost the ball, so the branches mean the opposite of the
-  rush case.
+### Closed
 
-  Entering it as two plays, which `GOLDEN_GAME.md` currently prescribes,
-  invents a possession: an interception returned and fumbled reports
-  `{teamA: 2, teamB: 1}` possessions and three drive starts. A return is
-  not a drive. All the CREDITS are correct — which is why this was signed
-  off on 14 August as "no change needed" — only the shape of the game is
-  wrong. See `HANDOFF.md` for the full specification.
+- [x] **Rush/pass/sack fumble wrote two plays.** Merged into one via an
+  attempt token in `parseInput`. Invented a down the game never reached and
+  a phantom entry in the down-conversion table. Dated to 3 Aug, not a
+  regression — verified four ways against git history.
+- [x] **`view.html` drive summary guessed rush-vs-pass from roster
+  position**, and read `statYds` for yardage that a lost fumble does not
+  carry. Both fixed; same guess removed from `engine.js:804`.
+- [x] **Half-yardage splits dropped merged-fumble yardage** in
+  `stat_package.html` and `season_report.html`. A REGRESSION introduced by
+  the fumble merge, found by sweeping all eleven files that key on
+  `playType`.
+- [x] **Picker: ambiguous list was not gated on the starters list.** Now
+  gated on `visible` (seeds + discovered). Unseeded games unchanged.
+- [x] **Picker: `ambiguousList.concat(resolved)`** put shared numbers ahead
+  of everyone regardless of recency. Merged into one sort.
+- [x] **Keypad dispatched `input` but never `change`**, so a pad-entered
+  jersey number never resolved a NAME via `attachNameConfirm`.
+- [x] **`touch-action:manipulation`** on the global `button` rule (122
+  buttons per page, three were covered). Double-tap zoom on iPad.
+- [x] **Shared keypad/keyboard buffer** backported to `gametest`/`gametest2`.
+- [x] **`gametest3` soft-keyboard suppression** via `readonly` on touch
+  devices, with `?softkb=1` to opt out on the device.
+- [x] **`tests/accuracy_check.js`** — invariants + golden snapshot over 50
+  UI paths, including the box score. Both layers watched to fail.
+
+### Open — testing gaps, in priority order
+
+- [ ] **Run `cross_surface.js`.** It did NOT run this session and it is the
+  suite built to catch multi-surface disagreement — three of this session's
+  bugs were exactly that. Also `run_scripted.js` (failed on a missing
+  dependency, so it is UNRUN, not passing) and the NFL corpus.
+- [ ] **Fixtures that are not kinder than the field.** Add probe cases for:
+  a carrier with NO position on file; a seeded team that also carries
+  UNSEEDED shared numbers; a roster row with a name but no position. None
+  of these is representable today, and each maps to a bug that shipped.
+- [ ] **Extend `accuracy_check` beyond `game.html`.** It boots the entry
+  page only, so `view.html`, `stat_package.html` and `season_report.html`
+  are invisible to it.
+- [ ] **Assert the down table.** `d3att`, `d4att`, `d3conv`, `oppDowns`
+  still have no direct assertion anywhere; `accuracy_check` covers them only
+  indirectly through the golden.
+- [ ] **A picker regression test** for this session's three bugs. The
+  existing suite passed throughout all of them.
+
+### Open — cleanup
+
+- [ ] **Dead `RECEIVE_POS` constants** in `recap.html`, `stat_package.html`,
+  `season_report.html`, `broadcast.html` — one definition, zero uses each,
+  and they have drifted from `engine.js` (those four include `SB`).
+- [ ] **`attachPickersLegacy` in `gametest3.html`** is never called. Delete
+  once the file is no longer under test; it is what keeps the stale
+  `PICKER_MODE` comment alive.
+- [ ] **`parseInput` is still duplicated in four HTML files** and is not in
+  `engine.js`. One fumble bug cost twelve-plus edit sites. Consolidating
+  first would have made it one.
+- [ ] `.gitignore` and `sql/schema.sql` still absent from the repo.
+
+### Still open from earlier
+
+- [ ] Prototype decision: keypad vs field strip for `game.html`. Untouched
+  this session; a full-game rehearsal is still the plan.
+- [ ] Historical data: any completed game containing a rush, pass or sack
+  fumble was recorded under the old two-play model and carries a phantom
+  down attempt. Decide whether to re-derive or leave.

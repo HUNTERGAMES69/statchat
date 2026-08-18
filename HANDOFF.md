@@ -163,120 +163,124 @@ what he last downloaded rather than assuming.
 
 # SESSION 2 — 17 August 2026
 
-Everything above predates this section.
+Everything above predates this section. **Two claims in it are false — see
+"Corrections" below before trusting it.**
 
-## Fumble entry — FIXED, one loose end
+## Fumble entry — FIXED
 
-**The bug.** A fumble ending a rush, pass or sack wrote TWO plays: the
-run, then the fumble. That put a down on the board the game never reached
-(a fumble on 2nd & 11 left the rush reading "3rd & 11") and, because
-'fumble' is a scrimmage type, the second half was counted as its own down
-attempt — inventing a failed third down in the conversion table. Silent,
-and it reached the stat package.
+A fumble ending a rush, pass or sack wrote TWO plays. That put a down on
+the board the game never reached (fumble on 2nd & 11 left the rush reading
+"3rd & 11") and, because 'fumble' is a scrimmage type, the second half was
+counted as its own down attempt — inventing a failed third down in the
+conversion table. Silent, and it reached the stat package.
 
-**Not a regression.** The split dated to 3 Aug, confirmed four ways:
-first appearance of its comment, a byte-identical block diff against
-16 Aug, block hashes across every commit since 1 Aug, and the Aug 14
-commit contents. Nothing on 14 Aug touched it — that day's fumble work
-was the muffed-punt turnover count in `engine.js`, plus the TODO entry
-verifying interception → return → fumble as two plays, which is a
-DIFFERENT path and correctly two plays. That entry is very likely why
-fumbles had always seemed fine: it documents the standalone Fumble panel,
-which was never broken.
+**Not a regression.** Dated to 3 Aug, confirmed four ways: first appearance
+of its comment, a byte-identical block diff against 16 Aug, block hashes
+across every commit since 1 Aug, and the 14 Aug commit contents. The 14 Aug
+TODO entry verifying interception → return → fumble as two plays is a
+DIFFERENT path and correctly two plays; it is very likely why fumbles had
+always seemed fine, because it documents the standalone Fumble panel, which
+was never broken.
 
 **The fix.** `parseInput` gained an attempt token, `a:<kind>:<yards>[:<passer>]`,
 stripped by search not position (same pattern as `oob`). The three panels
 pass it instead of pre-pushing. Effect on a LOST fumble is deliberately
 unchanged — `computeState` skips the flip for stat plays, so marking it
 `isStat` would silently cancel the turnover; the yardage rides on `roles`
-and the spot comes from the panel. Own-team recovery IS a stat play, so
-the down advances exactly once. `roles.attempt` carries the credit;
-`playType` stays 'fumble' because 11 files key on it.
+and the spot comes from the panel. Own-team recovery IS a stat play, so the
+down advances exactly once. `roles.attempt` carries the credit; `playType`
+stays 'fumble' because 11 files key on it.
 
-**Verified**: Andy's exact sequence gives `att=2 yds=3 fum=1`. Standalone
-Fumble panel byte-unchanged and re-verified.
+Verified: Andy's sequence gives `att=2 yds=3 fum=1`. Standalone Fumble panel
+byte-unchanged.
 
-**Downstream surfaces also fixed.** `view.html` computed drive stats
-itself and GUESSED rush-vs-pass from the carrier's roster position — a
-completion to a receiver with no position on file landed in RUSHING.
-Same guess at `engine.js:804`. Both now ask `r.attempt` and keep the
-guess only as a fallback for older plays. `view.html` also read `statYds`
-for drive yardage, which a lost fumble does not carry, so the gained
-yards vanished from the drive line.
+### Downstream surfaces — three more places, two found late
 
-**LOOSE END — verify first.** Andy's screenshots showed `1 att, -1 yds`
-where `2 att, 3 yds` was correct. That is exactly what the OLD
-`engine.js` produces alongside a NEW `game.html`. Believed to be a
-partial upload. If both files are confirmed up and the number is still
-wrong, then `attempt` is not surviving persistence — check a saved
-fumble play's roles for the field.
+`playType` is keyed on in eleven files. Fixing the engine was not enough:
 
-## QC — `tests/accuracy_check.js` (new)
+- **`view.html` drive summary** GUESSED rush-vs-pass from the carrier's
+  roster position. A completion to a receiver with no position on file
+  landed in RUSHING. Same guess at `engine.js:804`. Both now read
+  `r.attempt`, keeping the guess only for plays saved before it existed.
+- **`view.html` drive yardage** read `statYds`, which a lost fumble does
+  not carry, so the gained yards vanished from the drive line. Falls back
+  to `attemptYards`.
+- **`stat_package.html` and `season_report.html` half splits** keyed on
+  `playType === 'rush'/'pass'`, so a merged fumble's yardage dropped out of
+  the half totals. **This was a regression introduced by the fumble fix**
+  and found only by sweeping every surface afterwards.
 
-**Why the suite missed it.** Not a coverage gap. `ui_driver.js` drives
-all three fumble toggles and `coverage_probe.js` walked them every run.
-Searching the suite for `d3att` / `d4att` / `oppDowns` returns NOTHING —
-the down table is computed, printed, and asserted nowhere.
-`full_game_check.js` `console.log`s a play count. The bug was printed on
-every run in output no assertion read.
+`recap/stat_package/season_report/broadcast` each define a `RECEIVE_POS`
+constant that is NEVER USED (one def, zero uses). They have drifted — those
+four include `SB`, `engine.js` does not. Worth deleting.
 
-Two layers, failing for different reasons:
-- **Invariants** — one entry writes one play; log text and state machine
-  agree on the down; a possession change starts a new series; every saved
-  play has a `playType`.
-- **Golden** (`accuracy.golden.json`) — frozen fingerprint of 50 paths
-  including the BOX SCORE, not just the roles feeding it.
+## Picker — three separate bugs, all in the opponent's list
 
-Both watched to fail before being trusted: reverting the fumble fix trips
-all seven fumble paths; flipping the sack sign trips four.
+Symptom: recency sorting appeared dead for St. Thomas More and fine for
+Neville. **Andy HAD seeded the starters** — that was never the problem, and
+two wrong diagnoses were given before the real one.
 
-**Known limits — read before relying on it.**
-- It boots `game.html` only. `view.html` has its OWN drive arithmetic and
-  is invisible to it. `cross_surface.js` is the suite for that and was
-  NOT run this session.
-- **The golden ran green straight through the `view.html` guess bug**,
-  because the harness roster gives its receiver a proper `WR` position.
-  The fixture is kinder than Andy's roster. A probe case whose carrier
-  has NO position on file is the single highest-value test to add next.
-- Cases are single plays from a clean drive; multi-play sequences and
-  drive-level numbers are not fingerprinted.
-- A golden blesses current behaviour. `--update` prints the diff first;
-  read every line.
+1. **The ambiguous list was not gated on the starters list.** It walked
+   EVERY shared number on the roster and narrowed only on position and on
+   *named* seeds. A number nobody seeded and nobody had used was still
+   offered, twice, with `?`. On an opponent roster uploaded offense-and-
+   defense-separately that is most of the squad. Fixed with `if (!visible[num]) return;`
+   after the has-played check. Unseeded games are unchanged, because
+   `visible` falls back to the whole roster when no seeds exist.
+2. **The two lists were glued, not merged.** `ambiguousList.concat(resolved)`
+   put every shared-number player ahead of every resolved one, so recency
+   only competed within a bucket. Now one list sorted once: identity ranking
+   for shared numbers, number ranking for everyone else, concat order kept
+   as the tiebreak so the pre-kickoff picker is unchanged. Only the man who
+   actually played is promoted — `['80','83','80']`, not both #80s.
+3. **The keypad dispatched only `input`, never `change`.** `attachNameConfirm`
+   binds `blur` and `change`, so a jersey number entered on the pad set the
+   number and never resolved the NAME. Not the cause of the sort problem,
+   but it is why hand-entered players get a name at all, which shared-number
+   attribution and box-score bucketing depend on. All picker writers now
+   dispatch both, as a real keyboard does.
 
-## Prototype changes (all three files)
+## Prototypes
 
-1. **Shared keypad/keyboard buffer** backported to `gametest`/`gametest2`;
-   previously only in `gametest3`. Opening the pad then typing meant Done
-   committed a stale buffer over the typed value. Clock affected too.
+1. **Shared keypad/keyboard buffer** backported to `gametest`/`gametest2`.
+   Opening the pad then typing meant Done committed a stale buffer over the
+   typed value. Clock affected too.
 2. **`gametest3` uses `readonly` on touch devices**, not `inputmode="none"`,
    gated on `(hover: none) and (pointer: coarse)`. `?softkb=1` opts out on
-   the device without another upload.
-3. **`touch-action:manipulation`** on the global `button` rule — 122
-   buttons per page had the double-tap-zoom defect, only three were
-   covered. `game.html` now has it too.
+   the device. NOTE: this makes the pad the ONLY entry route on iPad, which
+   is what made bug 3 above unavoidable there.
+3. **`touch-action:manipulation`** on the global `button` rule — 122 buttons
+   per page had the double-tap-zoom defect, only three were covered.
 
 ## Corrections to the section above this one
 
-- **"PICKER_MODE is the ONLY difference between gametest and gametest2"
-  is FALSE.** gametest2 also has the strip's position mode and the
-  `applyOutcome` extraction — 163 lines gametest lacks. gametest's strip
-  is older AND unreachable. If the strip wins, promote gametest2/3's.
+- **"The offensive picker's ambiguous list is now gated on the starters
+  list" is FALSE.** It was gated on named seeds only. This wrong claim cost
+  several rounds of misdiagnosis. Now true as of this session.
+- **"PICKER_MODE is the ONLY difference between gametest and gametest2" is
+  FALSE.** gametest2 also has the strip's position mode and the
+  `applyOutcome` extraction — 163 lines gametest lacks. gametest's strip is
+  older AND unreachable. If the strip wins, promote gametest2/3's.
 - `attachPickersLegacy` in gametest3 is dead code, never called.
-- `tests/ui_driver.js`, `README.md`, `run_qa.js`, `convert.js` ARE
-  uploaded; only `.gitignore` is missing. `sql/schema.sql` still absent.
+- `tests/ui_driver.js`, `README.md`, `run_qa.js`, `convert.js` ARE uploaded;
+  only `.gitignore` is missing. `sql/schema.sql` still absent.
 
-## iPad
+## QC — `tests/accuracy_check.js` (new)
 
-Add to Home Screen works — the meta tags are already there. Do NOT use
-the Fullscreen API: focusing an input drops out of it. Standalone mode
-has a SEPARATE localStorage jar from Safari, so the offline queue does
-not carry across — pick one and stay in it for a whole game. URL freezes
-at install, so settle `?softkb=1` in plain Safari first and install
-`dashboard.html`, not a game URL.
+Invariants (one entry writes one play; log text and state agree on the down;
+possession change starts a new series; every saved play has a playType) plus
+a golden snapshot of 50 paths including the BOX SCORE, not just the roles
+feeding it. Both watched to fail before being trusted.
+
+**It did not catch any of the four bugs found after it was written.** See
+PROJECT_NOTES, "The fixture is kinder than the field".
 
 ## Next
 
-1. Confirm the upload, then re-check the fumble numbers.
-2. Add the no-position-on-file probe case.
-3. Run the FULL suite and the NFL corpus — `run_scripted.js` and
-   `cross_surface.js` did not run this session.
+1. Full suite + NFL corpus. `run_scripted.js` and **`cross_surface.js`**
+   have NOT run this session — the latter is the one built to catch exactly
+   the multi-surface bugs that got through.
+2. Probe case: a carrier with NO position on file, and a seeded team
+   carrying UNSEEDED shared numbers. Neither is representable in the current
+   fixtures.
+3. Prototype decision (keypad vs strip) is still open and untouched.
