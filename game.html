@@ -8506,6 +8506,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (ydsEl.dataset.autofill !== '1') return;
       delete ydsEl.dataset.autofill;
       ydsEl.style.background = ''; ydsEl.style.borderColor = ''; ydsEl.style.fontWeight = '';
+      document.getElementById('pen_half_dist_btn').classList.remove('picked');
     });
     panel.querySelectorAll('.penTeamBtn').forEach(b => b.addEventListener('click', () => {
       penTeam = b.dataset.team;
@@ -8532,6 +8533,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // dropdown's own "rebuild, don't patch" rule above -- a coach who
       // picks a foul, sees the suggestion, then picks a DIFFERENT foul
       // should see THAT one's numbers, not a mix of old and new.
+      document.getElementById('pen_half_dist_btn').classList.remove('picked');
+      document.getElementById('pen_half_readout').style.display = 'none';
       if (p && p.yards !== undefined){
         ydsEl.value = String(p.yards);
         ydsEl.dataset.autofill = '1';
@@ -8576,6 +8579,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       ydsEl.style.background = '#eef6f1'; ydsEl.style.borderColor = '#1a7a4c'; ydsEl.style.fontWeight = '700';
       readout.style.color = '#1a7a4c';
       readout.textContent = 'Half the distance to the goal: ' + half + (half === 1 ? ' yard.' : ' yards.');
+      // .picked is the app's own gold "this is the active choice" cue,
+      // used everywhere else in this panel (the team buttons, the three
+      // toggles) -- applying it here too, rather than only changing the
+      // readout text below the button, so a click on this one looks and
+      // reads the same way every other selection in the app already does.
+      document.getElementById('pen_half_dist_btn').classList.add('picked');
     });
     document.getElementById('pen_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('pen_review').addEventListener('click', () => {
