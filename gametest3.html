@@ -1794,6 +1794,23 @@ function offenseEligible(team, role){
         ambiguousList.push({ num, name: nm, resolvedName: nm });
         return;
       }
+      // GATED ON THE STARTERS LIST, exactly like the resolved list below.
+      // ------------------------------------------------------------
+      // This loop walked EVERY shared number on the roster and narrowed
+      // only on position and on named seeds, so a number nobody seeded
+      // and nobody had used was still offered -- twice, with '?' -- and
+      // then prepended ahead of the man who had just carried. On an
+      // opponent roster where offense and defense are uploaded
+      // separately, that is most of the squad, and it read as the
+      // starters list being ignored.
+      //
+      // `visible` is the seeds plus whoever has been discovered in play,
+      // and it falls back to the whole roster when no seeds were set --
+      // so an unseeded game is unchanged, and a seeded one now honours
+      // what the coach actually said. The other man is not lost: typing
+      // the number brings up the same choice, and the branch above
+      // promotes him permanently the moment he plays.
+      if (!visible[num]) return;
       // A NAMED SEED IS THE ANSWER TO "WHICH ONE".
       // ------------------------------------------------------------
       // If the coach resolved this number in the starters list, offering
