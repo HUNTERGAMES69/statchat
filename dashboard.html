@@ -106,6 +106,16 @@
   .season-record .rec-lbl { font-size:10.5px; text-transform:uppercase;
                             letter-spacing:0.05em; color:#9aa3b2; }
   .season-record .rec-item { display:flex; flex-direction:column; gap:2px; }
+  .season-record .rec-empty { font-size:14px; color:#c7ccd6; }
+  /* Pushed to the far edge of the flex row regardless of how many
+     .rec-item blocks precede it -- margin-left:auto claims all the
+     leftover space for itself, which is the standard way to right-align
+     one child in an otherwise left-packed flex row. On the narrow
+     breakpoint the row already switches to justify-content:space-between,
+     which independently pushes the LAST child to the end too, so the two
+     rules agree there rather than fight. */
+  .season-record .rec-reports { margin-left:auto; padding:8px 16px; border-radius:8px;
+    font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap; }
   @media (max-width: 700px) {
     /* Spread rather than clustered: three items on a phone read better
        apart than bunched at the left with dead space to the right. */
@@ -168,10 +178,11 @@
         </div>
       </div>
       <p class="sub" id="signedInAs"></p>
-      <!-- Season record. Hidden until there is at least one FINAL game to
-           count -- an empty band reading 0-0 at the start of a season is
-           not a record, it is the absence of one, and it reads as a
-           result. Filled by renderSeasonRecord(). -->
+      <!-- Season record AND the Stats/Reports button's home. Always
+           visible once renderSeasonRecord runs -- "hidden" here is only
+           the pre-JS state, removed on first render regardless of
+           whether there is a record yet, so the button stays reachable
+           even in an empty season. Filled by renderSeasonRecord(). -->
       <div id="seasonRecord" class="hidden"></div>
     </div>
 
@@ -185,7 +196,6 @@
           <select id="seasonPicker" style="font-size:13px; color:#555; border:1px solid #ddd; border-radius:6px; padding:3px 6px; background:#fff;"></select>
           <button type="button" id="refreshGamesBtn" class="secondary" style="font-size:13px; padding:3px 10px; margin-left:6px;">Refresh</button>
         </div>
-        <a class="button-link secondary" id="reportsLink" href="reports.html">Reports</a>
       </div>
       <p class="sub" id="seasonSummary"></p>
       <a class="button-link" id="newGameLink" href="create_game.html" style="display:inline-block; margin-bottom:12px;">+ New game</a>
@@ -202,6 +212,12 @@
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  // Read by renderSeasonRecord on every call, not just once at load --
+  // that function rebuilds its element's innerHTML on every season
+  // change and every manual refresh, which would silently strip a color
+  // applied only when the team first loads.
+  let teamPrimaryColor = null, teamSecondaryColor = null;
 
   function luminanceOf(hex){
     if (!hex || hex.length < 7) return 0.5;
@@ -332,6 +348,8 @@
         document.getElementById('teamHeading').style.color = team.primary_color;
         document.getElementById('newGameLink').style.background = team.primary_color;
         if (team.secondary_color) document.getElementById('newGameLink').style.color = team.secondary_color;
+        teamPrimaryColor = team.primary_color;
+        teamSecondaryColor = team.secondary_color || null;
       }
       if (team.logo_url){
         const logo = document.getElementById('teamLogo');
@@ -533,14 +551,17 @@
     const el = document.getElementById('seasonRecord');
     if (!el) return;
     const r = seasonRecord(games);
-    // Nothing final yet: no band at all. "0-0" is not a record, it is the
-    // absence of one, and showing it reads as a result.
-    if (r.played === 0){ el.classList.add('hidden'); el.innerHTML = ''; return; }
     const wl = (w, l) => w + '\u2013' + l;
     const overall = r.t ? wl(r.w, r.l) + '\u2013' + r.t : wl(r.w, r.l);
-    el.innerHTML =
-      '<div class="season-record">' +
-        '<div class="rec-item">' +
+    // ALWAYS VISIBLE now, whether there is a record yet or not -- the
+    // band is the Stats/Reports button's permanent home, and a button
+    // that vanishes along with an empty record is not always reachable.
+    // "0-0" would still read as a result rather than the absence of one,
+    // so the empty case gets a short message of its own instead of three
+    // zeroed-out stat blocks.
+    const statsHtml = r.played === 0
+      ? '<div class="rec-empty">No games played yet</div>'
+      : '<div class="rec-item">' +
           '<span class="rec-big">' + overall + '</span>' +
           '<span class="rec-lbl">' + r.played + ' played</span>' +
         '</div>' +
@@ -551,9 +572,24 @@
         '<div class="rec-item">' +
           '<span class="rec-val">' + wl(r.awayW, r.awayL) + '</span>' +
           '<span class="rec-lbl">Away</span>' +
-        '</div>' +
+        '</div>';
+    el.innerHTML =
+      '<div class="season-record">' +
+        statsHtml +
+        '<a class="rec-reports" id="reportsLink" href="reports.html">Stats / Reports</a>' +
       '</div>';
     el.classList.remove('hidden');
+    // Coloured here, not by a CSS default, because the team's colour is
+    // per-school and only known at runtime -- the same reasoning already
+    // applied to newGameLink, just re-run every time this element is
+    // rebuilt rather than once at page load. Falls back to the band's own
+    // white-on-navy palette if a team record loaded with no colour set,
+    // rather than an unstyled/invisible button.
+    const reportsBtn = document.getElementById('reportsLink');
+    if (reportsBtn){
+      reportsBtn.style.background = teamPrimaryColor || '#ffffff';
+      reportsBtn.style.color = teamSecondaryColor || '#1a1a2e';
+    }
   }
 
   function renderGames(games){
