@@ -1899,7 +1899,43 @@ function offenseEligible(team, role){
       return (sa === -1 ? 999 : sa) - (sb === -1 ? 999 : sb);
     });
   }
-  return ambiguousList.concat(resolved);
+  // ONE LIST, SORTED ONCE -- not two lists glued together.
+  // --------------------------------------------------------------------
+  // `ambiguousList.concat(resolved)` put every shared-number player ahead
+  // of every resolved one, so recency only ever competed WITHIN a bucket.
+  // A seeded #80 who had not touched the ball still outranked the man who
+  // caught a pass on the previous snap, because one was ambiguous and the
+  // other was not. That is not a rule anybody wants; it was an artefact of
+  // building the list in two halves.
+  //
+  // Recency is measured differently in each half, for a good reason: a
+  // shared number must be attributed by IDENTITY, or one catch promotes
+  // both men wearing the jersey. Both indexes store the same thing -- a
+  // play index into `plays` -- so they compare directly. A shared-number
+  // play that recorded no name yields no recency at all, which is the
+  // honest answer: we do not know which of them it was.
+  //
+  // The concat order is kept as the TIEBREAK, so among players nobody has
+  // used yet the picker looks exactly as it did before: shared numbers
+  // first, then the seeded order.
+  // Keyed off `ambiguous`, NOT off the item's shape. Both lists hold
+  // objects -- resolved entries are {num,name}, ambiguous ones carry a
+  // resolvedName as well -- so a typeof test silently sent every resolved
+  // player down the identity path, where they have no entry, and ranked
+  // the whole list undefined. It sorted, and changed nothing.
+  const rankOf = (item) => ambiguous[item.num]
+    ? playedThisRole[identityKey(item.num, item.resolvedName)]
+    : usedInRole[item.num];
+  return ambiguousList.concat(resolved)
+    .map((item, i) => ({ item, i, r: rankOf(item) }))
+    .sort((a, b) => {
+      if (a.r === undefined && b.r === undefined) return a.i - b.i;
+      if (a.r === undefined) return 1;
+      if (b.r === undefined) return -1;
+      if (a.r !== b.r) return b.r - a.r;
+      return a.i - b.i;
+    })
+    .map(x => x.item);
 }
 // Most recent play index at which a player filled any of these roles.
 // Every picker sorts by this: the player who just did the thing is far
