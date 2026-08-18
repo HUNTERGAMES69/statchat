@@ -1777,3 +1777,51 @@ resolved player was looked up in the identity index, every rank came back
 undefined, and the sort ran and changed nothing. It failed silently and
 looked like the merge had simply not worked — the same "guard that quietly
 does nothing" as the three bugs recorded in HANDOFF.
+
+## The strip is parked, not discarded (17 August 2026)
+
+`gametest3.html` no longer contains the field strip. Andy's call: the
+prototype tests one proposition — the pop-up numeric keypad, on every input
+field, opened by tapping the box — and a second control beside the yardage
+boxes muddied it. Removing the strip took about 23KB out of the file:
+`buildStrip`, `openStrip`, the `.stripBtn` click branch, the launcher entry
+and the button injected next to yardage and yard-line fields.
+
+**Where the code went.** Nowhere — `gametest2.html` still carries the full
+implementation, byte-identical to what was removed, and git holds it either
+way. Nothing needs reconstructing if the strip comes back; it needs copying.
+That is the reason it was deleted outright rather than left dormant behind a
+flag: dead code in a file under test is how `attachPickersLegacy` and the
+stale `PICKER_MODE` comment came about.
+
+A few strip declarations survive in `gametest3` — `stripEl`, `stripTarget`,
+`stripTargetId`, `stripSuppressClose` and `closeStrip` itself, which is
+still called from six defensive close sites. With nothing to build a strip,
+`closeStrip` is a no-op guard. Left in place deliberately: removing it means
+editing six unrelated call sites for no behavioural gain. It should go when
+the prototype is promoted or retired, not before.
+
+## Default to the pad, list the exceptions (17 August 2026)
+
+`fieldKind` matched jersey fields with `/_manual$/`, anchored. That silently
+missed EIGHT live fields: `pp_credit_manual_rushfum`, `_passfum`, `_sackfum`,
+`_pb` and `_fgb` all carry a suffix after `_manual`, and `pp_muff_rec`,
+`pp_ko_onside_rec` and `pp_ko_muff_rec` matched nothing at all. Those boxes
+had no picker whatsoever — on a touchscreen, nothing to tap.
+
+It is now inverted: everything is a jersey field unless it matches clock,
+yard line or yardage, or appears on a two-name exception list. `manualText`
+describes a play in words and `code` is the hidden staging field the review
+step reads; on a touch device a classified field also becomes `readOnly`, so
+misclassifying either would make it impossible to fill rather than merely
+awkward.
+
+The point is which way the mistake falls. Matching patterns means a field
+nobody thought about gets NO pad, which is invisible until a scorer needs it
+mid-drive. Defaulting means it gets a pad it may not want, which is visible
+the first time anyone opens the panel. Same class of reasoning as the
+whitelist checks: prefer the failure someone will notice.
+
+`pp_calc_yardline` still reports no kind, correctly — it is `disabled` until
+the calculator is in use, and `attachPickers` sets `pickerDone` only AFTER a
+kind is found, so the MutationObserver picks it up the moment it is enabled.
