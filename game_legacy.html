@@ -1,26 +1,4 @@
 <!DOCTYPE html>
-<!--
-  ============================================================================
-  DEAD PROTOTYPE — DO NOT EDIT, DO NOT DEPLOY.               17 August 2026
-  ============================================================================
-  Superseded on 17 Aug 2026 when gametest3 was promoted to `game.html`.
-  Kept for reference only; NOT maintained. Every fix from that day forward
-  goes to `game.html`, and this file will drift out of date immediately.
-
-  What this file was: one of three input prototypes.
-    gametest.html   keypad button beside every field
-    gametest2.html  field strip button for yardage and yard line
-    gametest3.html  tap the field to open the keypad  <-- CHOSEN
-
-  IT STILL CONTAINS THE FIELD STRIP. That is the only reason to keep it:
-  the strip implementation lives on here and in git, so bringing it back is
-  a copy rather than a rewrite. See PROJECT_NOTES, "The strip is parked,
-  not discarded".
-
-  The live fallback is `game_legacy.html`, NOT this file.
-  ============================================================================
--->
-
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -46,24 +24,7 @@
   label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
   input:not([type=checkbox]):not([type=radio]), select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
   input[type=checkbox], input[type=radio] { width:auto; margin-right:6px; vertical-align:middle; }
-  /* touch-action:manipulation -- DOUBLE-TAP ZOOM.
-     On iOS a second tap inside ~300ms is read as a double-tap and zooms
-     the page, so tapping the strip's arrows quickly to walk the marker a
-     few yards zoomed the field instead of moving it. `manipulation` opts
-     out of double-tap zoom (and the tap delay that comes with it) while
-     leaving pinch-zoom and scrolling alone, so the page can still be
-     zoomed deliberately.
-
-     It belongs on the `button` rule rather than on the two arrows,
-     because nothing about this is specific to them: there are 122 buttons
-     on this page and only the pad keys and the launchers had it. Any
-     control tapped twice quickly had the same problem -- the arrows are
-     just the ones that get tapped that way most.
-
-     user-select:none is the same tap, other symptom: iOS also treats a
-     double-tap as select-the-word, so a fast second tap could leave the
-     button's own label highlighted. */
-  button { padding:8px 12px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; cursor:pointer; touch-action:manipulation; -webkit-user-select:none; user-select:none; }
+  button { padding:8px 12px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
   button.primary { background:#1a7a4c; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
   button.danger { background:#fff; color:#a32d2d; border:1px solid #a32d2d; }
@@ -1805,6 +1766,25 @@ function offenseEligible(team, role){
   // point of the whole shared-number fix.
   const playedThisRole = roleKey ? lastUsedByIdentity(team, [roleKey]) : {};
   Object.keys(ambiguous).forEach(num => {
+    // A SHARED NUMBER DOES NOT EXCUSE A PLAYER FROM THE STARTERS LIST.
+    // ------------------------------------------------------------------
+    // This loop walked EVERY shared number on the roster and admitted
+    // anyone whose recorded position fitted the role. `visible` -- the
+    // seeded starters plus whoever has been discovered -- was never
+    // consulted, so a six-man starters list produced eleven buttons on a
+    // roster with twenty-two shared numbers, and none of the extras were
+    // players the coach had named.
+    //
+    // The rule was already written one line up for the resolved list.
+    // This is the same rule, applied to the half of the list that was
+    // missing it: position tells you WHETHER he could play the role,
+    // `visible` tells you whether anybody expects him to.
+    //
+    // Not a bare `return`, because two overrides below outrank the seed --
+    // a man who has ALREADY played this role, and a seed that names him
+    // specifically. Both are stronger statements than "not seeded", so
+    // they are tested first and this gate only stops the rest.
+    const inVisible = !!visible[num];
     ambiguous[num].forEach(entry => {
       const nm = typeof entry === 'string' ? entry : entry.name;
       const pos = (typeof entry === 'string' ? '' : (entry.position || '')).toUpperCase().trim();
@@ -1857,6 +1837,8 @@ function offenseEligible(team, role){
         ambiguousList.push({ num, name: nm, resolvedName: nm });
         return;
       }
+      // Neither override applied, so the starters list decides.
+      if (!inVisible) return;
       if (allowedPos && pos){
         // The entry's OWN position is more specific evidence than a
         // seed, which is keyed by number and so cannot tell these two
@@ -4070,6 +4052,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const takingOver = kickingRecovers ? guided.kickingTeam : guided.receivingTeam;
 
         let text, effect, touchbackRole = null;
+        // The most recent kickoff in this game, for crediting an outcome
+        // that arrives as its own play.
         function kickoffJustRecorded(){
           for (let i = plays.length - 1; i >= 0; i--){
             const r = plays[i] && plays[i].roles;
@@ -4098,9 +4082,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         } else if (touchback){
           text = TEAMS[guided.receivingTeam].name + ' — TOUCHBACK';
           effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
-          // See game.html: the guided flow writes the kick and its outcome
-          // as two plays, so the touchback has to name the kicker it
-          // belongs to or it is never counted.
+          // CREDIT THE TOUCHBACK TO THE KICKER.
+          // ------------------------------------------------------------
+          // The guided flow writes the kick and its outcome as TWO plays,
+          // because the outcome is not known when the kick is recorded.
+          // So the kickoff play carried the kicker and no touchback, the
+          // outcome play carried the touchback and no kicker, and the
+          // stat package showed 1 kickoff at 0% touchbacks -- a number
+          // that is wrong in the one direction a kicker would mind.
+          //
+          // Read back off the kickoff that was just written rather than
+          // threaded through the guided state: the play IS the record, and
+          // a second copy of the kicker in a state object is a second
+          // thing that can disagree.
           const koKick = kickoffJustRecorded();
           if (koKick) touchbackRole = { team: koKick.team, num: koKick.num };
         } else {
@@ -4115,6 +4109,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         pushAndPersist({ id: nextId++, text, effect, team: takingOver, quarter: guided.quarter,
           roles: Object.assign({ playType: 'kickoff_return' },
             (!muffed && !onside && returnerNum) ? { defense: { team: guided.receivingTeam, num: returnerNum } } : {},
+            // A touchback credit, NOT a second kickoff. The engine counts
+            // kickoffs from playType 'kickoff' and would double them if
+            // this play claimed to be one.
             touchbackRole ? { kickoffTouchback: touchbackRole } : {}) });
         const receivingName = TEAMS[takingOver].name;
         const receivingTeamKey = takingOver;
@@ -4389,918 +4386,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       one('int', 'Intercepted') + '</div>';
   }
 
-  // ===================================================================
-  // PROTOTYPE ONLY -- gametest.html. THE YARDAGE WHEEL.
-  // ===================================================================
-  // Two columns, TENS and ONES, ten items each. Andy suggested 0-10 and
-  // 20-99; tens+ones covers the same ground with no gap at 11-19 and the
-  // same amount of travel -- a wheel of 80 items would be a scroll, not
-  // a flick.
-  //
-  // Native scroll-snap does the work. Momentum, rubber-banding and the
-  // feel of the thing under a finger are the browser's, and no library
-  // reproduces them faithfully. The only JavaScript is reading which row
-  // settled under the window.
-  const WHEEL_ROW = 46;          // px per row; also the snap interval
-  const WHEEL_VISIBLE = 3;       // rows in the window -- one centred, one either side
-
-  let wheelEl = null, wheelTarget = null;
-
-  function buildWheel(){
-    if (wheelEl) return wheelEl;
-    const pad = WHEEL_ROW * Math.floor(WHEEL_VISIBLE / 2);
-    const column = (cls) =>
-      '<div class="ydWheelCol" data-col="' + cls + '" style="' +
-        'height:' + (WHEEL_ROW * WHEEL_VISIBLE) + 'px; overflow-y:auto; scroll-snap-type:y mandatory; ' +
-        'width:76px; -webkit-overflow-scrolling:touch; scrollbar-width:none;">' +
-        '<div style="height:' + pad + 'px;"></div>' +
-        [0,1,2,3,4,5,6,7,8,9].map(n =>
-          '<div class="ydWheelItem" data-val="' + n + '" style="height:' + WHEEL_ROW + 'px; ' +
-            'scroll-snap-align:center; display:flex; align-items:center; justify-content:center; ' +
-            'font-size:24px; font-weight:700; color:#9aa3b2;">' + n + '</div>').join('') +
-        '<div style="height:' + pad + 'px;"></div>' +
-      '</div>';
-
-    const el = document.createElement('div');
-    el.id = 'ydWheel';
-    el.style.cssText = 'position:absolute; z-index:9000; display:none; background:#fff; ' +
-      'border:1px solid #ccc; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.22); ' +
-      'padding:10px 12px 12px;';
-    el.innerHTML =
-      '<div style="display:flex; align-items:center; justify-content:space-between; ' +
-        'font-size:12px; font-weight:700; color:#8a8a8a; margin-bottom:6px;">' +
-        '<span>TENS</span><span>ONES</span></div>' +
-      '<div style="position:relative; display:flex; gap:10px;">' +
-        // The window: a band across both columns showing which row counts.
-        '<div style="position:absolute; left:-4px; right:-4px; top:' + pad + 'px; ' +
-          'height:' + WHEEL_ROW + 'px; border-top:2px solid #1a4d2e; border-bottom:2px solid #1a4d2e; ' +
-          'background:rgba(26,77,46,0.06); border-radius:6px; pointer-events:none;"></div>' +
-        column('tens') + column('ones') +
-      '</div>' +
-      '<div style="display:flex; gap:8px; margin-top:10px;">' +
-        '<button type="button" id="ydWheelDone" style="flex:1; padding:11px; border-radius:8px; ' +
-          'border:none; background:#1a4d2e; color:#fff; font-size:15px; font-weight:700; ' +
-          'cursor:pointer;">Done</button>' +
-      '</div>';
-    document.body.appendChild(el);
-
-    const cols = [...el.querySelectorAll('.ydWheelCol')];
-    const settled = (col) => Math.max(0, Math.min(9, Math.round(col.scrollTop / WHEEL_ROW)));
-
-    // Paint the settled row dark and the rest grey, so the value reads
-    // even when the window band is hard to see on a bright screen.
-    function paint(){
-      cols.forEach(col => {
-        const v = settled(col);
-        col.querySelectorAll('.ydWheelItem').forEach(it => {
-          const on = Number(it.dataset.val) === v;
-          it.style.color = on ? '#1a1a1a' : '#9aa3b2';
-          it.style.fontSize = on ? '28px' : '24px';
-        });
-      });
-    }
-
-    function apply(){
-      if (!wheelTarget) return;
-      const tens = settled(cols[0]), ones = settled(cols[1]);
-      wheelTarget.value = String(tens * 10 + ones);
-      // Fired so the calculators release their hold on the box and the
-      // review path sees the value. Setting .value alone is silent.
-      wheelTarget.dispatchEvent(new Event('input', { bubbles: true }));
-        // 'change' AS WELL AS 'input' -- a real keyboard fires both, and
-        // things downstream listen for the second one. attachNameConfirm
-        // binds 'blur' and 'change', never 'input', so a jersey number
-        // entered on the pad set the number and never resolved the NAME.
-        // The saved play then carried a number alone, lastUsedByIdentity
-        // skips anyone without a name, and that player silently stopped
-        // counting towards picker recency -- which is why the opponent's
-        // pickers, whose players are typed rather than tapped from the
-        // seeded starter grid, stopped sorting while Neville's kept working.
-        //
-        // Invisible to the suite because ui_driver.js dispatches both, as
-        // a real keyboard would: the fixture was kinder than the pad.
-    }
-
-    cols.forEach(col => {
-      let t = null;
-      col.addEventListener('scroll', () => {
-        paint();
-        // Debounced rather than on scrollend: scrollend is not carried by
-        // every browser this has to run in, and a 90ms settle is well
-        // inside the time a finger takes to lift.
-        clearTimeout(t);
-        t = setTimeout(() => { paint(); apply(); }, 90);
-      });
-    });
-    el.querySelector('#ydWheelDone').addEventListener('click', () => { apply(); closeWheel(); });
-    el._cols = cols;
-    el._paint = paint;
-    wheelEl = el;
-    return el;
-  }
-
-  function closeWheel(){
-    if (wheelEl) wheelEl.style.display = 'none';
-    wheelTarget = null;
-  }
-
-  // ===================================================================
-  // PROTOTYPE ONLY -- gametest.html. THE NUMBER PAD.
-  // ===================================================================
-  // The wheel's cost is that time-to-value depends on where it already
-  // sits: 3 is a flick, 47 is a journey. A keypad is CONSTANT -- two taps
-  // to any number, from anywhere -- and a thumb learns the positions, so
-  // it can be worked without looking up from the field.
-  //
-  // Digits APPEND rather than replace, the way a keypad is expected to
-  // behave: 4 then 7 gives 47. Two digits is the cap, because no yardage
-  // in this app is three.
-  //
-  // Same contract as the wheel: it writes into the input and fires
-  // 'input'. Nothing downstream knows which control was used.
-  let padEl = null, padTarget = null, padTargetId = null, padKind = 'yards';
-
-  function buildPad(){
-    if (padEl) return padEl;
-    const key = (label, val, style) =>
-      '<button type="button" class="padKey" data-k="' + val + '" style="' +
-        'height:58px; border-radius:10px; border:2px solid #ccc; background:#fff; ' +
-        'font-size:23px; font-weight:700; color:#222; cursor:pointer; ' +
-        'touch-action:manipulation;' + (style || '') + '">' + label + '</button>';
-    const el = document.createElement('div');
-    el.id = 'ydPad';
-    el.style.cssText = 'position:absolute; z-index:9000; display:none; background:#fff; ' +
-      'border:1px solid #ccc; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.22); ' +
-      'padding:10px;';
-    el.innerHTML =
-      // The value is echoed above the keys. On a keypad you are not
-      // looking at the field you are filling, so the pad has to show what
-      // it has -- otherwise a stray tap is invisible until review.
-      '<div id="ydPadEcho" style="height:38px; display:flex; align-items:center; ' +
-        'justify-content:flex-end; padding:0 10px; margin-bottom:8px; border-radius:8px; ' +
-        'background:#f2f3f5; font-size:26px; font-weight:800; ' +
-        'font-variant-numeric:tabular-nums;">0</div>' +
-      '<div style="display:grid; grid-template-columns:repeat(3, 62px); gap:8px;">' +
-        // 7-8-9 on the top row: the calculator layout, not the phone one.
-        // Anyone entering numbers all evening has that muscle memory.
-        key('7',7) + key('8',8) + key('9',9) +
-        key('4',4) + key('5',5) + key('6',6) +
-        key('1',1) + key('2',2) + key('3',3) +
-        key('\u232B','back','font-size:19px; color:#a32d2d;') +
-        key('0',0) +
-        key('\u2713','done','background:#1a4d2e; color:#fff; border-color:#1a4d2e;') +
-      '</div>';
-    document.body.appendChild(el);
-
-    const echo = el.querySelector('#ydPadEcho');
-    let buf = '';
-    // A clock is echoed as m:ss while it is being typed, so the scorer
-    // sees the time rather than a run of digits.
-    const asClock = (d) => d.length <= 2 ? d : (d.slice(0, d.length - 2) + ':' + d.slice(-2));
-    const paint = () => {
-      echo.textContent = buf === '' ? (padKind === 'clock' ? '0:00' : '0')
-                       : (padKind === 'clock' ? asClock(buf) : buf);
-    };
-    const commit = () => {
-      // RESOLVED BY ID, NOT HELD AS A REFERENCE.
-      // ----------------------------------------------------------------
-      // Writing to a field fires 'input', and several fields have
-      // listeners that redraw part of the panel. When that happens the
-      // input element is REPLACED, and a held reference then writes to a
-      // node no longer in the document -- the pad's echo showed 38 while
-      // the box on screen still read 3.
-      //
-      // Looking it up each time costs nothing and cannot go stale.
-      const t = padTargetId && document.getElementById(padTargetId);
-      if (!t) return;
-      padTarget = t;
-      // The clock field is written as typed -- the app normalises a
-      // colon-less entry itself, and re-formatting here would be a second
-      // opinion on a conversion that already exists.
-      // try/finally, NOT a bare pair of assignments.
-      // ----------------------------------------------------------------
-      // This dispatch runs other people's handlers -- calculators,
-      // prefills, panel redraws. If any of them throws, a bare
-      // `padWriting = false` on the next line never runs, the flag stays
-      // true for the rest of the session, and the pad silently stops
-      // following the keyboard. Nothing looks broken; it just quietly
-      // ignores you.
-      padWriting = true;
-      try {
-        t.value = buf === '' ? ''
-          : (padKind === 'clock' ? buf : String(parseInt(buf, 10)));
-        t.dispatchEvent(new Event('input', { bubbles: true }));
-        // 'change' AS WELL AS 'input' -- a real keyboard fires both, and
-        // things downstream listen for the second one. attachNameConfirm
-        // binds 'blur' and 'change', never 'input', so a jersey number
-        // entered on the pad set the number and never resolved the NAME.
-        // The saved play then carried a number alone, lastUsedByIdentity
-        // skips anyone without a name, and that player silently stopped
-        // counting towards picker recency -- which is why the opponent's
-        // pickers, whose players are typed rather than tapped from the
-        // seeded starter grid, stopped sorting while Neville's kept working.
-        //
-        // Invisible to the suite because ui_driver.js dispatches both, as
-        // a real keyboard would: the fixture was kinder than the pad.
-      } finally {
-        padWriting = false;
-      }
-    };
-
-    el.addEventListener('click', (e) => {
-      const k = e.target.closest('.padKey');
-      if (!k) return;
-      const v = k.dataset.k;
-      // NOTHING IS WRITTEN UNTIL DONE.
-      // ----------------------------------------------------------------
-      // Committing on every tap put HALF-TYPED values into the field, and
-      // several fields drive other fields: writing 3 on the way to 38 made
-      // the punt calculator compute a punt to the 3, which wrote the yards
-      // box, which cleared the calculator -- so the pad's echo read 38 and
-      // the box on screen read 3.
-      //
-      // A 3 on the way to 38 is not a number the scorer ever meant. The
-      // echo above the keys is what shows progress; the field gets one
-      // value, once, when they say so.
-      if (v === 'done'){ commit(); closePad(); return; }
-      if (v === 'back'){ buf = buf.slice(0, -1); paint(); return; }
-      // The cap depends on the field. Yardage and yard lines are two
-      // digits; a clock is four -- 1145 for 11:45, which the app already
-      // normalises from a colon-less entry.
-      const cap = padKind === 'clock' ? 4 : 2;
-      buf = (buf.length >= cap) ? v : (buf + v);
-      // Leading zeros are meaningful in a clock (0530 is 5:30) and noise
-      // in a yardage, so only the yardage sheds them.
-      if (padKind !== 'clock' && buf.length > 1 && buf[0] === '0') buf = buf.slice(1);
-      paint();
-    });
-    el._reset = (start) => { buf = start; paint(); };
-    el._syncFromField = () => {
-      const t = padTargetId && document.getElementById(padTargetId);
-      if (!t) return;
-      const raw = String(t.value || '').replace(/[^0-9]/g, '');
-      buf = padKind === 'clock' ? raw.slice(0, 4) : raw.slice(0, 2);
-      paint();
-    };
-    padEl = el;
-    return el;
-  }
-
-  function closePad(){
-    if (padEl) padEl.style.display = 'none';
-    padTarget = null; padTargetId = null;
-  }
-
-  // ===================================================================
-  // PROTOTYPE ONLY -- gametest.html. THE FIELD STRIP.
-  // ===================================================================
-  // The other two controls ask for a NUMBER. This one asks for a PLACE,
-  // which is what a scorer actually saw: the ball ended on the 38. The
-  // yardage is arithmetic the app can do.
-  //
-  // That is the same insight the four spot calculators are built on, so
-  // if this works it does not merely replace the wheel -- it replaces the
-  // calculator beside it, and the same control would serve punts, field
-  // goals, interceptions and bad snaps.
-  //
-  // A hundred yards across ~330px is 3.3px per yard, which is below what
-  // a finger can place. So a tap is a COARSE aim and the steppers beneath
-  // do the last yard or two. That pairing is deliberate: neither half is
-  // any good alone, and the stepper is the third pattern worth trying.
-  let stripEl = null, stripTarget = null, stripTargetId = null,
-      stripPos = null, stripStart = null, stripMode = 'yards';
-  // Set only while the strip is clicking something outside itself on
-  // purpose. See paint().
-  let stripSuppressClose = false;
-
-  function buildStrip(){
-    if (stripEl) return stripEl;
-    const el = document.createElement('div');
-    el.id = 'ydStrip';
-    el.style.cssText = 'position:absolute; z-index:9000; display:none; background:#fff; ' +
-      'border:1px solid #ccc; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.22); ' +
-      'padding:12px;';
-    // Yard numbers the way they are painted on a field: up to 50 and back
-    // down. A strip labelled 0-100 would be a ruler, not a football field,
-    // and the scorer is reading the real one.
-    // THE STRIP INCLUDES BOTH END ZONES.
-    // ------------------------------------------------------------------
-    // It used to map 0-100 across the full width and then DRAW end zones
-    // on top of that same range -- so the shaded band at the left was
-    // really the 0 to 6 yard line, and dragging into it meant a play that
-    // ended on the 3, not a safety. The picture and the scale disagreed.
-    //
-    // The span is now -10 to 110: ten yards of end zone, the hundred, and
-    // ten more. Anything at or beyond a goal line IS in that end zone,
-    // which is what the drawing has been promising all along.
-    const SPAN_LO = -10, SPAN_HI = 110, SPAN = SPAN_HI - SPAN_LO;
-    // THE STRIP FACES THE WAY THE DRIVE IS FACING.
-    // ------------------------------------------------------------------
-    // fieldPos is possession-relative -- 0 is the goal line being
-    // defended, 100 the one being attacked -- so drawing it straight
-    // always put the attacking end on the right. Half the time that is
-    // the opposite of what the scorer is looking at, and a control that
-    // disagrees with the field in front of you is worse than no control:
-    // every drag is a mental flip.
-    //
-    // state.driveDir already says which way the possession team is going.
-    // It is recorded once per game and alternates by quarter, so this
-    // needs no new input.
-    //
-    // Only the DRAWING flips. Positions stay possession-relative
-    // throughout, so the arithmetic, the toggles and the value written to
-    // the box are untouched by which way the picture faces.
-    let stripFlip = false;
-    const pctOf = (pos) => {
-      const raw = 100 * (pos - SPAN_LO) / SPAN;
-      return stripFlip ? (100 - raw) : raw;
-    };
-    const ticks = [10,20,30,40,50,60,70,80,90]
-      .map(pos => {
-        const shown = pos <= 50 ? pos : (100 - pos);
-        return '<div class="ydStripTick" data-pos="' + pos + '" style="position:absolute; ' +
-          'left:' + pctOf(pos) + '%; top:0; bottom:0; ' +
-          'width:1px; background:rgba(255,255,255,0.45);"></div>' +
-          '<div class="ydStripTick" data-pos="' + pos + '" style="position:absolute; ' +
-          'left:' + pctOf(pos) + '%; top:50%; ' +
-          'transform:translate(-50%,-50%); color:rgba(255,255,255,0.9); font-size:11px; ' +
-          'font-weight:700; pointer-events:none;">' + shown + '</div>';
-      }).join('');
-    el.innerHTML =
-      '<div id="ydStripReadout" style="font-size:15px; font-weight:700; color:#1a4d2e; ' +
-        'background:#eef6f1; border-left:3px solid #1a7a4c; border-radius:4px; ' +
-        'padding:8px 10px; margin-bottom:10px;"></div>' +
-      // WHICH WAY THE DRIVE IS GOING, said out loud.
-      // ----------------------------------------------------------------
-      // The strip already mirrors itself to match the drive, but nothing
-      // on it SAID so -- and a mirrored field looks exactly like an
-      // unmirrored one to somebody who has just glanced down. Getting it
-      // backwards costs a whole play, so the direction is stated rather
-      // than implied.
-      '<div id="ydStripDir" style="display:flex; align-items:center; gap:7px; ' +
-        'font-size:11px; font-weight:700; letter-spacing:0.06em; color:#7c8794; ' +
-        'text-transform:uppercase; margin-bottom:6px;"></div>' +
-      '<div id="ydStripField" style="position:relative; height:56px; width:330px; ' +
-        'background:#2f6b45; border-radius:6px; overflow:hidden; cursor:pointer; ' +
-        'touch-action:none;">' +
-        // End zones, so left and right are never ambiguous.
-        // Sized to the real ten yards, so the shading and the scale agree.
-        // Built unflipped and swapped at open time -- see setStripFacing.
-        '<div id="ydStripEzLeft" style="position:absolute; left:0; top:0; bottom:0; ' +
-          'width:8.3333%; background:rgba(0,0,0,0.34); display:flex; align-items:center; ' +
-          'justify-content:center; color:rgba(255,255,255,0.75); font-size:9px; ' +
-          'font-weight:700; letter-spacing:0.04em;">SAFETY</div>' +
-        '<div id="ydStripEzRight" style="position:absolute; right:0; top:0; bottom:0; ' +
-          'width:8.3333%; background:rgba(0,0,0,0.34); display:flex; align-items:center; ' +
-          'justify-content:center; color:rgba(255,255,255,0.75); font-size:9px; ' +
-          'font-weight:700; letter-spacing:0.04em;">TD</div>' +
-        ticks +
-        // A row of faint chevrons across the turf, pointing downfield. The
-        // banner above says it in words; this says it where the eye
-        // already is -- on the field, mid-drag.
-        '<div id="ydStripChevrons" style="position:absolute; left:0; right:0; ' +
-          'top:0; bottom:0; display:flex; align-items:center; justify-content:space-around; ' +
-          'color:rgba(255,255,255,0.22); font-size:20px; font-weight:700; ' +
-          'pointer-events:none; user-select:none;"></div>' +
-        // Where the ball is now.
-        '<div id="ydStripFrom" style="position:absolute; top:0; bottom:0; width:2px; ' +
-          'background:#ffffff; opacity:0.85;"></div>' +
-        // Where the play ended.
-        '<div id="ydStripTo" style="position:absolute; top:-2px; bottom:-2px; width:4px; ' +
-          'background:#ffc72c; border-radius:2px; box-shadow:0 0 0 2px rgba(0,0,0,0.35);"></div>' +
-        // The ground gained, shaded between the two.
-        '<div id="ydStripGain" style="position:absolute; top:0; bottom:0; ' +
-          'background:rgba(255,199,44,0.30); pointer-events:none;"></div>' +
-      '</div>' +
-      '<div style="display:flex; align-items:center; gap:8px; margin-top:10px;">' +
-        // LABELLED BY SCREEN DIRECTION, NOT BY SIGN.
-        // ----------------------------------------------------------------
-        // These used to read "-1 yd" and "+1 yd". On a drive going right
-        // that is fine; on one going left, "+1" moves the marker LEFT --
-        // the button and the thing it moves disagree, and the scorer has
-        // to hold the flip in their head to use it.
-        //
-        // An arrow means the same thing whichever way the drive faces:
-        // this button moves the marker that way. Whether that is a gain
-        // or a loss is already said, loudly, by the readout above --
-        // green or red, with a sign.
-        //
-        // color:#222 is NOT optional: the app sets `button { color:#fff }`
-        // globally, so a white button with no colour of its own is white
-        // on white. That is exactly how these first rendered.
-        '<button type="button" class="stripStep" data-dir="left" style="flex:1; padding:12px; ' +
-          'border-radius:8px; border:2px solid #ccc; background:#fff; color:#222; ' +
-          'font-size:20px; font-weight:700; cursor:pointer;">&larr; 1</button>' +
-        '<button type="button" class="stripStep" data-dir="right" style="flex:1; padding:12px; ' +
-          'border-radius:8px; border:2px solid #ccc; background:#fff; color:#222; ' +
-          'font-size:20px; font-weight:700; cursor:pointer;">1 &rarr;</button>' +
-        '<button type="button" id="ydStripDone" style="flex:1.2; padding:12px; border-radius:8px; ' +
-          'border:none; background:#1a4d2e; color:#fff; font-size:15px; font-weight:700; ' +
-          'cursor:pointer;">Done</button>' +
-      '</div>';
-    document.body.appendChild(el);
-
-    const field = el.querySelector('#ydStripField');
-    const readout = el.querySelector('#ydStripReadout');
-    const fromEl = el.querySelector('#ydStripFrom');
-    const toEl = el.querySelector('#ydStripTo');
-    const gainEl = el.querySelector('#ydStripGain');
-    const label = (pos) => pos <= 50 ? ('own ' + pos) : ('opp ' + (100 - pos));
-
-    function paint(){
-      if (stripStart === null || stripPos === null) return;
-      fromEl.style.left = pctOf(stripStart) + '%';
-      toEl.style.left = 'calc(' + pctOf(stripPos) + '% - 2px)';
-      // Left/width are screen quantities, so they come from the DRAWN
-      // percentages, not from the yard values -- when the strip is
-      // mirrored the lower yard line is the right-hand edge.
-      const a = pctOf(stripStart), b = pctOf(stripPos);
-      gainEl.style.left = Math.min(a, b) + '%';
-      gainEl.style.width = Math.abs(b - a) + '%';
-      const delta = stripPos - stripStart;
-      const inTd = stripPos >= 100, inSafety = stripPos <= 0;
-      readout.textContent = inTd
-        ? (label(stripStart) + '  \u2192  end zone   =   TOUCHDOWN, ' + (100 - stripStart) + ' yards')
-        : inSafety
-          ? (label(stripStart) + '  \u2192  own end zone   =   SAFETY, ' + stripStart + ' yards lost')
-          : (label(stripStart) + '  \u2192  ' + label(stripPos) +
-             '   =   ' + (delta >= 0 ? '+' : '\u2212') + Math.abs(delta) + ' yards');
-      // THE READOUT CARRIES THE SIGN AS COLOUR.
-      // ----------------------------------------------------------------
-      // A minus sign is one glyph in a line of text, read at a glance on
-      // a sideline in the dark. The whole bar changing is not: green for
-      // ground gained, red for ground lost, and it registers before the
-      // words do.
-      //
-      // Pale on purpose -- this is a status, not an alarm. A saturated
-      // red would make every two yard loss look like a mistake.
-      // Colour and the end-zone toggles, shared by both modes. Defined
-      // here rather than inlined because the position branch below returns
-      // early and would otherwise skip all of it -- which is exactly the
-      // bug this replaced.
-      const losing = inSafety || (!inTd && delta < 0);
-      function applyOutcome(){
-        readout.style.background = losing ? '#fdeceb' : '#eef6f1';
-        readout.style.borderLeftColor = losing ? '#a32d2d' : '#1a7a4c';
-        readout.style.color = losing ? '#8a2020' : '#1a4d2e';
-        const setT = (btnId, stateEl, want) => {
-          const btn = document.getElementById(btnId);
-          if (!btn) return;
-          const on = stateEl ? !!stateEl.checked
-                             : (btn.classList.contains('picked') ||
-                                (btn.textContent || '').indexOf('\u2713') === 0);
-          if (on === want) return;
-          stripSuppressClose = true;
-          try { btn.click(); } finally { stripSuppressClose = false; }
-        };
-        setT('pp_td_toggle', document.getElementById('pp_td'), inTd);
-        setT('pp_rush_safety_toggle', document.getElementById('pp_rush_safety'), inSafety);
-        setT('pp_pass_safety_toggle', document.getElementById('pp_pass_safety'), inSafety);
-      }
-      applyOutcome();
-      // POSITION MODE: a yard-line box wants WHERE, not HOW FAR.
-      // ------------------------------------------------------------------
-      // Yard-line fields (a takeover spot, a calculator's spot) are 0-50
-      // plus a side, not a distance. The same strip serves both: the
-      // marker means the same thing, only the number written differs.
-      if (stripMode === 'pos' && stripTarget){
-        const t = stripTargetId && document.getElementById(stripTargetId);
-        if (t){
-          const clamped = Math.max(0, Math.min(100, stripPos));
-          const ownSide = clamped <= 50;
-          t.value = String(ownSide ? clamped : 100 - clamped);
-          t.dispatchEvent(new Event('input', { bubbles: true }));
-        // 'change' AS WELL AS 'input' -- a real keyboard fires both, and
-        // things downstream listen for the second one. attachNameConfirm
-        // binds 'blur' and 'change', never 'input', so a jersey number
-        // entered on the pad set the number and never resolved the NAME.
-        // The saved play then carried a number alone, lastUsedByIdentity
-        // skips anyone without a name, and that player silently stopped
-        // counting towards picker recency -- which is why the opponent's
-        // pickers, whose players are typed rather than tapped from the
-        // seeded starter grid, stopped sorting while Neville's kept working.
-        //
-        // Invisible to the suite because ui_driver.js dispatches both, as
-        // a real keyboard would: the fixture was kinder than the pad.
-          // The side control that belongs to this box. Found by walking up
-          // from the input rather than by a table of ids: there are five
-          // of these blocks with three different class names between them,
-          // and a table would be one more thing to keep in step.
-          let scope = t.parentElement, sideBtns = null;
-          for (let i = 0; i < 4 && scope; i++){
-            const found = scope.querySelectorAll('button[data-side]');
-            if (found.length){ sideBtns = [...found]; break; }
-            scope = scope.parentElement;
-          }
-          if (sideBtns){
-            // Two vocabularies in use: own/opp on most, off/def on the
-            // interception spot.
-            const want = ownSide ? ['own','def'] : ['opp','off'];
-            const btn = sideBtns.find(b => want.indexOf(b.dataset.side) !== -1);
-            if (btn && !btn.classList.contains('picked')){
-              stripSuppressClose = true;
-              btn.click();
-              stripSuppressClose = false;
-            }
-          }
-        }
-        // The spot is WHERE THE PLAY ENDED, which is the same fact the
-        // yards mode reports -- so it says the same things about it.
-        // ----------------------------------------------------------------
-        // This branch used to overwrite the colour with green and return
-        // before the outcome toggles ran. So sliding the calculator's strip
-        // into an end zone showed "spot: opp 0" and set nothing, and a
-        // backwards slide stayed green while the calculator underneath
-        // read -13.
-        //
-        // Two controls describing one play have to agree.
-        readout.textContent = 'spot: ' + label(Math.max(0, Math.min(100, stripPos))) +
-          (inTd ? '  \u2014  TOUCHDOWN' : inSafety ? '  \u2014  SAFETY'
-                : '   (' + (delta >= 0 ? '+' : '\u2212') + Math.abs(delta) + ')');
-        applyOutcome();
-        return;
-      }
-
-      if (stripTarget){
-        // THE STRIP TAKES THE BOX BACK FROM THE CALCULATOR.
-        // ----------------------------------------------------------------
-        // The spot calculator DISABLES "Enter yards" whenever it holds a
-        // yard line -- the two are an either/or, and that is correct. But
-        // its own release is guarded by
-        //     if (!yardsEl().disabled && ylEl.value)
-        // which can never be true once it has disabled the box. So after
-        // any calculator use the yards field stayed locked, and the strip
-        // -- which writes into that same box -- looked like the thing that
-        // had locked it.
-        //
-        // Sliding a distance is the same statement as typing one: it means
-        // "the calculator's answer no longer applies". So the calculator is
-        // cleared and the box released, using the hook the panel already
-        // exposes for exactly this.
-        // Resolved by ID. `panel` is a local inside renderPlayPanel and is
-        // not in scope here, so the first version of this silently did
-        // nothing -- typeof panel was 'undefined' and the release never
-        // ran. The panel element carries __spotCalc, so ask the document
-        // for it.
-        const pnl = document.getElementById('playPanel');
-        const sc = pnl ? pnl.__spotCalc : null;
-        if (sc){
-          const cy = document.getElementById('pp_calc_yardline');
-          if (cy && cy.value) cy.value = '';
-          if (typeof sc.releaseYards === 'function') sc.releaseYards();
-        }
-        // The outcome toggles and the colour are set by applyOutcome()
-        // above, which both modes call. This used to be a second copy of
-        // the same logic, reachable only from the yards path -- which is
-        // why the position path set nothing.
-        // At a goal line the yardage is the distance TO it, not past it:
-        // a carry from the own 4 into the end zone is a four yard loss,
-        // and one from the opponent 8 is an eight yard touchdown. The
-        // extra yards of end zone are not yardage anybody records.
-        const gained = inTd ? (100 - stripStart) : inSafety ? stripStart : Math.abs(delta);
-        stripTarget.value = String(gained);
-        stripTarget.dispatchEvent(new Event('input', { bubbles: true }));
-        // 'change' AS WELL AS 'input' -- a real keyboard fires both, and
-        // things downstream listen for the second one. attachNameConfirm
-        // binds 'blur' and 'change', never 'input', so a jersey number
-        // entered on the pad set the number and never resolved the NAME.
-        // The saved play then carried a number alone, lastUsedByIdentity
-        // skips anyone without a name, and that player silently stopped
-        // counting towards picker recency -- which is why the opponent's
-        // pickers, whose players are typed rather than tapped from the
-        // seeded starter grid, stopped sorting while Neville's kept working.
-        //
-        // Invisible to the suite because ui_driver.js dispatches both, as
-        // a real keyboard would: the fixture was kinder than the pad.
-        // A play that lost ground has to say so. The yards box holds a
-        // magnitude, and LOSS is how every panel here carries the sign --
-        // writing a bare 6 for a six yard loss is the one outcome that
-        // looks deliberate and is wrong.
-        const loss = document.querySelector('.lossToggle[data-for="' + stripTarget.id + '"]');
-        if (loss){
-          const want = inSafety || (!inTd && delta < 0);
-          if (loss.classList.contains('picked') !== want){
-            // THE FLAG IS LOAD-BEARING.
-            // ------------------------------------------------------------
-            // This click BUBBLES to the document, where the outside-click
-            // handler saw a target outside the popover and closed the
-            // strip -- nulling stripTarget. Everything after the first
-            // backwards tap then updated the readout and wrote nothing,
-            // so the box froze on the first loss and never moved again.
-            //
-            // The LOSS toggle sits in the panel, not in the popover, so
-            // "is the target inside #ydStrip" cannot tell a real outside
-            // click from this one. Only the caller knows.
-            stripSuppressClose = true;
-            loss.click();
-            stripSuppressClose = false;
-          }
-        }
-
-      }
-    }
-
-    function setFromEvent(e){
-      const r = field.getBoundingClientRect();
-      const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
-      const frac = stripFlip ? (1 - x / r.width) : (x / r.width);
-      stripPos = Math.max(SPAN_LO, Math.min(SPAN_HI, Math.round(SPAN_LO + SPAN * frac)));
-      paint();
-    }
-    field.addEventListener('pointerdown', (e) => { field.setPointerCapture(e.pointerId); setFromEvent(e); });
-    field.addEventListener('pointermove', (e) => { if (e.buttons) setFromEvent(e); });
-    field.addEventListener('click', setFromEvent);
-    el.querySelectorAll('.stripStep').forEach(b => b.addEventListener('click', () => {
-      // A step is one yard ACROSS THE SCREEN. Which way that moves the
-      // yard line depends on the facing, which is the whole point of
-      // labelling them with arrows.
-      const screenDir = b.dataset.dir === 'right' ? 1 : -1;
-      const delta = stripFlip ? -screenDir : screenDir;
-      stripPos = Math.max(SPAN_LO, Math.min(SPAN_HI, stripPos + delta));
-      paint();
-    }));
-    el.querySelector('#ydStripDone').addEventListener('click', closeStrip);
-    // The tick marks and the end zone labels are drawn once, so both have
-    // to be re-laid when the facing changes. Everything else reads pctOf()
-    // live and needs nothing.
-    el._setFacing = (flip) => {
-      stripFlip = flip;
-      el.querySelectorAll('.ydStripTick').forEach(t => {
-        t.style.left = pctOf(Number(t.dataset.pos)) + '%';
-      });
-      // flip means the offence is attacking to the LEFT.
-      const arrow = flip ? '\u2190' : '\u2192';
-      const dirEl = el.querySelector('#ydStripDir');
-      if (dirEl){
-        const who = (typeof TEAMS === 'object' && TEAMS.teamA) ? '' : '';
-        dirEl.innerHTML =
-          '<span style="font-size:17px; color:#1a4d2e;">' + arrow + '</span>' +
-          '<span>' + (flip ? 'driving left' : 'driving right') + '</span>' +
-          '<span style="margin-left:auto; text-transform:none; font-weight:600; ' +
-            'letter-spacing:0; color:#9aa3b2;">tap where the play ended</span>';
-      }
-      const chev = el.querySelector('#ydStripChevrons');
-      // Six of them, so the direction reads at any width without the
-      // chevrons crowding the yard numbers.
-      if (chev) chev.textContent = new Array(6).fill(arrow).join('');
-      const lz = el.querySelector('#ydStripEzLeft'), rz = el.querySelector('#ydStripEzRight');
-      // The attacking end zone is a touchdown and the defended one a
-      // safety, whichever side of the screen each happens to be on.
-      if (lz) lz.textContent = flip ? 'TD' : 'SAFETY';
-      if (rz) rz.textContent = flip ? 'SAFETY' : 'TD';
-    };
-    el._paint = paint;
-    stripEl = el;
-    return el;
-  }
-
-  function closeStrip(){
-    if (stripEl) stripEl.style.display = 'none';
-    stripTarget = null; stripTargetId = null;
-  }
-
-  function openStrip(target, anchor, kind){
-    const el = buildStrip();
-    stripMode = (kind === 'pos') ? 'pos' : 'yards';
-    const st = computeState();
-    if (st.fieldPos === null){
-      // Without a spot there is no field to point at. Saying so beats
-      // opening a strip whose left end means nothing.
-      alert('Set the current spot first — the strip measures from where the ball is.');
-      return;
-    }
-    stripTarget = target;
-    stripTargetId = target.id;
-    stripStart = st.fieldPos;
-    const cur = parseInt(target.value, 10);
-    stripPos = Number.isFinite(cur) ? Math.max(-10, Math.min(110, st.fieldPos + Math.abs(cur))) : st.fieldPos;
-    // driveDir is null until somebody records which way a team is kicking.
-    // Unflipped is then the honest default: it matches how fieldPos is
-    // stored, rather than guessing at a direction nobody has stated.
-    el._setFacing(st.driveDir === 'left');
-    el.style.display = 'block';
-    el._paint();
-    const r = anchor.getBoundingClientRect();
-    const w = el.offsetWidth || 360, h = el.offsetHeight || 200;
-    let left = window.scrollX + r.left;
-    left = Math.min(left, window.scrollX + document.documentElement.clientWidth - w - 8);
-    const fitsBelow = (r.bottom + h + 10) < window.innerHeight;
-    el.style.left = Math.max(window.scrollX + 8, left) + 'px';
-    el.style.top = (fitsBelow ? (window.scrollY + r.bottom + 6)
-                              : (window.scrollY + r.top - h - 6)) + 'px';
-  }
-
-  // THE PAD FOLLOWS THE KEYBOARD.
-  // ---------------------------------------------------------------------
-  // The pad kept its own buffer and wrote it on Done. So a scorer who
-  // opened the pad, then typed 47 on the physical keyboard, saw the field
-  // read 47 and the pad's echo read 0 -- and pressing Done wiped the
-  // field, because the pad committed its own empty buffer over the top.
-  //
-  // That is DATA LOSS on the likeliest mixed action there is: open the
-  // pad, type an odd number, confirm. Both routes now write into one
-  // buffer: a keystroke updates the pad, a tap updates the field, and
-  // Done can only ever commit what is already on screen.
-  //
-  // padWriting guards the feedback loop -- commit() dispatches 'input'
-  // itself, which would otherwise re-read the field and re-paint on every
-  // tap.
-  let padWriting = false;
-  function syncPadFromKeyboard(e){
-    if (padWriting) return;
-    if (!padEl || padEl.style.display === 'none') return;
-    if (!padTargetId) return;
-    // Matched on the ID rather than on element identity: a panel redraw
-    // replaces the input, and a held reference would stop matching.
-    const t = e && e.target;
-    if (!t || t.id !== padTargetId) return;
-    padEl._syncFromField();
-  }
-  // THREE listeners, on purpose.
-  // ---------------------------------------------------------------------
-  // 'input' is the one that should suffice, and does in every test here.
-  // But this has to work on a touchscreen laptop in a press box, and the
-  // cost of a missed keystroke is a wrong number in a box score -- so
-  // 'keyup' and 'change' are cheap belt and braces. Re-reading the field
-  // is idempotent: syncing twice for one keystroke produces exactly the
-  // same buffer as syncing once.
-  ['input', 'keyup', 'change'].forEach(evt =>
-    document.addEventListener(evt, syncPadFromKeyboard, true));
-
-  function openPad(target, anchor, kind){
-    padKind = kind || 'yards';
-    const el = buildPad();
-    padTarget = target;
-    padTargetId = target.id;
-    const raw = String(target.value || '').replace(/[^0-9]/g, '');
-    el._reset(padKind === 'clock' ? raw.slice(0, 4)
-      : (raw ? String(Math.min(99, parseInt(raw, 10))) : ''));
-    el.style.display = 'block';
-    const r = anchor.getBoundingClientRect();
-    const w = el.offsetWidth || 220, h = el.offsetHeight || 300;
-    let left = window.scrollX + r.left;
-    left = Math.min(left, window.scrollX + document.documentElement.clientWidth - w - 8);
-    const fitsBelow = (r.bottom + h + 10) < window.innerHeight;
-    el.style.left = Math.max(window.scrollX + 8, left) + 'px';
-    el.style.top = (fitsBelow ? (window.scrollY + r.bottom + 6)
-                              : (window.scrollY + r.top - h - 6)) + 'px';
-  }
-
-  function openWheel(target, anchor){
-    const el = buildWheel();
-    wheelTarget = target;
-    // Start where the box already is, so opening the wheel on a value of
-    // 7 and closing it again cannot change anything.
-    const cur = Math.abs(parseInt(target.value, 10));
-    const start = Number.isFinite(cur) ? Math.min(99, cur) : 0;
-    el._cols[0].scrollTop = Math.floor(start / 10) * WHEEL_ROW;
-    el._cols[1].scrollTop = (start % 10) * WHEEL_ROW;
-    el.style.display = 'block';
-    el._paint();
-    const r = anchor.getBoundingClientRect();
-    // Placed below the button, and flipped above it when there is not
-    // room -- on a laptop the play panel often sits near the bottom.
-    const w = el.offsetWidth || 200, h = el.offsetHeight || 240;
-    let left = window.scrollX + r.left;
-    left = Math.min(left, window.scrollX + document.documentElement.clientWidth - w - 8);
-    const below = window.scrollY + r.bottom + 6;
-    const fitsBelow = (r.bottom + h + 10) < window.innerHeight;
-    el.style.left = Math.max(window.scrollX + 8, left) + 'px';
-    el.style.top = (fitsBelow ? below : (window.scrollY + r.top - h - 6)) + 'px';
-  }
-
-  document.addEventListener('click', (e) => {
-    const wb = e.target.closest && e.target.closest('.wheelBtn');
-    if (wb){
-      closePad(); closeStrip();
-      const target = document.getElementById(wb.dataset.for);
-      if (target && !target.disabled) openWheel(target, wb);
-      e.preventDefault();
-      return;
-    }
-    const sb = e.target.closest && e.target.closest('.stripBtn');
-    if (sb){
-      closeWheel(); closePad();
-      const target = document.getElementById(sb.dataset.for);
-      // NOT gated on `disabled`.
-      // ----------------------------------------------------------------
-      // Selecting a touchdown DISABLES the yards box -- the app fills it
-      // from the spot, so there is nothing to type. But the strip is the
-      // control that would take the touchdown back off, and refusing to
-      // open on a disabled field meant that after one slide into the end
-      // zone the button simply stopped responding. Nothing said why; it
-      // looked like the strip had broken.
-      if (target) openStrip(target, sb, sb.dataset.kind);
-      e.preventDefault();
-      return;
-    }
-    const pb = e.target.closest && e.target.closest('.padBtn');
-    if (pb){
-      closeWheel(); closeStrip();
-      const target = document.getElementById(pb.dataset.for);
-      if (target && !target.disabled) openPad(target, pb, pb.dataset.kind);
-      e.preventDefault();
-      return;
-    }
-    // Anywhere else closes them, except inside the popovers themselves.
-    if (wheelEl && wheelEl.style.display !== 'none' &&
-        !(e.target.closest && e.target.closest('#ydWheel'))) closeWheel();
-    if (padEl && padEl.style.display !== 'none' &&
-        !(e.target.closest && e.target.closest('#ydPad'))) closePad();
-    if (!stripSuppressClose && stripEl && stripEl.style.display !== 'none' &&
-        !(e.target.closest && e.target.closest('#ydStrip'))) closeStrip();
-  });
-
-  // ===================================================================
-  // PROTOTYPE ONLY. THE LAUNCHER ATTACHER.
-  // ===================================================================
-  // Every numeric field in this app gets a picker button, and they are
-  // attached at RUNTIME rather than written into each markup site.
-  //
-  // Hand-placing them was tried and is not viable: the ids are built by
-  // concatenation -- id="' + idPrefix + '_yardline" -- so there is no
-  // list of them to work from, they appear in a dozen panels plus the
-  // utility trees, and several only exist once a toggle is ticked. Any
-  // hand-written list would be missing something within a week.
-  //
-  // A MutationObserver catches every panel, every branch revealed by a
-  // toggle, and anything added later without being told about it.
-  //
-  // PICKER_MODE is the ONLY difference between gametest.html and
-  // gametest2.html.
-  const PICKER_MODE = 'strip';         // 'keypad' | 'strip'
-
-  // What kind of number is this box?
-  //   clock  -- always the keypad, in both files. A wheel or a strip
-  //             cannot express 7:42, and the clock is the one field where
-  //             the scorer is copying a number they can read.
-  //   pos    -- a yard line: 0-50 with a side
-  //   yards  -- a distance
-  function fieldKind(input){
-    const id = input.id || '';
-    if (!id || input.type === 'hidden' || input.disabled) return null;
-    if (/dummy/i.test(id)) return null;
-    if (/clock/i.test(id) || id === 'setclock_val') return 'clock';
-    // A JERSEY NUMBER always gets the keypad, in both files.
-    // ------------------------------------------------------------------
-    // Every "or type #" box ends in _manual -- the ball carrier, the
-    // passer, the man who recovered a fumble, the returner, the kicker.
-    // A wheel or a field strip cannot express a jersey number: it is not
-    // a distance and not a place, it is a label the scorer already knows
-    // and is copying.
-    //
-    // Two digits, so 0-99 covers every roster the app has imported.
-    if (/_manual$/.test(id)) return 'jersey';
-    if (/yardline/i.test(id)) return 'pos';
-    if (/(yards|yds)$/i.test(id) || /(yards|yds)_/i.test(id) || /retyds/i.test(id)) return 'yards';
-    return null;
-  }
-
-  function launcherFor(kind){
-    // Clock and jersey are keypad in BOTH files -- neither is a distance
-    // or a place, so neither the wheel nor the strip has anything to say
-    // about them.
-    if (kind === 'clock') return { cls: 'padBtn', glyph: '\u2328', title: 'Number pad' };
-    if (kind === 'jersey') return { cls: 'padBtn', glyph: '\u2328', title: 'Jersey number' };
-    return PICKER_MODE === 'strip'
-      ? { cls: 'stripBtn', glyph: '\u25AD', title: 'Tap where the play ended' }
-      : { cls: 'padBtn', glyph: '\u2328', title: 'Number pad' };
-  }
-
-  function attachPickers(root){
-    (root || document).querySelectorAll('input[type="text"]').forEach(inp => {
-      if (inp.dataset.pickerDone === '1') return;
-      const kind = fieldKind(inp);
-      if (!kind) return;
-      inp.dataset.pickerDone = '1';
-      inp.setAttribute('inputmode', 'numeric');
-      const L = launcherFor(kind);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = L.cls;
-      btn.title = L.title;
-      btn.dataset.for = inp.id;
-      btn.dataset.kind = kind;
-      // color is set explicitly: the app styles `button { color:#fff }`,
-      // so a white button without one is invisible.
-      btn.style.cssText = 'padding:7px 10px; margin-left:6px; border-radius:6px; ' +
-        'border:2px solid #ccc; background:#fff; color:#555; font-size:15px; ' +
-        'font-weight:700; cursor:pointer; line-height:1; vertical-align:middle; ' +
-        'touch-action:manipulation;';
-      btn.textContent = L.glyph;
-      if (inp.parentNode) inp.parentNode.insertBefore(btn, inp.nextSibling);
-    });
-  }
-
-  // Debounced: a panel render replaces a whole subtree and would
-  // otherwise fire this once per node.
-  let attachTimer = null;
-  new MutationObserver(() => {
-    clearTimeout(attachTimer);
-    attachTimer = setTimeout(() => attachPickers(document), 30);
-  }).observe(document.body, { childList: true, subtree: true });
-  attachPickers(document);
-
   function renderPlayPanel(type){
     // New play, new question: never carry a shared-number choice over.
     clearNameOverrides();
@@ -5364,24 +4449,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // As a sibling of the column it aligned to the TOP of the row -- level
     // with the label, not the box it modifies -- because the row
     // tops-align so the calculator's working can hang below it.
-    // ===================================================================
-    // PROTOTYPE ONLY -- gametest.html. Not in game.html.
-    // ===================================================================
-    // A wheel picker for yardage, opened from a button beside the box.
-    //
-    // IN A POPOVER, NOT INLINE. The first attempt put a row of buttons
-    // under every yards field and pushed every panel around -- the
-    // controls below moved, and panels that fitted on a screen stopped
-    // fitting. Nothing here occupies layout space until it is asked for:
-    // the only permanent addition is one small button.
-    // `picker` chooses which launcher sits beside the box: 'wheel' (the
-    // default) or 'keypad'. Both are prototypes and both write into the
-    // same input, so a panel can carry either and nothing downstream
-    // notices -- which is what makes comparing them on real plays cheap.
-    const yardsBlock = (label, id, withLoss, picker) => fieldLabel(label || 'Enter yards') +
+    const yardsBlock = (label, id, withLoss) => fieldLabel(label || 'Enter yards') +
       '<span style="display:inline-flex; align-items:center; gap:8px;">' +
-        '<input autocomplete="off" type="text" inputmode="numeric" id="' + (id||'pp_yards') + '" style="width:80px;">' +
-
+        '<input autocomplete="off" type="text" id="' + (id||'pp_yards') + '" style="width:80px;">' +
         (withLoss ? '<button type="button" class="lossToggle ptoggle" data-for="' + (id||'pp_yards') + '" ' +
           'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button>' : '') +
       '</span>';
@@ -5458,7 +4528,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
             TEAMS[opp].name + '</button>' +
           '<input autocomplete="off" type="text" id="pp_calc_yardline" placeholder="yard line" style="width:90px;">' +
-
         '</span>' +
         spotCalcReadoutHtml() +
       '</div>';
@@ -5532,9 +4601,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '</div>';
     else if (type === 'pass') html = outcomeSwitchRow('pass') +
         offBlock('passer','Passer') + offBlock('receiver','Receiver') +
-        // PROTOTYPE: the passing tree carries the KEYPAD, the rushing tree
-        // the wheel, so the two can be compared on the same evening
-        // against real plays rather than in the abstract.
         '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap">' + yardsBlock('Enter yards', null, true) + '</div>' + spotCalcHtml() + '</div>' +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
         '<div style="margin-bottom:6px;"><input autocomplete="off" type="checkbox" id="pp_incomplete" style="display:none;">' +

@@ -1853,3 +1853,54 @@ satisfies any listener regardless of which one the real control fires.
 The rule worth keeping: when wiring a listener, name the actual user action
 that produces it. "Types a number" is `input`. "Leaves the field" is `blur`.
 "Taps a pad key" is whatever the pad dispatches — go and read it.
+
+## gametest3 became game.html (17 August 2026)
+
+The keypad prototype won and was promoted. The old entry page is preserved
+verbatim as `game_legacy.html`.
+
+**The URL had to stay `game.html`.** `dashboard.html` navigates to
+`game.html?id=`, and beyond that are bookmarks, open tabs and deep links
+nobody has an inventory of. So the CONTENTS moved and the address did not;
+the fallback is the file you have to ask for by name, not the one everyone
+lands on by accident.
+
+**One real gap had to be reconciled first.** `gametest3` forked from
+`game.html` at 06:34 on 17 Aug, and commit `0b2ee9f` at 08:40 changed
+`game.html` alone — it added the starters gate to the picker's ambiguous
+list. Promoting without noticing would have silently reverted it. Worse,
+the same bug was independently re-fixed in the prototypes later that day,
+so `game.html` briefly carried TWO equivalent gates. The promoted file
+keeps `0b2ee9f`'s: it sits after the two overrides, and its comment
+explains why that ordering matters.
+
+A function-level diff was the thing that made this safe to do — zero
+functions existed in `game.html` that were missing from `gametest3`, so the
+only possible losses were statement-level, which narrowed the search to one
+commit.
+
+**Prototype scaffolding was stripped before promotion, not after.** Gone:
+`attachPickersLegacy` (never called), `launcherFor` and `PICKER_MODE` (only
+reachable through it), `buildWheel` / `openWheel` / `closeWheel` and the
+`.wheelBtn` branch (no wheel button was created any more, so the whole
+yardage wheel was unreachable), `closeStrip` and the orphaned strip state.
+Roughly 8KB. Shipping it would have repeated the exact mistake that made
+`attachPickersLegacy` a puzzle in the first place.
+
+Removing it took two attempts. The first deleted the functions and their
+call sites in one pass and broke the parse, because two calls were the
+BODY of an `if` — `if (...) closeWheel();` — so removing the call left a
+dangling condition. The second went one function at a time with a syntax
+check after each and reverted anything that failed, which found it
+immediately. Bulk edits to code with no tests are worth doing in single
+steps you can bisect.
+
+**The strongest evidence the promotion was safe** was the golden snapshot:
+all 50 UI paths produced byte-identical play data, roles, effects, state
+transitions and box scores before and after. The input method changed
+completely; nothing downstream moved at all. That is exactly the question a
+golden file is good at answering, and the one nobody can answer by reading.
+
+`gametest.html` and `gametest2.html` are marked DEAD PROTOTYPE in a banner
+at the top of each. `gametest2` is worth keeping specifically because it
+still holds the field strip.

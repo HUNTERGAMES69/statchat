@@ -24,7 +24,24 @@
   label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
   input:not([type=checkbox]):not([type=radio]), select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
   input[type=checkbox], input[type=radio] { width:auto; margin-right:6px; vertical-align:middle; }
-  button { padding:8px 12px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+  /* touch-action:manipulation -- DOUBLE-TAP ZOOM.
+     On iOS a second tap inside ~300ms is read as a double-tap and zooms
+     the page, so tapping the strip's arrows quickly to walk the marker a
+     few yards zoomed the field instead of moving it. `manipulation` opts
+     out of double-tap zoom (and the tap delay that comes with it) while
+     leaving pinch-zoom and scrolling alone, so the page can still be
+     zoomed deliberately.
+
+     It belongs on the `button` rule rather than on the two arrows,
+     because nothing about this is specific to them: there are 122 buttons
+     on this page and only the pad keys and the launchers had it. Any
+     control tapped twice quickly had the same problem -- the arrows are
+     just the ones that get tapped that way most.
+
+     user-select:none is the same tap, other symptom: iOS also treats a
+     double-tap as select-the-word, so a fast second tap could leave the
+     button's own label highlighted. */
+  button { padding:8px 12px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; cursor:pointer; touch-action:manipulation; -webkit-user-select:none; user-select:none; }
   button.primary { background:#1a7a4c; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
   button.danger { background:#fff; color:#a32d2d; border:1px solid #a32d2d; }
@@ -1766,6 +1783,7 @@ function offenseEligible(team, role){
   // point of the whole shared-number fix.
   const playedThisRole = roleKey ? lastUsedByIdentity(team, [roleKey]) : {};
   Object.keys(ambiguous).forEach(num => {
+    ambiguous[num].forEach(entry => {
     // A SHARED NUMBER DOES NOT EXCUSE A PLAYER FROM THE STARTERS LIST.
     // ------------------------------------------------------------------
     // This loop walked EVERY shared number on the roster and admitted
@@ -1785,7 +1803,6 @@ function offenseEligible(team, role){
     // specifically. Both are stronger statements than "not seeded", so
     // they are tested first and this gate only stops the rest.
     const inVisible = !!visible[num];
-    ambiguous[num].forEach(entry => {
       const nm = typeof entry === 'string' ? entry : entry.name;
       const pos = (typeof entry === 'string' ? '' : (entry.position || '')).toUpperCase().trim();
       const hasPlayedRole = playedThisRole[identityKey(num, nm)] !== undefined;
@@ -1796,23 +1813,6 @@ function offenseEligible(team, role){
         ambiguousList.push({ num, name: nm, resolvedName: nm });
         return;
       }
-      // GATED ON THE STARTERS LIST, exactly like the resolved list below.
-      // ------------------------------------------------------------
-      // This loop walked EVERY shared number on the roster and narrowed
-      // only on position and on named seeds, so a number nobody seeded
-      // and nobody had used was still offered -- twice, with '?' -- and
-      // then prepended ahead of the man who had just carried. On an
-      // opponent roster where offense and defense are uploaded
-      // separately, that is most of the squad, and it read as the
-      // starters list being ignored.
-      //
-      // `visible` is the seeds plus whoever has been discovered in play,
-      // and it falls back to the whole roster when no seeds were set --
-      // so an unseeded game is unchanged, and a seeded one now honours
-      // what the coach actually said. The other man is not lost: typing
-      // the number brings up the same choice, and the branch above
-      // promotes him permanently the moment he plays.
-      if (!visible[num]) return;
       // A NAMED SEED IS THE ANSWER TO "WHICH ONE".
       // ------------------------------------------------------------
       // If the coach resolved this number in the starters list, offering
@@ -4052,8 +4052,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const takingOver = kickingRecovers ? guided.kickingTeam : guided.receivingTeam;
 
         let text, effect, touchbackRole = null;
-        // The most recent kickoff in this game, for crediting an outcome
-        // that arrives as its own play.
         function kickoffJustRecorded(){
           for (let i = plays.length - 1; i >= 0; i--){
             const r = plays[i] && plays[i].roles;
@@ -4082,19 +4080,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         } else if (touchback){
           text = TEAMS[guided.receivingTeam].name + ' — TOUCHBACK';
           effect = { flip: true, flipApplied: true, flipTo: guided.receivingTeam };
-          // CREDIT THE TOUCHBACK TO THE KICKER.
-          // ------------------------------------------------------------
-          // The guided flow writes the kick and its outcome as TWO plays,
-          // because the outcome is not known when the kick is recorded.
-          // So the kickoff play carried the kicker and no touchback, the
-          // outcome play carried the touchback and no kicker, and the
-          // stat package showed 1 kickoff at 0% touchbacks -- a number
-          // that is wrong in the one direction a kicker would mind.
-          //
-          // Read back off the kickoff that was just written rather than
-          // threaded through the guided state: the play IS the record, and
-          // a second copy of the kicker in a state object is a second
-          // thing that can disagree.
+          // See game.html: the guided flow writes the kick and its outcome
+          // as two plays, so the touchback has to name the kicker it
+          // belongs to or it is never counted.
           const koKick = kickoffJustRecorded();
           if (koKick) touchbackRole = { team: koKick.team, num: koKick.num };
         } else {
@@ -4109,9 +4097,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         pushAndPersist({ id: nextId++, text, effect, team: takingOver, quarter: guided.quarter,
           roles: Object.assign({ playType: 'kickoff_return' },
             (!muffed && !onside && returnerNum) ? { defense: { team: guided.receivingTeam, num: returnerNum } } : {},
-            // A touchback credit, NOT a second kickoff. The engine counts
-            // kickoffs from playType 'kickoff' and would double them if
-            // this play claimed to be one.
             touchbackRole ? { kickoffTouchback: touchbackRole } : {}) });
         const receivingName = TEAMS[takingOver].name;
         const receivingTeamKey = takingOver;
@@ -4386,6 +4371,388 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       one('int', 'Intercepted') + '</div>';
   }
 
+  // ===================================================================
+  // PROTOTYPE ONLY -- gametest.html. THE YARDAGE WHEEL.
+  // ===================================================================
+  // Two columns, TENS and ONES, ten items each. Andy suggested 0-10 and
+  // 20-99; tens+ones covers the same ground with no gap at 11-19 and the
+  // same amount of travel -- a wheel of 80 items would be a scroll, not
+  // a flick.
+  //
+  // Native scroll-snap does the work. Momentum, rubber-banding and the
+  // feel of the thing under a finger are the browser's, and no library
+  // reproduces them faithfully. The only JavaScript is reading which row
+  // settled under the window.
+  const WHEEL_ROW = 46;          // px per row; also the snap interval
+  const WHEEL_VISIBLE = 3;       // rows in the window -- one centred, one either side
+
+  let wheelEl = null, wheelTarget = null;
+
+
+
+  // ===================================================================
+  // PROTOTYPE ONLY -- gametest.html. THE NUMBER PAD.
+  // ===================================================================
+  // The wheel's cost is that time-to-value depends on where it already
+  // sits: 3 is a flick, 47 is a journey. A keypad is CONSTANT -- two taps
+  // to any number, from anywhere -- and a thumb learns the positions, so
+  // it can be worked without looking up from the field.
+  //
+  // Digits APPEND rather than replace, the way a keypad is expected to
+  // behave: 4 then 7 gives 47. Two digits is the cap, because no yardage
+  // in this app is three.
+  //
+  // Same contract as the wheel: it writes into the input and fires
+  // 'input'. Nothing downstream knows which control was used.
+  let padEl = null, padTarget = null, padTargetId = null, padKind = 'yards';
+
+  function buildPad(){
+    if (padEl) return padEl;
+    const key = (label, val, style) =>
+      '<button type="button" class="padKey" data-k="' + val + '" style="' +
+        'height:58px; border-radius:10px; border:2px solid #ccc; background:#fff; ' +
+        'font-size:23px; font-weight:700; color:#222; cursor:pointer; ' +
+        'touch-action:manipulation;' + (style || '') + '">' + label + '</button>';
+    const el = document.createElement('div');
+    el.id = 'ydPad';
+    el.style.cssText = 'position:absolute; z-index:9000; display:none; background:#fff; ' +
+      'border:1px solid #ccc; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.22); ' +
+      'padding:10px;';
+    el.innerHTML =
+      // The value is echoed above the keys. On a keypad you are not
+      // looking at the field you are filling, so the pad has to show what
+      // it has -- otherwise a stray tap is invisible until review.
+      '<div id="ydPadEcho" style="height:38px; display:flex; align-items:center; ' +
+        'justify-content:flex-end; padding:0 10px; margin-bottom:8px; border-radius:8px; ' +
+        'background:#f2f3f5; font-size:26px; font-weight:800; ' +
+        'font-variant-numeric:tabular-nums;">0</div>' +
+      '<div style="display:grid; grid-template-columns:repeat(3, 62px); gap:8px;">' +
+        // 7-8-9 on the top row: the calculator layout, not the phone one.
+        // Anyone entering numbers all evening has that muscle memory.
+        key('7',7) + key('8',8) + key('9',9) +
+        key('4',4) + key('5',5) + key('6',6) +
+        key('1',1) + key('2',2) + key('3',3) +
+        key('\u232B','back','font-size:19px; color:#a32d2d;') +
+        key('0',0) +
+        key('\u2713','done','background:#1a4d2e; color:#fff; border-color:#1a4d2e;') +
+      '</div>';
+    document.body.appendChild(el);
+
+    const echo = el.querySelector('#ydPadEcho');
+    let buf = '';
+    // A clock is echoed as m:ss while it is being typed, so the scorer
+    // sees the time rather than a run of digits.
+    const asClock = (d) => d.length <= 2 ? d : (d.slice(0, d.length - 2) + ':' + d.slice(-2));
+    const paint = () => {
+      echo.textContent = buf === '' ? (padKind === 'clock' ? '0:00' : '0')
+                       : (padKind === 'clock' ? asClock(buf) : buf);
+    };
+    const commit = () => {
+      // RESOLVED BY ID, NOT HELD AS A REFERENCE.
+      // ----------------------------------------------------------------
+      // Writing to a field fires 'input', and several fields have
+      // listeners that redraw part of the panel. When that happens the
+      // input element is REPLACED, and a held reference then writes to a
+      // node no longer in the document -- the pad's echo showed 38 while
+      // the box on screen still read 3.
+      //
+      // Looking it up each time costs nothing and cannot go stale.
+      const t = padTargetId && document.getElementById(padTargetId);
+      if (!t) return;
+      padTarget = t;
+      // The clock field is written as typed -- the app normalises a
+      // colon-less entry itself, and re-formatting here would be a second
+      // opinion on a conversion that already exists.
+      // try/finally, NOT a bare pair of assignments.
+      // ----------------------------------------------------------------
+      // This dispatch runs other people's handlers -- calculators,
+      // prefills, panel redraws. If any of them throws, a bare
+      // `padWriting = false` on the next line never runs, the flag stays
+      // true for the rest of the session, and the pad silently stops
+      // following the keyboard. Nothing looks broken; it just quietly
+      // ignores you.
+      padWriting = true;
+      try {
+        t.value = buf === '' ? ''
+          : (padKind === 'clock' ? buf : String(parseInt(buf, 10)));
+        t.dispatchEvent(new Event('input', { bubbles: true }));
+        // 'change' AS WELL AS 'input' -- a real keyboard fires both, and
+        // things downstream listen for the second one. attachNameConfirm
+        // binds 'blur' and 'change', never 'input', so a jersey number
+        // entered on the pad set the number and never resolved the NAME.
+        // The saved play then carried a number alone, lastUsedByIdentity
+        // skips anyone without a name, and that player silently stopped
+        // counting towards picker recency -- which is why the opponent's
+        // pickers, whose players are typed rather than tapped from the
+        // seeded starter grid, stopped sorting while Neville's kept working.
+        //
+        // Invisible to the suite because ui_driver.js dispatches both, as
+        // a real keyboard would: the fixture was kinder than the pad.
+      } finally {
+        padWriting = false;
+      }
+    };
+
+    el.addEventListener('click', (e) => {
+      const k = e.target.closest('.padKey');
+      if (!k) return;
+      const v = k.dataset.k;
+      // NOTHING IS WRITTEN UNTIL DONE.
+      // ----------------------------------------------------------------
+      // Committing on every tap put HALF-TYPED values into the field, and
+      // several fields drive other fields: writing 3 on the way to 38 made
+      // the punt calculator compute a punt to the 3, which wrote the yards
+      // box, which cleared the calculator -- so the pad's echo read 38 and
+      // the box on screen read 3.
+      //
+      // A 3 on the way to 38 is not a number the scorer ever meant. The
+      // echo above the keys is what shows progress; the field gets one
+      // value, once, when they say so.
+      if (v === 'done'){ commit(); closePad(); return; }
+      if (v === 'back'){ buf = buf.slice(0, -1); paint(); return; }
+      // The cap depends on the field. Yardage and yard lines are two
+      // digits; a clock is four -- 1145 for 11:45, which the app already
+      // normalises from a colon-less entry.
+      const cap = padKind === 'clock' ? 4 : 2;
+      buf = (buf.length >= cap) ? v : (buf + v);
+      // Leading zeros are meaningful in a clock (0530 is 5:30) and noise
+      // in a yardage, so only the yardage sheds them.
+      if (padKind !== 'clock' && buf.length > 1 && buf[0] === '0') buf = buf.slice(1);
+      paint();
+    });
+    el._reset = (start) => { buf = start; paint(); };
+    el._syncFromField = () => {
+      const t = padTargetId && document.getElementById(padTargetId);
+      if (!t) return;
+      const raw = String(t.value || '').replace(/[^0-9]/g, '');
+      buf = padKind === 'clock' ? raw.slice(0, 4) : raw.slice(0, 2);
+      paint();
+    };
+    padEl = el;
+    return el;
+  }
+
+  function closePad(){
+    if (padEl) padEl.style.display = 'none';
+    padTarget = null; padTargetId = null;
+  }
+
+
+
+
+  // THE PAD FOLLOWS THE KEYBOARD.
+  // ---------------------------------------------------------------------
+  // The pad kept its own buffer and wrote it on Done. So a scorer who
+  // tapped a field, then typed 47 on the physical keyboard, saw the field
+  // read 47 and the pad's echo read 0 -- and pressing Done wiped the
+  // field, because the pad committed its own empty buffer over the top.
+  //
+  // That is DATA LOSS on the likeliest mixed action there is: tap in,
+  // type an odd number, confirm. Both routes now write into one buffer:
+  // a keystroke updates the pad, a tap updates the field, and Done can
+  // only ever commit what is already on screen.
+  //
+  // padWriting guards the feedback loop -- commit() dispatches 'input'
+  // itself, which would otherwise re-read the field and re-paint on every
+  // tap.
+  let padWriting = false;
+  function syncPadFromKeyboard(e){
+    if (padWriting) return;
+    if (!padEl || padEl.style.display === 'none') return;
+    if (!padTargetId) return;
+    // Matched on the ID rather than on element identity: a panel redraw
+    // replaces the input, and a held reference would stop matching.
+    const t = e && e.target;
+    if (!t || t.id !== padTargetId) return;
+    padEl._syncFromField();
+  }
+  // THREE listeners, on purpose.
+  // ---------------------------------------------------------------------
+  // 'input' is the one that should suffice, and does in every test here.
+  // But this has to work on a touchscreen laptop in a press box, and the
+  // cost of a missed keystroke is a wrong number in a box score -- so
+  // 'keyup' and 'change' are cheap belt and braces. Re-reading the field
+  // is idempotent: syncing twice for one keystroke produces exactly the
+  // same buffer as syncing once.
+  ['input', 'keyup', 'change'].forEach(evt =>
+    document.addEventListener(evt, syncPadFromKeyboard, true));
+
+  function openPad(target, anchor, kind){
+    padKind = kind || 'yards';
+    const el = buildPad();
+    padTarget = target;
+    padTargetId = target.id;
+    const raw = String(target.value || '').replace(/[^0-9]/g, '');
+    el._reset(padKind === 'clock' ? raw.slice(0, 4)
+      : (raw ? String(Math.min(99, parseInt(raw, 10))) : ''));
+    el.style.display = 'block';
+    const r = anchor.getBoundingClientRect();
+    const w = el.offsetWidth || 220, h = el.offsetHeight || 300;
+    let left = window.scrollX + r.left;
+    left = Math.min(left, window.scrollX + document.documentElement.clientWidth - w - 8);
+    const fitsBelow = (r.bottom + h + 10) < window.innerHeight;
+    el.style.left = Math.max(window.scrollX + 8, left) + 'px';
+    el.style.top = (fitsBelow ? (window.scrollY + r.bottom + 6)
+                              : (window.scrollY + r.top - h - 6)) + 'px';
+  }
+
+
+  document.addEventListener('click', (e) => {
+    const pb = e.target.closest && e.target.closest('.padBtn');
+    if (pb){
+      const target = document.getElementById(pb.dataset.for);
+      if (target && !target.disabled) openPad(target, pb, pb.dataset.kind);
+      e.preventDefault();
+      return;
+    }
+    // Anywhere else closes the pad, except inside the pad itself. The
+    // wheel and the strip were removed when this became the live page --
+    // see PROJECT_NOTES, "The strip is parked, not discarded".
+    if (padEl && padEl.style.display !== 'none' &&
+        !(e.target.closest && e.target.closest('#ydPad'))) closePad();
+  });
+
+  // ===================================================================
+  // THE LAUNCHER ATTACHER.
+  // ===================================================================
+  // Every numeric field in this app gets a picker button, and they are
+  // attached at RUNTIME rather than written into each markup site.
+  //
+  // Hand-placing them was tried and is not viable: the ids are built by
+  // concatenation -- id="' + idPrefix + '_yardline" -- so there is no
+  // list of them to work from, they appear in a dozen panels plus the
+  // utility trees, and several only exist once a toggle is ticked. Any
+  // hand-written list would be missing something within a week.
+  //
+  // A MutationObserver catches every panel, every branch revealed by a
+  // toggle, and anything added later without being told about it.
+  //
+
+  // What kind of number is this box?
+  //   clock  -- always the keypad, in both files. A wheel or a strip
+  //             cannot express 7:42, and the clock is the one field where
+  //             the scorer is copying a number they can read.
+  //   pos    -- a yard line: 0-50 with a side
+  //   yards  -- a distance
+  function fieldKind(input){
+    const id = input.id || '';
+    if (!id || input.type === 'hidden' || input.disabled) return null;
+    if (/dummy/i.test(id)) return null;
+    if (/clock/i.test(id) || id === 'setclock_val') return 'clock';
+    // A JERSEY NUMBER always gets the keypad, in both files.
+    // ------------------------------------------------------------------
+    // Every "or type #" box ends in _manual -- the ball carrier, the
+    // passer, the man who recovered a fumble, the returner, the kicker.
+    // A wheel or a field strip cannot express a jersey number: it is not
+    // a distance and not a place, it is a label the scorer already knows
+    // and is copying.
+    //
+    // Two digits, so 0-99 covers every roster the app has imported.
+    // FREE TEXT -- the only two exceptions, and both are exceptions
+    // because a numeric pad cannot express what belongs in them.
+    // `manualText` describes a play in words; `code` is the hidden
+    // staging field the review step reads. On a touch device a classified
+    // field also becomes readOnly, so misclassifying either would make it
+    // impossible to fill rather than merely awkward.
+    if (id === 'manualText' || id === 'code') return null;
+    if (/yardline/i.test(id)) return 'pos';
+    if (/(yards|yds)$/i.test(id) || /(yards|yds)_/i.test(id) || /retyds/i.test(id)) return 'yards';
+    // EVERYTHING ELSE IS A JERSEY NUMBER, by default rather than by
+    // matching a pattern.
+    // ------------------------------------------------------------------
+    // This was `/_manual$/`, anchored, and it silently missed EIGHT live
+    // fields: pp_credit_manual_rushfum / _passfum / _sackfum / _pb / _fgb
+    // all carry a suffix after _manual, and pp_muff_rec, pp_ko_onside_rec
+    // and pp_ko_muff_rec never matched anything at all. Those boxes had no
+    // picker whatsoever -- on a touchscreen, nothing to tap.
+    //
+    // Defaulting to jersey inverts the failure: a new field now gets a pad
+    // it may not want, which is VISIBLE the first time anyone opens the
+    // panel, instead of getting no pad at all, which is invisible until a
+    // scorer needs it mid-drive. If a future field takes free text, add it
+    // to the exception list above.
+    return 'jersey';
+  }
+
+
+  // GAMETEST3: THE FIELD IS THE BUTTON.
+  // ---------------------------------------------------------------------
+  // Tapping a numeric box opens the keypad, and the keypad button is gone
+  // -- no added control anywhere, and no layout moved, which was the whole
+  // objection to the first attempt.
+  //
+  // inputmode="none" is what makes it work: it suppresses the SOFT
+  // keyboard without making the field read-only, so the physical keyboard
+  // on the laptop still types into it. An odd number like 47 is still two
+  // keystrokes for anyone who would rather type it.
+  //
+  // Opened on CLICK rather than focus: focus fires when tabbing through a
+  // panel too, and a pad appearing while you move between fields is worse
+  // than one that never appears.
+  const TAP_OPENS_KEYPAD = true;
+
+  // ON A TOUCHSCREEN, READONLY -- NOT inputmode="none".
+  // ---------------------------------------------------------------------
+  // inputmode="none" is the correct attribute and WebKit has a long
+  // history of ignoring it, raising the system keyboard anyway. Rather
+  // than pin this to a Safari version -- which changes underneath us and
+  // cannot be checked from here -- the field is made readonly on touch
+  // devices, which suppresses the keyboard on every iOS version there has
+  // ever been.
+  //
+  // Nothing is lost by it. `readonly` still takes taps, still takes focus,
+  // and still accepts a programmatic `.value =` -- so the calculators, the
+  // touchdown prefill and the spot fills all keep working. What it removes
+  // is typing into the box, and on a bare iPad there was no keyboard to
+  // type with in the first place.
+  //
+  // ON THE LAPTOP NOTHING CHANGES. The query is for the PRIMARY pointer,
+  // so a trackpad laptop -- touchscreen or not -- reports `pointer: fine`
+  // and is left alone, keeping inputmode="none" and a typeable field.
+  // An iPad with a Magic Keyboard attached reports `fine` too, which is
+  // the behaviour we want: a keyboard is present, so let it be used.
+  //
+  // ?softkb=1 OPTS OUT, on the device, without another upload. It forces
+  // inputmode="numeric" and leaves the field typeable, so the same iPad
+  // can be tried both ways in one sitting -- and it is the escape hatch if
+  // the pad ever fails to open on a field that now has no other route in.
+  const FORCE_SOFT_KEYBOARD = /[?&]softkb=1(&|$)/.test(location.search);
+  const TOUCH_ONLY = !FORCE_SOFT_KEYBOARD &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+  function attachPickers(root){
+    (root || document).querySelectorAll('input[type="text"]').forEach(inp => {
+      if (inp.dataset.pickerDone === '1') return;
+      const kind = fieldKind(inp);
+      if (!kind) return;
+      inp.dataset.pickerDone = '1';
+      inp.dataset.pickerKind = kind;
+      inp.setAttribute('inputmode',
+        (TAP_OPENS_KEYPAD && !FORCE_SOFT_KEYBOARD) ? 'none' : 'numeric');
+      // readOnly, not the attribute: the tap handler tests `fld.disabled`,
+      // and readonly is deliberately NOT disabled -- a disabled input
+      // receives no clicks at all, so the pad could never be opened.
+      if (TAP_OPENS_KEYPAD && TOUCH_ONLY) inp.readOnly = true;
+      // NO BUTTON, ON ANY FIELD. The field strip was removed from this
+      // prototype on 17 Aug 2026 -- see PROJECT_NOTES, "The strip is
+      // parked, not discarded". Tapping the box is the only way in, on
+      // every field without exception, which is the whole proposition
+      // being tested here.
+      return;
+    });
+  }
+
+
+  // Debounced: a panel render replaces a whole subtree and would
+  // otherwise fire this once per node.
+  let attachTimer = null;
+  new MutationObserver(() => {
+    clearTimeout(attachTimer);
+    attachTimer = setTimeout(() => attachPickers(document), 30);
+  }).observe(document.body, { childList: true, subtree: true });
+  attachPickers(document);
+
   function renderPlayPanel(type){
     // New play, new question: never carry a shared-number choice over.
     clearNameOverrides();
@@ -4449,9 +4816,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // As a sibling of the column it aligned to the TOP of the row -- level
     // with the label, not the box it modifies -- because the row
     // tops-align so the calculator's working can hang below it.
-    const yardsBlock = (label, id, withLoss) => fieldLabel(label || 'Enter yards') +
+    // ===================================================================
+    // PROTOTYPE ONLY -- gametest.html. Not in game.html.
+    // ===================================================================
+    // A wheel picker for yardage, opened from a button beside the box.
+    //
+    // IN A POPOVER, NOT INLINE. The first attempt put a row of buttons
+    // under every yards field and pushed every panel around -- the
+    // controls below moved, and panels that fitted on a screen stopped
+    // fitting. Nothing here occupies layout space until it is asked for:
+    // the only permanent addition is one small button.
+    // `picker` chooses which launcher sits beside the box: 'wheel' (the
+    // default) or 'keypad'. Both are prototypes and both write into the
+    // same input, so a panel can carry either and nothing downstream
+    // notices -- which is what makes comparing them on real plays cheap.
+    const yardsBlock = (label, id, withLoss, picker) => fieldLabel(label || 'Enter yards') +
       '<span style="display:inline-flex; align-items:center; gap:8px;">' +
-        '<input autocomplete="off" type="text" id="' + (id||'pp_yards') + '" style="width:80px;">' +
+        '<input autocomplete="off" type="text" inputmode="numeric" id="' + (id||'pp_yards') + '" style="width:80px;">' +
+
         (withLoss ? '<button type="button" class="lossToggle ptoggle" data-for="' + (id||'pp_yards') + '" ' +
           'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button>' : '') +
       '</span>';
@@ -4528,6 +4910,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
             TEAMS[opp].name + '</button>' +
           '<input autocomplete="off" type="text" id="pp_calc_yardline" placeholder="yard line" style="width:90px;">' +
+
         '</span>' +
         spotCalcReadoutHtml() +
       '</div>';
@@ -4601,6 +4984,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '</div>';
     else if (type === 'pass') html = outcomeSwitchRow('pass') +
         offBlock('passer','Passer') + offBlock('receiver','Receiver') +
+        // PROTOTYPE: the passing tree carries the KEYPAD, the rushing tree
+        // the wheel, so the two can be compared on the same evening
+        // against real plays rather than in the abstract.
         '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap">' + yardsBlock('Enter yards', null, true) + '</div>' + spotCalcHtml() + '</div>' +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
         '<div style="margin-bottom:6px;"><input autocomplete="off" type="checkbox" id="pp_incomplete" style="display:none;">' +
