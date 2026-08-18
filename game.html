@@ -890,71 +890,85 @@ function extractNameTag(rawName){
 //
 // The SLUGS stay distinct (offensive_pi / defensive_pi) so the stored
 // data can still tell them apart even though the labels match.
+// YARDS / afd (automatic first down) / lossOfDown, added 18 Aug 2026 for
+// the auto-fill feature -- see PROJECT_NOTES. Verified against current
+// NFHS sources rather than assumed from NFL/NCAA habit, which gets this
+// wrong in ways that matter: automatic first down under NFHS belongs to
+// FOUR fouls only (the roughing fouls, marked afd below) -- not defensive
+// holding, not defensive pass interference, not personal fouls, all of
+// which carry it in the NFL. A few fouls carry loss of down instead,
+// which is a THIRD down effect this file previously had no button for.
+//
+// chop_block has NO yards value on purpose -- sources disagree (10 yards
+// per two NFHS exam-prep documents; 15 per an officials' association's
+// cited rule text) and this file could not resolve it with confidence.
+// An undefined yards value means the auto-fill leaves the box blank
+// rather than silently pick a side of that disagreement.
 const PENALTIES = {
   // --- before the snap ---
-  false_start:          { name: 'False start',                     side: 'off', group: 'Before the snap' },
-  illegal_formation:    { name: 'Illegal formation',               side: 'off', group: 'Before the snap' },
-  illegal_shift:        { name: 'Illegal shift',                   side: 'off', group: 'Before the snap' },
-  illegal_motion:       { name: 'Illegal motion',                  side: 'off', group: 'Before the snap' },
-  illegal_snap:         { name: 'Illegal snap',                    side: 'off', group: 'Before the snap' },
-  illegal_numbering:    { name: 'Illegal numbering',               side: 'off', group: 'Before the snap' },
+  false_start:          { name: 'False start',                     side: 'off', group: 'Before the snap', yards: 5 },
+  illegal_formation:    { name: 'Illegal formation',               side: 'off', group: 'Before the snap', yards: 5 },
+  illegal_shift:        { name: 'Illegal shift',                   side: 'off', group: 'Before the snap', yards: 5 },
+  illegal_motion:       { name: 'Illegal motion',                  side: 'off', group: 'Before the snap', yards: 5 },
+  illegal_snap:         { name: 'Illegal snap',                    side: 'off', group: 'Before the snap', yards: 5 },
+  illegal_numbering:    { name: 'Illegal numbering',               side: 'off', group: 'Before the snap', yards: 5 },
   // NFHS keeps "encroachment" for the DEFENCE entering the neutral zone
   // and uses "false start" for the offence -- it is not the NFL's
   // "offside", and calling it that in the log would be wrong.
-  encroachment:         { name: 'Encroachment',                    side: 'def', group: 'Before the snap' },
-  delay_of_game:        { name: 'Delay of game',                   side: 'both', group: 'Before the snap' },
-  illegal_substitution: { name: 'Illegal substitution',            side: 'both', group: 'Before the snap' },
-  too_many_players:     { name: 'Too many players on the field',   side: 'both', group: 'Before the snap' },
-
+  encroachment:         { name: 'Encroachment',                    side: 'def', group: 'Before the snap', yards: 5 },
+  delay_of_game:        { name: 'Delay of game',                   side: 'both', group: 'Before the snap', yards: 5 },
+  illegal_substitution: { name: 'Illegal substitution',            side: 'both', group: 'Before the snap', yards: 5 },
+  too_many_players:     { name: 'Too many players on the field',   side: 'both', group: 'Before the snap', yards: 5 },
   // --- during the play ---
-  holding:              { name: 'Holding',                         side: 'both', group: 'During the play' },
-  illegal_use_hands:    { name: 'Illegal use of hands',            side: 'both', group: 'During the play' },
-  illegal_block_back:   { name: 'Illegal block in the back',       side: 'both', group: 'During the play' },
-  block_below_waist:    { name: 'Illegal block below the waist',   side: 'both', group: 'During the play' },
-  clipping:             { name: 'Clipping',                        side: 'both', group: 'During the play' },
-  tripping:             { name: 'Tripping',                        side: 'both', group: 'During the play' },
-  illegal_participation:{ name: 'Illegal participation',           side: 'both', group: 'During the play' },
-  illegal_kick_bat:     { name: 'Illegal kicking or batting',      side: 'both', group: 'During the play' },
-  chop_block:           { name: 'Chop block',                      side: 'off', group: 'During the play' },
-  hurdling:             { name: 'Hurdling',                        side: 'off', group: 'During the play' },
-  helping_runner:       { name: 'Helping the runner',              side: 'off', group: 'During the play' },
-  ineligible_downfield: { name: 'Ineligible receiver downfield',   side: 'off', group: 'During the play' },
-  illegal_forward_pass: { name: 'Illegal forward pass',            side: 'off', group: 'During the play' },
-  intentional_grounding:{ name: 'Intentional grounding',           side: 'off', group: 'During the play' },
-  illegal_touching:     { name: 'Illegal touching',                side: 'off', group: 'During the play' },
-  offensive_pi:         { name: 'Pass interference',               side: 'off', group: 'During the play' },
-  defensive_pi:         { name: 'Pass interference',               side: 'def', group: 'During the play' },
+  holding:              { name: 'Holding',                         side: 'both', group: 'During the play', yards: 10 },
+  illegal_use_hands:    { name: 'Illegal use of hands',            side: 'both', group: 'During the play', yards: 10 },
+  illegal_block_back:   { name: 'Illegal block in the back',       side: 'both', group: 'During the play', yards: 10 },
+  block_below_waist:    { name: 'Illegal block below the waist',   side: 'both', group: 'During the play', yards: 10 },
+  clipping:             { name: 'Clipping',                        side: 'both', group: 'During the play', yards: 15 },
+  tripping:             { name: 'Tripping',                        side: 'both', group: 'During the play', yards: 15 },
+  illegal_participation:{ name: 'Illegal participation',           side: 'both', group: 'During the play', yards: 15 },
+  illegal_kick_bat:     { name: 'Illegal kicking or batting',      side: 'both', group: 'During the play', yards: 10 },
+  chop_block:           { name: 'Chop block',                      side: 'off', group: 'During the play'  },
+  hurdling:             { name: 'Hurdling',                        side: 'off', group: 'During the play', yards: 15 },
+  helping_runner:       { name: 'Helping the runner',              side: 'off', group: 'During the play', yards: 15 },
+  ineligible_downfield: { name: 'Ineligible receiver downfield',   side: 'off', group: 'During the play', yards: 5 },
+  illegal_forward_pass: { name: 'Illegal forward pass',            side: 'off', group: 'During the play', yards: 5, lossOfDown: true },
+  intentional_grounding:{ name: 'Intentional grounding',           side: 'off', group: 'During the play', yards: 5, lossOfDown: true },
+  illegal_touching:     { name: 'Illegal touching',                side: 'off', group: 'During the play', yards: 5, lossOfDown: true },
+  offensive_pi:         { name: 'Pass interference',               side: 'off', group: 'During the play', yards: 15 },
+  defensive_pi:         { name: 'Pass interference',               side: 'def', group: 'During the play', yards: 15 },
   // MOVED to Personal foul / conduct, 14 Aug 2026. It is a personal foul
   // in NFHS and sits beside unnecessary roughness and targeting in every
   // coach's head -- filed under "During the play" it read as missing to
   // someone looking where it belongs. Same class of problem as pass
   // interference sorting under D: present, correct, and unfindable.
-  roughing_passer:      { name: 'Roughing the passer',             side: 'def', group: 'Personal foul / conduct' },
-  leaping:              { name: 'Leaping',                         side: 'def', group: 'During the play' },
-  leverage:             { name: 'Leverage',                        side: 'def', group: 'During the play' },
-
+  roughing_passer:      { name: 'Roughing the passer',             side: 'def', group: 'Personal foul / conduct', yards: 15, afd: true },
+  leaping:              { name: 'Leaping',                         side: 'def', group: 'During the play', yards: 15 },
+  leverage:             { name: 'Leverage',                        side: 'def', group: 'During the play', yards: 15 },
   // --- kicking plays ---
   // Charged to the KICKING team, which is the side in possession, so
   // these sit under offence. The receiving team's fouls are the mirror.
-  roughing_kicker:      { name: 'Roughing the kicker',             side: 'def', group: 'Kicking plays' },
-  roughing_holder:      { name: 'Roughing the holder',             side: 'def', group: 'Kicking plays' },
-  running_into_kicker:  { name: 'Running into the kicker',         side: 'def', group: 'Kicking plays' },
-  invalid_fair_catch:   { name: 'Invalid fair catch signal',       side: 'def', group: 'Kicking plays' },
-  kick_catch_interference:{ name: 'Kick-catch interference',       side: 'off', group: 'Kicking plays' },
-
+  roughing_kicker:      { name: 'Roughing the kicker',             side: 'def', group: 'Kicking plays', yards: 15, afd: true },
+  roughing_holder:      { name: 'Roughing the holder',             side: 'def', group: 'Kicking plays', yards: 15, afd: true },
+  // ADDED 18 Aug 2026 -- one of the four AFD fouls and was missing from
+  // this catalog entirely.
+  roughing_snapper:     { name: 'Roughing the snapper',            side: 'def', group: 'Kicking plays', yards: 15, afd: true },
+  running_into_kicker:  { name: 'Running into the kicker',         side: 'def', group: 'Kicking plays', yards: 5 },
+  invalid_fair_catch:   { name: 'Invalid fair catch signal',       side: 'def', group: 'Kicking plays', yards: 5 },
+  kick_catch_interference:{ name: 'Kick-catch interference',       side: 'off', group: 'Kicking plays', yards: 15 },
   // --- personal fouls and conduct ---
-  personal_foul:        { name: 'Personal foul',                   side: 'both', group: 'Personal foul / conduct' },
-  unnecessary_roughness:{ name: 'Unnecessary roughness',           side: 'both', group: 'Personal foul / conduct' },
-  unsportsmanlike:      { name: 'Unsportsmanlike conduct',         side: 'both', group: 'Personal foul / conduct' },
-  face_mask:            { name: 'Face mask',                       side: 'both', group: 'Personal foul / conduct' },
-  horse_collar:         { name: 'Horse-collar tackle',             side: 'both', group: 'Personal foul / conduct' },
-  targeting:            { name: 'Targeting',                       side: 'both', group: 'Personal foul / conduct' },
-  helmet_contact:       { name: 'Illegal helmet contact',          side: 'both', group: 'Personal foul / conduct' },
-  spearing:             { name: 'Spearing',                        side: 'both', group: 'Personal foul / conduct' },
-  butt_block:           { name: 'Butt block',                      side: 'both', group: 'Personal foul / conduct' },
-  fighting:             { name: 'Fighting',                        side: 'both', group: 'Personal foul / conduct' },
-  sideline_interference:{ name: 'Sideline interference',           side: 'both', group: 'Personal foul / conduct' },
-  illegal_equipment:    { name: 'Illegal equipment',               side: 'both', group: 'Personal foul / conduct' }
+  personal_foul:        { name: 'Personal foul',                   side: 'both', group: 'Personal foul / conduct', yards: 15 },
+  unnecessary_roughness:{ name: 'Unnecessary roughness',           side: 'both', group: 'Personal foul / conduct', yards: 15 },
+  unsportsmanlike:      { name: 'Unsportsmanlike conduct',         side: 'both', group: 'Personal foul / conduct', yards: 15 },
+  face_mask:            { name: 'Face mask',                       side: 'both', group: 'Personal foul / conduct', yards: 15 },
+  horse_collar:         { name: 'Horse-collar tackle',             side: 'both', group: 'Personal foul / conduct', yards: 15 },
+  targeting:            { name: 'Targeting',                       side: 'both', group: 'Personal foul / conduct', yards: 15 },
+  helmet_contact:       { name: 'Illegal helmet contact',          side: 'both', group: 'Personal foul / conduct', yards: 15 },
+  spearing:             { name: 'Spearing',                        side: 'both', group: 'Personal foul / conduct', yards: 15 },
+  butt_block:           { name: 'Butt block',                      side: 'both', group: 'Personal foul / conduct', yards: 15 },
+  fighting:             { name: 'Fighting',                        side: 'both', group: 'Personal foul / conduct', yards: 15 },
+  sideline_interference:{ name: 'Sideline interference',           side: 'both', group: 'Personal foul / conduct', yards: 15 },
+  illegal_equipment:    { name: 'Illegal equipment',               side: 'both', group: 'Personal foul / conduct', yards: 15 }
 };
 
 // Options for one side, grouped, in the order the groups are declared
@@ -1038,6 +1052,15 @@ function parseInput(raw, state){
     // way to record that, so the coach had to fix the down afterwards
     // with Adjust Down/Distance.
     const autoFirstDown = tokens.slice(2).some(t => /^fd$/i.test(t));
+    // 'ld' = loss of down. Illegal touching, illegal forward pass and
+    // intentional grounding are enforced as though the down had been
+    // played and failed -- the down that was just run is consumed, same
+    // as an ordinary incompletion, rather than left untouched (noDown)
+    // or turned into a fresh series (autoFirstDown). Added 18 Aug 2026
+    // alongside 'nd'/'fd': a third down effect this file had no way to
+    // record before, so it fell to Adjust Down/Distance after the fact,
+    // same as 'fd' did before it existed.
+    const lossOfDown = tokens.slice(2).some(t => /^ld$/i.test(t));
     const newFieldPos = state.fieldPos !== null ? Math.max(0, Math.min(100, state.fieldPos + fieldDelta)) : null;
     let newDown = state.down, newDistance = state.distance !== null ? (state.distance - fieldDelta) : null;
     if (noDownChange){
@@ -1047,6 +1070,16 @@ function parseInput(raw, state){
     } else if (newDistance !== null && newDistance <= 0){
       newDown = 1;
       newDistance = newFieldPos !== null ? Math.max(1, Math.min(10, 100 - newFieldPos)) : 10;
+    } else if (lossOfDown && newDown !== null){
+      // Distance above already increased by the yardage, exactly as an
+      // ordinary failed down would move it -- only the down number needs
+      // advancing here. Capped at 4th rather than rolled into a turnover:
+      // loss of down ON an already-4th-down snap needs Adjust
+      // Down/Distance, the same fallback 'fd' relied on before it had a
+      // button. That combination is rare enough that building a full
+      // turnover path into this branch is not worth the added risk of
+      // getting the turnover mechanics wrong inside a penalty branch.
+      newDown = Math.min(4, newDown + 1);
     }
     if (autoFirstDown && newFieldPos !== null){
       newDown = 1;
@@ -8421,20 +8454,58 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<p style="font-size:13px; color:#888; margin:0 0 4px;">Penalty (optional)</p>' +
         '<select id="pen_type" style="min-width:260px; padding:8px; font-size:15px; border-radius:6px; border:1px solid #ccc;"></select>' +
       '</div>' +
-      '<div style="margin-top:8px;"><label class="inline">Yards <input autocomplete="off" type="text" id="pen_yds" style="width:70px; display:inline-block; margin-left:6px;"></label></div>' +
-      '<label class="inline" style="margin-top:8px; display:block;"><input autocomplete="off" type="checkbox" id="pen_no_down"> Dead-ball / after a kick or change of possession (move the ball, keep the down &amp; distance)</label>' +
+      '<div style="margin-top:8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
+        '<label class="inline">Yards <input autocomplete="off" type="text" id="pen_yds" style="width:70px; display:inline-block; margin-left:6px;"></label>' +
+        // A CLICK, not a toggle: half-the-distance is a one-time
+        // transform applied when the scorer has judged the situation
+        // calls for it, not a state the panel remembers -- Andy's
+        // design, not automatic detection. The human decides WHETHER a
+        // rule applies; the app only computes the number once told to.
+        '<button type="button" id="pen_half_dist_btn" class="secondary" style="padding:8px 12px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">Half the distance</button>' +
+      '</div>' +
+      '<div id="pen_half_readout" style="display:none; font-size:13px; margin-top:6px;"></div>' +
+      '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pen_no_down" style="display:none;"><button type="button" id="pen_no_down_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Dead-ball / after a kick or change of possession (move the ball, keep the down &amp; distance)</button></div>' +
       '<div style="margin-top:8px;">' +
         '<input autocomplete="off" type="checkbox" id="pen_first_down" style="display:none;">' +
         '<button type="button" id="pen_first_down_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Automatic first down</button>' +
       '</div>' +
+      '<div style="margin-top:8px;"><input autocomplete="off" type="checkbox" id="pen_lod" style="display:none;"><button type="button" id="pen_lod_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Loss of down</button></div>' +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="pen_review">Review</button><button class="secondary" id="pen_clear">Clear</button></div>';
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
     let penTeam = null;
-    const fdBtn = document.getElementById('pen_first_down_toggle'), fdCb = document.getElementById('pen_first_down');
-    fdBtn.addEventListener('click', () => {
-      fdCb.checked = !fdCb.checked;
-      fdBtn.classList.toggle('picked', fdCb.checked);
-      fdBtn.textContent = fdCb.checked ? '\u2713 Automatic first down' : 'Automatic first down';
+    function setToggle(id, on){
+      const btn = document.getElementById(id + '_toggle'), cb = document.getElementById(id);
+      cb.checked = on;
+      btn.classList.toggle('picked', on);
+      // The label text itself (minus any checkmark already on it) is the
+      // source of truth, read back off the button rather than stored
+      // separately -- nothing else needs to know these three labels.
+      const label = btn.dataset.label || btn.textContent.replace(/^\u2713\s*/, '');
+      btn.dataset.label = label;
+      btn.textContent = on ? '\u2713 ' + label : label;
+    }
+    ['pen_no_down', 'pen_first_down', 'pen_lod'].forEach(id => {
+      document.getElementById(id + '_toggle').addEventListener('click', () => setToggle(id, !document.getElementById(id).checked));
+    });
+    // MUTUALLY EXCLUSIVE: dead-ball, automatic first down and loss of
+    // down are three different answers to the same question -- what
+    // happens to the down -- so turning one on turns the other two off.
+    // Andy can still override any of these by hand afterward; this only
+    // stops two contradictory states sitting on screen at once.
+    ['pen_no_down', 'pen_first_down', 'pen_lod'].forEach(id => {
+      document.getElementById(id + '_toggle').addEventListener('click', () => {
+        if (!document.getElementById(id).checked) return;
+        ['pen_no_down', 'pen_first_down', 'pen_lod'].filter(x => x !== id).forEach(x => setToggle(x, false));
+      });
+    });
+    const ydsEl = document.getElementById('pen_yds');
+    // A hand-edit means this is no longer "the suggestion" -- release the
+    // tint the moment the coach types, same convention used everywhere
+    // else tonight for an auto-derived number.
+    ydsEl.addEventListener('input', () => {
+      if (ydsEl.dataset.autofill !== '1') return;
+      delete ydsEl.dataset.autofill;
+      ydsEl.style.background = ''; ydsEl.style.borderColor = ''; ydsEl.style.fontWeight = '';
     });
     panel.querySelectorAll('.penTeamBtn').forEach(b => b.addEventListener('click', () => {
       penTeam = b.dataset.team;
@@ -8454,16 +8525,69 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       sel.value = '';
       document.getElementById('pen_type_wrap').style.display = 'block';
     }));
+    document.getElementById('pen_type').addEventListener('change', () => {
+      const slug = document.getElementById('pen_type').value;
+      const p = slug ? PENALTIES[slug] : null;
+      // RE-DERIVED FROM SCRATCH on every change, matching the side
+      // dropdown's own "rebuild, don't patch" rule above -- a coach who
+      // picks a foul, sees the suggestion, then picks a DIFFERENT foul
+      // should see THAT one's numbers, not a mix of old and new.
+      if (p && p.yards !== undefined){
+        ydsEl.value = String(p.yards);
+        ydsEl.dataset.autofill = '1';
+        ydsEl.style.background = '#eef6f1'; ydsEl.style.borderColor = '#1a7a4c'; ydsEl.style.fontWeight = '700';
+      } else if (ydsEl.dataset.autofill === '1'){
+        // The foul just switched to one with NO book number (chop block
+        // -- sources disagree, see PENALTIES) or back to "not specified".
+        // Cleared rather than left sitting there un-marked as stale.
+        ydsEl.value = '';
+        delete ydsEl.dataset.autofill;
+        ydsEl.style.background = ''; ydsEl.style.borderColor = ''; ydsEl.style.fontWeight = '';
+      }
+      setToggle('pen_first_down', !!(p && p.afd));
+      setToggle('pen_lod', !!(p && p.lossOfDown));
+    });
+    document.getElementById('pen_half_dist_btn').addEventListener('click', () => {
+      const readout = document.getElementById('pen_half_readout');
+      readout.style.display = 'block';
+      if (!penTeam){
+        readout.style.color = '#a32d2d';
+        readout.textContent = 'Pick On offense / On defense first.';
+        return;
+      }
+      const fp = computeState().fieldPos;
+      if (fp === null){
+        readout.style.color = '#a32d2d';
+        readout.textContent = 'Field position is not set -- enter the yardage directly.';
+        return;
+      }
+      // Half the REMAINING DISTANCE TO THE RELEVANT GOAL LINE, not half
+      // of whatever number happens to be in the box already. A foul
+      // against the offence pushes the ball toward the offence's OWN
+      // goal, so that is the goal that matters; a foul against the
+      // defence pushes it the other way. fieldPos is already in the
+      // current possessor's (the offence's) frame, so this is a direct
+      // read of it or its complement -- no further conversion needed.
+      const distToGoal = penTeam === 'off' ? fp : (100 - fp);
+      // ROUNDED UP, never a fraction of a yard -- Andy's instruction.
+      const half = Math.max(0, Math.ceil(distToGoal / 2));
+      ydsEl.value = String(half);
+      ydsEl.dataset.autofill = '1';
+      ydsEl.style.background = '#eef6f1'; ydsEl.style.borderColor = '#1a7a4c'; ydsEl.style.fontWeight = '700';
+      readout.style.color = '#1a7a4c';
+      readout.textContent = 'Half the distance to the goal: ' + half + (half === 1 ? ' yard.' : ' yards.');
+    });
     document.getElementById('pen_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('pen_review').addEventListener('click', () => {
       const yds = document.getElementById('pen_yds').value.trim();
       if (!penTeam || !yds) return;
       const noDown = document.getElementById('pen_no_down').checked;
       const firstDown = document.getElementById('pen_first_down').checked;
+      const lossOfDown = document.getElementById('pen_lod').checked;
       const penType = (document.getElementById('pen_type') || {}).value || '';
       const code = (penTeam === 'off' ? 'po' : 'pd') + ' ' + yds +
         (penType ? ' f:' + penType : '') +
-        (noDown ? ' nd' : '') + (firstDown ? ' fd' : '');
+        (noDown ? ' nd' : '') + (firstDown ? ' fd' : '') + (lossOfDown ? ' ld' : '');
       document.getElementById('code').value = code;
       showConfirm();
     });
