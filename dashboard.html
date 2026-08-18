@@ -77,6 +77,18 @@
   .game-meta { font-size:13px; color:#888; }
   .game-right { text-align:center; width:140px; flex-shrink:0; }
   .game-score { font-weight:600; }
+  @media (max-width: 700px) {
+    /* 140px was sized for a desktop row with room to spare. On a phone
+       that same reservation, plus the kebab button, plus the game
+       number, left under 100px for the team name -- not enough for
+       "vs Alexandria Sr High", which wrapped across three lines while
+       everything else on the row sat comfortably. The score/status
+       column narrows instead; "Not started" and "In progress" wrap to
+       two short lines at this width, which reads as normal on a phone,
+       unlike a team name doing the same. */
+    .game-right { width:74px; font-size:13px; }
+    .game-left { gap:10px; }
+  }
   .status-win { color:#1a7a4c; font-size:13px; }
   .status-loss { color:#a32d2d; font-size:13px; }
   .status-live { color:#a37a00; font-size:13px; }
@@ -98,7 +110,12 @@
      follow the season selector, which is easier to reason about as one
      element than as a row inside a list. */
   .season-record { background:#1a1a2e; color:#fff; border-radius:10px; padding:14px 18px;
-                   display:flex; align-items:center; gap:26px; margin:14px 0 0; }
+                   display:flex; align-items:center; margin:14px 0 0; }
+  /* The stats moved one level deeper in the DOM (see renderSeasonRecord)
+     so the mobile rule below can force this one container to full width
+     without touching the .rec-item children individually. Desktop
+     layout is otherwise unchanged: same flex row, same 26px gap. */
+  .season-record .rec-stats { display:flex; align-items:center; gap:26px; }
   .season-record .rec-big { font-size:30px; font-weight:500; line-height:1;
                             font-variant-numeric:tabular-nums; }
   .season-record .rec-val { font-size:16px; font-weight:700; line-height:1.2;
@@ -117,10 +134,31 @@
   .season-record .rec-reports { margin-left:auto; padding:8px 16px; border-radius:8px;
     font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap; }
   @media (max-width: 700px) {
-    /* Spread rather than clustered: three items on a phone read better
-       apart than bunched at the left with dead space to the right. */
-    .season-record { gap:0; justify-content:space-between; padding:12px 14px; }
+    /* THE BUTTON GETS ITS OWN ROW on mobile, rather than sharing one
+       with the three stat blocks.
+       ------------------------------------------------------------
+       .rec-reports carries margin-left:auto to push itself to the far
+       edge of the row -- which works by consuming ALL remaining free
+       space as its own margin, BEFORE justify-content:space-between
+       ever gets a turn to distribute anything. On desktop that is
+       harmless: a fixed 26px gap already separates the three stat
+       blocks regardless of what space is left over. On mobile the gap
+       was 0, relying entirely on space-between to create spacing --
+       and with nothing left for it to distribute once the button's
+       auto-margin had claimed the row, "3-1", "3-0" and "0-1" collapsed
+       together with no visible separation between any of them.
+       Reported from a real phone screenshot.
+
+       Wrapping fixes it structurally rather than by guessing at a gap
+       that happens to leave enough room: .rec-stats is forced to its
+       own full-width row, which pushes the button onto a second row
+       by simple arithmetic -- nothing of a fixed width is competing
+       with it for that first row's space any more. */
+    .season-record { flex-wrap:wrap; padding:12px 14px; }
+    .season-record .rec-stats { width:100%; justify-content:space-between; gap:0; }
     .season-record .rec-big { font-size:26px; }
+    .season-record .rec-reports { margin-left:0; width:100%; text-align:center;
+      justify-content:center; display:flex; align-items:center; }
   }
   /* .status-loss was declared twice, identically, here and beside
      .status-win. Harmless but misleading -- the second looked like an
@@ -575,7 +613,11 @@
         '</div>';
     el.innerHTML =
       '<div class="season-record">' +
-        statsHtml +
+        // Wrapped so the mobile @media rule can force THIS to full width
+        // (pushing the button onto its own row below by simple
+        // arithmetic) without needing three individual widths on the
+        // .rec-item/.rec-empty children themselves.
+        '<div class="rec-stats">' + statsHtml + '</div>' +
         '<a class="rec-reports" id="reportsLink" href="reports.html">Stats / Reports</a>' +
       '</div>';
     el.classList.remove('hidden');
