@@ -6572,7 +6572,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (!wrap) return;
         const ylEl = document.getElementById('pp_kofielded_yardline');
         const sideBtns = [...wrap.querySelectorAll('.kofieldedSide')];
-        let side = null;
+        // DEFAULTS TO THE RECEIVING TEAM'S SIDE, not unset.
+        // ------------------------------------------------------------
+        // A kickoff always travels toward the opponent, so "fielded at"
+        // is on the receiving team's side of the field in every case
+        // except a very short or mishit kick. Leaving `side` unset meant
+        // a coach who typed a yard line without ALSO clicking a side
+        // button got no error and no result -- the readout kept saying
+        // "enter fielded first" with a number plainly sitting in the
+        // box, because recompute() requires both and silently no-ops
+        // without the side. Reported from a real game.
+        let side = 'opp';
         const paintSides = () => sideBtns.forEach(b => b.classList.toggle('picked', b.dataset.side === side));
         function recompute(){
           koFieldedPos = null;
@@ -6581,6 +6591,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const n = parseInt(raw, 10);
           if (isNaN(n) || n < 0 || n > 50) return;
           koFieldedPos = side === 'own' ? n : (100 - n);
+          // FALLBACK PREFILL for the no-return case -- a kickoff fielded
+          // and never returned still needs a takeover spot, exactly as
+          // punt's equivalent calculator already provides one. This
+          // yields to "returned to" whenever THAT has a value: its own
+          // recompute() runs after this one (registration order, same
+          // reasoning as elsewhere in this file) and overwrites the spot
+          // with the true endpoint the moment a return exists.
+          const spotYl = document.getElementById('pp_spot_yardline');
+          if (spotYl){
+            const ours = spotYl.dataset.fromCalc === '1';
+            const untouched = !spotYl.value.trim() && !document.querySelector('.pp_spot_side.picked');
+            if (ours || untouched){
+              const takeover = 100 - koFieldedPos;
+              const ownSide = takeover <= 50;
+              spotYl.value = String(ownSide ? takeover : 100 - takeover);
+              spotYl.dataset.fromCalc = '1';
+              const want = ownSide ? 'own' : 'opp';
+              const btn = document.querySelector('.pp_spot_side[data-side="' + want + '"]');
+              if (btn && !btn.classList.contains('picked')) btn.click();
+            }
+          }
         }
         sideBtns.forEach(b => b.addEventListener('click', () => { side = b.dataset.side; paintSides(); recompute(); }));
         ylEl.addEventListener('input', recompute);
@@ -6595,7 +6626,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const readout = document.getElementById('pp_koretto_readout');
         const retyEl = document.getElementById('pp_retyds');
         const sideBtns = [...wrap.querySelectorAll('.koretSide')];
-        let side = null;
+        // Same default and the same reason as "fielded at": most returns
+        // do not cross midfield, so this is right far more often than
+        // 'own' would be, and it closes off the identical silent-no-op
+        // bug recurring one field over.
+        let side = 'opp';
         const paintSides = () => sideBtns.forEach(b => b.classList.toggle('picked', b.dataset.side === side));
         let writing = false;
         function releaseRetyds(){
@@ -6625,6 +6660,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           retyEl.disabled = true;
           retyEl.style.background = '#eef6f1'; retyEl.style.borderColor = '#1a7a4c'; retyEl.style.fontWeight = '700';
           writing = false;
+
+          // THE TAKEOVER SPOT FOLLOWS THE RETURN -- this was MISSING
+          // entirely in the first version of this calculator, reported
+          // from a real game. Punt's equivalent has always done this;
+          // it was not ported over here. "ours or untouched" mirrors
+          // punt's wireReturnToCalc exactly: a manual edit by the coach
+          // to pp_spot still wins over anything this calculator would
+          // write.
+          const spotYl = document.getElementById('pp_spot_yardline');
+          if (spotYl){
+            const ours = spotYl.dataset.fromCalc === '1';
+            const untouched = !spotYl.value.trim() && !document.querySelector('.pp_spot_side.picked');
+            if (ours || untouched){
+              const takeover = 100 - returnToPos;
+              const ownSide = takeover <= 50;
+              spotYl.value = String(ownSide ? takeover : 100 - takeover);
+              spotYl.dataset.fromCalc = '1';
+              const want = ownSide ? 'own' : 'opp';
+              const btn = document.querySelector('.pp_spot_side[data-side="' + want + '"]');
+              if (btn && !btn.classList.contains('picked')) btn.click();
+            }
+          }
           readout.textContent = 'from ' + markerLabel(100 - koFieldedPos) + ' return to ' + markerLabel(100 - returnToPos) +
             '  =  ' + (retYds >= 0 ? '+' : '') + retYds + ' return yards';
         }
