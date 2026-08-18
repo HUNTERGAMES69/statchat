@@ -4378,6 +4378,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // Fired so the calculators release their hold on the box and the
       // review path sees the value. Setting .value alone is silent.
       wheelTarget.dispatchEvent(new Event('input', { bubbles: true }));
+        // 'change' AS WELL AS 'input' -- a real keyboard fires both, and
+        // things downstream listen for the second one. attachNameConfirm
+        // binds 'blur' and 'change', never 'input', so a jersey number
+        // entered on the pad set the number and never resolved the NAME.
+        // The saved play then carried a number alone, lastUsedByIdentity
+        // skips anyone without a name, and that player silently stopped
+        // counting towards picker recency -- which is why the opponent's
+        // pickers, whose players are typed rather than tapped from the
+        // seeded starter grid, stopped sorting while Neville's kept working.
+        //
+        // Invisible to the suite because ui_driver.js dispatches both, as
+        // a real keyboard would: the fixture was kinder than the pad.
     }
 
     cols.forEach(col => {
@@ -4489,6 +4501,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         t.value = buf === '' ? ''
           : (padKind === 'clock' ? buf : String(parseInt(buf, 10)));
         t.dispatchEvent(new Event('input', { bubbles: true }));
+        // 'change' AS WELL AS 'input' -- a real keyboard fires both, and
+        // things downstream listen for the second one. attachNameConfirm
+        // binds 'blur' and 'change', never 'input', so a jersey number
+        // entered on the pad set the number and never resolved the NAME.
+        // The saved play then carried a number alone, lastUsedByIdentity
+        // skips anyone without a name, and that player silently stopped
+        // counting towards picker recency -- which is why the opponent's
+        // pickers, whose players are typed rather than tapped from the
+        // seeded starter grid, stopped sorting while Neville's kept working.
+        //
+        // Invisible to the suite because ui_driver.js dispatches both, as
+        // a real keyboard would: the fixture was kinder than the pad.
       } finally {
         padWriting = false;
       }
@@ -4732,6 +4756,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const gained = inTd ? (100 - stripStart) : inSafety ? stripStart : Math.abs(delta);
         stripTarget.value = String(gained);
         stripTarget.dispatchEvent(new Event('input', { bubbles: true }));
+        // 'change' AS WELL AS 'input' -- a real keyboard fires both, and
+        // things downstream listen for the second one. attachNameConfirm
+        // binds 'blur' and 'change', never 'input', so a jersey number
+        // entered on the pad set the number and never resolved the NAME.
+        // The saved play then carried a number alone, lastUsedByIdentity
+        // skips anyone without a name, and that player silently stopped
+        // counting towards picker recency -- which is why the opponent's
+        // pickers, whose players are typed rather than tapped from the
+        // seeded starter grid, stopped sorting while Neville's kept working.
+        //
+        // Invisible to the suite because ui_driver.js dispatches both, as
+        // a real keyboard would: the fixture was kinder than the pad.
         // A play that lost ground has to say so. The yards box holds a
         // magnitude, and LOSS is how every panel here carries the sign --
         // writing a bare 6 for a six yard loss is the one outcome that
