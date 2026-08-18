@@ -785,7 +785,11 @@ function computeBoxScore(playsList){
     const type = r.playType;
     if (type === 'kickoff' && r.kicker) lastKickoffKicker = r.kicker;
 
-    if (r.carrier && type === 'rush'){
+    // `attempt` is a fumble that ENDED a rush -- one play, not two. The
+    // carry and its yardage are credited here exactly as they were when
+    // the rush was written as its own separate play; only the play count
+    // changes, because there is now correctly one of them.
+    if (r.carrier && (type === 'rush' || (type === 'fumble' && r.attempt === 'rush'))){
       const s = bucket(r.carrier.team, 'rushing', r.carrier.num, r.carrier.name);
       if (s){
         s.att = (s.att||0) + 1;
@@ -806,6 +810,19 @@ function computeBoxScore(playsList){
     // known intended receiver. Two-point conversions are excluded --
     // NFHS keeps conversion attempts out of season passing and
     // receiving totals, so 'tpp' never reaches this branch.
+    // A fumble that ended a COMPLETION still throws and still catches.
+    // Credited off the roles the panel attached, so the reception is not
+    // lost with the separate pass play that used to carry it.
+    if (type === 'fumble' && r.attempt === 'pass' && r.passer){
+      const ps = bucket(r.passer.team, 'passing', r.passer.num, r.passer.name);
+      if (ps){ ps.att = (ps.att||0) + 1; ps.cmp = (ps.cmp||0) + 1;
+        ps.yds = (ps.yds||0) + (r.passer.yards||0); ps.long = Math.max(ps.long||0, r.passer.yards||0); }
+      if (r.receiver){
+        const rs = bucket(r.receiver.team, 'receiving', r.receiver.num, r.receiver.name);
+        if (rs){ rs.rec = (rs.rec||0) + 1; rs.tgt = (rs.tgt||0) + 1;
+          rs.yds = (rs.yds||0) + (r.receiver.yards||0); rs.long = Math.max(rs.long||0, r.receiver.yards||0); }
+      }
+    }
     if (type === 'incomplete' || type === 'int'){
       // Same reasoning as the completion below: an unnamed intended
       // receiver still had a ball thrown at him, and leaving it out makes
@@ -859,7 +876,9 @@ function computeBoxScore(playsList){
         if (e.td) rcv.td = (rcv.td||0) + 1;
       }
     }
-    if (r.passer && type === 'sack'){
+    // A fumble that ended a SACK is still a sack: the quarterback is
+    // charged, and NFHS still books the yardage as a team rushing loss.
+    if (r.passer && (type === 'sack' || (type === 'fumble' && r.attempt === 'sack'))){
       const s = bucket(r.passer.team, 'passing', r.passer.num, r.passer.name);
       if (s) s.sacked = (s.sacked||0) + 1;
       // NFHS charges sack yardage to the team as a rushing loss. Doing

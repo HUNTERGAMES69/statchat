@@ -1097,6 +1097,20 @@ function parseInput(raw, state){
   // below -- left in place it would be parsed as a returner number.
   const oobIdx = rest.indexOf('oob');
   if (oobIdx !== -1) rest.splice(oobIdx, 1);
+  // A FUMBLE THAT ENDED A RUSH, PASS OR SACK carries the play it ended,
+  // as `a:<kind>:<yards>[:<passer>]`. Stripped by SEARCH rather than by
+  // position, exactly as 'oob' is above: left in `rest` it would be read
+  // as a returner number, and the caller should not have to know where
+  // in the token list it is allowed to sit.
+  let attempt = null;
+  for (let ai = 0; ai < rest.length; ai++){
+    const am = String(rest[ai]).match(/^a:([rps]):(-?\d+)(?::(\w+))?$/i);
+    if (am){
+      attempt = { kind: am[1].toLowerCase(), yards: parseInt(am[2], 10) || 0, passer: am[3] || null };
+      rest.splice(ai, 1);
+      break;
+    }
+  }
   const isTouchback = rest[rest.length - 1] === 'tb';
   if (isTouchback) rest.pop();
   const O = n => nameInOffense(off, n), D = n => nameInDefense(def, n), ST = n => nameInSpecialTeams(off, n);
@@ -1246,15 +1260,47 @@ function parseInput(raw, state){
       return { text: O(p1) + ' fumble out of the end zone — TOUCHBACK',
         effect: {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
     }
+    // ONE PLAY, NOT TWO.
+    // --------------------------------------------------------------------
+    // A fumble ending a rush, pass or sack used to be written as two
+    // plays: the run, then the fumble. That put a down on the board the
+    // game never reached -- fumble on 2nd & 11 and the rush line read
+    // "3rd & 11" -- and because 'fumble' is a scrimmage type, the second
+    // half was then counted as its own down attempt, inventing a failed
+    // third down in the conversion table. Reported 17 Aug 2026.
+    //
+    // `attempt` folds the originating play back in: its wording here, its
+    // stat credit through `roles.attempt` in computeBoxScore.
+    const lead = !attempt ? O(p1) + ' fumble'
+      : (attempt.kind === 'r' ? O(p1) + ' rush ' + gainPhrase(attempt.yards)
+        : attempt.kind === 's' ? O(p1) + ' sacked ' + gainPhrase(attempt.yards)
+        : O(attempt.passer) + ' pass' + (p1 === '?' ? '' : ' to ' + O(p1)) + ' ' + gainPhrase(attempt.yards)
+        ) + ', fumble';
     if (rec){
-      let t = O(p1) + ' fumble — ' + (rec === '?' ? 'recovered by the defense' : 'recovered by ' + D(rec)) + ' (turnover)';
+      let t = lead + ' — ' + (rec === '?' ? 'recovered by the defense' : 'recovered by ' + D(rec)) + ' (turnover)';
       if (retyds) t += ', returned ' + retyds;
       let score = null;
       if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+      // EFFECT DELIBERATELY UNCHANGED when the ball is lost, attempt or
+      // no attempt. computeState skips the flip for stat plays -- a play
+      // that gains yardage must not also change hands -- so marking this
+      // isStat to move the ball would silently cancel the turnover. The
+      // yardage rides on `roles` instead, which is where computeBoxScore
+      // reads it, and the takeover spot comes from the panel's own spot
+      // field. Same reasoning, same shape, as a bad snap recovered by
+      // the defense.
       return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
     }
-    return { text: O(p1) + ' fumble — recovered by own team' + (isSafety ? ', in the end zone — SAFETY' : ''),
-      effect: isSafety ? { score: { team: def, points: 2 }, endsDrive: true } : {},
+    // RECOVERED BY THE OFFENSE: possession is kept, so this is an ordinary
+    // stat play and the down must advance exactly once -- which is what
+    // the separate rush play used to do before it was folded in here.
+    // Without isStat the down would stall and the drive would never reach
+    // fourth.
+    const ownEffect = isSafety
+      ? { score: { team: def, points: 2 }, endsDrive: true }
+      : (attempt ? { isStat: true, statYds: attempt.yards, fieldDelta: attempt.yards } : {});
+    return { text: lead + ' — recovered by own team' + (isSafety ? ', in the end zone — SAFETY' : ''),
+      effect: ownEffect,
       flipEligible: false, team: off, quarter: state.quarter };
   }
   if (type === 'pt'){
@@ -6141,28 +6187,29 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const yds = signedYards('pp_yards') || '0';
       const fumbled = document.getElementById('pp_rush_fumbled').checked;
       if (fumbled){
-        // The gain genuinely happened before the fumble -- save it as
-        // its own play first, silently, then let the rest of this
-        // branch build a Fumble-type play for the turnover itself.
-        const rushParsed = parseInput(sel.carrier + 'r ' + yds, computeState());
-        pushAndPersist({ id: nextId++, text: rushParsed.text, effect: rushParsed.effect, team: off, quarter: computeState().quarter,
-          roles: { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0, name: sel.carrierName || undefined }, playType: 'rush' } });
+        // The gain happened before the fumble, but it is the SAME PLAY --
+        // see the 'f' branch of parseInput. The attempt token carries the
+        // yardage into the wording; `roles.attempt` carries it into the
+        // box score. This used to push a separate rush play here, which
+        // invented a down the game never reached.
+        const att = ' a:r:' + (parseInt(yds, 10) || 0);
+        const attRole = { attempt: 'rush', attemptYards: parseInt(yds, 10) || 0 };
         const rec = document.querySelector('input[name=pp_rush_fumrec]:checked').value;
         if (rec === 'tb'){
           // Lost, but to nobody -- the defence gets it at their own 20.
-          code = sel.carrier + 'f tb';
-          roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined }, playType: 'fumble', lost: true };
+          code = sel.carrier + 'f tb' + att;
+          roles = Object.assign({ carrier: { team: off, num: sel.carrier, yards: parseInt(yds, 10) || 0, name: sel.carrierName || undefined }, playType: 'fumble', lost: true }, attRole);
         } else if (rec === 'own'){
           const isRushFumSafety = document.getElementById('pp_rushfum_safety').checked;
-          code = sel.carrier + 'f' + (isRushFumSafety ? ' sf' : '');
-          roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined }, playType: 'fumble' };
+          code = sel.carrier + 'f' + att + (isRushFumSafety ? ' sf' : '');
+          roles = Object.assign({ carrier: { team: off, num: sel.carrier, yards: parseInt(yds, 10) || 0, name: sel.carrierName || undefined }, playType: 'fumble' }, attRole);
         } else {
           const fumCredit = sel.credit;
           // Optional -- see the standalone fumble branch.
           const retyds = yards('pp_rushfum_retyds');
           const returnTd = document.getElementById('pp_rushfum_td').checked;
-          code = sel.carrier + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
-          roles = { carrier: { team: off, num: sel.carrier, name: sel.carrierName || undefined }, playType: 'fumble', lost: true };
+          code = sel.carrier + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + att + (returnTd ? ' td' : '');
+          roles = Object.assign({ carrier: { team: off, num: sel.carrier, yards: parseInt(yds, 10) || 0, name: sel.carrierName || undefined }, playType: 'fumble', lost: true }, attRole);
           if (fumCredit) roles.defense = { team: def, num: fumCredit, name: sel.creditName || undefined };
         }
       } else {
@@ -6188,30 +6235,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const yds = signedYards('pp_yards') || '0';
         const fumbled = document.getElementById('pp_pass_fumbled').checked;
         if (fumbled){
-          // The catch and yardage genuinely happened before the fumble --
-          // save the completion as its own play first, silently, then
-          // let the rest of this branch build a Fumble-type play for
-          // the receiver, same as the Rush panel's equivalent.
-          const passParsed = parseInput(sel.passer + 'p ' + recTok + ' ' + yds, computeState());
-          pushAndPersist({ id: nextId++, text: passParsed.text, effect: passParsed.effect, team: off, quarter: computeState().quarter,
-            roles: Object.assign({ passer: { team: off, num: sel.passer, yards: parseInt(yds)||0, name: sel.passerName || undefined }, playType: 'pass' },
-              sel.receiver ? { receiver: { team: off, num: sel.receiver, yards: parseInt(yds)||0, name: sel.receiverName || undefined } } : {}) });
+          // Same play, not two -- see the Rush panel above and the 'f'
+          // branch of parseInput. The passer travels in the attempt token
+          // because the fumble code is keyed on the RECEIVER, so without
+          // it the wording could not name who threw the ball.
+          const att = ' a:p:' + (parseInt(yds, 10) || 0) + ':' + sel.passer;
+          const attRole = { attempt: 'pass', attemptYards: parseInt(yds, 10) || 0,
+            passer: { team: off, num: sel.passer, yards: parseInt(yds)||0, name: sel.passerName || undefined } };
+          if (sel.receiver) attRole.receiver = { team: off, num: sel.receiver, yards: parseInt(yds)||0, name: sel.receiverName || undefined };
           const rec = document.querySelector('input[name=pp_pass_fumrec]:checked').value;
           if (rec === 'tb'){
             // Lost, but to nobody -- the defence gets it at their own 20.
-            code = sel.receiver + 'f tb';
-            roles = { carrier: { team: off, num: sel.receiver, name: sel.receiverName || undefined }, playType: 'fumble', lost: true };
+            code = recTok + 'f tb' + att;
+            roles = Object.assign({ carrier: { team: off, num: sel.receiver, yards: parseInt(yds, 10) || 0, name: sel.receiverName || undefined }, playType: 'fumble', lost: true }, attRole);
           } else if (rec === 'own'){
             const isPassFumSafety = document.getElementById('pp_passfum_safety').checked;
-            code = sel.receiver + 'f' + (isPassFumSafety ? ' sf' : '');
-            roles = { carrier: { team: off, num: sel.receiver, name: sel.receiverName || undefined }, playType: 'fumble' };
+            code = recTok + 'f' + att + (isPassFumSafety ? ' sf' : '');
+            roles = Object.assign({ carrier: { team: off, num: sel.receiver, yards: parseInt(yds, 10) || 0, name: sel.receiverName || undefined }, playType: 'fumble' }, attRole);
           } else {
             const fumCredit = sel.credit;
             // Optional -- see the standalone fumble branch.
             const retyds = yards('pp_passfum_retyds');
             const returnTd = document.getElementById('pp_passfum_td').checked;
-            code = sel.receiver + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
-            roles = { carrier: { team: off, num: sel.receiver, name: sel.receiverName || undefined }, playType: 'fumble', lost: true };
+            code = recTok + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + att + (returnTd ? ' td' : '');
+            roles = Object.assign({ carrier: { team: off, num: sel.receiver, yards: parseInt(yds, 10) || 0, name: sel.receiverName || undefined }, playType: 'fumble', lost: true }, attRole);
             if (fumCredit) roles.defense = { team: def, num: fumCredit, name: sel.creditName || undefined };
           }
         } else {
@@ -6227,28 +6274,32 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const yds = yards('pp_yards') || '0';
       const fumbled = document.getElementById('pp_sack_fumbled').checked;
       if (fumbled){
-        // The sack and its yardage genuinely happened before the fumble
-        // -- save it as its own play first, silently, then build a
-        // Fumble-type play for the turnover itself.
-        const sackParsed = parseInput(sel.passer + 's ' + yds, computeState());
-        pushAndPersist({ id: nextId++, text: sackParsed.text, effect: sackParsed.effect, team: off, quarter: computeState().quarter,
-          roles: { passer: { team: off, num: sel.passer, yards: parseInt(yds)||0, name: sel.passerName || undefined }, playType: 'sack' } });
+        // Same play, not two -- see the Rush panel above. A sack's yardage
+        // is a LOSS, and `yds` is unsigned here, so it is negated on the
+        // way into the attempt token: 'sacked for a loss of 7', never
+        // 'sacked for 7'.
+        const att = ' a:s:' + (-Math.abs(parseInt(yds, 10) || 0));
+        // yards POSITIVE here, negative in the token above. engine.js
+        // SUBTRACTS this from the team rushing total, so a negative would
+        // credit the offense with the sack yardage instead of charging it.
+        const attRole = { attempt: 'sack', attemptYards: -Math.abs(parseInt(yds, 10) || 0),
+          passer: { team: off, num: sel.passer, yards: Math.abs(parseInt(yds, 10) || 0), name: sel.passerName || undefined } };
         const rec = document.querySelector('input[name=pp_sack_fumrec]:checked').value;
         if (rec === 'tb'){
           // Lost, but to nobody -- the defence gets it at their own 20.
-          code = sel.passer + 'f tb';
-          roles = { carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble', lost: true };
+          code = sel.passer + 'f tb' + att;
+          roles = Object.assign({ carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble', lost: true }, attRole);
         } else if (rec === 'own'){
           const isSackFumSafety = document.getElementById('pp_sackfum_safety').checked;
-          code = sel.passer + 'f' + (isSackFumSafety ? ' sf' : '');
-          roles = { carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble' };
+          code = sel.passer + 'f' + att + (isSackFumSafety ? ' sf' : '');
+          roles = Object.assign({ carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble' }, attRole);
         } else {
           const fumCredit = sel.credit;
           // Optional -- see the standalone fumble branch.
           const retyds = yards('pp_sackfum_retyds');
           const returnTd = document.getElementById('pp_sackfum_td').checked;
-          code = sel.passer + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + (returnTd ? ' td' : '');
-          roles = { carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble', lost: true };
+          code = sel.passer + 'f ' + (fumCredit || '?') + (retyds ? ' ' + retyds : '') + att + (returnTd ? ' td' : '');
+          roles = Object.assign({ carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble', lost: true }, attRole);
           if (fumCredit) roles.defense = { team: def, num: fumCredit, name: sel.creditName || undefined };
         }
       } else {
