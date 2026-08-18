@@ -801,7 +801,13 @@ function computeBoxScore(playsList){
     if (r.carrier && type === 'fumble'){
       const teamObj = TEAMS[r.carrier.team];
       const pos = ((teamObj && teamObj.posOffense[r.carrier.num]) || '').toUpperCase();
-      const targetCat = RECEIVE_POS.has(pos) ? 'receiving' : 'rushing';
+      // Same reasoning as view.html's drive summary: the play now SAYS
+      // what it ended, so the roster-position guess is a fallback for
+      // plays saved before `attempt` existed. A standalone fumble has no
+      // attempt and still needs the guess.
+      const targetCat = r.attempt === 'pass' ? 'receiving'
+        : (r.attempt === 'rush' || r.attempt === 'sack') ? 'rushing'
+        : (RECEIVE_POS.has(pos) ? 'receiving' : 'rushing');
       const s = bucket(r.carrier.team, targetCat, r.carrier.num, r.carrier.name);
       if (s) s.fum = (s.fum||0) + 1;
     }

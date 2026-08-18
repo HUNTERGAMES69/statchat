@@ -116,72 +116,6 @@ too.
 
 ---
 
-## THE NEXT THING TO BUILD — a fumble during a return
-
-Found at the very end of the session, not yet fixed. This is the first
-thing the next session should pick up.
-
-### What is wrong
-
-A pass intercepted and then fumbled during the return has to be entered
-as **two plays** today: the interception, then the standalone Fumble
-panel with the interceptor typed as the carrier.
-
-On 14 August that was tested, found to compose correctly, and written
-into `GOLDEN_GAME.md` as a Night 5 case with the note "no change needed".
-That was wrong, and the evidence was in the output at the time:
-
-```
-possessions : {teamA: 2, teamB: 1}
-drive starts: 3
-```
-
-**A return is not a possession.** The intercepting team never had one --
-they had a return, on the same down. Splitting the play in two invents a
-drive, which inflates possession counts for both teams, splits time of
-possession across a series that never happened, and puts a phantom entry
-in the drive log. The credits were all correct, which is why it passed:
-the interception, the recovery, the pick and both turnovers land where
-they should. Only the shape of the game is wrong.
-
-### Scope — four panels, not one
-
-`rush`, `pass` and `sack` already have a fumble branch. These four have a
-return that can be fumbled and no way to say so:
-
-| Panel | Return field | Who fumbles |
-|---|---|---|
-| Interception | `pp_int_return_wrap` | the interceptor |
-| Punt return | `pp_retyds` | the returner |
-| Kickoff return | `pp_ko_ret_wrap` | the returner |
-| FG block return | `pp_blockretyds` | the man who picked it up |
-
-A **muff** is not this. Punt and kickoff already handle a muff, which is
-a failure to catch cleanly; this is a fumble after clean possession of
-the return.
-
-### The pattern to copy, and the one asymmetry
-
-`pp_rush_fumbled` is the model: a Fumbled toggle, then a recovery choice
-of own / opponent / out of the end zone, with a takeover spot, optional
-return yards and a return-touchdown toggle on the opponent branch.
-
-**The asymmetry:** on a rush fumble the offence fumbles and the defence
-recovers. On a return fumble the team that just took the ball away
-fumbles, and the ORIGINAL offence may recover it -- which hands
-possession back to the team that threw the interception or punted. The
-recovery branches mean the opposite thing from the rush case, and the
-takeover spot belongs to whichever team ends up with it.
-
-### Check afterwards
-
-The two-play entry gives `{teamA: 2, teamB: 1}` and three drive starts.
-One play should give **one possession each and two drive starts**, with
-the whole return counted against the team that had the ball first.
-
-`GOLDEN_GAME.md` currently instructs the two-play method as a Night 5
-case. Andy's call whether to change it; deliberately left alone for now.
-
 ## Not yet done
 
 - **Four calculators, written separately.** The shared one in
@@ -224,3 +158,125 @@ file, then pull the current files from
 `raw.githubusercontent.com/HUNTERGAMES69/statchat/main/` — GitHub can lag
 behind Andy's local copies if an upload was skipped, so verify against
 what he last downloaded rather than assuming.
+
+---
+
+# SESSION 2 — 17 August 2026
+
+Everything above predates this section.
+
+## Fumble entry — FIXED, one loose end
+
+**The bug.** A fumble ending a rush, pass or sack wrote TWO plays: the
+run, then the fumble. That put a down on the board the game never reached
+(a fumble on 2nd & 11 left the rush reading "3rd & 11") and, because
+'fumble' is a scrimmage type, the second half was counted as its own down
+attempt — inventing a failed third down in the conversion table. Silent,
+and it reached the stat package.
+
+**Not a regression.** The split dated to 3 Aug, confirmed four ways:
+first appearance of its comment, a byte-identical block diff against
+16 Aug, block hashes across every commit since 1 Aug, and the Aug 14
+commit contents. Nothing on 14 Aug touched it — that day's fumble work
+was the muffed-punt turnover count in `engine.js`, plus the TODO entry
+verifying interception → return → fumble as two plays, which is a
+DIFFERENT path and correctly two plays. That entry is very likely why
+fumbles had always seemed fine: it documents the standalone Fumble panel,
+which was never broken.
+
+**The fix.** `parseInput` gained an attempt token, `a:<kind>:<yards>[:<passer>]`,
+stripped by search not position (same pattern as `oob`). The three panels
+pass it instead of pre-pushing. Effect on a LOST fumble is deliberately
+unchanged — `computeState` skips the flip for stat plays, so marking it
+`isStat` would silently cancel the turnover; the yardage rides on `roles`
+and the spot comes from the panel. Own-team recovery IS a stat play, so
+the down advances exactly once. `roles.attempt` carries the credit;
+`playType` stays 'fumble' because 11 files key on it.
+
+**Verified**: Andy's exact sequence gives `att=2 yds=3 fum=1`. Standalone
+Fumble panel byte-unchanged and re-verified.
+
+**Downstream surfaces also fixed.** `view.html` computed drive stats
+itself and GUESSED rush-vs-pass from the carrier's roster position — a
+completion to a receiver with no position on file landed in RUSHING.
+Same guess at `engine.js:804`. Both now ask `r.attempt` and keep the
+guess only as a fallback for older plays. `view.html` also read `statYds`
+for drive yardage, which a lost fumble does not carry, so the gained
+yards vanished from the drive line.
+
+**LOOSE END — verify first.** Andy's screenshots showed `1 att, -1 yds`
+where `2 att, 3 yds` was correct. That is exactly what the OLD
+`engine.js` produces alongside a NEW `game.html`. Believed to be a
+partial upload. If both files are confirmed up and the number is still
+wrong, then `attempt` is not surviving persistence — check a saved
+fumble play's roles for the field.
+
+## QC — `tests/accuracy_check.js` (new)
+
+**Why the suite missed it.** Not a coverage gap. `ui_driver.js` drives
+all three fumble toggles and `coverage_probe.js` walked them every run.
+Searching the suite for `d3att` / `d4att` / `oppDowns` returns NOTHING —
+the down table is computed, printed, and asserted nowhere.
+`full_game_check.js` `console.log`s a play count. The bug was printed on
+every run in output no assertion read.
+
+Two layers, failing for different reasons:
+- **Invariants** — one entry writes one play; log text and state machine
+  agree on the down; a possession change starts a new series; every saved
+  play has a `playType`.
+- **Golden** (`accuracy.golden.json`) — frozen fingerprint of 50 paths
+  including the BOX SCORE, not just the roles feeding it.
+
+Both watched to fail before being trusted: reverting the fumble fix trips
+all seven fumble paths; flipping the sack sign trips four.
+
+**Known limits — read before relying on it.**
+- It boots `game.html` only. `view.html` has its OWN drive arithmetic and
+  is invisible to it. `cross_surface.js` is the suite for that and was
+  NOT run this session.
+- **The golden ran green straight through the `view.html` guess bug**,
+  because the harness roster gives its receiver a proper `WR` position.
+  The fixture is kinder than Andy's roster. A probe case whose carrier
+  has NO position on file is the single highest-value test to add next.
+- Cases are single plays from a clean drive; multi-play sequences and
+  drive-level numbers are not fingerprinted.
+- A golden blesses current behaviour. `--update` prints the diff first;
+  read every line.
+
+## Prototype changes (all three files)
+
+1. **Shared keypad/keyboard buffer** backported to `gametest`/`gametest2`;
+   previously only in `gametest3`. Opening the pad then typing meant Done
+   committed a stale buffer over the typed value. Clock affected too.
+2. **`gametest3` uses `readonly` on touch devices**, not `inputmode="none"`,
+   gated on `(hover: none) and (pointer: coarse)`. `?softkb=1` opts out on
+   the device without another upload.
+3. **`touch-action:manipulation`** on the global `button` rule — 122
+   buttons per page had the double-tap-zoom defect, only three were
+   covered. `game.html` now has it too.
+
+## Corrections to the section above this one
+
+- **"PICKER_MODE is the ONLY difference between gametest and gametest2"
+  is FALSE.** gametest2 also has the strip's position mode and the
+  `applyOutcome` extraction — 163 lines gametest lacks. gametest's strip
+  is older AND unreachable. If the strip wins, promote gametest2/3's.
+- `attachPickersLegacy` in gametest3 is dead code, never called.
+- `tests/ui_driver.js`, `README.md`, `run_qa.js`, `convert.js` ARE
+  uploaded; only `.gitignore` is missing. `sql/schema.sql` still absent.
+
+## iPad
+
+Add to Home Screen works — the meta tags are already there. Do NOT use
+the Fullscreen API: focusing an input drops out of it. Standalone mode
+has a SEPARATE localStorage jar from Safari, so the offline queue does
+not carry across — pick one and stay in it for a whole game. URL freezes
+at install, so settle `?softkb=1` in plain Safari first and install
+`dashboard.html`, not a game URL.
+
+## Next
+
+1. Confirm the upload, then re-check the fumble numbers.
+2. Add the no-position-on-file probe case.
+3. Run the FULL suite and the NFL corpus — `run_scripted.js` and
+   `cross_surface.js` did not run this session.

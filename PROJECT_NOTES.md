@@ -1668,3 +1668,57 @@ in the database, which cannot grow a role they were never saved with.
 Reading play text is not a habit to form — the role is the mechanism, and
 new plays use it — but the alternative was telling a scorer to re-enter
 the opening kickoff of every affected game.
+
+## A number nobody reads is a number nobody checks (17 August 2026)
+
+The rush/pass/sack fumble split wrote two plays for one snap for two
+weeks. Thirty-one suites, a property-based fuzzer and 93 NFL games ran
+over it every time.
+
+The instinct is to call that a coverage gap. It was not. `ui_driver.js`
+drives all three fumble toggles -- `pp_rush_fumbled_toggle`,
+`pp_pass_fumbled_toggle`, `pp_sack_fumbled_toggle` -- with their recovery
+radios, and `coverage_probe.js` walked every one of those paths on every
+run. The broken path was exercised constantly.
+
+It survived because **the probe reports and nothing asserted**. Searching
+the whole suite for `d3att`, `d4att` or `oppDowns` returns nothing: the
+down-conversion table is computed by the engine, printed in the stat
+package, and checked by no test. `full_game_check.js` computes a play
+count and `console.log`s it. `coverage_probe.js` describes itself as
+reporting "what actually happened". The bug was printed on every run, in
+output no assertion read.
+
+Two things follow, and they are different:
+
+**Exercising a path is not testing it.** A test that drives code and
+prints the result is a demo. The assertion is the test. Coverage counts
+measure the wrong thing -- this bug sat inside covered code.
+
+**The bug produced plausible numbers.** Nothing crashed, nothing was NaN,
+no invariant the suite knew about was violated. A phantom failed third
+down looks exactly like a real one. Wrongness that looks like data can
+only be caught by checking a number against something independent, which
+is the Aug 14 principle -- a number that cannot be cross-checked is a
+number nobody trusts -- applied to the down table, where it had never
+been applied.
+
+`tests/accuracy_check.js` is the answer to both, in two layers that fail
+for different reasons. Invariants are absolute and catch a number that
+was wrong the day it was written. The golden snapshot is relative and
+catches a number that moves without anybody meaning it to. Neither
+subsumes the other: a golden file generated against a bug defends that
+bug forever, which is precisely why the invariants sit beside it.
+
+**The snapshot freezes the box score, not just its inputs.** Fingerprinting
+roles and effects would have caught the split, because the split changed
+the inputs. It would NOT have caught the sign error made while fixing it
+-- `computeBoxScore` subtracts sack yardage from team rushing, so storing
+the loss negative credits the offense with it. The roles looked right and
+the printed number was wrong. `computeBoxScore` runs inside the harness
+page, so the fingerprint now records what the report pages would actually
+print.
+
+Both layers were watched to fail before being trusted: reverting the
+fumble fix trips all seven fumble paths on the invariant, and flipping
+that sack sign trips four paths on the golden.

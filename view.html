@@ -1021,14 +1021,33 @@ function extractNameTag(rawName){
       const r = p.roles;
       if (!r || p.team !== driveTeam) return;
       if (scrimmageTypes.includes(r.playType)) totalPlays++;
+      // A LOST fumble carries no statYds ON PURPOSE -- computeState skips
+      // the flip for stat plays, so the yardage rides on roles instead
+      // (see the 'f' branch of parseInput). Reading statYds alone therefore
+      // scored a 3-yard catch-and-fumble as a 3-yard drive gain of zero.
+      const attYds = (typeof r.attemptYards === 'number') ? r.attemptYards : null;
+      const yds = (p.effect && typeof p.effect.statYds === 'number') ? p.effect.statYds
+        : (attYds !== null ? attYds : 0);
       if (p.effect && typeof p.effect.statYds === 'number') totalYds += p.effect.statYds;
-      const yds = (p.effect && p.effect.statYds) || 0;
+      else if (attYds !== null) totalYds += attYds;
       if (r.playType === 'rush'){ rushes++; rushYds += yds; }
       else if (r.playType === 'pass' || r.playType === 'incomplete' || r.playType === 'int' || r.playType === 'sack'){ passes++; passYds += yds; }
       else if (r.playType === 'fumble' && r.carrier){
-        const pos = ((TEAMS[driveTeam] && TEAMS[driveTeam].posOffense[r.carrier.num]) || '').toUpperCase();
-        if (RECEIVE_POS.has(pos)){ passes++; passYds += yds; }
-        else { rushes++; rushYds += yds; }
+        // ASK THE PLAY, DO NOT GUESS FROM THE ROSTER.
+        // A fumble used to carry no record of what play it ended, so this
+        // inferred rush-or-pass from the carrier's listed position. That
+        // put a completion to a receiver with no position on file -- or
+        // any position outside RECEIVE_POS -- in the RUSHING column, and a
+        // running back's catch-and-fumble with it. `attempt` now states
+        // what the play was, so the guess is only a fallback for plays
+        // saved before it existed.
+        if (r.attempt === 'rush'){ rushes++; rushYds += yds; }
+        else if (r.attempt === 'pass' || r.attempt === 'sack'){ passes++; passYds += yds; }
+        else {
+          const pos = ((TEAMS[driveTeam] && TEAMS[driveTeam].posOffense[r.carrier.num]) || '').toUpperCase();
+          if (RECEIVE_POS.has(pos)){ passes++; passYds += yds; }
+          else { rushes++; rushYds += yds; }
+        }
       }
       const isFgGood = r.playType === 'fg' && r.kicker && r.kicker.result === 'g';
       if (p.effect && (p.effect.td || isFgGood)) scoringPlayText = p.text;
