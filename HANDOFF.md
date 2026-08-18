@@ -116,6 +116,72 @@ too.
 
 ---
 
+## THE NEXT THING TO BUILD — a fumble during a return
+
+Found at the very end of the session, not yet fixed. This is the first
+thing the next session should pick up.
+
+### What is wrong
+
+A pass intercepted and then fumbled during the return has to be entered
+as **two plays** today: the interception, then the standalone Fumble
+panel with the interceptor typed as the carrier.
+
+On 14 August that was tested, found to compose correctly, and written
+into `GOLDEN_GAME.md` as a Night 5 case with the note "no change needed".
+That was wrong, and the evidence was in the output at the time:
+
+```
+possessions : {teamA: 2, teamB: 1}
+drive starts: 3
+```
+
+**A return is not a possession.** The intercepting team never had one --
+they had a return, on the same down. Splitting the play in two invents a
+drive, which inflates possession counts for both teams, splits time of
+possession across a series that never happened, and puts a phantom entry
+in the drive log. The credits were all correct, which is why it passed:
+the interception, the recovery, the pick and both turnovers land where
+they should. Only the shape of the game is wrong.
+
+### Scope — four panels, not one
+
+`rush`, `pass` and `sack` already have a fumble branch. These four have a
+return that can be fumbled and no way to say so:
+
+| Panel | Return field | Who fumbles |
+|---|---|---|
+| Interception | `pp_int_return_wrap` | the interceptor |
+| Punt return | `pp_retyds` | the returner |
+| Kickoff return | `pp_ko_ret_wrap` | the returner |
+| FG block return | `pp_blockretyds` | the man who picked it up |
+
+A **muff** is not this. Punt and kickoff already handle a muff, which is
+a failure to catch cleanly; this is a fumble after clean possession of
+the return.
+
+### The pattern to copy, and the one asymmetry
+
+`pp_rush_fumbled` is the model: a Fumbled toggle, then a recovery choice
+of own / opponent / out of the end zone, with a takeover spot, optional
+return yards and a return-touchdown toggle on the opponent branch.
+
+**The asymmetry:** on a rush fumble the offence fumbles and the defence
+recovers. On a return fumble the team that just took the ball away
+fumbles, and the ORIGINAL offence may recover it -- which hands
+possession back to the team that threw the interception or punted. The
+recovery branches mean the opposite thing from the rush case, and the
+takeover spot belongs to whichever team ends up with it.
+
+### Check afterwards
+
+The two-play entry gives `{teamA: 2, teamB: 1}` and three drive starts.
+One play should give **one possession each and two drive starts**, with
+the whole return counted against the team that had the ball first.
+
+`GOLDEN_GAME.md` currently instructs the two-play method as a Night 5
+case. Andy's call whether to change it; deliberately left alone for now.
+
 ## Not yet done
 
 - **Four calculators, written separately.** The shared one in

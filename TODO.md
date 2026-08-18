@@ -2049,3 +2049,20 @@ watch for.
   alphabetised entries, with the two most common passing fouls adjacent.
   A passing-fouls sub-group or a type-to-filter box would help; Andy's
   call whether it is a problem.
+
+## A fumble during a return has no branch (17 August 2026)
+
+- [ ] **Add a fumble branch to the four return paths**: interception,
+  punt return, kickoff return, FG block return. Copy the
+  `pp_rush_fumbled` pattern — Fumbled toggle, recovery own / opponent /
+  touchback, takeover spot, optional return yards, return touchdown.
+  Note the asymmetry: on a return fumble the recovering team may be the
+  team that just lost the ball, so the branches mean the opposite of the
+  rush case.
+
+  Entering it as two plays, which `GOLDEN_GAME.md` currently prescribes,
+  invents a possession: an interception returned and fumbled reports
+  `{teamA: 2, teamB: 1}` possessions and three drive starts. A return is
+  not a drive. All the CREDITS are correct — which is why this was signed
+  off on 14 August as "no change needed" — only the shape of the game is
+  wrong. See `HANDOFF.md` for the full specification.
