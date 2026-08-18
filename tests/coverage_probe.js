@@ -152,6 +152,12 @@ async function run() {
       rec.before = before;
       rec.after = after;
       rec.plays = plays;
+      // THE BOX SCORE ITSELF, not just its inputs. engine.js is loaded by
+      // the page, so this is the same computeBoxScore the report pages
+      // run. Without it a bug INSIDE computeBoxScore stays invisible --
+      // the roles feeding it look right and the printed number is still
+      // wrong, which is the harder half of the problem to find.
+      rec.box = JSON.parse(h.evalIn('JSON.stringify(computeBoxScore(plays))'));
       rec.alerts = h.alerts.slice();
     } catch (e) {
       rec.error = (e instanceof UnreachableByUI ? 'UNREACHABLE: ' : 'THREW: ') + e.message;

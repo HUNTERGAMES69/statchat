@@ -30,6 +30,7 @@ node tests/tackles_check.js               # ~3s  per-player tackles and TFL
 node tests/season_filter_check.js         # ~2s  season stats from finalised games only
 node tests/whitelist_check.js             # ~5s  no stray controls on gated panels
 node tests/fake_kick_check.js             # ~8s  fake punts and fake field goals
+node tests/accuracy_check.js               # ~90s invariants + golden snapshot over every UI path
 node tests/fuzz_check.js 60               # ~5m  property-based fuzzer (not in the normal suite)
 node tests/full_game_check.js             # ~15s a WHOLE GAME through the UI, nothing injected
 
@@ -162,3 +163,37 @@ this README lists is a fast sanity check.
 - **RLS is not exercised at all.** Missing policies fail silently in
   production and nothing here would notice.
 - **Multi-game season aggregation** is only tested with a single game.
+
+
+## accuracy_check.js -- read this before changing any number
+
+The rush/pass/sack fumble split (17 Aug 2026) lived for two weeks with 31
+suites, a fuzzer and 93 NFL games running over it. It was NOT a coverage
+gap: `ui_driver.js` drives all three fumble toggles and `coverage_probe.js`
+walked the path on every run. It survived because the probe REPORTS and
+nothing ASSERTED. The play count was printed on every run and read by
+nobody.
+
+`accuracy_check.js` adds judgement to that existing coverage, in two
+layers that fail for different reasons:
+
+- **Invariants** -- absolute rules that hold whatever the code does. One
+  entry writes one play; the log text and the state machine agree on the
+  down; a change of possession starts a new series; every saved play has
+  a `playType`. These catch a number that has been wrong since the day it
+  was written, which a snapshot never can.
+- **Golden snapshot** (`accuracy.golden.json`) -- a frozen fingerprint of
+  all 50 paths: the log text, roles, effect, the state transition, and
+  **the box score itself** rather than only the roles feeding it. This
+  catches any number that moves without somebody meaning it to.
+
+Both layers were verified against the real bug before being trusted:
+reverting the fumble fix trips all seven fumble paths on the invariant,
+and flipping the sack sign in `computeBoxScore` trips four paths on the
+golden. A check that has never been watched to fail is not evidence.
+
+**On `--update`.** A golden file blesses whatever the code does today;
+generate it against a bug and it defends that bug forever. That is why the
+invariants exist alongside it, and why `--update` prints the diff first.
+Read every line of that diff before re-blessing. If a number moved and you
+cannot say why, that is the bug, not the test.
