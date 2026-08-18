@@ -6007,7 +6007,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // else, and the field stays editable for that. Only filled when
         // untouched, so it never overwrites a spot already given.
         if (type === 'punt'){
-          const spotYl = document.getElementById('pp_spot_yardline');
+          // WHICH takeover spot is on screen depends on the muff.
+          // ----------------------------------------------------------
+          // When the KICKING team recovers a muff, the general spot field
+          // is hidden and `pp_muffspot` takes its place -- and that flow
+          // is the one where the two yard lines are most obviously the
+          // same, because the ball is muffed and recovered dead on the
+          // spot. Prefilling only `pp_spot` meant the muff flow asked for
+          // the identical yard line twice, the second time marked
+          // required.
+          //
+          // NOT FLIPPED for a kicking-team recovery. The general spot
+          // belongs to the receiving team taking over, so it is mirrored
+          // to 100 - newPos; a kicking-team recovery keeps possession with
+          // the punting team, so its spot is already in this team's frame
+          // and mirroring it would move the ball to the far end.
+          const muffWrap = document.getElementById('pp_muff_spot_wrap');
+          const muffActive = !!(muffWrap && muffWrap.style.display !== 'none' &&
+            document.getElementById('pp_muffed') && document.getElementById('pp_muffed').checked);
+          const spotPrefix = muffActive ? 'pp_muffspot' : 'pp_spot';
+          const spotYl = document.getElementById(spotPrefix + '_yardline');
           if (spotYl){
             // IT FOLLOWS THE CALCULATOR, including corrections.
             // ----------------------------------------------------------
@@ -6023,14 +6042,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             // below protects: once they edit the box by hand, the
             // calculator stops touching it.
             const ours = spotYl.dataset.fromCalc === '1';
-            const untouched = !spotYl.value.trim() && !panel.querySelector('.pp_spot_side.picked');
+            const untouched = !spotYl.value.trim() && !panel.querySelector('.' + spotPrefix + '_side.picked');
             if (ours || untouched){
-              const takeover = 100 - newPos;          // flipped to the receiving team
+              const takeover = muffActive ? newPos : (100 - newPos);
               const ownSide = takeover <= 50;
               spotYl.value = String(ownSide ? takeover : 100 - takeover);
               spotYl.dataset.fromCalc = '1';
               const want = ownSide ? 'own' : 'opp';
-              const btn = panel.querySelector('.pp_spot_side[data-side="' + want + '"]');
+              const btn = panel.querySelector('.' + spotPrefix + '_side[data-side="' + want + '"]');
               if (btn && !btn.classList.contains('picked')) btn.click();
             }
           }
