@@ -546,7 +546,20 @@ function countTurnovers(playsList){
     // A muff or onside kick the receiving team recovers themselves is
     // not a turnover -- they keep the ball, exactly as they would have
     // anyway.
-    if (r.playType === 'kickoff' && r.kicker && r.recovery &&
+    //
+    // NOT AN ONSIDE KICK, though -- reported from a real game, 18 Aug
+    // 2026. This comment's own reasoning two lines up ("the kicking
+    // team's own drive was the kick itself, not a possession they are
+    // giving up") applies with equal force to the RECEIVING team on an
+    // onside kick: nobody has controlled the ball yet, so a recovery by
+    // either side is not a turnover -- it is simply a recovery, the same
+    // distinction football statistics keep between "muffed, recovered
+    // by the other team" (a turnover -- the receiving team HAD the ball,
+    // however briefly, before losing it) and "onside kick recovered by
+    // the kicking team" (never a turnover -- nobody had it to lose).
+    // Muffed kickoffs are unaffected: this only excludes plays with
+    // roles.kicker.onside set, which 'km' (muff) never carries.
+    if (r.playType === 'kickoff' && r.kicker && r.recovery && !r.kicker.onside &&
         r.recovery.team === r.kicker.team){
       const receiving = otherTeam(r.kicker.team);
       counts[receiving] = (counts[receiving] || 0) + 1;
