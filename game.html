@@ -1465,6 +1465,53 @@ function parseInput(raw, state){
     if (isOob) t += ' — OUT OF BOUNDS';
     else if (isTouchback) t += ' — TOUCHBACK';
     else if (ret) t += ', returned' + (ret === '?' ? '' : ' by ' + D(ret)) + (retyds ? ' for ' + retyds : '');
+    // A FUMBLE DURING THE RETURN, folded into this SAME play rather than
+    // written as a second one -- identical reasoning and shape to punt's
+    // 'pt' branch, built earlier the same night. As with punt, there is
+    // no existing down to protect here: the receiving team's series has
+    // not started when the return happens, so this decides only who ends
+    // up with the ball and where, never "advances" anything.
+    const fumTok = rest[3] && String(rest[3]).match(/^fumrec:([kr]):(.+)$/i);
+    if (fumTok){
+      const kickingRecovers = fumTok[1].toLowerCase() === 'k';
+      const recNum = fumTok[2];
+      // WHOEVER RECOVERS is who can score -- not hardcoded to `def`,
+      // which is only correct for the ordinary (non-fumble) case below.
+      const recTeam = kickingRecovers ? off : def;
+      const named = recNum && recNum !== '?';
+      const recName = named
+        ? (kickingRecovers ? ST(recNum) : D(recNum))
+        : TEAMS[recTeam].name;
+      t += ', fumbled — recovered by ' + recName + (kickingRecovers ? ' (turnover)' : '');
+      // TOUCHDOWN WORDING COMES AFTER THE RECOVERY, not before it -- text
+      // built in the order the play actually happened, matching 'pt'.
+      // An EARLIER version of this exact branch, written the same night,
+      // left a shared `if(td)` block ABOVE this fumble text (copied
+      // structurally from the ordinary-return case below, which predates
+      // the fumble token entirely), announcing the score before
+      // explaining what happened -- the identical bug already caught and
+      // fixed on 'pt' a few hours earlier, reproduced here because this
+      // branch was extended from the ORIGINAL kickoff structure rather
+      // than re-derived from 'pt''s already-corrected one.
+      let score = null;
+      if (td){ t += ' — TOUCHDOWN'; score = { team: recTeam, points: 6 }; }
+      return { text: t,
+        // effect.endsDrive, NOT ONLY effect.score -- computeState only
+        // nulls down/distance/fieldPos on a score if endsDrive is ALSO
+        // set, or if a flip fired, and a kicking-team recovery does not
+        // flip. Without endsDrive here, a kicking-team recovery returned
+        // for a score would leave the OLD down and distance on screen --
+        // the exact bug both the punt-muff and kickoff-muff branches
+        // already document fixing once, read directly before writing
+        // this rather than re-derived from memory.
+        effect: Object.assign(score ? { score, endsDrive: true } : {}, (kickingRecovers && !score) ? { newPossession: true } : {}),
+        flipEligible: !kickingRecovers, flipTo: def, team: off, quarter: state.quarter };
+    }
+    // score's OWN, separate declaration for the ordinary (non-fumble)
+    // case -- not shared with the one inside fumTok above, which is
+    // scoped to that block and unreachable from here. Confirmed against
+    // 'pt', which has exactly this same pair of independent
+    // declarations, one per branch, rather than assumed.
     let score = null;
     if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
@@ -5221,7 +5268,59 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // Equal widths mean the row cannot reflow as labels change
         // length, and a longer label shrinks the text rather than moving
         // a button somewhere else.
-        '<div id="pp_ret_yds_wrap" style="margin-bottom:8px;">' + yardsBlockRet() + '</div>' +
+        '<div id="pp_ret_yds_wrap" style="margin-bottom:8px;">' + yardsBlockRet() +
+          // KICKOFF HAS NO KICK-DISTANCE FIELD.
+          // ------------------------------------------------------------
+          // ui_driver.js says so directly: "nothing reports kick distance,
+          // so it was removed from the panel." Punt's equivalent
+          // calculator derives TWO numbers from a fielding spot -- kick
+          // distance and, later, return yards. This derives only one:
+          // "fielded at" is a reference point ONLY, writing nothing
+          // itself, so it does not resurrect a stat the app deliberately
+          // stopped tracking.
+          '<div id="pp_kofielded_wrap" style="margin-top:10px;">' +
+            '<p style="font-size:13px; color:#888; margin:0 0 4px;">Or enter fielded at</p>' +
+            '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+              '<button type="button" class="ptoggle kofieldedSide" data-side="own" ' +
+                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+                TEAMS[off].name + '</button>' +
+              '<button type="button" class="ptoggle kofieldedSide" data-side="opp" ' +
+                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+                TEAMS[def].name + '</button>' +
+              '<input autocomplete="off" type="text" id="pp_kofielded_yardline" placeholder="yard line" style="width:90px;">' +
+            '</span>' +
+          '</div>' +
+          '<div id="pp_koretto_wrap" style="margin-top:6px; margin-left:22px; ' +
+            'padding-left:22px; border-left:1px solid #d8d8d8;">' +
+            '<p style="font-size:13px; color:#888; margin:0 0 4px;">Or enter returned to</p>' +
+            '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+              '<button type="button" class="ptoggle koretSide" data-side="own" ' +
+                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+                TEAMS[off].name + '</button>' +
+              '<button type="button" class="ptoggle koretSide" data-side="opp" ' +
+                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+                TEAMS[def].name + '</button>' +
+              '<input autocomplete="off" type="text" id="pp_koretto_yardline" placeholder="yard line" style="width:90px;">' +
+            '</span>' +
+            '<div id="pp_koretto_readout" style="font-size:14px; font-weight:600; color:#1a4d2e; ' +
+              'background:#eef6f1; border-left:3px solid #1a7a4c; border-radius:4px; ' +
+              'padding:7px 10px; margin-top:10px;"></div>' +
+          '</div>' +
+          // FUMBLED DURING THE RETURN -- same shape as punt's equivalent.
+          // Return yardage above is measured to where the ball was lost;
+          // the recovery spot below sets only where the NEXT drive
+          // starts, never touching that number. Receiving-team recovery
+          // reuses the panel's own takeover-spot field further down --
+          // it is already exactly this question, in the same frame.
+          blockedToggleHtml('pp_ko_ret_fumbled', 'Fumbled during the return') +
+          '<div id="pp_ko_ret_fum_wrap" style="display:none; margin-top:10px;">' +
+            '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_koret_fumrec" value="r" checked> Recovered by ' + TEAMS[def].name + ' (they keep the ball)</label>' +
+            '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_koret_fumrec" value="k"> Recovered by ' + TEAMS[off].name + '</label>' +
+            '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
+            '<input autocomplete="off" type="text" id="pp_koret_fumrec_credit" placeholder="type #" style="width:100px;">' +
+            '<div id="pp_koretfumspot_wrap" style="display:none;">' + startingSpotFieldsHtml('pp_koretfumspot', 'Spot where the kicking team took over (required)', off) + '</div>' +
+          '</div>' +
+        '</div>' +
         '<div style="display:flex; gap:8px; flex-wrap:nowrap; margin-bottom:6px;">' +
           ['pp_ko_touchback|Touchback', 'pp_ko_muffed|Muffed / fumbled catch',
            'pp_ko_onside|Onside kick', 'pp_ko_oob|Out of bounds']
@@ -6460,7 +6559,89 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         });
       });
       const koMuffSpotGetter = wireStartingSpot(panel, 'pp_komuffspot');
+      // Same shape as koMuffSpotGetter, for the same reason: a fumble the
+      // KICKING team recovers during the return keeps possession with
+      // them, so this is in THEIR frame directly, no flip to undo later.
+      const koFumSpotGetter = wireStartingSpot(panel, 'pp_koretfumspot');
       const koSpotGetter = currentSpotGetter;
+
+      // --- "fielded at" (reference only, writes nothing) ---------------
+      let koFieldedPos = null;
+      (function wireKoFieldedCalc(){
+        const wrap = document.getElementById('pp_kofielded_wrap');
+        if (!wrap) return;
+        const ylEl = document.getElementById('pp_kofielded_yardline');
+        const sideBtns = [...wrap.querySelectorAll('.kofieldedSide')];
+        let side = null;
+        const paintSides = () => sideBtns.forEach(b => b.classList.toggle('picked', b.dataset.side === side));
+        function recompute(){
+          koFieldedPos = null;
+          const raw = (ylEl.value || '').trim();
+          if (!raw || !side) return;
+          const n = parseInt(raw, 10);
+          if (isNaN(n) || n < 0 || n > 50) return;
+          koFieldedPos = side === 'own' ? n : (100 - n);
+        }
+        sideBtns.forEach(b => b.addEventListener('click', () => { side = b.dataset.side; paintSides(); recompute(); }));
+        ylEl.addEventListener('input', recompute);
+        paintSides(); recompute();
+      })();
+
+      // --- "returned to" (writes pp_retyds, mirrors punt's wireReturnToCalc) ---
+      (function wireKoReturnToCalc(){
+        const wrap = document.getElementById('pp_koretto_wrap');
+        if (!wrap) return;
+        const ylEl = document.getElementById('pp_koretto_yardline');
+        const readout = document.getElementById('pp_koretto_readout');
+        const retyEl = document.getElementById('pp_retyds');
+        const sideBtns = [...wrap.querySelectorAll('.koretSide')];
+        let side = null;
+        const paintSides = () => sideBtns.forEach(b => b.classList.toggle('picked', b.dataset.side === side));
+        let writing = false;
+        function releaseRetyds(){
+          writing = true;
+          retyEl.disabled = false;
+          retyEl.style.background = ''; retyEl.style.borderColor = ''; retyEl.style.fontWeight = '';
+          writing = false;
+        }
+        function recompute(){
+          if (koFieldedPos === null){
+            readout.textContent = 'Enter where it was fielded first.';
+            releaseRetyds();
+            return;
+          }
+          const raw = (ylEl.value || '').trim();
+          if (!raw || !side){
+            readout.textContent = 'Leave blank if not returned.';
+            releaseRetyds();
+            return;
+          }
+          const n = parseInt(raw, 10);
+          if (isNaN(n) || n < 0 || n > 50){ readout.textContent = 'Yard line must be 0–50.'; return; }
+          const returnToPos = side === 'own' ? n : (100 - n);
+          const retYds = koFieldedPos - returnToPos;
+          writing = true;
+          retyEl.value = String(retYds);
+          retyEl.disabled = true;
+          retyEl.style.background = '#eef6f1'; retyEl.style.borderColor = '#1a7a4c'; retyEl.style.fontWeight = '700';
+          writing = false;
+          readout.textContent = 'from ' + markerLabel(100 - koFieldedPos) + ' return to ' + markerLabel(100 - returnToPos) +
+            '  =  ' + (retYds >= 0 ? '+' : '') + retYds + ' return yards';
+        }
+        retyEl.addEventListener('input', () => {
+          if (writing) return;
+          if (!retyEl.disabled){ ylEl.value = ''; side = null; paintSides(); readout.textContent = ''; }
+        });
+        sideBtns.forEach(b => b.addEventListener('click', () => { side = b.dataset.side; paintSides(); recompute(); }));
+        ylEl.addEventListener('input', recompute);
+        // Re-run AFTER "fielded at"'s own listeners fire, same reasoning
+        // as punt: registration order makes "after" automatic here, since
+        // this IIFE runs later in the same render pass.
+        const fieldedYl = document.getElementById('pp_kofielded_yardline');
+        if (fieldedYl) fieldedYl.addEventListener('input', recompute);
+        wrap.parentElement.querySelectorAll('.kofieldedSide').forEach(b => b.addEventListener('click', recompute));
+        paintSides(); recompute();
+      })();
       const refreshKoMode = () => {
         const tb = document.getElementById('pp_ko_touchback').checked;
         const muffed = document.getElementById('pp_ko_muffed').checked;
@@ -6492,8 +6673,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // one is fixed by rule -- but still editable, since the receiving
         // team may instead take it at the inbounds spot.
         if (oob) prefillOobSpot(panel, 'pp_spot');
+        // A fumble during the return is independent of the muff branch
+        // above -- the ball was fielded cleanly here, which is the whole
+        // difference -- so it is wired wholly separately, exactly as on
+        // the punt panel. Gated on the ordinary-return state (none of
+        // tb/muffed/onside/oob) even though it is also physically nested
+        // inside pp_ret_yds_wrap, which already disappears for all four:
+        // belt and braces, since a coach flipping outcomes quickly should
+        // never see a stale fumble block survive the switch.
+        const retFumbled = !tb && !muffed && !onside && !oob &&
+          document.getElementById('pp_ko_ret_fumbled').checked;
+        document.getElementById('pp_ko_ret_fum_wrap').style.display = retFumbled ? 'block' : 'none';
+        const retFumKickingRecovers = retFumbled &&
+          document.querySelector('input[name=pp_koret_fumrec]:checked').value === 'k';
+        document.getElementById('pp_koretfumspot_wrap').style.display = retFumKickingRecovers ? 'block' : 'none';
+        // Receiving-team recovery reuses the panel's OWN takeover-spot
+        // field -- it is already exactly this question, in their frame,
+        // for the same reason it exists on an unfumbled return.
+        if (genSpotKo && retFumbled) genSpotKo.style.display = retFumKickingRecovers ? 'none' : 'block';
         currentSpotGetter = onside ? koOnsideSpotGetter
-          : (kickingRecovers ? koMuffSpotGetter : koSpotGetter);
+          : kickingRecovers ? koMuffSpotGetter
+          : retFumKickingRecovers ? koFumSpotGetter
+          : koSpotGetter;
       };
       const koOnsideSpotGetter = wireStartingSpot(panel, 'pp_koonsidespot');
       // ONE EXCLUSIVE GROUP, not a web of pairwise rules.
@@ -6538,6 +6739,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       attachNameConfirm('pp_ko_muff_rec',
         () => document.querySelector('input[name=pp_ko_muffrec]:checked').value === 'k' ? off : def,
         () => document.querySelector('input[name=pp_ko_muffrec]:checked').value === 'k' ? ['special','offense','defense'] : ['defense','special','offense']);
+      // Same wiring, wholly separate control: a fumble during the return.
+      document.getElementById('pp_ko_ret_fumbled').addEventListener('change', refreshKoMode);
+      panel.querySelectorAll('input[name=pp_koret_fumrec]').forEach(r =>
+        r.addEventListener('change', refreshKoMode));
+      attachNameConfirm('pp_koret_fumrec_credit',
+        () => document.querySelector('input[name=pp_koret_fumrec]:checked').value === 'k' ? off : def,
+        () => document.querySelector('input[name=pp_koret_fumrec]:checked').value === 'k' ? ['special','offense','defense'] : ['defense','special','offense']);
     }
     if (type === 'punt'){
       const updatePuntTdVisibility = () => {
@@ -7170,9 +7378,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // returner unknown" so the yards still count; no roles.defense is
         // created, so no phantom player appears in stats or pickers.
         const retTok = sel.credit || ((retyds || td) ? '?' : null);
-        code = sel.kicker + 'ko ' + yds + (retTok ? ' ' + retTok + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
+        const koRetFumbled = document.getElementById('pp_ko_ret_fumbled').checked;
         roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0 } };
         if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
+        if (koRetFumbled){
+          // RETURN YARDAGE IS UNTOUCHED by the fumble -- measured to
+          // where the ball was lost, not to where it came to rest. Only
+          // the takeover spot (via currentSpotGetter, reassigned above in
+          // refreshKoMode) depends on the recovery. Same design as punt.
+          const fumRecTeamTok = document.querySelector('input[name=pp_koret_fumrec]:checked').value;
+          const fumRecRaw = (document.getElementById('pp_koret_fumrec_credit')||{}).value;
+          const fumRecNum = (fumRecRaw||'').trim() || '?';
+          code = sel.kicker + 'ko ' + yds + (retTok ? ' ' + retTok + (retyds ? ' ' + retyds : ' 0') : ' ? 0') +
+            ' fumrec:' + fumRecTeamTok + ':' + fumRecNum + (td ? ' td' : '');
+          // TEAM UNCONDITIONAL -- the radio already answered it, and the
+          // number is the only optional part. Built this way from the
+          // start here, having found the pre-14-Aug shape of this bug
+          // twice already tonight in the adjacent muff/onside branches.
+          roles.recovery = { team: fumRecTeamTok === 'k' ? off : def,
+                              num: fumRecNum !== '?' ? fumRecNum : undefined };
+        } else {
+          code = sel.kicker + 'ko ' + yds + (retTok ? ' ' + retTok + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
+        }
       }
     } else if (type === 'punt' && document.getElementById('pp_punt_fake') &&
                document.getElementById('pp_punt_fake').checked){
