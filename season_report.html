@@ -438,10 +438,17 @@ function isAdminMarker(p){
       const r = p.roles;
       if (!r) return;
       const half = (p.quarter || 1) <= 2 ? 1 : 2;
-      if (r.playType === 'rush' && r.carrier && r.carrier.team === 'teamA'){ if (half===1) h1Rush += (r.carrier.yards||0); else h2Rush += (r.carrier.yards||0); }
-      if (r.playType === 'pass' && r.passer && r.passer.team === 'teamA'){ if (half===1) h1Pass += (r.passer.yards||0); else h2Pass += (r.passer.yards||0); }
-      if (r.playType === 'rush' && r.carrier && r.carrier.team === 'teamB'){ if (half===1) oppH1Rush += (r.carrier.yards||0); else oppH2Rush += (r.carrier.yards||0); }
-      if (r.playType === 'pass' && r.passer && r.passer.team === 'teamB'){ if (half===1) oppH1Pass += (r.passer.yards||0); else oppH2Pass += (r.passer.yards||0); }
+      // A merged fumble play is playType 'fumble' but it WAS a rush or a
+      // completion -- see the 'f' branch of parseInput. Keying on
+      // playType alone dropped its yardage out of the half splits, so a
+      // drive-ending fumble quietly shrank the half it happened in.
+      // Sacks stay out, as they always have been here.
+      const isRush = r.playType === 'rush' || (r.playType === 'fumble' && r.attempt === 'rush');
+      const isPass = r.playType === 'pass' || (r.playType === 'fumble' && r.attempt === 'pass');
+      if (isRush && r.carrier && r.carrier.team === 'teamA'){ if (half===1) h1Rush += (r.carrier.yards||0); else h2Rush += (r.carrier.yards||0); }
+      if (isPass && r.passer && r.passer.team === 'teamA'){ if (half===1) h1Pass += (r.passer.yards||0); else h2Pass += (r.passer.yards||0); }
+      if (isRush && r.carrier && r.carrier.team === 'teamB'){ if (half===1) oppH1Rush += (r.carrier.yards||0); else oppH2Rush += (r.carrier.yards||0); }
+      if (isPass && r.passer && r.passer.team === 'teamB'){ if (half===1) oppH1Pass += (r.passer.yards||0); else oppH2Pass += (r.passer.yards||0); }
     });
     for (let i=0;i<4;i++){ seasonAgg.quarterScored[i] += quarterScored[i]; seasonAgg.quarterAllowed[i] += quarterAllowed[i]; }
 

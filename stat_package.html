@@ -532,8 +532,15 @@ function isAdminMarker(p){
       const r = p.roles;
       if (!r) return;
       const half = (p.quarter || 1) <= 2 ? 'h1' : 'h2';
-      if (r.playType === 'rush' && r.carrier) halfYards[r.carrier.team][half+'Rush'] += (r.carrier.yards || 0);
-      if (r.playType === 'pass' && r.passer) halfYards[r.passer.team][half+'Pass'] += (r.passer.yards || 0);
+      // A merged fumble play is playType 'fumble' but it WAS a rush or a
+      // completion -- see the 'f' branch of parseInput. Keying on
+      // playType alone dropped its yardage out of the half splits, so a
+      // drive-ending fumble quietly shrank the half it happened in.
+      // Sacks stay out, as they always have been here.
+      const fumRush = r.playType === 'fumble' && r.attempt === 'rush';
+      const fumPass = r.playType === 'fumble' && r.attempt === 'pass';
+      if ((r.playType === 'rush' || fumRush) && r.carrier) halfYards[r.carrier.team][half+'Rush'] += (r.carrier.yards || 0);
+      if ((r.playType === 'pass' || fumPass) && r.passer) halfYards[r.passer.team][half+'Pass'] += (r.passer.yards || 0);
     });
 
     const headers = ['GameID','Team','Player','Rush Attempts','Rush Yards','Yds Per Carry','Long Rush','Rush TD',
