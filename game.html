@@ -3007,9 +3007,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // demanded a kickoff that nobody was about to take.
     // endsDrive is set only by the plays a kickoff really follows: a made
     // field goal, every PAT outcome, every 2PT outcome, and a safety.
+    // A PENALTY DOES NOT SATISFY THE TRY, OR THE KICKOFF.
+    // ------------------------------------------------------------------
+    // This walked back to the last non-admin play, and a penalty IS a real
+    // play -- so a foul entered after a touchdown became `lastReal`, the
+    // touchdown stopped being visible to the test below, and every button
+    // the score had just disabled came back. A rush was then enterable in
+    // a gap where the only legal play is the try.
+    //
+    // Fouls in that gap are ordinary: a dead-ball foul after a score is
+    // enforced on the try or the kickoff, so it can be entered and the
+    // gate must survive it. Skipping penalties is therefore the fix, not
+    // refusing them.
+    //
+    // Safe on a live drive, where both gates also require `down === null`
+    // and a penalty leaves the down set -- so looking past one there can
+    // reach nothing this could wrongly fire on.
     let lastReal = null;
     for (let i = plays.length - 1; i >= 0; i--){
-      if (!isAdminMarker(plays[i])){ lastReal = plays[i]; break; }
+      const p = plays[i];
+      if (isAdminMarker(p)) continue;
+      if (p.effect && p.effect.penaltyTeam) continue;
+      lastReal = p; break;
     }
     const awaitingKickoff = st0.down === null && st0.quarter < 5 &&
       !!(lastReal && lastReal.effect && lastReal.effect.endsDrive) &&
