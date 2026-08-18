@@ -4598,6 +4598,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
 
   document.addEventListener('click', (e) => {
+    // A numeric field opens the keypad. This has to come before the
+    // outside-close branch below: the input is outside #ydPad, so the
+    // close would fire first and the pad would shut and reopen forever.
+    const fld = e.target.closest && e.target.closest('input[data-picker-kind]');
+    if (fld && TAP_OPENS_KEYPAD && !fld.disabled){
+      // Already open on this field? Leave it -- a second tap on the box
+      // should not restart the entry the scorer is halfway through.
+      if (!(padEl && padEl.style.display !== 'none' && padTargetId === fld.id)){
+        openPad(fld, fld, fld.dataset.pickerKind);
+      }
+      return;
+    }
     const pb = e.target.closest && e.target.closest('.padBtn');
     if (pb){
       const target = document.getElementById(pb.dataset.for);
