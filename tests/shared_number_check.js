@@ -40,6 +40,15 @@ function loadSetupFns() {
   const resolveByNumber = new Function('posToUnit',
     code.match(/function resolveByNumber[\s\S]*?\n  }/)[0] + '\nreturn resolveByNumber;')(posToUnit);
   const buildGameRosterRows = new Function(
+    // firstPosOf extracted too, and defined ahead of it in the SAME
+    // function body -- buildGameRosterRows now calls it directly (the
+    // compound-position fix, reported from a real game the same
+    // night), and new Function() gives each extracted function its
+    // own isolated scope with no closure over the rest of the file.
+    // Found by running this suite as part of a systematic audit, not
+    // by a report: nothing had re-run it since that fix landed, so it
+    // had been silently throwing on every call in between.
+    code.match(/function firstPosOf[\s\S]*?\n  }/)[0] + '\n' +
     code.match(/function buildGameRosterRows[\s\S]*?\n  }/)[0] + '\nreturn buildGameRosterRows;')();
   return { resolveByNumber, buildGameRosterRows };
 }

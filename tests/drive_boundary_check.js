@@ -227,6 +227,74 @@ async function run() {
     g.close();
   }
 
+  // --- 5. HALFTIME never registers a phantom drive at the opening kick
+  //
+  // Found by a systematic audit, 19 Aug 2026, not by a live-game report
+  // -- and the more serious of the two, because it is not a rare
+  // combination. Every single game has exactly one halftime, and the
+  // second half always opens with a kickoff. findDriveStarts forces a
+  // fresh boundary at halftime regardless of whether possession
+  // actually changed (so a team that keeps the ball across the break
+  // still gets a new drive) -- but that boundary landed ON the opening
+  // kickoff itself, which then flips possession AGAIN as its own
+  // effect. countPossessions (built directly from these same
+  // boundaries) credited a second, spurious possession to whichever
+  // team the kickoff favoured, in every game with a halftime, not just
+  // ones with an unusual score near the break.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '5' });
+    enterPlay(h, { type: 'punt', punter: '15', yards: '40', credit: '99', retyds: '5',
+      spot: { side: 'own', yardline: '30' } });
+    h.evalIn("pushAndPersist({ id: nextId++, text: 'End of 1st half', effect: {}, isDivider: true })");
+    h.evalIn("pushAndPersist({ id: nextId++, text: 'Start of 2nd half', effect: { setQuarter: 3 }, isDivider: true })");
+    enterPlay(h, { type: 'kickoff', kicker: '99', touchback: true, clock: '12:00' });
+    const poss = JSON.parse(h.evalIn('JSON.stringify(countPossessions(plays))'));
+    // teamA drove once (ending in the punt) and receives to open the
+    // second half -- exactly two. teamB has exactly the punt-return
+    // drive -- exactly one. Anything else means a phantom drive landed
+    // on the opening kickoff.
+    if (poss.teamA !== 2 || poss.teamB !== 1){
+      fail('halftime', 'ordinary halftime transition: expected teamA:2, teamB:1, got ' + JSON.stringify(poss));
+    }
+    const starts = JSON.parse(h.evalIn('JSON.stringify(findDriveStarts(plays))'));
+    const koIdx = JSON.parse(h.evalIn('JSON.stringify(plays.map((p,i)=>({i, pt: p.roles && p.roles.playType})))'))
+      .find(p => p.pt === 'kickoff').i;
+    if (starts.includes(koIdx)){
+      fail('halftime', 'a drive boundary landed directly on the 2nd-half kickoff at index ' + koIdx +
+        ' -- starts: ' + JSON.stringify(starts));
+    }
+    h.close();
+  }
+
+  // --- 6. Same halftime check, with a defensive score right before it
+  //
+  // The scenario that surfaced this: reported from a real game the
+  // same night, in a slightly different shape (a defensive score, its
+  // PAT, THEN halftime). Confirms the fix holds with a score and a try
+  // sitting between the last real play and the interval, not just an
+  // ordinary punt.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 3, distance: 2, side: 'opp', yardline: 40 });
+    enterPlay(h, { type: 'fg', kicker: '3', yards: '35', blocked: true, credit: '55', retyds: '60',
+      td: true, clock: '2:00' });
+    enterPlay(h, { type: 'pat', kicker: '3', result: 'g' });
+    h.evalIn("pushAndPersist({ id: nextId++, text: 'End of 1st half', effect: {}, isDivider: true })");
+    h.evalIn("pushAndPersist({ id: nextId++, text: 'Start of 2nd half', effect: { setQuarter: 3 }, isDivider: true })");
+    enterPlay(h, { type: 'kickoff', kicker: '99', touchback: true, clock: '12:00' });
+    const poss = JSON.parse(h.evalIn('JSON.stringify(countPossessions(plays))'));
+    // teamA's own drive ending in the block, plus receiving to open the
+    // second half -- exactly two. teamB scored a defensive touchdown,
+    // which correctly earns no possession of its own (matching the
+    // ordinary-game convention already established for this).
+    if (poss.teamA !== 2 || poss.teamB !== 0){
+      fail('halftime', 'halftime after a defensive score: expected teamA:2, teamB:0, got ' + JSON.stringify(poss));
+    }
+    h.close();
+  }
+
   return failures;
 }
 
