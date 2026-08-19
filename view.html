@@ -886,7 +886,28 @@ function extractNameTag(rawName){
     if (!isResultsMode){
       const resetIdxs = findDriveStarts(plays);
       const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
-      document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.filter(x => !isDriveTileNoise(x)).slice().reverse(), true) || '<div style="color:#999;">no active drive yet</div>';
+      // FILTERED BY TEAM, matching the exact filter computeDriveSummary
+      // already applies to the numeric tiles just below -- this log
+      // never had it. Reported from a real game, 19 Aug 2026: a
+      // defensive score is followed by that scoring team's own PAT and
+      // kickoff before the real new drive registers (see the
+      // findDriveStarts fix from the same night, which correctly makes
+      // THEM wait for it) -- and until it does, this slice still starts
+      // at the OTHER team's old drive. Unfiltered, that meant the
+      // scoring team's touchdown and PAT rendered inside a box still
+      // labelled with the team that just got scored on, mixed into
+      // their own older plays.
+      //
+      // A punt or kickoff that ends THIS team's own drive is correctly
+      // unaffected: its own team field already matches driveTeam (the
+      // kicking team is still "on offense" the instant they kick, per
+      // this app's own convention), so it stays in the log exactly as
+      // it always has.
+      const driveTeam = resetIdxs.length
+        ? computeState(plays.slice(0, resetIdxs[resetIdxs.length - 1] + 1)).possession
+        : null;
+      const currentDriveOwnTeamPlays = currentDrivePlays.filter(p => p.isDivider || !p.team || p.team === driveTeam);
+      document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDriveOwnTeamPlays.filter(x => !isDriveTileNoise(x)).slice().reverse(), true) || '<div style="color:#999;">no active drive yet</div>';
 
       const currentSummary = resetIdxs.length
         ? computeDriveSummary(resetIdxs[resetIdxs.length - 1], plays.length)
@@ -1051,6 +1072,41 @@ function extractNameTag(rawName){
         return;
       }
       const r = p.roles;
+      // SCORING TEXT CAPTURED REGARDLESS OF TEAM, unlike everything
+      // below this. Reported from a real game, 19 Aug 2026: a
+      // defensive score -- a blocked kick, an interception, a fumble,
+      // anything returned by the team that was NOT driving -- is still
+      // this drive's OUTCOME, even though the team that committed it
+      // is not the offense whose rushing/passing stats the rest of this
+      // loop counts. The early return two lines below, gating
+      // everything on p.team === driveTeam, used to gate THIS too --
+      // so once a defensive score's own team correctly said who
+      // actually scored (the attribution fix from earlier the same
+      // night), that team no longer matched driveTeam, and the
+      // touchdown that ended this exact drive silently never got
+      // captured. The outcome line fell back to lastPlayText instead --
+      // in the reported case, the scoring team's own ensuing kickoff,
+      // which is not remotely what ended this drive.
+      if (r){
+        const isFgGoodAny = r.playType === 'fg' && r.kicker && r.kicker.result === 'g';
+        // points === 6, not effect.td -- a THIRD bug in the same
+        // function, found while fixing the second one, the same night:
+        // a blocked kick returned for a touchdown sets effect.score
+        // with points: 6, but never sets effect.td at all -- that flag
+        // only gets set by the rush/pass/fumble/interception/kick-
+        // return branches, not the field-goal-block one. And it can
+        // never match isFgGoodAny either, since a BLOCKED kick's own
+        // result is 'b', never the 'g' a made field goal has. Neither
+        // condition ever matched this exact play shape, in EITHER
+        // team's own drive, since before tonight's attribution fix
+        // existed at all -- this was never about which team the play
+        // was filed under. 6 points is unambiguous in football
+        // regardless of the mechanism that produced it, so it is the
+        // one check that cannot miss a touchdown no matter how it was
+        // scored.
+        if (p.effect && p.effect.score && p.effect.score.points === 6){ scoringPlayText = p.text; endedInTouchdown = true; }
+        else if (p.effect && isFgGoodAny){ scoringPlayText = p.text; }
+      }
       if (!r || p.team !== driveTeam) return;
       // THE TRY THAT FOLLOWS THE TOUCHDOWN, still inside this same drive's
       // segment -- a PAT/2PT never opens a new drive (no down, no reset,
@@ -1108,9 +1164,6 @@ function extractNameTag(rawName){
           else { rushes++; rushYds += yds; }
         }
       }
-      const isFgGood = r.playType === 'fg' && r.kicker && r.kicker.result === 'g';
-      if (p.effect && p.effect.td){ scoringPlayText = p.text; endedInTouchdown = true; }
-      else if (p.effect && isFgGood){ scoringPlayText = p.text; }
     });
     const top = stateAtEnd.possessionTime[driveTeam] - stateBefore.possessionTime[driveTeam];
     let lastPlayText = null;
