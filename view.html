@@ -994,12 +994,44 @@ function extractNameTag(rawName){
 
     prevCard.classList.remove('hidden');
     if (prevTiles) prevTiles.classList.remove('hidden');
+    // Every previously-hidden log line and the team-name label get
+    // unhidden too, from a clean slate each call -- otherwise a drive
+    // that shrinks back down (an undo, a shorter drive next time)
+    // would stay missing lines that nothing hid on THIS pass.
+    prevCard.querySelectorAll('.logline, .prevDriveTeamLabel').forEach(el => el.classList.remove('hidden'));
 
     if (quad.scrollHeight <= quad.clientHeight) return;
 
     if (prevTiles) prevTiles.classList.add('hidden');
     if (quad.scrollHeight <= quad.clientHeight) return;
 
+    // ONE LINE AT A TIME, OLDEST FIRST -- Andy asked for this specifically,
+    // 19 Aug 2026, after Previous Drive's own full play log (added the
+    // same night) made this card tall enough to overflow on its own.
+    // The fallback used to jump straight from "hide the tiles" to "hide
+    // the whole card", which was fine when this card was only ever 1-2
+    // lines -- there was nothing in between worth losing gradually. Now
+    // a drive can be several lines long, and that same jump meant the
+    // ENTIRE card could vanish the moment Current Drive grew by a
+    // handful of plays, rather than shedding its own oldest lines
+    // first -- which is available here, and was not before, because
+    // there previously were no individual lines to shed one at a time.
+    //
+    // OLDEST FIRST because the list renders newest-first (see the
+    // reversal fixed the same night): the last .logline in the DOM is
+    // the oldest play, so working from the end preserves the most
+    // recent plays -- and the scoring play, which the capping logic
+    // upstream already fought to keep -- for as long as there is any
+    // room left at all.
+    const lines = prevCard.querySelectorAll('.logline');
+    for (let i = lines.length - 1; i >= 0; i--){
+      lines[i].classList.add('hidden');
+      if (quad.scrollHeight <= quad.clientHeight) return;
+    }
+
+    // Still too tall even with every line hidden -- a very short
+    // viewport, or the tiles/team-name alone don't fit. Last resort,
+    // matching the original fallback.
     prevCard.classList.add('hidden');
   }
 
@@ -1185,11 +1217,19 @@ function extractNameTag(rawName){
     // stays, and the tiles above are unchanged -- same four numbers,
     // same order, same source.
     //
-    // CHRONOLOGICAL, not reversed like Current Drive's own log. The
-    // request was specifically for the scoring play -- or the PAT/2PT
-    // that follows it -- to read as the FINAL entry, the way a coach
-    // naturally tells the story of a drive: what happened, in order,
-    // ending with how it ended.
+    // NEWEST FIRST, matching Current Drive's own log -- reversed from
+    // the first version of this, which read chronologically so the
+    // score would land at the visual bottom. Andy corrected that
+    // directly after seeing it live, 19 Aug 2026: both tiles should
+    // read the same direction. The capping logic below still finds and
+    // preserves the scoring play (and whatever follows it) by walking
+    // the segment chronologically -- only the FINAL render order flips,
+    // via one .reverse() right before renderLogLines. A side effect
+    // worth keeping in mind: this also means the score now sits at the
+    // TOP of the visible list rather than the bottom, which is the
+    // safer place for it given the fixed-height clipping this tile is
+    // built to avoid (see the note below) clips from the bottom, not
+    // the top.
     //
     // CAPPED, not left to the browser to clip. This page is a fixed
     // 1920x1080 canvas with overflow:hidden and no scrolling anywhere,
@@ -1246,8 +1286,8 @@ function extractNameTag(rawName){
     return '<div class="inline-stat-line">' +
       tiles.map(([label, val]) => '<span class="inline-stat-item"><b>' + label + '</b>' + val + '</span>').join('') +
       '</div>' +
-      '<div style="font-size:12px; font-weight:600; color:#888; margin:4px 0 2px;">' + teamName + '</div>' +
-      renderLogLines(logList, false);
+      '<div class="prevDriveTeamLabel" style="font-size:12px; font-weight:600; color:#888; margin:4px 0 2px;">' + teamName + '</div>' +
+      renderLogLines(logList.slice().reverse(), false);
   }
 
 
