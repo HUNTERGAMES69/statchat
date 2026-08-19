@@ -2118,3 +2118,100 @@ watch for.
 - [ ] Historical data: any completed game containing a rush, pass or sack
   fumble was recorded under the old two-play model and carries a phantom
   down attempt. Decide whether to re-derive or leave.
+
+## 20. 19 August 2026 — attribution chain, systematic audit, guided kickoff
+
+### Closed
+
+- [x] **`team: off` hardcoded regardless of `td`** in 15 branches of
+  `parseInput` (interception, fumble, punt, kickoff, FG block). A
+  defensive score correctly awarded points but filed the play itself
+  under the scoring team's opponent. Predates this session (git-blamed
+  to 1 Aug); 12 of the 15 are UI-reachable and were live bugs, all
+  fixed. The other 3 (PAT/2PT blocked-return) are dead code — NFHS
+  gives the defense no return on a try, confirmed directly against the
+  panel's own HTML, so those branches can never fire.
+- [x] **`findDriveStarts` registered a phantom drive** at a kick or
+  try that doesn't actually stick as a new possession — both the
+  general possession-change branch and, separately, the `endsPeriod`
+  (halftime) branch. The halftime one affected EVERY game with a
+  halftime, not a rare combination. Both fixed; pinned in
+  `drive_boundary_check.js`.
+- [x] **`computeDriveSummary`'s scoring-text capture and touchdown
+  detection**, plus the identical touchdown-detection bug independently
+  in `renderLogLines`'s bold-highlighting. Neither ever matched a
+  defensive score correctly; fixed to check `effect.score.points`
+  directly rather than a flag only some branches set.
+- [x] **`playsFor` (total plays per team) broke in 4 files** the
+  moment the attribution fix above landed — `recap.html`,
+  `stat_package.html`, `season_report.html`, `view.html`. Fixed by
+  deriving offense from the role that ran the play, not the field that
+  now correctly tracks who it scored for.
+- [x] **`tests/shared_number_check.js`** broken since an unrelated fix
+  earlier and never re-run. Fixed.
+- [x] **Guided kickoff flow missing the "fielded at / returned to"
+  calculator and "fumbled during the return"** that the ordinary panel
+  already had — see the `parseInput` duplication item below, this is
+  the same root cause in a new place. Ported both; found and fixed a
+  real pre-existing `endsDrive` bug shared with the onside/muffed
+  branches along the way. New permanent test:
+  `tests/guided_kickoff_check.js`.
+- [x] **Ran the full 23-mutant `mutation_check.js` to completion** —
+  first time this session, not just written and trusted. 22/23 caught.
+  One stale fixture updated to match the night's own engine changes.
+
+### Open — a decision, not an oversight
+
+- [ ] **`returnerRank()` is defined and never called.** The function
+  it was clearly built for — `returnerEligible`'s sort — still uses a
+  `() => 0` placeholder, and every entry in that list sets `pos: ''`
+  regardless, so wiring the sort in would currently be a no-op anyway.
+  Looks like an unfinished feature, not a bug. Left alone deliberately:
+  wiring it up changes actual picker ordering without being asked, and
+  a test for code that doesn't run yet would be hollow. Needs a call —
+  finish it (which also means populating `pos` correctly when the
+  eligible list is built) or delete it.
+
+### Open — escalating an existing item
+
+- [ ] **"`parseInput` is still duplicated in four HTML files" (below,
+  17 Aug) is now a FIVE-implementation problem, and worse than the
+  original count suggests.** The guided kickoff flow doesn't duplicate
+  `parseInput` — it doesn't call it AT ALL. It independently
+  reconstructs `text`/`effect`/`roles` by hand for every kickoff
+  outcome. That's why it silently missed an entire feature (the
+  calculator) and a real bug fix (`endsDrive`) that the ordinary panel
+  already had: there is no shared code for an upgrade to reach. The 18
+  Aug handoff already flagged this exact gap by name ("kickoff has its
+  own guided flow... that difference has not been checked yet") and it
+  took a live-game report to surface it. Any future `parseInput`
+  change needs an explicit check of whether the guided flow needs the
+  same fix ported by hand, same as punt/kickoff/FG already do.
+
+### Open — testing gaps, in priority order
+
+- [ ] **Overtime through the guided flow's own UI**, not through direct
+  effect injection. Tested OT combined with a defensive score by
+  writing the `forcePossession`/`otSeriesStart` markers directly; the
+  guided flow's own OT-entry path (if it has a distinct one) is
+  unverified.
+- [ ] **Areas no fuzzer or systematic read reached at all:** the
+  broadcast feed generator (`api/feed.js`, `api/seasondata.js`), the
+  offline queue, realtime sync, PDF/XLSX export, and anything in
+  `create_game.html`'s import pipeline beyond the shared-number case.
+- [ ] **Mutation testing needs a repeatable, batched runner**, not an
+  ad-hoc script written for one session. It timed out running all 23
+  at once and left a mutation on disk mid-run (recovered via the
+  script's own breadcrumb mechanism, no lasting damage) — this should
+  not depend on remembering to batch it by hand next time.
+
+### Still open from earlier
+
+- [ ] Multiple/offsetting penalties. Explicitly deprioritized — Andy
+  confirmed he will never enter them. Not worth building fixtures for.
+- [ ] Prototype decision: keypad vs field strip for `game.html`.
+  Untouched again this session.
+- [ ] Historical data: any completed game containing a rush, pass or
+  sack fumble was recorded under the old two-play model and carries a
+  phantom down attempt. Still undecided whether to re-derive or leave.
+- [ ] `.gitignore` and `sql/schema.sql` still absent from the repo.

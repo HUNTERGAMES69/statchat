@@ -1995,3 +1995,81 @@ check because deleting live code produces syntactically valid code) is the
 same one: a plausible, similar-looking pattern is not evidence about what
 a specific piece of this codebase actually does. The file is authoritative.
 Memory of the file is not.
+
+## One blind spot in many places is not many bugs (19 August 2026)
+
+Fifteen branches of `parseInput` shared one hardcoded assumption:
+`team: off`, regardless of `td`. Fixing the first one and then checking
+every sibling — rather than treating the reported bug as isolated —
+found the other fourteen in the same sitting. The pattern repeated at a
+second level: `computeDriveSummary`'s scoring capture, `renderLogLines`'s
+bold-highlighting, and `playsFor` in four separate files all broke for
+variants of the same reason, once the first fix started correctly
+flipping a field three unrelated pieces of code were all silently
+reading the same way.
+
+The practical lesson: when a bug turns out to be "this field was wrong
+in a way nobody had ever exercised," the next question is never "is
+this fixed now" — it's "what else reads this exact field, and does IT
+make the same assumption." A codebase-wide grep for the pattern, not
+just the one reported symptom, is what actually closes it.
+
+## A test that has not been shown to fail is not verified (19 August 2026)
+
+Twice this session, a "passing" test turned out to prove nothing. The
+attribution fuzzer's phantom-drive check initially generated a fumble-
+recovery spec with no takeover-spot field, leaving `fieldPos: null` —
+which the fuzzer's own loop then "fixed" by attempting a kickoff, which
+made no sense there at all, and produced a finding that looked like an
+app bug and was entirely the fuzzer's own generator. Separately, the
+FIRST version of `tests/guided_kickoff_check.js`'s `endsDrive` test
+passed with the fix deliberately removed, because it started from a
+fresh game where `down`/`distance`/`fieldPos` were already `null` —
+there was nothing stale for a missing fix to leave behind, so the test
+could not have told a working fix from a broken one either way.
+
+Both were only caught by deliberately reverting the fix and watching
+the test — expecting red, watching for it to actually turn red, not
+assuming it would. A green test against unmodified code is not
+evidence. The only real evidence is a test shown to fail against the
+SPECIFIC broken version it exists to catch. This is now the standing
+check for every new fixture in this project, not a one-off habit for
+one session — including double-checking earlier manual verification
+done before a permanent test existed, since it can carry the identical
+blind spot.
+
+## Mutation testing distinguishes a stale fixture from a real gap (19 August 2026)
+
+Running all 23 known mutants against the live suite (not just trusting
+that a prior pass had) surfaced three different outcomes, and they are
+NOT the same finding: one mutant could not even be applied, because its
+anchor text was the exact line before a fix made earlier the same
+night — a maintenance gap in the test file, not a defect in the app.
+One survived genuinely, and turned out to be dead code
+(`returnerRank()`, never called) — a real gap, but with zero actual
+risk, since nothing exercises the code it would protect. The other 21
+were caught immediately by their expected suite. Treating all three as
+"the mutation suite found problems" would have been wrong in two of
+three cases. The fix for each is different: update the fixture, decide
+whether to finish or delete the dead code, and do nothing at all — and
+conflating them wastes the part of this signal that's actually
+diagnostic.
+
+## The guided flow is not a copy of `parseInput` — it never calls it (19 August 2026)
+
+`TODO.md` has tracked `parseInput` duplication across four HTML files
+as a known cost since at least 17 August. The guided kickoff flow is a
+fifth instance and a structurally worse one: it does not duplicate
+`parseInput`, it replaces it — every outcome's `text`/`effect`/`roles`
+is hand-built inline in the guided-flow handler, with no shared
+function at all. That is why an upgrade to the ordinary kickoff panel
+(the "fielded at / returned to" calculator, a real `endsDrive` bug fix)
+never reached it: there was no code connecting the two for the fix to
+travel through. The 18 August handoff had already named this exact
+gap — "kickoff has its own guided flow... that difference has not been
+checked yet" — and it still took a live-game report to surface it,
+because a standing note in a handoff file is not the same thing as a
+test that fails when the two diverge. Consolidating `parseInput` into
+one shared place, reachable from both the ordinary panel and any guided
+flow, would not just reduce edit sites — it would make this specific
+class of drift structurally impossible instead of merely documented.

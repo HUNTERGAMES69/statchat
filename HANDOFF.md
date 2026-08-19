@@ -345,3 +345,170 @@ identical, since the feature is opt-in). None of it is a permanent
 regression case. `coverage_probe.js`'s CASES list is the right home for
 it: fielded either side of the 50, a fumble recovered by each team, a
 fumble-recovery touchdown on each side, and a negative/backward return.
+
+# SESSION 3 — 19 August 2026
+
+## The attribution chain — a blocked field goal returned for a touchdown
+
+Reported from a real game: a blocked FG returned for a TD by the
+defense scored the right team but the play itself was filed under the
+KICKING team's own attribution. Root cause, found by tracing one
+branch and then checking every sibling: `parseInput`'s `team: off`
+was hardcoded regardless of `td` in fifteen separate branches across
+`game.html` — interception, fumble, punt (ordinary/blocked/muffed),
+kickoff (ordinary/muffed/onside/fumble-during-return), and field goal
+block returns. Confirmed via git history and my own earliest snapshot
+from the session that the root defect predates tonight entirely (first
+appeared 1 Aug); the PATTERN just had never been exercised by a real
+game before.
+
+**Three of the fifteen turned out to be dead code.** `game.html`'s own
+PAT/2PT-blocked panels have no return control at all — NFHS ends a try
+the instant the defense has it, no return possible — so those three
+branches can never actually fire through the UI. Twelve are reachable
+and were live bugs; all twelve fixed.
+
+**Fixing this exposed a second, independent bug in `findDriveStarts`
+(`engine.js`).** A defensive score followed immediately by that team's
+own PAT/kickoff (the scoring team always acts next) registered a
+phantom one-play "drive" at the try or the kickoff itself, since
+neither actually sticks as a real possession change. Fixed by checking
+whether the target of a detected possession change ACTUALLY holds
+there before registering a boundary, walking past a PAT/2PT try and
+past a kick that flips again.
+
+**The same defect existed a second time, in the `endsPeriod` branch —
+and this one was not rare.** Halftime forces a fresh boundary
+regardless of whether possession changed, specifically so a team that
+keeps the ball across the interval still gets counted — but that
+boundary landed ON the second half's own opening kickoff in EVERY
+GAME, not just ones with an unusual score near the break. Confirmed
+with a completely ordinary sequence (rush, punt, halftime, kickoff),
+no rare combination required. Fixed the same way as the general
+branch. `tests/drive_boundary_check.js` now pins both shapes.
+
+**`computeDriveSummary` (`view.html`) had two more bugs in the same
+family, found while fixing the drive tile display Andy was watching
+live:**
+- Its own team filter, applied to EVERYTHING including the scoring-
+  text capture, meant a defensive score no longer matched `driveTeam`
+  once its attribution was corrected — so the outcome line silently
+  fell back to whatever play happened to be last (once, literally the
+  team's own ensuing kickoff). Fixed by capturing the score
+  unconditionally; only the offense's own rush/pass/yardage totals stay
+  team-filtered.
+- Touchdown detection keyed on `effect.td`, which none of the fifteen
+  branches above ever set — only `effect.score.points === 6` is. Same
+  bug independently existed in `renderLogLines`'s bold-highlighting.
+  Both switched to checking points directly, which cannot miss a
+  touchdown regardless of the mechanism that scored it.
+
+**Current Drive's own log needed a third, narrower fix on top of
+that:** it has to show the scoring play itself, even when the OTHER
+team scored it — that IS how the drive ended — but still exclude the
+PAT and kickoff that follow, which are the next team's business, not
+this drive's.
+
+**Fixing the attribution correctly broke a completely different
+question that happens to share the same field.** `p.team` correctly
+flipping to the returning team on a score broke `playsFor` — "how many
+plays did each team run" — in FOUR places (`recap.html`,
+`stat_package.html`, `season_report.html`, and `view.html` itself: a
+copy I missed on the first pass through the other three). An
+intercepted pass returned for a touchdown was counting as the
+intercepting team's own offensive snap. Fixed by deriving offense from
+`r.carrier`/`r.passer` — the role that actually ran the play — which
+never changes no matter how it ends.
+
+## Systematic audit — Andy asked to cover "every bit of code"
+
+Not a one-time sweep; the actual output was a permanent testing
+practice. In order:
+
+- **Read every remaining `.team ===` comparison** across all eight
+  app-facing HTML files plus `engine.js`. Confirmed everything else is
+  role-level (`r.carrier.team`, `r.passer.team`) or `effect.score.team`
+  — both always correctly set regardless of a play's outcome — and is
+  genuinely safe.
+- **Ran the full 23-mutant `mutation_check.js` suite to completion**,
+  in small batches after the first full run hit a tool timeout and
+  left a deliberate bug on disk mid-mutation — the script's own
+  breadcrumb/backup recovery caught it; verified the restoration with
+  a syntax check and two independent suites before continuing. Result:
+  22 of 23 known historical bugs are caught automatically if they ever
+  recur. One mutant's anchor text was stale (rewritten to match the
+  night's own `findDriveStarts` changes, same intent preserved). One
+  is genuine and left alone: `returnerRank()` is defined, never
+  called — dead code, not a live risk, and NOT silently wired up
+  without being asked (see TODO).
+- **Built four new fuzzers**, none of which existed before tonight and
+  none of which overlap: `fuzz_attribution_check.js` (special-teams
+  and turnover-return attribution), `fuzz_period_transition_check.js`
+  (halftime/overtime, the exact class that had zero prior coverage),
+  `fuzz_roster_check.js` (shared jersey numbers, required extending
+  `ui_driver.js`'s picker with a name-disambiguation hint), and
+  `fuzz_season_check.js` (cross-game aggregation, required extending
+  `tests/harness.js`'s mock backend to support more than one game at
+  once — `opts.games`, purely additive). Every one was verified by
+  deliberately reintroducing the exact bug it targets and confirming
+  it's actually caught, not just written and assumed correct.
+- **Found and fixed `tests/shared_number_check.js`**, silently broken
+  since an EARLIER, unrelated fix (`firstPosOf`) and never re-run since
+  — a gap in test hygiene, not a bug in the app.
+
+## Guided kickoff flow — the note from 18 August, answered
+
+The prior session's own handoff flagged this directly: *"kickoff has
+its own guided flow (`gr_*` fields, `guided.receivingTeam`) that punt
+does not, and that difference has not been checked yet."* Andy reported
+it tonight before I got to it: the guided flow (used for the opening
+kickoff and every 2nd-half kickoff) never gained the "fielded at /
+returned to" calculator or the "fumbled during the return" outcome the
+ordinary panel already had. Root cause is structural, not an oversight
+in one spot: **the guided flow never calls `parseInput` at all** — it
+independently reconstructs `text`/`effect`/`roles` by hand, so
+upgrades to the ordinary panel simply never reach it. Ported both
+pieces, mirroring `parseInput`'s exact attribution semantics (recovery
+team decides who can score, not hardcoded).
+
+**Found a real, pre-existing bug in the process, shared by the
+existing onside/muffed branches too:** when the kicking team recovers
+and scores, no flip fires (they never gave up the ball), and the
+shared `if (td)` line only ever set `effect.score`, never
+`effect.endsDrive` — the identical "old down and distance left on
+screen" bug the 18 August session's own punt work had already hit and
+fixed once, just never ported to this second implementation either.
+Fixed for all three branches sharing the line.
+
+**My own new code had two bugs, both caught by actually running it
+through the UI rather than trusting the read:** called
+`blockedToggleHtml()` from a scope where it doesn't exist (crashed on
+first click — the exact limitation the existing code's own comments
+had already warned about, for a different field), and the FIRST
+version of the permanent test for the `endsDrive` fix passed with the
+fix removed, because it started from a fresh game where down/distance
+were already `null` with nothing to leave stale. Fixed the test by
+establishing a real prior drive state first. Worth being direct about:
+this means my OWN earlier manual verification of the same fix, a few
+turns before the test existed, had the identical flaw and was never
+real evidence either.
+
+`tests/guided_kickoff_check.js` is new and covers all of the above —
+the calculator, both fumble-recovery outcomes, touchdown scoring
+through each path, and the pre-existing onside case the fix also
+touched.
+
+## Not yet done
+
+- Multiple/offsetting penalties — explicitly out of scope; Andy will
+  never enter them.
+- Overtime combined with the guided flow specifically (tested OT
+  combined with a defensive score via direct effect injection, not
+  through the guided kickoff UI itself — the guided flow's own OT
+  entry path is untested).
+- Areas the audit did not reach at all: the broadcast feed generator,
+  offline queue, realtime sync, PDF/XLSX export paths, and the
+  create_game/roster import pipeline beyond what `shared_number_check`
+  already covers.
+- `returnerRank()` — wire it up, or delete it. See TODO; this is a
+  product decision, not left unresolved by accident.
