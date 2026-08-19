@@ -1249,7 +1249,10 @@ if (typeof module !== 'undefined' && module.exports) {
       if (!p) return true;
       const e = p.effect || {};
       if (e.isReset) return false;
-      return !!(e.clockEvent || e.setQuarter || e.forcePossession || p.isDivider);
+      // e.timeout added 19 Aug 2026 -- see game.html for the full
+      // reasoning. Kept in sync with the six HTML copies by hand;
+      // TODO.md already tracks this duplication as an ongoing cost.
+      return !!(e.clockEvent || e.setQuarter || e.forcePossession || e.timeout || p.isDivider);
     };
   }
   if (typeof globalThis.otherTeam !== 'function') {

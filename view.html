@@ -362,7 +362,13 @@ function isAdminMarker(p){
   if (!p) return true;
   const e = p.effect || {};
   if (e.isReset) return false;
-  return !!(e.clockEvent || e.setQuarter || e.forcePossession || p.isDivider);
+  // e.timeout added 19 Aug 2026: a timeout call has no bearing on
+  // possession or drive state at all, but was never in this list --
+  // so findDriveStarts treated it as a real play, and a timeout called
+  // between a defensive score and its own PAT became the target a
+  // phantom drive boundary landed on, registering an unearned
+  // possession for the scoring team. Reported from a real game.
+  return !!(e.clockEvent || e.setQuarter || e.forcePossession || e.timeout || p.isDivider);
 }
 
 // Jersey numbers resolve across ALL THREE roster units, not just the one
