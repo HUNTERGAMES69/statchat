@@ -5864,7 +5864,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             markerLabel(cur) + ' — a sack cannot gain yards. Check the yard line.';
           return;
         }
-        yardsEl().value = String(Math.abs(gain));
+        // GUARDED: the same missing-yards-field case releaseYards was
+        // just fixed for, reached from a different line in the same
+        // closure. If there is nowhere to write the computed gain, there
+        // is nothing further this branch can do -- the calculator's own
+        // readout below still reports the number either way.
+        if (yardsEl()) yardsEl().value = String(Math.abs(gain));
 
         // ON A PUNT, THE LANDING SPOT IS ALSO THE TAKEOVER SPOT.
         // ----------------------------------------------------------------
@@ -5936,9 +5941,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
         // Tinted so it is obvious the number was worked out rather than
         // typed -- a locked grey box just looks broken.
-        yardsEl().style.background = '#eef6f1';
-        yardsEl().style.borderColor = '#1a7a4c';
-        yardsEl().style.fontWeight = '700';
+        //
+        // GUARDED, same reasoning as releaseYards below: nothing to tint
+        // if there is no yards field for this panel to begin with.
+        const yeLock = yardsEl();
+        if (yeLock){
+          yeLock.style.background = '#eef6f1';
+          yeLock.style.borderColor = '#1a7a4c';
+          yeLock.style.fontWeight = '700';
+        }
         // The sign comes out of the arithmetic, so LOSS is driven from
         // here rather than left for the coach to set as well -- having
         // both would double-negate exactly like a typed "-5" plus LOSS.
@@ -5958,9 +5969,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
       function releaseYards(){
         setDisabled(yardsEl(), false);
-        yardsEl().style.background = '';
-        yardsEl().style.borderColor = '';
-        yardsEl().style.fontWeight = '';
+        // GUARDED, not assumed non-null: the kickoff panel has no yards
+        // field at all -- deliberately removed, see the comment where
+        // the kickoff panel's HTML is built -- so targetId()'s own
+        // default of 'pp_yards' resolves to nothing there. Every OTHER
+        // caller of yardsEl() in this closure already goes through
+        // setDisabled, which already guards with `if (el)`; this was
+        // the one place that reached into .style directly. Found by
+        // fuzzing a real, valid sequence -- an interception returned
+        // for a touchdown, its PAT, then an onside kickoff -- and
+        // reproduced deterministically once isolated, not a rare or
+        // contrived case.
+        const ye = yardsEl();
+        if (ye){
+          ye.style.background = '';
+          ye.style.borderColor = '';
+          ye.style.fontWeight = '';
+        }
         if (lossBtn()) setDisabled(lossBtn(), false);
       }
 
@@ -5968,9 +5993,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       ylEl.addEventListener('input', recompute);
       // Typing yards directly clears the calculator, so the two inputs
       // can never disagree about the same play.
-      yardsEl().addEventListener('input', () => {
-        if (!yardsEl().disabled && ylEl.value){ ylEl.value = ''; readout.textContent = ''; }
-      });
+      //
+      // GUARDED at setup time too: if this panel's target has no yards
+      // field to begin with, there is nothing to attach the listener to
+      // -- and nothing for it to do, since the whole point was keeping
+      // two boxes in sync and only one of them exists.
+      if (yardsEl()){
+        yardsEl().addEventListener('input', () => {
+          if (!yardsEl().disabled && ylEl.value){ ylEl.value = ''; readout.textContent = ''; }
+        });
+      }
       paintSides();
       recompute();
       panel.__spotCalc = { recompute, releaseYards,
