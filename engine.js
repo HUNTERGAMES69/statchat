@@ -312,7 +312,33 @@ function findDriveStarts(playsList){
     const endsPeriod = (playsList[i].isDivider && /end of (1st|first) half/i.test(playsList[i].text || '')) ||
       (playsList[i].effect && playsList[i].effect.setQuarter >= 5);
     if (endsPeriod){
-      pushStart(firstRealPlayFrom(i + 1));
+      // SKIP PAST THE OPENING KICKOFF/PUNT AND ANY TRY, exactly as the
+      // general check two branches below already learned to do the
+      // same night, for the same reason -- but this branch never got
+      // the same fix, because it does not detect a possession change
+      // at all; it FORCES a boundary regardless of whether one
+      // happened, specifically so a team that keeps the ball across
+      // the interval still gets a fresh drive. The new half always
+      // opens with a kickoff, and the kickoff itself flips possession
+      // again -- so without this, the boundary landed ON the kickoff
+      // in EVERY SINGLE GAME with a halftime, not just the rare
+      // defensive-score case that surfaced the general check's version
+      // of this bug. countPossessions (which shares this exact array)
+      // credited a second, spurious possession to whichever team the
+      // kickoff itself favoured, every time. Found by a systematic
+      // audit specifically checking whether this fix generalized,
+      // not by a live-game report.
+      let target = firstRealPlayFrom(i + 1);
+      while (target !== -1){
+        const tp = playsList[target].roles && playsList[target].roles.playType;
+        if (tp === 'pat' || tp === 'twopt'){ target = firstRealPlayFrom(target + 1); continue; }
+        if ((tp === 'kickoff' || tp === 'punt') &&
+            playsList[target].effect && playsList[target].effect.flip && playsList[target].effect.flipApplied){
+          target = firstRealPlayFrom(target + 1); continue;
+        }
+        break;
+      }
+      pushStart(target);
       priorPoss = computeState(playsList.slice(0, i + 1)).possession;
       continue;
     }

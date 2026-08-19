@@ -1024,14 +1024,19 @@ function extractNameTag(rawName){
     // A touchdown or a made field goal is bold on sight, not just
     // whichever play happens to be most recent -- Andy asked for
     // this specifically, 19 Aug 2026. Same detection computeDriveSummary
-    // already uses for scoringPlayText, reused rather than re-derived:
-    // p.effect.td for a touchdown, and playType 'fg' with a made
-    // kicker result for a field goal. Deliberately NOT every scoring
-    // play -- a PAT, a 2-point try and a safety were not asked for,
-    // and bolding everything that scores would have made this no
-    // different from bolding nothing.
+    // uses for scoringPlayText -- and the SAME bug this function had,
+    // found by a systematic audit rather than another live-game report:
+    // effect.td is never set by a blocked kick, an interception, or a
+    // fumble returned for a touchdown -- only effect.score.points: 6
+    // is. Every one of those thirteen-plus branches has been bold-
+    // eligible in NAME since the feature shipped and never once
+    // actually bold, because this check could not see them. points
+    // === 6 is unambiguous in football regardless of the mechanism
+    // that scored it. Deliberately NOT every scoring play -- a PAT, a
+    // 2-point try and a safety were not asked for, and neither is 6
+    // points, so none of them match this check either.
     const isTdOrFg = (p) => {
-      if (p.effect && p.effect.td) return true;
+      if (p.effect && p.effect.score && p.effect.score.points === 6) return true;
       const r = p.roles;
       return !!(r && r.playType === 'fg' && r.kicker && r.kicker.result === 'g');
     };
@@ -1246,7 +1251,18 @@ function extractNameTag(rawName){
     // function did not previously care who had the ball.
     const liveState = computeState(plays);
     const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
-    const playsFor = (teamKey) => plays.filter(p => p.team === teamKey && p.roles && scrimmageTypes.includes(p.roles.playType)).length;
+    // OFFENSE DETERMINED BY ROLE, NOT BY p.team -- same bug, same fix as
+    // recap.html/stat_package.html/season_report.html, found the same
+    // night by a systematic audit specifically because this file's own
+    // copy had been missed on the first pass through those three.
+    const offenseTeamOf = (p) => {
+      const r = p.roles;
+      if (!r) return null;
+      if (r.carrier) return r.carrier.team;
+      if (r.passer) return r.passer.team;
+      return null;
+    };
+    const playsFor = (teamKey) => plays.filter(p => p.roles && scrimmageTypes.includes(p.roles.playType) && offenseTeamOf(p) === teamKey).length;
     const possessions = countPossessions(plays);
     const turnovers = countTurnovers(plays);
     const penState = computeState();

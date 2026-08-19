@@ -352,7 +352,16 @@ function isAdminMarker(p){
     const possessions = countPossessions(gamePlays);
     const turnovers = countTurnovers(gamePlays);
     const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
-    const playsFor = (teamKey) => gamePlays.filter(p => p.team === teamKey && p.roles && scrimmageTypes.includes(p.roles.playType)).length;
+    // OFFENSE DETERMINED BY ROLE, NOT BY p.team -- see recap.html for
+    // the full reasoning, found and fixed there first the same night.
+    const offenseTeamOf = (p) => {
+      const r = p.roles;
+      if (!r) return null;
+      if (r.carrier) return r.carrier.team;
+      if (r.passer) return r.passer.team;
+      return null;
+    };
+    const playsFor = (teamKey) => gamePlays.filter(p => p.roles && scrimmageTypes.includes(p.roles.playType) && offenseTeamOf(p) === teamKey).length;
 
     ['rushing','passing','receiving'].forEach(cat => {
       Object.keys(box.teamA[cat]).forEach(n => {

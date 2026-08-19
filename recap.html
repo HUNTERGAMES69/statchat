@@ -670,7 +670,26 @@ function isAdminMarker(p){
     const possessions = countPossessions(plays);
     const turnovers = countTurnovers(plays);
     const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
-    const playsFor = (teamKey) => plays.filter(p => p.team === teamKey && p.roles && scrimmageTypes.includes(p.roles.playType)).length;
+    // OFFENSE DETERMINED BY ROLE, NOT BY p.team. Found by a systematic
+    // audit, 19 Aug 2026: p.team was deliberately changed the same
+    // night so an interception or fumble RETURNED for a touchdown
+    // files under the RETURNING team, for drive-attribution purposes --
+    // correctly. But this "how many plays did each team run" count
+    // shares that same field for a completely different question, and
+    // got the wrong answer as soon as the first one was fixed: a pass
+    // that gets intercepted and run back for a score is still the
+    // passer's own team's offensive snap, regardless of who ends up
+    // with the ball. r.carrier/r.passer identify who actually ran the
+    // play and never change no matter how it ends, which is exactly
+    // what this question needs.
+    const offenseTeamOf = (p) => {
+      const r = p.roles;
+      if (!r) return null;
+      if (r.carrier) return r.carrier.team;
+      if (r.passer) return r.passer.team;
+      return null;
+    };
+    const playsFor = (teamKey) => plays.filter(p => p.roles && scrimmageTypes.includes(p.roles.playType) && offenseTeamOf(p) === teamKey).length;
 
     // Quarter-by-quarter scoring, derived from each play's own quarter
     // and scoring effect -- nothing pre-computes this today, so it's
