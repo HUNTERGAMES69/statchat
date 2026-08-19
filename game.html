@@ -1323,7 +1323,7 @@ function parseInput(raw, state){
     }
     if (ret) t += ', returned ' + ret;
     let score = null;
-    if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+    if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
     // TEAM FLIPS TO def ON THE TD, not left at off. Andy reported this
     // from a real game, 19 Aug 2026 -- score correctly credited to the
     // defense, but the PLAY ITSELF still filed under the offense's own
@@ -1365,7 +1365,7 @@ function parseInput(raw, state){
       let t = lead + ' — ' + (rec === '?' ? 'recovered by the defense' : 'recovered by ' + D(rec)) + ' (turnover)';
       if (retyds) t += ', returned ' + retyds;
       let score = null;
-      if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+      if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
       // EFFECT DELIBERATELY UNCHANGED when the ball is lost, attempt or
       // no attempt. computeState skips the flip for stat plays -- a play
       // that gains yardage must not also change hands -- so marking this
@@ -1426,7 +1426,7 @@ function parseInput(raw, state){
       // below. An earlier version of this branch left the shared `td`
       // block ABOVE the fumble text, which announced the score before
       // explaining what happened.
-      if (td){ t += ' — TOUCHDOWN'; score = { team: recTeam, points: 6 }; }
+      if (td){ t += ' — TOUCHDOWN ' + TEAMS[recTeam].name.toUpperCase(); score = { team: recTeam, points: 6 }; }
       return { text: t,
         // effect.endsDrive, NOT ONLY effect.score. `computeState` only
         // nulls down/distance/fieldPos on a score if endsDrive is ALSO
@@ -1450,10 +1450,16 @@ function parseInput(raw, state){
         // exact mechanism a muffed punt the kicking team recovers
         // already uses, verified against that code before this was
         // written.
-        flipEligible: !kickingRecovers, flipTo: def, team: off, quarter: state.quarter };
+        //
+        // team: td ? recTeam : off -- a 15TH BRANCH with the same
+        // attribution bug, missed in the first sweep because it is a
+        // fumble-during-return sub-case nested inside 'pt' rather than
+        // 'pt''s own top-level return. Found and fixed while adding
+        // the explicit team name to the text, 19 Aug 2026.
+        flipEligible: !kickingRecovers, flipTo: def, team: td ? recTeam : off, quarter: state.quarter };
     }
     let score = null;
-    if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+    if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter };
   }
   if (type === 'pm'){
@@ -1479,7 +1485,7 @@ function parseInput(raw, state){
     // spot either. `isTouchback` is stripped earlier, and 'sf' is the
     // same token the blocked-punt safety uses.
     if (isSafety && kickingRecovers){
-      return { text: t + ' in the end zone — SAFETY',
+      return { text: t + ' in the end zone — SAFETY ' + TEAMS[def].name.toUpperCase(),
         effect: { score: { team: def, points: 2 }, endsDrive: true },
         // team: def, not off -- the receiving team scored the safety;
         // it is their moment, not the kicking team's blunder, for the
@@ -1496,7 +1502,7 @@ function parseInput(raw, state){
     // a kicking-team recovery returned for a score left the old down and
     // distance sitting on screen, because nothing else clears them when
     // possession has not changed.
-    if (td){ t += ' — TOUCHDOWN'; score = { team: recTeam, points: 6 }; }
+    if (td){ t += ' — TOUCHDOWN ' + TEAMS[recTeam].name.toUpperCase(); score = { team: recTeam, points: 6 }; }
     return {
       text: t,
       // Recovering your own muffed kick is a new POSSESSION, not a
@@ -1522,12 +1528,12 @@ function parseInput(raw, state){
     if (rec && rec !== '?') t += ', recovered by ' + D(rec);
     if (retyds) t += ', returned ' + retyds;
     let score = null;
-    if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+    if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter };
   }
   if (type === 'pbo'){
     let t = ST(p1) + ' punt BLOCKED, recovered by own team';
-    if (isSafety) t += ', in the end zone — SAFETY';
+    if (isSafety) t += ', in the end zone — SAFETY ' + TEAMS[def].name.toUpperCase();
     // team: isSafety ? def : off -- the receiving team scored the
     // safety when the kicking team's own recovery went backward into
     // their own end zone; the play is theirs, not the kicking team's,
@@ -1575,7 +1581,7 @@ function parseInput(raw, state){
       // branch was extended from the ORIGINAL kickoff structure rather
       // than re-derived from 'pt''s already-corrected one.
       let score = null;
-      if (td){ t += ' — TOUCHDOWN'; score = { team: recTeam, points: 6 }; }
+      if (td){ t += ' — TOUCHDOWN ' + TEAMS[recTeam].name.toUpperCase(); score = { team: recTeam, points: 6 }; }
       return { text: t,
         // effect.endsDrive, NOT ONLY effect.score -- computeState only
         // nulls down/distance/fieldPos on a score if endsDrive is ALSO
@@ -1599,7 +1605,7 @@ function parseInput(raw, state){
     // 'pt', which has exactly this same pair of independent
     // declarations, one per branch, rather than assumed.
     let score = null;
-    if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+    if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter };
   }
   if (type === 'km'){
@@ -1622,7 +1628,7 @@ function parseInput(raw, state){
     // a kicking-team recovery returned for a score left the old down and
     // distance sitting on screen, because nothing else clears them when
     // possession has not changed.
-    if (td){ t += ' — TOUCHDOWN'; score = { team: recTeam, points: 6 }; }
+    if (td){ t += ' — TOUCHDOWN ' + TEAMS[recTeam].name.toUpperCase(); score = { team: recTeam, points: 6 }; }
     return {
       text: t,
       // Recovering your own muffed kick is a new POSSESSION, not a
@@ -1706,7 +1712,7 @@ function parseInput(raw, state){
       : TEAMS[recTeam].name;
     let t = ST(p1) + ' ONSIDE KICK — recovered by ' + recName;
     let score = null;
-    if (td){ t += ' — TOUCHDOWN'; score = { team: recTeam, points: 6 }; }
+    if (td){ t += ' — TOUCHDOWN ' + TEAMS[recTeam].name.toUpperCase(); score = { team: recTeam, points: 6 }; }
     return {
       text: t,
       // Recovering your own onside kick is a new POSSESSION, not a fresh
@@ -1741,7 +1747,7 @@ function parseInput(raw, state){
       if (rec) t += ', recovered by ' + D(rec);
       if (retyds) t += ', returned ' + retyds;
       let score = null;
-      if (td){ t += ' — TOUCHDOWN'; score = { team: def, points: 6 }; }
+      if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
       // team: def on the TD -- THE ORIGINAL REPORT, 19 Aug 2026: score
       // correctly went to the defense, but this line still filed the
       // play itself under the offense's own team, which is what a
@@ -1767,7 +1773,7 @@ function parseInput(raw, state){
       if (rec) t += ', recovered by ' + D(rec);
       if (retyds) t += ', returned ' + retyds;
       let score = null;
-      if (td){ t += ' — returned for 2 (defense)'; score = { team: def, points: 2 }; }
+      if (td){ t += ' — returned for 2 — ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 2 }; }
       // team: def on the return -- same fix as the other thirteen
       // branches found the same night this was reported.
       return { text: t, effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: td ? def : off, quarter: state.quarter };
@@ -1783,7 +1789,7 @@ function parseInput(raw, state){
       let t = O(p1) + ' 2PT rush attempt FUMBLED, turned over';
       if (rec) t += ', recovered by ' + D(rec);
       let score = null;
-      if (td){ t += ' — returned for 2 (defense)'; score = { team: def, points: 2 }; }
+      if (td){ t += ' — returned for 2 — ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 2 }; }
       return { text: t, effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: td ? def : off, quarter: state.quarter };
     }
     const good = res === 'g';
@@ -1797,7 +1803,7 @@ function parseInput(raw, state){
       let t = O(p1) + ' 2PT pass INTERCEPTED';
       if (rec) t += ' by ' + D(rec);
       let score = null;
-      if (td){ t += ' — returned for 2 (defense)'; score = { team: def, points: 2 }; }
+      if (td){ t += ' — returned for 2 — ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 2 }; }
       // team: def on the return, not off -- last of fourteen branches
       // with this bug, found and fixed the same night it was
       // reported (a blocked field goal returned for a touchdown).
