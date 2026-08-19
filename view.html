@@ -623,7 +623,7 @@ function extractNameTag(rawName){
         }
         if (d.kickoffs){
           const tbPct = Math.round(100 * (d.touchbacks || 0) / d.kickoffs);
-          stKickoffs.push({ name, values: [d.kickoffs, tbPct + '%'] });
+          stKickoffs.push({ name, values: [d.kickoffs, d.touchbacks || 0, tbPct + '%'] });
         }
         if (d.punts){
           const avg = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
@@ -650,7 +650,7 @@ function extractNameTag(rawName){
         // Individual kickoff distance is not reported anywhere and the
         // panel does not even ask for it, so a per-kicker yardage table
         // would be all zeroes.
-        pushIfRows(['Kickoffs','TB %'], stKickoffs.filter(rowHasValue));
+        pushIfRows(['Kicks','Touchbacks','TB%'], stKickoffs.filter(rowHasValue));
         const stInner = stSections.map((sec, i) => i === 0 ? sec :
           '<div style="border-top:1px solid #dde3ea; margin-top:calc(9px * var(--stat-scale, 1)); ' +
           'padding-top:calc(7px * var(--stat-scale, 1));">' + sec + '</div>').join('');
@@ -914,11 +914,41 @@ function extractNameTag(rawName){
     // the new drive starts at the next play instead.
     if (!isResultsMode){
       const resetIdxs = findDriveStarts(plays);
-      const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
+      let liveStart = resetIdxs.length ? resetIdxs[resetIdxs.length - 1] : 0;
+      // CURRENT DRIVE, SPECIFICALLY, ALSO SHOWS A LEADING KICKOFF OR
+      // PUNT -- reported from a real game, 19 Aug 2026. Right after a
+      // kick, before the receiving team's first scrimmage snap, this
+      // used to show the KICKING team's already-finished drive instead,
+      // because findDriveStarts has nothing to push a new boundary at
+      // until a scrimmage play follows the kick. It read as stale --
+      // "here is the drive that just ended" -- rather than "a new drive
+      // is starting right now."
+      //
+      // Scoped to THIS DISPLAY ONLY, not to findDriveStarts itself: a
+      // punt or kickoff is ALSO the tested, correct CLOSING play of the
+      // drive that ends with it (see drive_boundary_check.js's punt
+      // scenario -- the Previous Drive tile is supposed to read
+      // "...punts 40"). Moving the shared boundary to give the kick to
+      // the new drive would have silently taken it away from the old
+      // one, since one boundary can't put the same play in both
+      // segments -- and the kick genuinely belongs to both narratives
+      // at once. This walks backward from the canonical start, past
+      // admin markers only, to pick the kick up for the live view
+      // specifically. Safe to reuse for the numeric tiles below too:
+      // computeDriveSummary's own team filter (p.team !== driveTeam)
+      // already keeps a kick from contributing to rushes/passes/yards
+      // regardless of whether it is inside the segment.
+      for (let j = liveStart - 1; j >= 0; j--){
+        if (isAdminMarker(plays[j])) continue;
+        const rt = plays[j].roles && plays[j].roles.playType;
+        if (rt === 'kickoff' || rt === 'punt') liveStart = j;
+        break;
+      }
+      const currentDrivePlays = resetIdxs.length ? plays.slice(liveStart) : [];
       document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.filter(x => !isDriveTileNoise(x)).slice().reverse(), true) || '<div style="color:#999;">no active drive yet</div>';
 
       const currentSummary = resetIdxs.length
-        ? computeDriveSummary(resetIdxs[resetIdxs.length - 1], plays.length)
+        ? computeDriveSummary(liveStart, plays.length)
         : null;
       document.getElementById('currentDriveTiles').innerHTML = currentSummary
         ? '<div class="inline-stat-line">' + [
