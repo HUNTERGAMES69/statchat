@@ -168,15 +168,25 @@ function makeMockSupabase(db) {
           // "is this hidden from a view account?" was silently always
           // asking about an admin, and passed regardless.
           if (table === 'profiles') data = [{ role: db.role, id: 'test-user-id' }];
-          else if (table === 'games') data = [db.game];
-          else if (table === 'game_rosters') data = db.roster;
+          else if (table === 'games') data = db.games ? db.games.map(g => g.game) : [db.game];
+          else if (table === 'game_rosters') {
+            if (db.games) {
+              const gid = this._filters.game_id;
+              const entry = db.games.find(g => String(g.game.id) === String(gid));
+              data = entry ? entry.roster : [];
+            } else data = db.roster;
+          }
           else if (table === 'teams') data = [db.branding];
           else if (table === 'plays') {
             // The server holds what was preloaded PLUS anything inserted
             // during this session. Returning only the preloaded rows made
             // the mock lie to any code that inserts and then re-reads --
             // which is exactly what offline-recovery logic does.
-            data = db.existingPlays.concat(db.plays);
+            if (db.games) {
+              const gid = this._filters.game_id;
+              const entry = db.games.find(g => String(g.game.id) === String(gid));
+              data = entry ? entry.plays.slice().sort((a, b) => (a.sequence_number || 0) - (b.sequence_number || 0)) : [];
+            } else data = db.existingPlays.concat(db.plays);
           }
         }
         return Promise.resolve({ data: narrow(data), error: null }).then(resolve, reject);
@@ -295,6 +305,17 @@ async function bootPage(file, opts = {}) {
     roster: opts.roster || defaultRoster(),
     existingPlays: opts.existingPlays || [],
     plays: [],
+    // MULTIPLE GAMES, for season-report fuzzing specifically. Added 19
+    // Aug 2026 -- every existing test uses the single game/roster/
+    // existingPlays above, and this is purely additive: when
+    // opts.games is absent (every test before this one), the 'games',
+    // 'game_rosters' and 'plays' table handling below is completely
+    // unchanged. When present, it is an array of { game, roster,
+    // plays }, each with its own game.id, and the mock actually
+    // respects the .eq('game_id', ...) filter season_report.html's
+    // real per-game loop applies -- which nothing needed before, since
+    // there was only ever one game to return regardless of the filter.
+    games: opts.games || null,
     failNext: opts.failNext || null,   // see builder().insert
     failUpdates: opts.failUpdates || null,  // see builder().update
     role: opts.role || 'admin',        // the signed-in user's role

@@ -9,6 +9,39 @@ function stateOf(h) {
   return JSON.parse(h.evalIn('JSON.stringify(computeState())'));
 }
 
+// A SEPARATE, INDEPENDENT CHECK, not a step in the scripted narrative
+// above -- added 19 Aug 2026, found by mutation testing rather than a
+// live-game report. A dead-ball penalty (or one assessed after a kick
+// or change of possession) moves the ball but keeps the down and
+// distance-to-go as they were, EXCEPT when the new spot is close
+// enough to the goal line that the original distance would overshoot
+// it -- "1st & 10" at the opponent's 5 makes no sense; it has to read
+// "1st & Goal" (5 to go). The clamp that makes this true had no test
+// of its own: removing it (Math.max(1, state.distance) instead of
+// Math.max(1, Math.min(state.distance, 100 - state.fieldPos))) passed
+// every existing suite silently. This is a real, reachable situation
+// -- unlike offsetting penalties, which will not be entered -- so it
+// gets its own fresh game instance rather than being folded into the
+// narrative script above, to avoid disturbing that script's own
+// carefully-built sequence.
+async function checkPenaltyDistanceClamp() {
+  const failures = [];
+  const h = await bootGamePage();
+  setDrive(h, { down: 1, distance: 10, side: 'opp', yardline: 15 });
+  enterPlay(h, { type: 'penalty', on: 'defense', yards: '10', deadBall: true });
+  const st = stateOf(h);
+  if (st.distance !== 5) {
+    failures.push({ step: 'penalty-distance-clamp', kind: 'distance',
+      detail: 'expected 5 (1st & Goal from the 5), got ' + st.distance });
+  }
+  if (st.fieldPos !== 95) {
+    failures.push({ step: 'penalty-distance-clamp', kind: 'fieldPos',
+      detail: 'expected 95, got ' + st.fieldPos });
+  }
+  h.close();
+  return failures;
+}
+
 async function runScript(opts = {}) {
   const h = await bootGamePage(opts.boot || {});
   const trace = [];
@@ -63,7 +96,7 @@ async function runScript(opts = {}) {
 }
 
 if (require.main === module) {
-  runScript().then(({ h, trace, failures }) => {
+  Promise.all([runScript(), checkPenaltyDistanceClamp()]).then(([{ h, trace, failures }, extraFailures]) => {
     console.log('=== Scripted game trace (driven through the real UI) ===\n');
     trace.forEach(t => {
       if (t.error) { console.log(t.label + '\n    THREW: ' + t.error); return; }
@@ -74,6 +107,7 @@ if (require.main === module) {
       console.log('    state: ' + dd + ' fp=' + s.fieldPos + ' poss=' + s.possession +
                   ' score=' + s.scores.teamA + '-' + s.scores.teamB + (t.warning ? '  WARN: ' + t.warning : ''));
     });
+    failures.push(...extraFailures);
     console.log('\n=== Failures: ' + failures.length + ' ===');
     failures.forEach(f => console.log('  [' + f.kind + '] ' + f.step + '\n      ' + f.detail));
     h.close();

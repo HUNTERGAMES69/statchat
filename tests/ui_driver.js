@@ -34,6 +34,15 @@ function typeInto(win, el, value) {
 // Pick a jersey number the way a coach does: click the player's picker
 // button if the app is showing one, otherwise type the number into the
 // "or type #" field next to it. Both are real UI paths.
+//
+// opts.name DISAMBIGUATES a shared number, added 19 Aug 2026 while
+// building a fuzzer for exactly this: two players can wear the same
+// number, and the picker offers a separate button for each (with a "?"
+// on both), distinguished only by name. Every caller before this simply
+// had one player per number, so the first matching button was always
+// the right one -- opts.name is optional and every existing call site
+// is unaffected, since without it this defaults to that exact prior
+// behaviour.
 function pickPlayer(win, doc, role, num, opts = {}) {
   const panel = doc.getElementById('playPanel');
   const suffix = opts.suffix || '';
@@ -41,7 +50,10 @@ function pickPlayer(win, doc, role, num, opts = {}) {
   const manualId = role === 'credit' ? 'pp_credit_manual' + suffix : 'pp_' + role + '_manual';
 
   if (opts.preferPicker !== false) {
-    const btn = panel.querySelector('.' + groupClass + '[data-num="' + num + '"]');
+    const candidates = [...panel.querySelectorAll('.' + groupClass + '[data-num="' + num + '"]')];
+    const btn = opts.name
+      ? (candidates.find(b => b.textContent.includes(opts.name)) || candidates[0])
+      : candidates[0];
     if (btn) { click(win, btn); return 'picker'; }
   }
   typeInto(win, q(doc, manualId), num);
@@ -111,7 +123,7 @@ function enterPlay(h, spec) {
   const t = spec.type;
   openPanel(win, doc, t);
 
-  const P = (role, num, opts) => { if (num !== undefined && num !== null) pickPlayer(win, doc, role, num, Object.assign({ preferPicker: spec.preferPicker }, opts || {})); };
+  const P = (role, num, opts) => { if (num !== undefined && num !== null) pickPlayer(win, doc, role, num, Object.assign({ preferPicker: spec.preferPicker, name: spec[role + 'Name'] }, opts || {})); };
 
   if (t === 'penalty') {
     const panel = doc.getElementById('playPanel');
@@ -168,6 +180,11 @@ function enterPlay(h, spec) {
         P('credit', spec.credit, { suffix: '_rushfum' });
         if (spec.retyds !== undefined) typeInto(win, q(doc, 'pp_rushfum_retyds'), spec.retyds);
         if (spec.fumTd) toggle(win, doc, 'pp_rushfum_td_toggle');
+        // The takeover spot is a SEPARATE field from retyds -- entering
+        // return yards alone leaves fieldPos null, which an earlier
+        // version of a fuzzer built on this driver never noticed because
+        // nothing here read spec.fumSpot at all. Added 19 Aug 2026.
+        if (spec.fumSpot && !spec.fumTd) setStartingSpot(win, doc, 'pp_rushfum_spot', spec.fumSpot.side, spec.fumSpot.yardline);
       } else if (spec.safety) toggle(win, doc, 'pp_rushfum_safety_toggle');
     } else {
       if (spec.safety) toggle(win, doc, 'pp_rush_safety_toggle');
@@ -196,6 +213,7 @@ function enterPlay(h, spec) {
           P('credit', spec.credit, { suffix: '_passfum' });
           if (spec.retyds !== undefined) typeInto(win, q(doc, 'pp_passfum_retyds'), spec.retyds);
           if (spec.fumTd) toggle(win, doc, 'pp_passfum_td_toggle');
+          if (spec.fumSpot && !spec.fumTd) setStartingSpot(win, doc, 'pp_passfum_spot', spec.fumSpot.side, spec.fumSpot.yardline);
         } else if (spec.safety) toggle(win, doc, 'pp_passfum_safety_toggle');
       } else {
         if (spec.safety) toggle(win, doc, 'pp_pass_safety_toggle');
@@ -212,6 +230,7 @@ function enterPlay(h, spec) {
         P('credit', spec.credit, { suffix: '_sackfum' });
         if (spec.retyds !== undefined) typeInto(win, q(doc, 'pp_sackfum_retyds'), spec.retyds);
         if (spec.fumTd) toggle(win, doc, 'pp_sackfum_td_toggle');
+        if (spec.fumSpot && !spec.fumTd) setStartingSpot(win, doc, 'pp_sackfum_spot', spec.fumSpot.side, spec.fumSpot.yardline);
       } else if (spec.safety) toggle(win, doc, 'pp_sackfum_safety_toggle');
     } else {
       if (spec.safety) toggle(win, doc, 'pp_sack_safety_toggle');
@@ -245,12 +264,47 @@ function enterPlay(h, spec) {
     // so it was removed from the panel. spec.yards is accepted and
     // ignored so existing scenarios keep working unchanged.
     void spec.yards;
+    // EXTENDED 19 Aug 2026 to reach muffed/fumbled-catch and onside
+    // kicks -- until now this branch could only drive a touchback or an
+    // ordinary return, so a fuzzer built on this driver could never
+    // reach the exact class of play (a kick recovered by someone other
+    // than the receiving team, then possibly returned for a score)
+    // where that night's real attribution bug lived. Read the panel's
+    // own HTML before writing this, matching the standing rule.
     if (spec.touchback) {
       toggle(win, doc, 'pp_ko_touchback_toggle');
+    } else if (spec.muffed) {
+      toggle(win, doc, 'pp_ko_muffed_toggle');
+      radio(win, doc, 'pp_ko_muffrec', spec.muffrec || 'k');
+      if (spec.muffrecoverer !== undefined) typeInto(win, q(doc, 'pp_ko_muff_rec'), spec.muffrecoverer);
+      if (spec.muffretyds !== undefined) typeInto(win, q(doc, 'pp_ko_muff_retyds'), spec.muffretyds);
+      if (spec.td) toggle(win, doc, 'pp_td_toggle');
+      // The takeover spot here is the KICKING team's own frame, only
+      // shown/required when they are the recoverer -- matching the
+      // panel's own conditional wrap, not assumed from the ordinary
+      // kickoff's spot field below.
+      if (spec.muffSpot) setStartingSpot(win, doc, 'pp_komuffspot', spec.muffSpot.side, spec.muffSpot.yardline);
+    } else if (spec.onside) {
+      toggle(win, doc, 'pp_ko_onside_toggle');
+      radio(win, doc, 'pp_ko_onsiderec', spec.onsiderec || 'r');
+      if (spec.onsiderecoverer !== undefined) typeInto(win, q(doc, 'pp_ko_onside_rec'), spec.onsiderecoverer);
+      if (spec.td) toggle(win, doc, 'pp_td_toggle');
+      if (spec.onsideSpot) setStartingSpot(win, doc, 'pp_koonsidespot', spec.onsideSpot.side, spec.onsideSpot.yardline);
     } else {
       P('credit', spec.credit);
       if (spec.retyds !== undefined) typeInto(win, q(doc, 'pp_retyds'), spec.retyds);
-      if (spec.td) toggle(win, doc, 'pp_td_toggle');
+      // A fumble DURING an otherwise-ordinary return -- separate from
+      // spec.muffed, which is a muffed CATCH. Only reachable once a
+      // return is already in progress, matching the panel's own toggle.
+      if (spec.retFumbled) {
+        toggle(win, doc, 'pp_ko_ret_fumbled_toggle');
+        radio(win, doc, 'pp_koret_fumrec', spec.retFumrec || 'r');
+        if (spec.retFumrecoverer !== undefined) typeInto(win, q(doc, 'pp_koret_fumrec_credit'), spec.retFumrecoverer);
+        if (spec.td) toggle(win, doc, 'pp_td_toggle');
+        if (spec.retFumSpot) setStartingSpot(win, doc, 'pp_koretfumspot', spec.retFumSpot.side, spec.retFumSpot.yardline);
+      } else {
+        if (spec.td) toggle(win, doc, 'pp_td_toggle');
+      }
     }
     if (spec.spot) setStartingSpot(win, doc, 'pp_spot', spec.spot.side, spec.spot.yardline);
   } else if (t === 'punt') {

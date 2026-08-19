@@ -103,8 +103,17 @@ const MUTANTS = [
   {
     name: "drive-boundary: let a drive start on an administrative marker (the Aug 6 bug)",
     file: "engine.js",
-    from: "    if (possAfter !== priorPoss) pushStart(firstRealPlayFrom(i + 1));",
-    to: "    if (possAfter !== priorPoss) pushStart(i + 1);",
+    // Anchor updated 19 Aug 2026 -- the general possession-change branch
+    // was rewritten the same night (a defensive score's own ensuing
+    // kickoff/PAT no longer registers a phantom drive), so the original
+    // one-line anchor no longer exists verbatim. Same original intent
+    // preserved exactly: strip the firstRealPlayFrom skip, so a drive
+    // can start directly on an administrative marker again -- the Aug 6
+    // bug this mutant exists to guard against. Found stale by running
+    // the full mutation suite as part of a systematic audit, not by a
+    // live-game report; a stale mutant silently stops testing anything.
+    from: "if (possAfter !== priorPoss){\n      let target = firstRealPlayFrom(i + 1);",
+    to: "if (possAfter !== priorPoss){\n      let target = i + 1;",
     expectCaughtBy: ["drive_boundary_check.js"]
   },
   {
@@ -193,7 +202,7 @@ const SUITES = ['run_scripted.js', 'picker_check.js', 'clock_display_check.js',
                 'drive_boundary_check.js', 'possession_and_drive_check.js',
                 'optional_players_check.js', 'entry_integrity_check.js',
                 'cross_surface.js', 'color_check.js', 'tackles_check.js',
-                'whitelist_check.js', 'shared_number_check.js'];
+                'whitelist_check.js', 'shared_number_check.js', 'returner_check.js'];
 
 const FLIGHT = path.join(__dirname, '.mutation-in-flight.json');
 const BACKUP = path.join(__dirname, '.mutation-in-flight.bak');
