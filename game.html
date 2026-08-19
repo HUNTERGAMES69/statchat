@@ -5062,7 +5062,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const lossToggleHtml = (id) => '<div style="margin-bottom:6px;">' +
       '<button type="button" class="lossToggle ptoggle" data-for="' + (id||'pp_yards') + '" ' +
       'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button></div>';
-    // QUICK YARDAGE: 1-10, one tap each, for the run and pass trees only --
+    // QUICK YARDAGE: 0-9, one tap each, for the run and pass trees only --
     // Andy asked for exactly these two, not sack, and 0 through 9, not
     // a different set (originally 1 through 10, changed 19 Aug 2026).
     // ------------------------------------------------------------------
@@ -5075,17 +5075,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // listeners key on to clear themselves, matching "typing in the
     // yards box clears the calculator" -- a tap must behave exactly
     // like typing, not sit apart from that rule as a special case.
-    const quickYardageHtml = (id) => '<div style="margin-top:8px;">' +
-      '<p style="font-size:13px; color:#888; margin:0 0 4px;">Quick yardage</p>' +
+    //
+    // NO LABEL, and NESTED inside the "Enter yards" column at the call
+    // site, not appended as a block after the whole flex row. Both were
+    // corrected the same night, from the same annotated screenshot: with
+    // no label of its own this reads as part of the yards question
+    // rather than a separate section, and sitting inside that column
+    // means it hugs the yards box directly instead of dropping to the
+    // bottom of whichever column -- usually the taller calculator one --
+    // happened to be tallest.
+    const quickYardageHtml = (id) => '<div style="margin-top:4px;">' +
       // FIXED-WIDTH columns and width:fit-content, not 1fr -- 1fr columns
-      // stretch to fill whatever container this sits in, and this row is
-      // NOT inside the narrow "Enter yards" column, it is a full-width
-      // block below the flex row that column belongs to. On the real,
-      // much wider panel that meant 1fr divided the WHOLE panel's width
-      // by 5, producing five oversized buttons spanning edge to edge.
-      // Fixed 36px tracks plus fit-content keep this small and left-
-      // aligned regardless of how wide the surrounding row is. Reported
-      // from a real device with an annotated screenshot, 19 Aug 2026.
+      // stretch to fill whatever their container allows, and the "Enter
+      // yards" column itself is sized by its own content (the input and
+      // LOSS), which is narrow. Kept explicit anyway rather than relying
+      // on inheriting that narrowness, so this stays compact even if the
+      // column's own width ever changes for an unrelated reason.
       '<div style="display:grid; grid-template-columns:repeat(5,36px); gap:4px; width:fit-content;">' +
         Array.from({ length: 10 }, (_, i) => i).map(n =>
           '<button type="button" class="quickYardsBtn" data-for="' + (id||'pp_yards') + '" data-yds="' + n + '" ' +
@@ -5198,8 +5203,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div>' + yardsBlock('Enter yards', null, true) +
           '<span style="display:inline-flex; align-items:center; gap:8px;">' +
             '<input autocomplete="off" type="text" id="pp_yards_dummy" style="display:none;">' +
-          '</span></div>' + spotCalcHtml() + '</div>' +
-        quickYardageHtml() +
+          '</span>' + quickYardageHtml() + '</div>' + spotCalcHtml() + '</div>' +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
         '<div id="pp_rush_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_rush_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_safety', 'Safety') + '</div></div>' +
@@ -5232,8 +5236,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // PROTOTYPE: the passing tree carries the KEYPAD, the rushing tree
         // the wheel, so the two can be compared on the same evening
         // against real plays rather than in the abstract.
-        '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap">' + yardsBlock('Enter yards', null, true) + '</div>' + spotCalcHtml() + '</div>' +
-        quickYardageHtml() +
+        '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap">' + yardsBlock('Enter yards', null, true) + quickYardageHtml() + '</div>' + spotCalcHtml() + '</div>' +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
         '<div style="margin-bottom:6px;"><input autocomplete="off" type="checkbox" id="pp_incomplete" style="display:none;">' +
         '<button type="button" id="pp_incomplete_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
