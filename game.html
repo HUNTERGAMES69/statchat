@@ -5063,8 +5063,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<button type="button" class="lossToggle ptoggle" data-for="' + (id||'pp_yards') + '" ' +
       'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button></div>';
     // QUICK YARDAGE: 1-10, one tap each, for the run and pass trees only --
-    // Andy asked for exactly these two, not sack, and exactly 1 through
-    // 10, not a different set of buckets.
+    // Andy asked for exactly these two, not sack, and 0 through 9, not
+    // a different set (originally 1 through 10, changed 19 Aug 2026).
     // ------------------------------------------------------------------
     // Writes the plain positive number into the SAME box a coach would
     // otherwise type into, and nothing else -- LOSS is a separate
@@ -5077,8 +5077,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // like typing, not sit apart from that rule as a special case.
     const quickYardageHtml = (id) => '<div style="margin-top:8px;">' +
       '<p style="font-size:13px; color:#888; margin:0 0 4px;">Quick yardage</p>' +
-      '<div style="display:grid; grid-template-columns:repeat(5,1fr); gap:4px;">' +
-        Array.from({ length: 10 }, (_, i) => i + 1).map(n =>
+      // FIXED-WIDTH columns and width:fit-content, not 1fr -- 1fr columns
+      // stretch to fill whatever container this sits in, and this row is
+      // NOT inside the narrow "Enter yards" column, it is a full-width
+      // block below the flex row that column belongs to. On the real,
+      // much wider panel that meant 1fr divided the WHOLE panel's width
+      // by 5, producing five oversized buttons spanning edge to edge.
+      // Fixed 36px tracks plus fit-content keep this small and left-
+      // aligned regardless of how wide the surrounding row is. Reported
+      // from a real device with an annotated screenshot, 19 Aug 2026.
+      '<div style="display:grid; grid-template-columns:repeat(5,36px); gap:4px; width:fit-content;">' +
+        Array.from({ length: 10 }, (_, i) => i).map(n =>
           '<button type="button" class="quickYardsBtn" data-for="' + (id||'pp_yards') + '" data-yds="' + n + '" ' +
           'style="background:#fff; color:#1a1a2e; border:1px solid #ccc; border-radius:5px; padding:4px 0; font-size:13px; font-weight:700; cursor:pointer;">' + n + '</button>'
         ).join('') +
