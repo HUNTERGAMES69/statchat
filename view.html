@@ -903,10 +903,27 @@ function extractNameTag(rawName){
       // kicking team is still "on offense" the instant they kick, per
       // this app's own convention), so it stays in the log exactly as
       // it always has.
+      //
+      // EXCEPT the drive's OWN ending score, even when scored by the
+      // OTHER team -- a blocked kick, an interception, a fumble
+      // returned the wrong way. Reported immediately after shipping
+      // the filter above: excluding it entirely made the score look
+      // like it had not happened at all, rather than what it actually
+      // is -- exactly how this drive ended, the same way a punt or an
+      // interception is. What still gets excluded is anything AFTER
+      // that score: the PAT/2PT try (a separate, later play; excluded
+      // by roles.playType specifically, since a try also carries its
+      // own effect.score and would otherwise pass this same check) and
+      // the ensuing kickoff (which carries no score at all, and is
+      // correctly excluded by the team check above on its own).
       const driveTeam = resetIdxs.length
         ? computeState(plays.slice(0, resetIdxs[resetIdxs.length - 1] + 1)).possession
         : null;
-      const currentDriveOwnTeamPlays = currentDrivePlays.filter(p => p.isDivider || !p.team || p.team === driveTeam);
+      const currentDriveOwnTeamPlays = currentDrivePlays.filter(p => {
+        if (p.isDivider || !p.team || p.team === driveTeam) return true;
+        const pt = p.roles && p.roles.playType;
+        return !!(p.effect && p.effect.score && pt !== 'pat' && pt !== 'twopt');
+      });
       document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDriveOwnTeamPlays.filter(x => !isDriveTileNoise(x)).slice().reverse(), true) || '<div style="color:#999;">no active drive yet</div>';
 
       const currentSummary = resetIdxs.length
