@@ -317,7 +317,50 @@ function findDriveStarts(playsList){
       continue;
     }
     const possAfter = computeState(playsList.slice(0, i + 1)).possession;
-    if (possAfter !== priorPoss) pushStart(firstRealPlayFrom(i + 1));
+    if (possAfter !== priorPoss){
+      let target = firstRealPlayFrom(i + 1);
+      // A PAT OR 2-POINT TRY IS NEVER A DRIVE, no matter what
+      // possession looks like there. Reported from a real game, 19 Aug
+      // 2026, the SAME NIGHT as the kickoff fix directly below this
+      // comment: a defensive score's own PAT was registering as ITS
+      // OWN phantom possession, because a try never flips possession
+      // (flipEligible is always false for one -- the scoring team kicks
+      // off next regardless of who holds the try-ball), so the check
+      // just below this loop -- "does possession still match where we
+      // landed" -- saw a match and pushed a boundary anyway. The try is
+      // PART OF the score that preceded it, never a drive of its own,
+      // so this walks past any number of them to find whatever real
+      // play actually follows.
+      while (target !== -1){
+        const tp = playsList[target].roles && playsList[target].roles.playType;
+        if (tp !== 'pat' && tp !== 'twopt') break;
+        target = firstRealPlayFrom(target + 1);
+      }
+      // ONLY IF THE CHANGE ACTUALLY STICKS. Reported from a real game,
+      // 19 Aug 2026: a defensive score (a blocked kick, an interception,
+      // a fumble, anything that flips possession to a team that was not
+      // already driving) is immediately followed by that same team's
+      // OWN kickoff, since the scoring team always kicks off next. The
+      // kickoff carries its own flip, back to the team that just lost
+      // the ball -- so by the time firstRealPlayFrom lands on it, the
+      // "possession" this branch just detected has already reversed
+      // itself before any actual drive happened. Pushing a boundary
+      // there registered a one-play phantom drive that was really just
+      // a kickoff, and countPossessions (which deliberately shares this
+      // exact array rather than reimplementing it) credited it to
+      // whichever team the kickoff itself favoured -- an extra,
+      // unearned possession for the receiving team, with the scoring
+      // team's own touchdown never counted as one at all.
+      //
+      // The kickoff's OWN flip still fires its own iteration of this
+      // same loop, later, and correctly pushes the boundary at the
+      // receiving team's actual first play -- this check only silences
+      // the earlier, spurious one, it does not need to push anything
+      // in its place.
+      if (target !== -1 && computeState(playsList.slice(0, target + 1)).possession === possAfter){
+        pushStart(target);
+      }
+    }
     priorPoss = possAfter;
   }
   return starts;
