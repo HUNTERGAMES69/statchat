@@ -36,7 +36,7 @@
 //   node tests/fuzz_attribution_check.js 200 12345 # reproduce a seed
 
 const { bootGamePage, bootPage } = require('./harness');
-const { enterPlay, setDrive, click } = require('./ui_driver');
+const { enterPlay, setDrive, click, enterTimeout } = require('./ui_driver');
 
 function rng(seed) {
   let s = seed >>> 0;
@@ -269,6 +269,30 @@ async function fuzzOneGame(seed, playsPerGame) {
   setDrive(h, { down: 1, distance: 10, side: 'own', yardline: int(rand, 20, 40) });
 
   let plays = 0;
+  // A timeout, sometimes, right after ANY play whose own effect flips
+  // possession -- not just after a touchdown. The reported bug's real
+  // precondition is a timeout sitting between a possession-flipping
+  // event and the next real play; a touchdown is only ONE way to reach
+  // that precondition. An earlier version of this fuzzer keyed the
+  // insertion off "was the last real play a touchdown" specifically,
+  // which meant it almost never fired: an ORDINARY offensive touchdown
+  // never flips possession at all (the scoring team keeps the ball,
+  // possession only changes on the ensuing kickoff), so that version
+  // ran clean even against the deliberately-reverted bug -- caught only
+  // by reverting the fix and checking this fuzzer actually go red, not
+  // by trusting that "it runs clean" meant anything.
+  function maybeTimeoutAfterFlip() {
+    const flipped = JSON.parse(h.evalIn(
+      'JSON.stringify((function(){ ' +
+      '  for (let i = plays.length - 1; i >= 0; i--){ if (!isAdminMarker(plays[i])) { ' +
+      '    const p = plays[i]; return !!(p && p.effect && p.effect.flip && p.effect.flipApplied); ' +
+      '  } } return false; })())'
+    ));
+    if (flipped && bool(rand, 0.4)) {
+      try { enterTimeout(h, bool(rand, 0.5) ? 'teamA' : 'teamB'); } catch (e) { /* not itself a finding */ }
+    }
+  }
+
   while (plays < playsPerGame && findings.length <= 6) {
     const before = JSON.parse(h.evalIn('JSON.stringify(computeState())'));
     if (before.fieldPos === null || before.down === null) {
@@ -277,7 +301,10 @@ async function fuzzOneGame(seed, playsPerGame) {
       // than resetting, so the special-teams path actually gets tested
       // rather than skipped.
       let spec;
-      try { spec = randomKickoff(rand); enterPlay(h, spec); }
+      try {
+        spec = randomKickoff(rand); enterPlay(h, spec);
+        maybeTimeoutAfterFlip();
+      }
       catch (e) {
         if (!/UnreachableByUI|no .* button|missing element/i.test(e.message)) {
           findings.push({ kind: 'threw', detail: 'kickoff: ' + e.message.split('\n')[0].slice(0, 100) });
@@ -294,6 +321,7 @@ async function fuzzOneGame(seed, playsPerGame) {
 
     try {
       enterPlay(h, spec);
+      maybeTimeoutAfterFlip();
     } catch (e) {
       if (!/UnreachableByUI|no .* button|missing element/i.test(e.message)) {
         findings.push({ kind: 'threw', detail: spec.type + ': ' + e.message.split('\n')[0].slice(0, 100) });
@@ -311,6 +339,7 @@ async function fuzzOneGame(seed, playsPerGame) {
     if (lastReal && lastReal.effect && lastReal.effect.score && lastReal.effect.score.points === 6) {
       try { enterPlay(h, randomTry(rand)); } catch (e) { /* a refusal here is not itself a finding */ }
     }
+
 
     for (const [name, check] of GENERAL_INVARIANTS) {
       const bad = check(st);
@@ -346,6 +375,27 @@ async function fuzzOneGame(seed, playsPerGame) {
     if (playType === 'pat' || playType === 'twopt'){
       findings.push({ kind: 'PHANTOM DRIVE', detail: 'drive start at play[' + idx + '] "' + p.text +
         '" is a PAT/2PT try, which is never a drive of its own.' });
+    }
+    // A THIRD shape, found from a real-game report the same night: a
+    // TIMEOUT sitting between a score and its own PAT became the
+    // target a phantom boundary landed on. Deliberately does NOT ask
+    // isAdminMarker whether this play is administrative -- that is
+    // circular. isAdminMarker FAILING to recognise the marker is
+    // exactly why the phantom boundary exists in the first place, so a
+    // check built on the same function's judgment can never fire when
+    // that judgment is the actual defect. (Written the wrong way once:
+    // it asked `if (isAdminMarker(...))`, which only ever fires when
+    // the classification is already correct -- caught by manually
+    // reproducing the exact reported sequence and watching this check
+    // stay silent regardless.) Independent instead: a genuine drive
+    // start is either a real play (has roles) or the app's own
+    // deliberate "new drive starts here" marker (effect.isReset). A
+    // timeout is neither.
+    const hasRoles = !!p.roles;
+    const isExplicitReset = !!(p.effect && p.effect.isReset);
+    if (!hasRoles && !isExplicitReset) {
+      findings.push({ kind: 'PHANTOM DRIVE', detail: 'drive start at play[' + idx + '] "' + p.text +
+        '" is neither a real play nor an explicit new-drive marker -- cannot be a drive.' });
     }
   }
 

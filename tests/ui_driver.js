@@ -458,4 +458,17 @@ function setDrive(h, { down = 1, distance = 10, side = 'own', yardline = 25 }) {
   return finish(h, {});
 }
 
-module.exports = { enterPlay, openPanel, pickPlayer, typeInto, click, toggle, radio, setStartingSpot, setDrive, finish, UnreachableByUI };
+// Calls a timeout for the given team via timeoutUtilBtn -- the exact UI
+// path a coach actually uses. Added 19 Aug 2026 alongside the
+// isAdminMarker fix: no fuzzer generated a timeout at all before this,
+// which is exactly why a real-game report (a timeout called between a
+// defensive score and its own PAT) found the bug before any test did.
+function enterTimeout(h, team) {
+  const { window: win, document: doc } = h;
+  click(win, q(doc, 'timeoutUtilBtn'));
+  const btn = doc.querySelector('.toTeamBtn[data-team="' + team + '"]');
+  if (!btn) throw new UnreachableByUI('no timeout button for ' + team);
+  click(win, btn);
+}
+
+module.exports = { enterPlay, openPanel, pickPlayer, typeInto, click, toggle, radio, setStartingSpot, setDrive, enterTimeout, finish, UnreachableByUI };
