@@ -885,41 +885,11 @@ function extractNameTag(rawName){
     // the new drive starts at the next play instead.
     if (!isResultsMode){
       const resetIdxs = findDriveStarts(plays);
-      let liveStart = resetIdxs.length ? resetIdxs[resetIdxs.length - 1] : 0;
-      // CURRENT DRIVE, SPECIFICALLY, ALSO SHOWS A LEADING KICKOFF OR
-      // PUNT -- reported from a real game, 19 Aug 2026. Right after a
-      // kick, before the receiving team's first scrimmage snap, this
-      // used to show the KICKING team's already-finished drive instead,
-      // because findDriveStarts has nothing to push a new boundary at
-      // until a scrimmage play follows the kick. It read as stale --
-      // "here is the drive that just ended" -- rather than "a new drive
-      // is starting right now."
-      //
-      // Scoped to THIS DISPLAY ONLY, not to findDriveStarts itself: a
-      // punt or kickoff is ALSO the tested, correct CLOSING play of the
-      // drive that ends with it (see drive_boundary_check.js's punt
-      // scenario -- the Previous Drive tile is supposed to read
-      // "...punts 40"). Moving the shared boundary to give the kick to
-      // the new drive would have silently taken it away from the old
-      // one, since one boundary can't put the same play in both
-      // segments -- and the kick genuinely belongs to both narratives
-      // at once. This walks backward from the canonical start, past
-      // admin markers only, to pick the kick up for the live view
-      // specifically. Safe to reuse for the numeric tiles below too:
-      // computeDriveSummary's own team filter (p.team !== driveTeam)
-      // already keeps a kick from contributing to rushes/passes/yards
-      // regardless of whether it is inside the segment.
-      for (let j = liveStart - 1; j >= 0; j--){
-        if (isAdminMarker(plays[j])) continue;
-        const rt = plays[j].roles && plays[j].roles.playType;
-        if (rt === 'kickoff' || rt === 'punt') liveStart = j;
-        break;
-      }
-      const currentDrivePlays = resetIdxs.length ? plays.slice(liveStart) : [];
+      const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
       document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.filter(x => !isDriveTileNoise(x)).slice().reverse(), true) || '<div style="color:#999;">no active drive yet</div>';
 
       const currentSummary = resetIdxs.length
-        ? computeDriveSummary(liveStart, plays.length)
+        ? computeDriveSummary(resetIdxs[resetIdxs.length - 1], plays.length)
         : null;
       document.getElementById('currentDriveTiles').innerHTML = currentSummary
         ? '<div class="inline-stat-line">' + [
@@ -938,10 +908,7 @@ function extractNameTag(rawName){
       const prevSummary = resetIdxs.length >= 2
         ? computeDriveSummary(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1])
         : null;
-      const prevSegment = resetIdxs.length >= 2
-        ? plays.slice(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1])
-        : null;
-      document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary, prevSegment);
+      document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary);
 
       // COLOUR EACH DRIVE CARD FOR THE TEAM THAT HAD THE BALL.
       // ----------------------------------------------------------------
@@ -994,44 +961,12 @@ function extractNameTag(rawName){
 
     prevCard.classList.remove('hidden');
     if (prevTiles) prevTiles.classList.remove('hidden');
-    // Every previously-hidden log line and the team-name label get
-    // unhidden too, from a clean slate each call -- otherwise a drive
-    // that shrinks back down (an undo, a shorter drive next time)
-    // would stay missing lines that nothing hid on THIS pass.
-    prevCard.querySelectorAll('.logline, .prevDriveTeamLabel').forEach(el => el.classList.remove('hidden'));
 
     if (quad.scrollHeight <= quad.clientHeight) return;
 
     if (prevTiles) prevTiles.classList.add('hidden');
     if (quad.scrollHeight <= quad.clientHeight) return;
 
-    // ONE LINE AT A TIME, OLDEST FIRST -- Andy asked for this specifically,
-    // 19 Aug 2026, after Previous Drive's own full play log (added the
-    // same night) made this card tall enough to overflow on its own.
-    // The fallback used to jump straight from "hide the tiles" to "hide
-    // the whole card", which was fine when this card was only ever 1-2
-    // lines -- there was nothing in between worth losing gradually. Now
-    // a drive can be several lines long, and that same jump meant the
-    // ENTIRE card could vanish the moment Current Drive grew by a
-    // handful of plays, rather than shedding its own oldest lines
-    // first -- which is available here, and was not before, because
-    // there previously were no individual lines to shed one at a time.
-    //
-    // OLDEST FIRST because the list renders newest-first (see the
-    // reversal fixed the same night): the last .logline in the DOM is
-    // the oldest play, so working from the end preserves the most
-    // recent plays -- and the scoring play, which the capping logic
-    // upstream already fought to keep -- for as long as there is any
-    // room left at all.
-    const lines = prevCard.querySelectorAll('.logline');
-    for (let i = lines.length - 1; i >= 0; i--){
-      lines[i].classList.add('hidden');
-      if (quad.scrollHeight <= quad.clientHeight) return;
-    }
-
-    // Still too tall even with every line hidden -- a very short
-    // viewport, or the tiles/team-name alone don't fit. Last resort,
-    // matching the original fallback.
     prevCard.classList.add('hidden');
   }
 
@@ -1196,7 +1131,7 @@ function extractNameTag(rawName){
       tryOutcome: endedInTouchdown ? tryOutcome : null };
   }
 
-  function renderDriveSummary(summary, segment){
+  function renderDriveSummary(summary){
     if (!summary) return '<div style="color:#999;">no previous drive yet</div>';
     const teamName = TEAMS[summary.team].name;
     const tiles = [
@@ -1211,83 +1146,24 @@ function extractNameTag(rawName){
       ['TOTAL', summary.totalPlays + '/' + summary.totalYds],
       ['TOP', formatDuration(summary.top)]
     ];
-    // THE FULL PLAY LOG, NOT ONE SUMMARY LINE. Andy asked for this
-    // specifically, 19 Aug 2026: instead of the tile "emptying" down to
-    // a single outcome line once a drive ends, the whole play-by-play
-    // stays, and the tiles above are unchanged -- same four numbers,
-    // same order, same source.
-    //
-    // NEWEST FIRST, matching Current Drive's own log -- reversed from
-    // the first version of this, which read chronologically so the
-    // score would land at the visual bottom. Andy corrected that
-    // directly after seeing it live, 19 Aug 2026: both tiles should
-    // read the same direction. The capping logic below still finds and
-    // preserves the scoring play (and whatever follows it) by walking
-    // the segment chronologically -- only the FINAL render order flips,
-    // via one .reverse() right before renderLogLines. A side effect
-    // worth keeping in mind: this also means the score now sits at the
-    // TOP of the visible list rather than the bottom, which is the
-    // safer place for it given the fixed-height clipping this tile is
-    // built to avoid (see the note below) clips from the bottom, not
-    // the top.
-    //
-    // CAPPED, not left to the browser to clip. This page is a fixed
-    // 1920x1080 canvas with overflow:hidden and no scrolling anywhere,
-    // by design, for the TV/broadcast use case ("nobody needs to touch
-    // it"). An uncapped list on a long drive would silently clip
-    // whatever falls outside the tile's height -- and because clipping
-    // cuts off the BOTTOM of a top-anchored block, that would take the
-    // score first under chronological order, which is the one line
-    // that must not disappear. So the ending is built into the
-    // rendered HTML explicitly here, rather than left to chance.
-    //
-    // MAX_DRIVE_LOG_LINES is a considered estimate, not a measured
-    // pixel fit -- there is no way to render this page in an actual
-    // browser from here to check. Treat it as adjustable once seen on
-    // a real device.
-    const MAX_DRIVE_LOG_LINES = 8;
-    const real = (segment || []).filter(x => !isDriveTileNoise(x));
-    let logList = real;
-    if (real.length > MAX_DRIVE_LOG_LINES){
-      // FIND THE SCORE BY CONTENT, NOT BY COUNTING FROM THE END.
-      // ----------------------------------------------------------------
-      // The first version of this kept "the last 2 entries" on the
-      // assumption those would always be the touchdown and its PAT.
-      // They are not: a kickoff or punt that closes this same drive
-      // (see the Current Drive fix, same night) lands AFTER the PAT in
-      // this segment, so "last 2" became the PAT and the kickoff --
-      // silently dropping the touchdown itself, the one line that must
-      // never go missing. Reported by testing a real long drive through
-      // the actual page, not caught by the isolated version of this
-      // check alone.
-      //
-      // So: find the touchdown or made field goal by the same detection
-      // used everywhere else (p.effect.td, or a made 'fg'), and treat
-      // everything from THERE to the end of the segment as the part
-      // that must survive -- the score, its PAT/2PT, and anything
-      // (like a closing kickoff) that comes after. A non-scoring drive
-      // has no such play, and falls back to keeping the last 2 plays
-      // as a reasonable default ending instead.
-      const isTdOrFgPlay = (p) => {
-        if (p.effect && p.effect.td) return true;
-        const r = p.roles;
-        return !!(r && r.playType === 'fg' && r.kicker && r.kicker.result === 'g');
-      };
-      let scoreIdx = -1;
-      for (let i = 0; i < real.length; i++){ if (isTdOrFgPlay(real[i])) scoreIdx = i; }
-      const tailStart = scoreIdx !== -1 ? scoreIdx : Math.max(0, real.length - 2);
-      const tail = real.slice(tailStart);
-      const keepStart = Math.max(0, MAX_DRIVE_LOG_LINES - tail.length);
-      const omitted = real.length - keepStart - tail.length;
-      logList = real.slice(0, keepStart)
-        .concat(omitted > 0 ? [{ isDivider: true, text: '\u2026and ' + omitted + ' more play' + (omitted === 1 ? '' : 's') }] : [])
-        .concat(tail);
-    }
+    const outcome = summary.scoringPlayText || summary.lastPlayText || 'No plays recorded';
+    const outcomeColor = summary.scoringPlayText ? '#1a7a4c' : '#555';
+    // A SEPARATE, SMALLER LINE, not appended onto the touchdown text --
+    // the scoring line is already long once a player's full name is in
+    // it, and this tile has already been fixed once for wrapping (the
+    // clock hint, on the header line above). Colour carries the same
+    // good/bad meaning it does everywhere else in this app: green for
+    // the attempting team's own success, red for anything else, whether
+    // that is a miss, a block, an interception or a fumble.
+    const tryHtml = summary.tryOutcome
+      ? '<div style="font-size:12px; line-height:1.3; margin-top:2px; color:' +
+        (summary.tryOutcome.good ? '#1a7a4c' : '#a32d2d') + ';">' + summary.tryOutcome.text + '</div>'
+      : '';
     return '<div class="inline-stat-line">' +
       tiles.map(([label, val]) => '<span class="inline-stat-item"><b>' + label + '</b>' + val + '</span>').join('') +
       '</div>' +
-      '<div class="prevDriveTeamLabel" style="font-size:12px; font-weight:600; color:#888; margin:4px 0 2px;">' + teamName + '</div>' +
-      renderLogLines(logList.slice().reverse(), false);
+      '<div style="font-size:13px; line-height:1.3;"><strong>' + teamName + ':</strong> <span style="color:' + outcomeColor + '; font-weight:' + (summary.scoringPlayText ? '700' : '600') + ';">' + outcome + '</span></div>' +
+      tryHtml;
   }
 
 
