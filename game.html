@@ -977,7 +977,12 @@ const PENALTIES = {
   roughing_snapper:     { name: 'Roughing the snapper',            side: 'def', group: 'Kicking plays', yards: 15, afd: true },
   running_into_kicker:  { name: 'Running into the kicker',         side: 'def', group: 'Kicking plays', yards: 5 },
   invalid_fair_catch:   { name: 'Invalid fair catch signal',       side: 'def', group: 'Kicking plays', yards: 5 },
-  kick_catch_interference:{ name: 'Kick-catch interference',       side: 'off', group: 'Kicking plays', yards: 15 },
+  // BOTH SIDES, not just the kicking team -- confirmed 19 Aug 2026. The
+  // receiving team can commit an equivalent interference against the
+  // KICKING team's own attempt to catch or recover a kick (an onside
+  // kick is the clearest case), so restricting this to 'off' missed a
+  // real scenario a scorer would reach for this exact name to describe.
+  kick_catch_interference:{ name: 'Kick-catch interference',       side: 'both', group: 'Kicking plays', yards: 15 },
   // --- personal fouls and conduct ---
   personal_foul:        { name: 'Personal foul',                   side: 'both', group: 'Personal foul / conduct', yards: 15 },
   unnecessary_roughness:{ name: 'Unnecessary roughness',           side: 'both', group: 'Personal foul / conduct', yards: 15 },
@@ -4531,6 +4536,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }));
   }
 
+  function wireQuickYardageButtons(panel){
+    panel.querySelectorAll('.quickYardsBtn').forEach(b => b.addEventListener('click', () => {
+      const input = document.getElementById(b.dataset.for);
+      if (!input) return;
+      input.value = b.dataset.yds;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }));
+  }
+
     // WHAT KIND OF PASS PLAY WAS IT -- shown on all three panels.
   // ------------------------------------------------------------------
   // These used to sit on the Pass panel only, and clicking one called
@@ -5048,6 +5062,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const lossToggleHtml = (id) => '<div style="margin-bottom:6px;">' +
       '<button type="button" class="lossToggle ptoggle" data-for="' + (id||'pp_yards') + '" ' +
       'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button></div>';
+    // QUICK YARDAGE: 1-10, one tap each, for the run and pass trees only --
+    // Andy asked for exactly these two, not sack, and exactly 1 through
+    // 10, not a different set of buckets.
+    // ------------------------------------------------------------------
+    // Writes the plain positive number into the SAME box a coach would
+    // otherwise type into, and nothing else -- LOSS is a separate
+    // .picked flag read only at submit time (see wireLossToggles), never
+    // baked into the input's own value, so a tap composes with whatever
+    // LOSS is already set to for free. No special-casing needed here.
+    // The dispatched 'input' event is what the existing calculator
+    // listeners key on to clear themselves, matching "typing in the
+    // yards box clears the calculator" -- a tap must behave exactly
+    // like typing, not sit apart from that rule as a special case.
+    const quickYardageHtml = (id) => '<div style="margin-top:8px;">' +
+      '<p style="font-size:13px; color:#888; margin:0 0 4px;">Quick yardage</p>' +
+      '<div style="display:grid; grid-template-columns:repeat(5,1fr); gap:4px;">' +
+        Array.from({ length: 10 }, (_, i) => i + 1).map(n =>
+          '<button type="button" class="quickYardsBtn" data-for="' + (id||'pp_yards') + '" data-yds="' + n + '" ' +
+          'style="background:#fff; color:#1a1a2e; border:1px solid #ccc; border-radius:5px; padding:4px 0; font-size:13px; font-weight:700; cursor:pointer;">' + n + '</button>'
+        ).join('') +
+      '</div></div>';
     // "Tackled on" calculator. fieldPos is possession-relative (0 = own
     // goal, 100 = opponent's goal), so a gain is simply newFieldPos minus
     // the current one -- which is why a play crossing midfield needs no
@@ -5155,6 +5190,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<span style="display:inline-flex; align-items:center; gap:8px;">' +
             '<input autocomplete="off" type="text" id="pp_yards_dummy" style="display:none;">' +
           '</span></div>' + spotCalcHtml() + '</div>' +
+        quickYardageHtml() +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
         '<div id="pp_rush_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_rush_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_safety', 'Safety') + '</div></div>' +
@@ -5188,6 +5224,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // the wheel, so the two can be compared on the same evening
         // against real plays rather than in the abstract.
         '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div id="pp_yards_wrap">' + yardsBlock('Enter yards', null, true) + '</div>' + spotCalcHtml() + '</div>' +
+        quickYardageHtml() +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
         '<div style="margin-bottom:6px;"><input autocomplete="off" type="checkbox" id="pp_incomplete" style="display:none;">' +
         '<button type="button" id="pp_incomplete_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
@@ -6140,6 +6177,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     })();
 
     wireLossToggles(panel);
+    wireQuickYardageButtons(panel);
     currentSpotGetter = (type === 'kickoff' || type === 'punt' || type === 'int' || type === 'fumble' || type === 'fg') ? wireStartingSpot(panel, 'pp_spot') : null;
     // An interception downed in the end zone is a touchback: the defence
     // takes over at their own 20 and there is no return. The spot is
