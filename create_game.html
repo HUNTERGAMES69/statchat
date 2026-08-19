@@ -175,9 +175,35 @@
   const OFFENSE_POS = ['QB','RB','FB','HB','TB','WR','SE','FL','SLOT','SB','TE','OL','OT','OG','G','T','C','ATHLETE','ATH'];
   const DEFENSE_POS = ['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE','DL'];
   const SPECIAL_POS = ['K','P','LS','DS','H','KR','PR','RET'];
-  function posToUnit(pos){
+  // FIRST POSITION, ONE PLACE. Reused by posToUnit (classification) and by
+  // buildGameRosterRows (what actually gets stored) -- previously two
+  // separate regexes existed, and only the stricter one (used for the
+  // opponent XLSX import) handled every separator a real roster uses
+  // (slash, comma, semicolon, hyphen, dot, space). posToUnit's own copy
+  // only split on slash/comma/whitespace, so "RB-WR" fed to it directly
+  // read as the single unknown token "RB-WR" rather than "RB".
+  //
+  // That gap did not matter for the opponent roster: rows are reduced to
+  // firstPos at import time (see the row-parsing loop below), so a
+  // compound value never reaches posToUnit unreduced from that path. It
+  // DID matter for our own team's roster, which is read straight from
+  // players.primary_position with no reduction at all -- and likely
+  // starters, the exact case this was reported against, are often
+  // two-way players whose position is stored compound on purpose (see
+  // roster.html, which explicitly invites "RB/LB" or "WR, DB").
+  //
+  // buildGameRosterRows used to write entry.position -- the RAW value --
+  // straight into game_rosters.position. For the opponent roster that
+  // was already reduced and harmless; for our own roster it was not,
+  // and a two-way starter's compound position went into the database
+  // unreduced. Reported from a real game, 19 Aug 2026.
+  function firstPosOf(pos){
     if (!pos) return null;
-    const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
+    return String(pos).toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean)[0] || null;
+  }
+  function posToUnit(pos){
+    const first = firstPosOf(pos);
+    if (!first) return null;
     if (SPECIAL_POS.includes(first)) return 'special';
     if (OFFENSE_POS.includes(first)) return 'offense';
     if (DEFENSE_POS.includes(first)) return 'defense';
@@ -883,7 +909,14 @@
             jersey_number: num,
             player_name: entry.name,
             unit,
-            position: entry.position || null,
+            // firstPosOf, not entry.position raw -- see the comment above
+            // posToUnit. entry.position is left untouched for the pages
+            // that still display it verbatim (the shared-numbers report
+            // right above shows "RB/LB" on purpose, so a coach can see
+            // why a number needed a decision); only what gets WRITTEN
+            // here is reduced, matching what the opponent import already
+            // guarantees for its own rows.
+            position: firstPosOf(entry.position),
             player_id: entry.playerId || null
           });
         });
