@@ -873,51 +873,6 @@ function extractNameTag(rawName){
     // reversed, so index 0 is the play that just happened -- the one a
     // spectator glancing up is looking for, and the one that was hardest
     // to pick out of an evenly-weighted list.
-    function renderLogLines(list, highlightFirst){
-      let marked = false;
-      // A touchdown or a made field goal is bold on sight, not just
-      // whichever play happens to be most recent -- Andy asked for
-      // this specifically, 19 Aug 2026. Same detection computeDriveSummary
-      // already uses for scoringPlayText, reused rather than re-derived:
-      // p.effect.td for a touchdown, and playType 'fg' with a made
-      // kicker result for a field goal. Deliberately NOT every scoring
-      // play -- a PAT, a 2-point try and a safety were not asked for,
-      // and bolding everything that scores would have made this no
-      // different from bolding nothing.
-      const isTdOrFg = (p) => {
-        if (p.effect && p.effect.td) return true;
-        const r = p.roles;
-        return !!(r && r.playType === 'fg' && r.kicker && r.kicker.result === 'g');
-      };
-      return list.map(p => {
-        if (p.isDivider) return '<div style="text-align:center; font-size:14px; font-weight:600; color:#888; margin:8px 0; border-top:1px dashed #ccc; padding-top:6px;">' + p.text + '</div>';
-        // A play in overtime is tagged OT, not Q5. The banner already
-        // said OT while every row beneath it said Q5, which is the same
-        // period under two names on one screen.
-        //
-        // Rounds are deliberately NOT numbered here: the tag is per PLAY
-        // and quarterLabel counts series up to the CURRENT state, so
-        // numbering a play from it would relabel the whole log every time
-        // a new series began. Which OT round is on the banner; the row
-        // only has to say it was overtime.
-        const qtag = p.quarter
-          ? '<span style="color:#999; font-size:12px; margin-right:6px;">' +
-            (p.quarter >= 5 ? 'OT' : 'Q' + p.quarter) + '</span>'
-          : '';
-        const text = stripTeamNames(p.text || '').replace(/TOUCHDOWN/g, '<strong>TOUCHDOWN</strong>');
-        // The first NON-DIVIDER line, not simply the first entry: an "End
-        // of 1st half" rule sitting on top would otherwise take the
-        // emphasis meant for the last real play.
-        let style = '';
-        if (highlightFirst && !marked){
-          marked = true;
-          style = ' style="font-size:calc(17px * var(--stat-scale, 1)); font-weight:700; color:#111;"';
-        } else if (isTdOrFg(p)){
-          style = ' style="font-weight:700;"';
-        }
-        return '<div class="logline"' + style + '>' + qtag + text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
-      }).join('');
-    }
     // Drive boundaries aren't only marked by explicit isReset plays --
     // a turnover on downs changes possession but never sets isReset at
     // all, relying entirely on the next scrimmage play's own down/
@@ -983,7 +938,10 @@ function extractNameTag(rawName){
       const prevSummary = resetIdxs.length >= 2
         ? computeDriveSummary(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1])
         : null;
-      document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary);
+      const prevSegment = resetIdxs.length >= 2
+        ? plays.slice(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1])
+        : null;
+      document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary, prevSegment);
 
       // COLOUR EACH DRIVE CARD FOR THE TEAM THAT HAD THE BALL.
       // ----------------------------------------------------------------
@@ -1043,6 +1001,63 @@ function extractNameTag(rawName){
     if (quad.scrollHeight <= quad.clientHeight) return;
 
     prevCard.classList.add('hidden');
+  }
+
+  // HOISTED TO TOP LEVEL, 19 Aug 2026 -- this used to be a private
+  // helper nested inside renderAll(), which is fine as long as only
+  // renderAll ever calls it. renderDriveSummary (Previous Drive's own
+  // full play log, added the same night) needed it too, and a function
+  // declared inside another function is invisible outside it -- calling
+  // it from renderDriveSummary threw "renderLogLines is not defined" in
+  // the real page even though an isolated test of both functions
+  // together passed cleanly, because extracting them side by side into
+  // one flat script accidentally recreated the very scope they don't
+  // share on the real page. Caught by the full test suite booting the
+  // actual page, not by the isolated one.
+  function renderLogLines(list, highlightFirst){
+    let marked = false;
+    // A touchdown or a made field goal is bold on sight, not just
+    // whichever play happens to be most recent -- Andy asked for
+    // this specifically, 19 Aug 2026. Same detection computeDriveSummary
+    // already uses for scoringPlayText, reused rather than re-derived:
+    // p.effect.td for a touchdown, and playType 'fg' with a made
+    // kicker result for a field goal. Deliberately NOT every scoring
+    // play -- a PAT, a 2-point try and a safety were not asked for,
+    // and bolding everything that scores would have made this no
+    // different from bolding nothing.
+    const isTdOrFg = (p) => {
+      if (p.effect && p.effect.td) return true;
+      const r = p.roles;
+      return !!(r && r.playType === 'fg' && r.kicker && r.kicker.result === 'g');
+    };
+    return list.map(p => {
+      if (p.isDivider) return '<div style="text-align:center; font-size:14px; font-weight:600; color:#888; margin:8px 0; border-top:1px dashed #ccc; padding-top:6px;">' + p.text + '</div>';
+      // A play in overtime is tagged OT, not Q5. The banner already
+      // said OT while every row beneath it said Q5, which is the same
+      // period under two names on one screen.
+      //
+      // Rounds are deliberately NOT numbered here: the tag is per PLAY
+      // and quarterLabel counts series up to the CURRENT state, so
+      // numbering a play from it would relabel the whole log every time
+      // a new series began. Which OT round is on the banner; the row
+      // only has to say it was overtime.
+      const qtag = p.quarter
+        ? '<span style="color:#999; font-size:12px; margin-right:6px;">' +
+          (p.quarter >= 5 ? 'OT' : 'Q' + p.quarter) + '</span>'
+        : '';
+      const text = stripTeamNames(p.text || '').replace(/TOUCHDOWN/g, '<strong>TOUCHDOWN</strong>');
+      // The first NON-DIVIDER line, not simply the first entry: an "End
+      // of 1st half" rule sitting on top would otherwise take the
+      // emphasis meant for the last real play.
+      let style = '';
+      if (highlightFirst && !marked){
+        marked = true;
+        style = ' style="font-size:calc(17px * var(--stat-scale, 1)); font-weight:700; color:#111;"';
+      } else if (isTdOrFg(p)){
+        style = ' style="font-weight:700;"';
+      }
+      return '<div class="logline"' + style + '>' + qtag + text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
+    }).join('');
   }
 
   function computeDriveSummary(startIdx, endIdx){
@@ -1149,7 +1164,7 @@ function extractNameTag(rawName){
       tryOutcome: endedInTouchdown ? tryOutcome : null };
   }
 
-  function renderDriveSummary(summary){
+  function renderDriveSummary(summary, segment){
     if (!summary) return '<div style="color:#999;">no previous drive yet</div>';
     const teamName = TEAMS[summary.team].name;
     const tiles = [
@@ -1164,24 +1179,75 @@ function extractNameTag(rawName){
       ['TOTAL', summary.totalPlays + '/' + summary.totalYds],
       ['TOP', formatDuration(summary.top)]
     ];
-    const outcome = summary.scoringPlayText || summary.lastPlayText || 'No plays recorded';
-    const outcomeColor = summary.scoringPlayText ? '#1a7a4c' : '#555';
-    // A SEPARATE, SMALLER LINE, not appended onto the touchdown text --
-    // the scoring line is already long once a player's full name is in
-    // it, and this tile has already been fixed once for wrapping (the
-    // clock hint, on the header line above). Colour carries the same
-    // good/bad meaning it does everywhere else in this app: green for
-    // the attempting team's own success, red for anything else, whether
-    // that is a miss, a block, an interception or a fumble.
-    const tryHtml = summary.tryOutcome
-      ? '<div style="font-size:12px; line-height:1.3; margin-top:2px; color:' +
-        (summary.tryOutcome.good ? '#1a7a4c' : '#a32d2d') + ';">' + summary.tryOutcome.text + '</div>'
-      : '';
+    // THE FULL PLAY LOG, NOT ONE SUMMARY LINE. Andy asked for this
+    // specifically, 19 Aug 2026: instead of the tile "emptying" down to
+    // a single outcome line once a drive ends, the whole play-by-play
+    // stays, and the tiles above are unchanged -- same four numbers,
+    // same order, same source.
+    //
+    // CHRONOLOGICAL, not reversed like Current Drive's own log. The
+    // request was specifically for the scoring play -- or the PAT/2PT
+    // that follows it -- to read as the FINAL entry, the way a coach
+    // naturally tells the story of a drive: what happened, in order,
+    // ending with how it ended.
+    //
+    // CAPPED, not left to the browser to clip. This page is a fixed
+    // 1920x1080 canvas with overflow:hidden and no scrolling anywhere,
+    // by design, for the TV/broadcast use case ("nobody needs to touch
+    // it"). An uncapped list on a long drive would silently clip
+    // whatever falls outside the tile's height -- and because clipping
+    // cuts off the BOTTOM of a top-anchored block, that would take the
+    // score first under chronological order, which is the one line
+    // that must not disappear. So the ending is built into the
+    // rendered HTML explicitly here, rather than left to chance.
+    //
+    // MAX_DRIVE_LOG_LINES is a considered estimate, not a measured
+    // pixel fit -- there is no way to render this page in an actual
+    // browser from here to check. Treat it as adjustable once seen on
+    // a real device.
+    const MAX_DRIVE_LOG_LINES = 8;
+    const real = (segment || []).filter(x => !isDriveTileNoise(x));
+    let logList = real;
+    if (real.length > MAX_DRIVE_LOG_LINES){
+      // FIND THE SCORE BY CONTENT, NOT BY COUNTING FROM THE END.
+      // ----------------------------------------------------------------
+      // The first version of this kept "the last 2 entries" on the
+      // assumption those would always be the touchdown and its PAT.
+      // They are not: a kickoff or punt that closes this same drive
+      // (see the Current Drive fix, same night) lands AFTER the PAT in
+      // this segment, so "last 2" became the PAT and the kickoff --
+      // silently dropping the touchdown itself, the one line that must
+      // never go missing. Reported by testing a real long drive through
+      // the actual page, not caught by the isolated version of this
+      // check alone.
+      //
+      // So: find the touchdown or made field goal by the same detection
+      // used everywhere else (p.effect.td, or a made 'fg'), and treat
+      // everything from THERE to the end of the segment as the part
+      // that must survive -- the score, its PAT/2PT, and anything
+      // (like a closing kickoff) that comes after. A non-scoring drive
+      // has no such play, and falls back to keeping the last 2 plays
+      // as a reasonable default ending instead.
+      const isTdOrFgPlay = (p) => {
+        if (p.effect && p.effect.td) return true;
+        const r = p.roles;
+        return !!(r && r.playType === 'fg' && r.kicker && r.kicker.result === 'g');
+      };
+      let scoreIdx = -1;
+      for (let i = 0; i < real.length; i++){ if (isTdOrFgPlay(real[i])) scoreIdx = i; }
+      const tailStart = scoreIdx !== -1 ? scoreIdx : Math.max(0, real.length - 2);
+      const tail = real.slice(tailStart);
+      const keepStart = Math.max(0, MAX_DRIVE_LOG_LINES - tail.length);
+      const omitted = real.length - keepStart - tail.length;
+      logList = real.slice(0, keepStart)
+        .concat(omitted > 0 ? [{ isDivider: true, text: '\u2026and ' + omitted + ' more play' + (omitted === 1 ? '' : 's') }] : [])
+        .concat(tail);
+    }
     return '<div class="inline-stat-line">' +
       tiles.map(([label, val]) => '<span class="inline-stat-item"><b>' + label + '</b>' + val + '</span>').join('') +
       '</div>' +
-      '<div style="font-size:13px; line-height:1.3;"><strong>' + teamName + ':</strong> <span style="color:' + outcomeColor + '; font-weight:' + (summary.scoringPlayText ? '700' : '600') + ';">' + outcome + '</span></div>' +
-      tryHtml;
+      '<div style="font-size:12px; font-weight:600; color:#888; margin:4px 0 2px;">' + teamName + '</div>' +
+      renderLogLines(logList, false);
   }
 
 
