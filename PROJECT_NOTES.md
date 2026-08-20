@@ -2073,3 +2073,144 @@ test that fails when the two diverge. Consolidating `parseInput` into
 one shared place, reachable from both the ordinary panel and any guided
 flow, would not just reduce edit sites — it would make this specific
 class of drift structurally impossible instead of merely documented.
+
+## One blind spot in many places, a second time — the sack-fumble defense credit (20 August 2026)
+
+The same shape as "One blind spot in many places is not many bugs"
+above, five days later, with a different field. A sack that also
+produced a fumble recovered by the defense recorded the fumble but not
+the sack itself, in `engine.js`'s `computeBoxScore` — the defense
+sacks check tested `type === 'sack'` directly and never had the
+`type === 'fumble' && r.attempt === 'sack'` exception the passer's own
+"sacked" credit already carried.
+
+Fixing `engine.js` was not the end of it, and the reason is the same
+one 19 August already stated: **the next question after a wrong field
+is fixed is never "is this fixed now" — it is "what else reads this
+exact field, and does it make the same assumption."** Grepping for
+`playType === 'sack'` found it independently reimplemented, un-fixed,
+in seven more places across five files: `view.html` and `broadcast.html`'s
+own `defTotals.sacks` accumulators (both live, both feeding what a
+scorer or a broadcast overlay sees mid-game), `stat_package.html` and
+`season_report.html`'s XLSX "Sacks and Bad Snaps" rows, and dead
+`sackYardsLost` calculations in three files that were fixed for
+consistency even though nothing currently reads them. One false
+positive was checked and correctly left alone: `view.html`'s own
+per-drive rush/pass breakdown already had its own, separate
+fumble-combined branch, added at a different time for a different
+reason, and already correct.
+
+**The generalizable lesson, restated because it recurred rather than
+because it is new:** a fix inside the shared engine does not
+automatically reach a display surface that reimplements the engine's
+own logic locally instead of calling it. Every one of these seven was
+an independent, duplicate "count sacks from the play log" written by
+hand rather than shared — the same root cause `engine.js`'s own
+extraction (section 8a, `TODO.md`) exists to remove for the five
+computation functions it already covers, and a live argument that the
+same treatment is worth extending to any other logic still duplicated
+by hand across the report surfaces.
+
+## Season-scoped rosters — why `players` needed a `season_year`, and the risk that motivated it (20 August 2026)
+
+Andy asked for a way to keep last season's roster around instead of
+losing it to "Clear roster," so he could keep working with past
+seasons' games. Investigating the actual risk, not just the stated
+request, surfaced something sharper than "the old data gets deleted":
+
+**`create_game.html` always re-derives "our" team's roster from the
+live `players` table on every save of an existing game, unconditionally
+— this was already true before tonight, and it is still true now.**
+The comment in the file says so directly: *"Our roster is always
+freshly resolved from the current team roster, so it always gets
+replaced."* The opponent roster already had an exception for this
+("only replaced if actually touched this session"); "our" side never
+did. So the real risk was never just "old data gets deleted" — it was
+that reopening an OLD game months later, to fix nothing more than a
+typo in its designator, would silently overwrite that game's roster
+snapshot with whatever the CURRENT season's roster happens to contain,
+corrupting a game that nobody was touching on purpose. Confirmed the
+`players` `id` is never actually joined back from `game_rosters` at
+display time anywhere in the app — every finished game's stats are
+already fully self-contained in its own snapshot — so this specific
+risk is narrower than "any past game," but it is real for the one path
+(re-saving an old game's setup) that does re-derive from `players`.
+
+**The design, in order of how much it changes:** add `season_year` to
+`players`; a season selector on `roster.html`, current season fully
+editable and every other season fully read-only (Andy's explicit
+call — no controls rendered at all for a past season, not merely
+disabled ones); `create_game.html`'s roster query resolves against
+*that specific game's own* `season_year`, not the team's "current"
+one — which is what actually closes the corruption risk above, since a
+re-save now correctly re-derives from the game's own historical
+season regardless of what season is active today. Confirmed with Andy
+before touching anything: players overlap between seasons constantly
+and their numbers can change year to year, and this design handles
+that for free, structurally — each season's roster is its own,
+independent set of rows, with nothing linking a number's meaning
+across two different years, so there is no scenario where the season
+scoping itself could confuse two different people who happened to
+share a number in different years.
+
+**Explicitly decided against, and worth recording so neither gets
+rebuilt as an oversight:** no way to retroactively add a player to a
+past season's roster, and no "copy last season's roster forward" as a
+starting point for a new one. Both were asked about directly and
+declined.
+
+**The migration detail that mattered more than it looked.** The
+backfill for existing rows could not simply use `teams.current_season_year`
+— confirmed directly with Andy that what was still loaded in the live
+`players` table, at the moment of migration, was last season's roster,
+not yet replaced. Using the team's own "current" pointer would have
+mislabeled an entire season's real roster as belonging to whichever
+year the team record already pointed at. The backfill instead uses the
+literal year Andy confirmed, not a value derived from anything else in
+the database.
+
+**A second, adjacent SQL gotcha, worth stating plainly since it would
+have silently broken every existing game's inclusion in season
+stats.** `is_preseason` (a related, smaller feature shipped the same
+session — see below) is `NULL`, not `false`, on every game that
+existed before that column did. `NULL = false` is itself `NULL` in
+SQL, not `true` — so a plain `.eq('is_preseason', false)` filter would
+have quietly excluded every pre-existing game from every season
+report the moment it shipped. Both exclusion filters
+(`season_report.html`, `player_report.html`) use an explicit
+`.or('is_preseason.is.null,is_preseason.eq.false')` instead, which
+treats null and false identically and only ever excludes a genuine
+`true`.
+
+## A test harness gap is a blind spot for every future test, not just the one that found it (20 August 2026)
+
+Testing the season-scoped roster feature required the shared mock
+Supabase backend (`tests/harness.js`) to support things it never had
+before: the `players` table at all, `.in()`, and a `teams` row shaped
+the way `roster.html` needs (`id`/`name`/`current_season_year`,
+alongside the colour fields other pages already read from the same
+mocked row). None of this was a gap introduced tonight — `roster.html`
+had simply never been tested against this harness before, so nothing
+had ever needed it.
+
+**The same principle already established for `delete()` and `.or()`
+applies here too, and is worth restating because it keeps recurring: a
+mock that silently returns nothing for an operation it does not
+implement is worse than one that throws.** The `players` table's
+`select`/`insert`/`update`/`delete` handling, and the new `.in()`
+method, all evaluate real filters rather than approximating — because
+the entire point of testing a season-scoping feature is verifying that
+a season filter actually narrows what a query returns, and a mock that
+quietly ignored the filter would have let the exact bug this feature
+exists to prevent pass every test while still being broken in
+production. Confirmed this reasoning holds by deliberately breaking
+the real fix (the season filter on the roster query, and separately
+the season filter on the "Clear roster" delete) and watching the new
+tests catch each one specifically, not just watching them fail to
+notice anything was wrong.
+
+Ran the entire existing suite — every other test, the golden
+snapshot, all five fuzzers — against the modified harness before
+trusting any of it, since a shared mock used by forty-odd other tests
+is exactly the kind of file where a well-intentioned addition can
+silently change behaviour nothing else was checking for.
