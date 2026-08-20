@@ -376,6 +376,90 @@ async function run() {
     v.close();
   }
 
+  // --- 10. "Current Drive" ITSELF shows the try outcome, BEFORE the
+  // ensuing kickoff has moved the boundary -- the actual gap behind
+  // the report. Reported directly, 19 Aug 2026, with a screenshot: a
+  // fresh page load right after the PAT (matching exactly how a crew
+  // checks the page live, before the next kickoff is entered) showed
+  // "no previous drive yet" AND no PAT anywhere in Current Drive's own
+  // log either -- test 7 above only proves the FIX works once a second
+  // drive-start exists; it says nothing about the gap before that.
+  {
+    const h = await bootGamePage();
+    enterPlay(h, { type: 'kickoff', kicker: '3', touchback: true, clock: '12:00' });
+    setDrive(h, { down: 3, distance: 2, side: 'opp', yardline: 40 });
+    enterPlay(h, { type: 'fg', kicker: '3', yards: '35', blocked: true, credit: '55', retyds: '60',
+      td: true, clock: '7:00' });
+    enterPlay(h, { type: 'pat', kicker: '3', result: 'g' });
+    // NO ensuing kickoff -- this is the exact moment the screenshot
+    // captured, one play short of test 7's scenario.
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+
+    const v = await bootPage('view.html', { existingPlays: rows });
+    const curHtml = v.document.getElementById('driveLogScroll').innerHTML;
+    if (!/PAT — GOOD/.test(curHtml)) {
+      fail('current-drive-try-display', 'right after the PAT, before the ensuing kickoff, Current Drive\'s ' +
+        'own log never showed it at all: ' + curHtml.replace(/<[^>]+>/g, '|'));
+    }
+    v.close();
+  }
+
+  // --- 11. Same gap, a MISSED try -- must still appear. A missed
+  // PAT/2PT carries NO effect.score at all (just endsDrive: true), so
+  // a filter that keyed on effect.score instead of playType would pass
+  // test 10 above (a MADE try happens to also carry a score) while
+  // still silently dropping every missed one.
+  {
+    const h = await bootGamePage();
+    enterPlay(h, { type: 'kickoff', kicker: '3', touchback: true, clock: '12:00' });
+    setDrive(h, { down: 3, distance: 2, side: 'opp', yardline: 40 });
+    enterPlay(h, { type: 'fg', kicker: '3', yards: '35', blocked: true, credit: '55', retyds: '60',
+      td: true, clock: '7:00' });
+    enterPlay(h, { type: 'pat', kicker: '3', result: 'x' });
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+
+    const v = await bootPage('view.html', { existingPlays: rows });
+    const curHtml = v.document.getElementById('driveLogScroll').innerHTML;
+    if (!/PAT — MISSED/.test(curHtml)) {
+      fail('current-drive-try-display', 'a MISSED PAT, right after entry, never showed in Current Drive\'s ' +
+        'own log either: ' + curHtml.replace(/<[^>]+>/g, '|'));
+    }
+    v.close();
+  }
+
+  // --- 12. Once the ensuing kickoff DOES move the boundary, the PAT
+  // must appear in Previous Drive exactly once, not duplicated between
+  // Previous Drive and a now-empty Current Drive. This is the exact
+  // failure mode an earlier feature this same night was reverted for
+  // (a kickoff shown in both tiles at once), so the fix for the gap
+  // above must not reopen it.
+  {
+    const h = await bootGamePage();
+    enterPlay(h, { type: 'kickoff', kicker: '3', touchback: true, clock: '12:00' });
+    setDrive(h, { down: 3, distance: 2, side: 'opp', yardline: 40 });
+    enterPlay(h, { type: 'fg', kicker: '3', yards: '35', blocked: true, credit: '55', retyds: '60',
+      td: true, clock: '7:00' });
+    enterPlay(h, { type: 'pat', kicker: '3', result: 'g' });
+    enterPlay(h, { type: 'kickoff', kicker: '3', touchback: true, clock: '7:00' });
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+
+    const v = await bootPage('view.html', { existingPlays: rows });
+    const curHtml = v.document.getElementById('driveLogScroll').innerHTML;
+    const prevHtml = v.document.getElementById('prevDriveLogScroll').innerHTML;
+    if (/PAT/.test(curHtml)) {
+      fail('current-drive-try-display', 'once the ensuing kickoff moved the boundary, the PAT was STILL ' +
+        'showing in the now-empty Current Drive too: ' + curHtml.replace(/<[^>]+>/g, '|'));
+    }
+    if ((prevHtml.match(/PAT — GOOD/g) || []).length !== 1) {
+      fail('current-drive-try-display', 'the PAT should appear exactly once in Previous Drive after the ' +
+        'boundary moves, got: ' + prevHtml.replace(/<[^>]+>/g, '|'));
+    }
+    v.close();
+  }
+
   return failures;
 }
 
