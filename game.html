@@ -5994,6 +5994,65 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         tdToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
         tdToggle.textContent = cb.checked ? '✓ Touchdown' : 'Touchdown';
         refreshSpotCalcContext(panel);
+        // INTERCEPTION touchdown auto-fill, added 19 Aug 2026, reported
+        // directly from a real game. An interception always flips
+        // possession to the defense, so a touchdown here covers the
+        // distance in the OPPOSITE direction from a rush or pass
+        // touchdown: fieldPos already means "yards from the goal line
+        // the offense was driving toward," and the team now running the
+        // other way, toward the goal line BEHIND where they intercepted
+        // it, needs exactly that many yards -- not 100 minus it, which
+        // is the distance in the direction that stopped applying the
+        // moment the ball changed hands. Reported exactly this way: ball
+        // at own 41, returned for a touchdown, logged as a 58/59-yard
+        // return when the correct number is 41.
+        //
+        // refreshSpotCalcContext's own touchdown auto-fill just above --
+        // the one rush/pass/sack already get right, since the offense
+        // keeps driving the same direction it always was -- never reaches
+        // this panel at all: interceptions use their own separate spot
+        // calculator (wireIntSpotCalc, for the TAKEOVER spot, a different
+        // question) with no shared panel.__spotCalc, so pp_yards was
+        // never touched, protected, or computed for this play at all. A
+        // coach was left to work out a direction-reversed number by hand,
+        // under time pressure, right after the single play in a game
+        // where the mental picture of who is going which way is least
+        // settled -- exactly the arithmetic this app otherwise goes out
+        // of its way to remove.
+        //
+        // The dedicated Fumble play type gets the identical fix, for the
+        // identical reason -- found while confirming this one, not
+        // separately reported. Its own Touchdown toggle lives ONLY inside
+        // the "recovered by opponent" branch (pp_fum_opp); the "recovered
+        // by own team" branch has no Touchdown option of its own at all,
+        // so whenever this toggle is even reachable on this panel, the
+        // team about to score is unconditionally the defense -- no need
+        // to check which radio is selected, the panel already guarantees
+        // it. The property-based fuzzer's own probe script had this exact
+        // combination (a fumble, opponent recovers, returned for a
+        // touchdown) with a manually typed, silently wrong 60 sitting in
+        // the golden snapshot -- the same bug, just never looked at
+        // sideways until this report gave a reason to check.
+        if (type === 'int' || type === 'fumble'){
+          const turnoverYardsEl = document.getElementById('pp_yards');
+          if (turnoverYardsEl){
+            if (cb.checked){
+              const fp = computeState().fieldPos;
+              if (fp !== null){
+                turnoverYardsEl.value = String(fp);
+                turnoverYardsEl.disabled = true;
+                turnoverYardsEl.style.background = '#eef6f1';
+                turnoverYardsEl.style.borderColor = '#1a7a4c';
+                turnoverYardsEl.style.fontWeight = '700';
+              }
+            } else {
+              turnoverYardsEl.disabled = false;
+              turnoverYardsEl.style.background = '';
+              turnoverYardsEl.style.borderColor = '';
+              turnoverYardsEl.style.fontWeight = '';
+            }
+          }
+        }
       });
     }
     const rushFumTdToggle = document.getElementById('pp_rushfum_td_toggle');
