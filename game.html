@@ -6071,9 +6071,31 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const isChecked = id => { const el = document.getElementById(id); return !!(el && el.checked); };
     // Untick the other toggle AND fire its change handler, so its own
     // panel bookkeeping (hiding the blocked box, say) runs too.
+    //
+    // ALSO resets the button's own visual state -- found and fixed 19
+    // Aug 2026, reported directly. This only ever cleared the CHECKBOX
+    // and fired 'change', which correctly ran the other toggle's own
+    // show/hide bookkeeping (since that is wired to the checkbox's
+    // 'change' event) -- but the BUTTON's own visual state, its
+    // checkmark and its gold "picked" styling, is set by a separate,
+    // global click handler a few lines above that only ever fires on
+    // an actual click on the button itself. A programmatic uncheck like
+    // this one never reached it, so a button a coach had just switched
+    // away from kept showing its own checkmark and gold background even
+    // after the other outcome correctly took over underneath it --
+    // both looked selected at once, exactly as reported, even though
+    // the underlying data was already correct throughout.
     const clearOther = id => {
       const el = document.getElementById(id);
-      if (el && el.checked){ el.checked = false; el.dispatchEvent(new Event('change')); }
+      if (el && el.checked){
+        el.checked = false;
+        const btn = document.getElementById(id + '_toggle');
+        if (btn){
+          btn.classList.remove('picked');
+          btn.textContent = btn.dataset.label || 'Blocked';
+        }
+        el.dispatchEvent(new Event('change'));
+      }
     };
     function setKickResultLocked(groupName, locked){
       document.querySelectorAll('input[name=' + groupName + ']').forEach(r => {
@@ -6456,10 +6478,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // distance, touchback, blocked, muffed -- is meaningless, so
           // those are cleared and the kick fields hidden.
           if (e.target.checked){
-            others.forEach(id => {
-              const o = document.getElementById(id);
-              if (o && o.checked){ o.checked = false; o.dispatchEvent(new Event('change')); }
-            });
+            others.forEach(clearOther);
           }
           box.style.display = e.target.checked ? 'block' : 'none';
           // Hidden, not merely disabled. A greyed-out box still reads as
@@ -7414,10 +7433,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       document.getElementById('pp_punt_touchback').addEventListener('change', (e) => {
         refreshSpotCalcContext(panel);
         if (e.target.checked){
-          ['pp_blocked', 'pp_muffed'].forEach(id => {
-            const o = document.getElementById(id);
-            if (o.checked){ o.checked = false; o.dispatchEvent(new Event('change')); }
-          });
+          ['pp_blocked', 'pp_muffed'].forEach(clearOther);
         }
         refreshPuntMode();
       });
@@ -7426,16 +7442,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // Blocked and muffed are different plays; turning one on clears
         // the other rather than leaving both claiming the panel.
         if (e.target.checked){
-          const m = document.getElementById('pp_muffed');
-          if (m.checked){ m.checked = false; m.dispatchEvent(new Event('change')); }
+          clearOther('pp_muffed');
         }
         refreshPuntMode();
       });
       document.getElementById('pp_muffed').addEventListener('change', (e) => {
         refreshSpotCalcContext(panel);
         if (e.target.checked){
-          const b = document.getElementById('pp_blocked');
-          if (b.checked){ b.checked = false; b.dispatchEvent(new Event('change')); }
+          clearOther('pp_blocked');
         }
         refreshPuntMode();
       });
