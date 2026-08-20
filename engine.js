@@ -1099,6 +1099,33 @@ function computeBoxScore(playsList){
         }
       }
     }
+    // A fumble that ended a SACK still counts as a team sack on
+    // defense, exactly as it already does on the passer's own line
+    // (the "sacked" credit near the top of this function). Reported
+    // directly, 20 Aug 2026: a sack-turned-fumble, recovered by the
+    // defense, showed the recovery but never the sack -- on either the
+    // named recoverer's own line or the team's. Confirmed it was not
+    // about the yardage (still missing at 7 lost, not just 0); the gap
+    // was that this check only ever tested type === 'sack' directly,
+    // never the fumble-carries-an-attempt shape the passer-side credit
+    // already knew about.
+    //
+    // Deliberately its OWN check, run unconditionally, rather than
+    // folded into the if/else-if above: roles.defense on a fumble play
+    // is who RECOVERED it, not who made the sack, and those are
+    // frequently different players. Crediting the recoverer directly
+    // would repeat the exact mistake already fixed for tackles on 13
+    // Aug 2026 (a linebacker with three tackles when he had made two,
+    // because picking the ball up is a different act from making the
+    // hit). The team level is the only claim this app can make with
+    // confidence, since the panel never separately asks who made the
+    // sack once a fumble is involved -- and it applies whether the
+    // defense recovers or the offense keeps its own fumble, since the
+    // sack happened either way.
+    if (type === 'fumble' && r.attempt === 'sack' && r.carrier && r.carrier.team){
+      const s = bucket(otherTeam(r.carrier.team), 'defense', 'TEAM');
+      if (s) s.sacks = (s.sacks||0) + 1;
+    }
     if (r.kicker && type === 'kickoff'){
       const s = bucket(r.kicker.team, 'specialTeams', r.kicker.num);
       if (s){
