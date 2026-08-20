@@ -395,9 +395,15 @@ function isAdminMarker(p){
     // NFHS: sack yardage is charged against RUSHING, not passing.
     // Individual passer season totals in seasonAgg.passing stay
     // unadjusted, matching each player's own personal statline.
+    //
+    // NOT currently called anywhere -- confirmed by search before this
+    // fix, not assumed. Corrected anyway, alongside the identical,
+    // LIVE gap a few lines down (the 'Sacks and Bad Snaps' xlsx row),
+    // rather than left as a latent copy of the same mistake for
+    // whenever this does get wired up.
     const sackYardsLostFor = (teamKey) => gamePlays.reduce((tot, p) => {
       const r = p.roles;
-      return (r && r.playType === 'sack' && r.passer && r.passer.team === teamKey) ? tot + (r.passer.yards || 0) : tot;
+      return (r && (r.playType === 'sack' || (r.playType === 'fumble' && r.attempt === 'sack')) && r.passer && r.passer.team === teamKey) ? tot + (r.passer.yards || 0) : tot;
     }, 0);
     const passYds = sumStat(box.teamA.passing,'yds'), passAtt = sumStat(box.teamA.passing,'att'), passComp = sumStat(box.teamA.passing,'comp'), passTd = sumStat(box.teamA.passing,'td');
     let oppRushYds = sumStat(box.teamB.rushing,'yds');
@@ -538,7 +544,16 @@ function isAdminMarker(p){
       }
     });
     let sackCount=0, sackYardsLost=0;
-    gamePlays.forEach(p => { const r=p.roles; if (r && r.playType==='sack' && r.passer && r.passer.team==='teamA'){ sackCount++; sackYardsLost += (r.passer.yards||0); } });
+    // Reported directly, 20 Aug 2026: a sack-turned-fumble was missing
+    // from this count specifically, even after engine.js's own sack
+    // credit was fixed for the same shape -- because this loop never
+    // goes through computeBoxScore or sumStat at all. It re-reads
+    // gamePlays directly and only ever tested r.playType==='sack', so a
+    // sack recorded as playType 'fumble' (with attempt: 'sack', the
+    // shape a sack-fumble is actually saved in) was invisible to it. Same
+    // gap, same fix, a separate place engine.js's own change could not
+    // reach because this was never routed through it.
+    gamePlays.forEach(p => { const r=p.roles; if (r && (r.playType==='sack' || (r.playType==='fumble' && r.attempt==='sack')) && r.passer && r.passer.team==='teamA'){ sackCount++; sackYardsLost += (r.passer.yards||0); } });
     if (sackCount){
       const row = blankRow();
       setCols(row, { GameID: gameId, Team: TEAMS.teamA.name, Player: 'Sacks and Bad Snaps', 'Rush Attempts': sackCount, 'Rush Yards': -sackYardsLost });

@@ -538,7 +538,13 @@ function extractNameTag(rawName){
       const defTotals = plays.reduce((acc, p) => {
         const r = p.roles; if (!r) return acc;
         const e = p.effect || {};
-        if (r.playType === 'sack' && r.passer && r.passer.team === opp) acc.sacks++;
+        // A fumble that ended a SACK is still a sack -- reported
+        // directly, 20 Aug 2026, from a game where this exact team
+        // total dropped one. This accumulator predates that report and
+        // never carried the exception engine.js's own sack credit
+        // already had, since it counts straight from the play log
+        // rather than through computeBoxScore.
+        if ((r.playType === 'sack' || (r.playType === 'fumble' && r.attempt === 'sack')) && r.passer && r.passer.team === opp) acc.sacks++;
         if (r.playType === 'int' && r.passer && r.passer.team === opp) acc.int++;
         if (r.playType === 'fumble' && r.carrier && r.carrier.team === opp && (r.lost || r.defense)) acc.fumRec++;
         // Tackles for loss, counted from the PLAY rather than from a named

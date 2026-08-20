@@ -640,10 +640,18 @@ function isAdminMarker(p){
     // passer, tracked as a negative rushing line per football
     // convention. computeBoxScore only counts sacks, it never sums
     // the yardage lost, so this reads the raw play log directly.
+    //
+    // Reported directly, 20 Aug 2026: a sack-turned-fumble was missing
+    // from this count, in a game with three total sacks against the
+    // same passer -- the total showed 2. The same shape as
+    // season_report.html's identical row, fixed there for the same
+    // reason: this reads roles.playType straight off the play log
+    // rather than through computeBoxScore, so engine.js's own fix for
+    // the fumble-carries-an-attempt shape never reached it.
     let sackCount = 0, sackYardsLost = 0;
     plays.forEach(p => {
       const r = p.roles;
-      if (r && r.playType === 'sack' && r.passer && r.passer.team === 'teamA'){
+      if (r && (r.playType === 'sack' || (r.playType === 'fumble' && r.attempt === 'sack')) && r.passer && r.passer.team === 'teamA'){
         sackCount++; sackYardsLost += (r.passer.yards || 0);
       }
     });
@@ -853,9 +861,15 @@ function isAdminMarker(p){
       // own personal statline stays unadjusted -- only this team-level
       // total subtracts it. computeBoxScore only counts sacks, never
       // sums their yardage, so this reads the raw play log directly.
+      //
+      // NOT currently referenced downstream in this function -- confirmed
+      // by search before this fix, not assumed. Corrected anyway,
+      // alongside the identical, LIVE gap a few dozen lines up (the
+      // 'Sacks and Bad Snaps' row), rather than left as a latent copy
+      // of the same mistake for whenever this does get wired up.
       const sackYardsLost = plays.reduce((t, p) => {
         const r = p.roles;
-        return (r && r.playType === 'sack' && r.passer && r.passer.team === teamKey) ? t + (r.passer.yards || 0) : t;
+        return (r && (r.playType === 'sack' || (r.playType === 'fumble' && r.attempt === 'sack')) && r.passer && r.passer.team === teamKey) ? t + (r.passer.yards || 0) : t;
       }, 0);
       // NFHS: charge the sack yardage against rushing.
       const passYds = sumStat(s.passing, 'yds'), passAtt = sumStat(s.passing, 'att'), sacked = sumStat(s.passing, 'sacked');

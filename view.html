@@ -705,7 +705,13 @@ function extractNameTag(rawName){
       const defTotals = plays.reduce((acc, p) => {
         const r = p.roles; if (!r) return acc;
         const e = p.effect || {};
-        if (r.playType === 'sack' && r.passer && r.passer.team === opp) acc.sacks++;
+        // A fumble that ended a SACK is still a sack -- reported
+        // directly, 20 Aug 2026, from a game where this exact team
+        // total dropped one. This accumulator predates that report and
+        // never carried the exception engine.js's own sack credit
+        // already had, since it counts straight from the play log
+        // rather than through computeBoxScore.
+        if ((r.playType === 'sack' || (r.playType === 'fumble' && r.attempt === 'sack')) && r.passer && r.passer.team === opp) acc.sacks++;
         if (r.playType === 'int' && r.passer && r.passer.team === opp) acc.int++;
         if (r.playType === 'fumble' && r.carrier && r.carrier.team === opp && (r.lost || r.defense)) acc.fumRec++;
         // Tackles for loss, counted from the PLAY rather than from a named
@@ -1357,9 +1363,15 @@ function extractNameTag(rawName){
       // from passing. The quarterback's individual passing line is
       // untouched either way -- only where the team total absorbs it
       // changes. Under the NFL rule this came out of Pass Yards.
+      //
+      // NOT currently referenced downstream in this function -- confirmed
+      // by search before this fix, not assumed. Corrected anyway,
+      // alongside the identical, LIVE gap this same session found a few
+      // hundred lines up (defTotals.sacks), rather than left as a latent
+      // copy of the same mistake for whenever this does get wired up.
       const sackYardsLost = plays.reduce((t, p) => {
         const r = p.roles;
-        return (r && r.playType === 'sack' && r.passer && r.passer.team === teamKey) ? t + (r.passer.yards || 0) : t;
+        return (r && (r.playType === 'sack' || (r.playType === 'fumble' && r.attempt === 'sack')) && r.passer && r.passer.team === teamKey) ? t + (r.passer.yards || 0) : t;
       }, 0);
       const passYds = Object.keys(s.passing).reduce((t, n) => t + (s.passing[n].yds || 0), 0);
       // No subtraction here: the sack yardage is already inside the
