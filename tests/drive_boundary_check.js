@@ -295,6 +295,87 @@ async function run() {
     h.close();
   }
 
+  // --- 7. "Previous Drive" panel shows the try outcome for a
+  // DEFENSIVE score, not just an ordinary offensive one
+  //
+  // Reported directly from a real game, 19 Aug 2026: computeDriveSummary
+  // (view.html) has always had a colored PAT/2PT outcome line for the
+  // "Previous Drive" panel, but the try-detection sat BELOW a team
+  // filter that only matched an ORDINARY offensive touchdown, where
+  // the scoring team happens to equal driveTeam by coincidence. For a
+  // defensive score the two are never equal, so the line silently
+  // never rendered -- the PAT looked, in the scorer's own words, "like
+  // it didn't exist." Moved the detection above the filter, mirroring
+  // the scoringPlayText fix a few lines above it in the same function,
+  // earlier the same night.
+  {
+    const h = await bootGamePage();
+    enterPlay(h, { type: 'kickoff', kicker: '3', touchback: true, clock: '12:00' });
+    setDrive(h, { down: 3, distance: 2, side: 'opp', yardline: 40 });
+    enterPlay(h, { type: 'fg', kicker: '3', yards: '35', blocked: true, credit: '55', retyds: '60',
+      td: true, clock: '7:00' });
+    enterPlay(h, { type: 'pat', kicker: '3', result: 'g' });
+    enterPlay(h, { type: 'kickoff', kicker: '3', touchback: true, clock: '7:00' });
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+
+    const v = await bootPage('view.html', { existingPlays: rows });
+    const prevHtml = v.document.getElementById('prevDriveLogScroll').innerHTML;
+    if (!/PAT — GOOD/.test(prevHtml)) {
+      fail('try-outcome-display', 'a defensive score\'s own PAT never rendered in the Previous Drive ' +
+        'panel: ' + prevHtml.replace(/<[^>]+>/g, '|'));
+    }
+    if (!/color:#1a7a4c/.test(prevHtml.split('PAT — GOOD')[0].slice(-120))) {
+      fail('try-outcome-display', 'the PAT line rendered but not in the expected "good" green');
+    }
+    v.close();
+  }
+
+  // --- 8. Same panel, a MISSED try -- must render red, not just absent
+  {
+    const h = await bootGamePage();
+    enterPlay(h, { type: 'kickoff', kicker: '3', touchback: true, clock: '12:00' });
+    setDrive(h, { down: 3, distance: 2, side: 'opp', yardline: 40 });
+    enterPlay(h, { type: 'fg', kicker: '3', yards: '35', blocked: true, credit: '55', retyds: '60',
+      td: true, clock: '7:00' });
+    enterPlay(h, { type: 'pat', kicker: '3', result: 'x' });
+    enterPlay(h, { type: 'kickoff', kicker: '3', touchback: true, clock: '7:00' });
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+
+    const v = await bootPage('view.html', { existingPlays: rows });
+    const prevHtml = v.document.getElementById('prevDriveLogScroll').innerHTML;
+    if (!/PAT — MISSED/.test(prevHtml)) {
+      fail('try-outcome-display', 'a defensive score\'s own MISSED PAT never rendered in the Previous ' +
+        'Drive panel: ' + prevHtml.replace(/<[^>]+>/g, '|'));
+    }
+    if (!/color:#a32d2d/.test(prevHtml.split('PAT — MISSED')[0].slice(-120))) {
+      fail('try-outcome-display', 'the missed PAT line rendered but not in the expected red');
+    }
+    v.close();
+  }
+
+  // --- 9. A made field goal (no touchdown, no try at all) must show
+  // no stray try-outcome line -- confirms computeDriveSummary's own
+  // `endedInTouchdown ? tryOutcome : null` guard still holds after
+  // moving the try-detection above the team filter.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 4, distance: 8, side: 'opp', yardline: 20 });
+    enterPlay(h, { type: 'fg', kicker: '3', yards: '37', result: 'g' });
+    enterPlay(h, { type: 'kickoff', kicker: '3', touchback: true });
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+
+    const v = await bootPage('view.html', { existingPlays: rows });
+    const prevHtml = v.document.getElementById('prevDriveLogScroll').innerHTML;
+    if (/margin-top:2px/.test(prevHtml)) {
+      fail('try-outcome-display', 'a made field goal (no touchdown) rendered a stray try-outcome line: ' +
+        prevHtml.replace(/<[^>]+>/g, '|'));
+    }
+    v.close();
+  }
+
   return failures;
 }
 
