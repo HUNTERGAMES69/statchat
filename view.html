@@ -1134,35 +1134,46 @@ function extractNameTag(rawName){
         // scored.
         if (p.effect && p.effect.score && p.effect.score.points === 6){ scoringPlayText = p.text; endedInTouchdown = true; }
         else if (p.effect && isFgGoodAny){ scoringPlayText = p.text; }
+        // THE TRY THAT FOLLOWS THE TOUCHDOWN, captured REGARDLESS OF
+        // TEAM -- moved above the team filter below for the same
+        // reason scoringPlayText was, a few lines up, the same night.
+        // A try always belongs to whoever scored the touchdown it
+        // follows, not to driveTeam (the team that was driving BEFORE
+        // the turnover this drive's segment starts from). For an
+        // ordinary offensive touchdown those are the same team, so
+        // this worked by coincidence and the gap went unnoticed; for a
+        // defensive score they never are, and the try's own outcome
+        // silently never got captured -- the "Previous Drive" panel's
+        // colored PAT/2PT line, built for exactly this, simply never
+        // rendered. Reported directly from a real game.
+        //
+        // Detected by playType === 'pat'/'twopt' specifically -- NOT by
+        // the presence of a .result field, which a field goal's kicker
+        // role also carries. An earlier version of this keyed on
+        // .result alone and silently swallowed made field goals:
+        // r.kicker.result === 'g' matched a FG too, this branch
+        // returned early, and the FG's own scoringPlayText capture
+        // above never ran. Caught by testing a made field goal
+        // specifically, not by re-reading the code -- the assumption
+        // that playType was absent from these roles was wrong, and the
+        // generic `roles.playType = roles.playType || type` line in
+        // the submit code (which runs for every panel, this one
+        // included) is why.
+        const tryRole = r.playType === 'pat' ? r.kicker
+          : r.playType === 'twopt' ? (r.carrier || r.passer) : null;
+        if (tryRole){
+          // p.text is reused verbatim rather than re-derived -- it is
+          // already the exact, correct wording for every outcome this
+          // can have, including the edge cases (a blocked kick
+          // returned for two, a muffed hold, an intercepted 2-point
+          // pass) that a short summary written here would be liable to
+          // get wrong or leave out.
+          tryOutcome = { text: p.text, good: tryRole.result === 'g' };
+          return;
+        }
       }
       if (!r || p.team !== driveTeam) return;
-      // THE TRY THAT FOLLOWS THE TOUCHDOWN, still inside this same drive's
-      // segment -- a PAT/2PT never opens a new drive (no down, no reset,
-      // see findDriveStarts in engine.js), so it was already being walked
-      // over here and simply never inspected for its own outcome.
-      //
-      // Detected by playType === 'pat'/'twopt' specifically -- NOT by the
-      // presence of a .result field, which a field goal's kicker role
-      // also carries. An earlier version of this keyed on .result alone
-      // and silently swallowed made field goals: r.kicker.result === 'g'
-      // matched a FG too, this branch returned early, and the FG's own
-      // scoringPlayText capture below never ran. Caught by testing a made
-      // field goal specifically, not by re-reading the code -- the
-      // assumption that playType was absent from these roles was wrong,
-      // and the .generic `roles.playType = roles.playType || type` line
-      // in the submit code (which runs for every panel, this one
-      // included) is why.
-      const tryRole = r.playType === 'pat' ? r.kicker
-        : r.playType === 'twopt' ? (r.carrier || r.passer) : null;
-      if (tryRole){
-        // p.text is reused verbatim rather than re-derived -- it is
-        // already the exact, correct wording for every outcome this can
-        // have, including the edge cases (a blocked kick returned for two,
-        // a muffed hold, an intercepted 2-point pass) that a short summary
-        // written here would be liable to get wrong or leave out.
-        tryOutcome = { text: p.text, good: tryRole.result === 'g' };
-        return;
-      }
+
       if (scrimmageTypes.includes(r.playType)) totalPlays++;
       // A LOST fumble carries no statYds ON PURPOSE -- computeState skips
       // the flip for stat plays, so the yardage rides on roles instead
