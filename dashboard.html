@@ -72,7 +72,19 @@
   .game-row { display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:0.5px solid #e5e3dc; cursor:pointer; }
   .game-row:hover { background:#faf9f6; }
   .game-left { display:flex; align-items:center; gap:14px; flex:1; min-width:0; }
-  .game-num { font-size:13px; color:#aaa; width:28px; }
+  /* Reported directly, with a screenshot: 28px fit maybe two or three
+     characters at this font size, so a designator like "SCRMG" or
+     "Throwaway" overflowed straight past its own box and sat on top of
+     the matchup and date text next to it -- there was no overflow rule
+     at all, so the box never grew, it just leaked. 120px is sized for
+     fifteen characters, the length asked for; anything past that
+     truncates to an ellipsis instead of overlapping again, which is a
+     display limit on THIS row only -- designator itself carries no
+     length limit anywhere it's created or edited. Desktop only: see the
+     media query below for why mobile keeps a narrower reservation here.
+     flex-shrink:0 so the game-matchup/game-meta block, not this label,
+     gives up the room when things get tight. */
+  .game-num { font-size:13px; color:#aaa; width:120px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .game-matchup { font-weight:600; }
   .game-meta { font-size:13px; color:#888; }
   .game-right { text-align:center; width:140px; flex-shrink:0; }
@@ -88,6 +100,14 @@
        unlike a team name doing the same. */
     .game-right { width:74px; font-size:13px; }
     .game-left { gap:10px; }
+    /* The fifteen-character allowance above is a desktop-width decision
+       -- giving it back here would repeat the exact squeeze the comment
+       above just finished describing, on the one row-item that still
+       had room to spare. Kept close to the original width instead, with
+       the same overflow rule, so a long designator still never overlaps
+       anything -- it just truncates harder on a phone than it does on a
+       wide screen. */
+    .game-num { width:40px; }
   }
   .status-win { color:#1a7a4c; font-size:13px; }
   .status-loss { color:#a32d2d; font-size:13px; }
