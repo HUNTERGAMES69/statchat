@@ -81,6 +81,13 @@ function makeMockSupabase(db) {
         // Same lesson as delete() being a no-op: a mock that silently
         // ignores an operation cannot test it.
         if (table === 'game_rosters') arr.forEach(r => db.roster.push(r));
+        // players, for the same reason, added for the season-scoped
+        // roster feature: a season filter is worth nothing to test if
+        // the row it should or shouldn't match was never actually
+        // stored anywhere. Auto-generates an id, since every real
+        // insert here never supplies one -- Postgres would.
+        if (table === 'players') arr.forEach(r => db.players.push(
+          Object.assign({ id: 'p' + (db.players.length + 1) }, r)));
         return this;
       },
       update(fields) {
@@ -95,12 +102,22 @@ function makeMockSupabase(db) {
         }
         db.updated.push({ table, fields });
         Object.assign(db.gameFields, fields);
+        // Stored for then() to apply once .eq() has actually populated
+        // _filters -- update() runs before any .eq() in the chain does,
+        // so applying the change here would always match nothing.
+        this._updateFields = fields;
         return this;
       },
       // Records the intent only -- the row removal happens in then(),
       // once the .eq() filters have been collected.
       delete() { this._op = 'delete'; return this; },
       eq(col, val) { this._filters[col] = val; return this; },
+      // Generic query-builder method, missing entirely until now --
+      // needed by roster.html's "sever the link before deleting" safety
+      // step (.in('player_id', ids)), the first thing in this whole
+      // codebase to call it. Stored as a marked object so matches()
+      // below can tell an IN-filter apart from a plain equality one.
+      in(col, values) { this._filters[col] = { __in: values }; return this; },
       // Real PostgREST syntax: comma-separated col.op.value clauses,
       // OR'd together. Added specifically for the preseason-exclusion
       // filter (season_report.html, player_report.html), which needs
@@ -129,6 +146,30 @@ function makeMockSupabase(db) {
             ? db.existingPlays.concat(db.plays) : [];
           return Promise.resolve({ data: null, count: rows.length, error: null })
             .then(resolve, reject);
+        }
+        // players update/delete, actually performed -- same lesson as
+        // the plays delete a few lines below: a mock that silently
+        // ignores the operation cannot test it, and the whole point of
+        // testing this feature is to see whether a season filter
+        // actually narrows what a query returns.
+        if (table === 'players' && this._op === 'update') {
+          const f = this._filters || {};
+          const matches = (r) => Object.keys(f).every(k => String(r[k]) === String(f[k]));
+          const updated = [];
+          db.players.forEach(r => {
+            if (matches(r)) { Object.assign(r, this._updateFields); updated.push(r); }
+          });
+          return Promise.resolve({ data: updated, error: null }).then(resolve, reject);
+        }
+        if (table === 'players' && this._op === 'delete') {
+          const f = this._filters || {};
+          const matches = (r) => Object.keys(f).every(k => String(r[k]) === String(f[k]));
+          const removed = [];
+          for (let i = db.players.length - 1; i >= 0; i--) {
+            if (matches(db.players[i])) removed.unshift(db.players.splice(i, 1)[0]);
+          }
+          db.deleted.push({ table, filters: Object.assign({}, f), rows: removed });
+          return Promise.resolve({ data: removed, error: null }).then(resolve, reject);
         }
         // DELETE, actually performed.
         // ------------------------------------------------------------
@@ -208,6 +249,15 @@ function makeMockSupabase(db) {
             } else data = db.roster;
           }
           else if (table === 'teams') data = [db.branding];
+          else if (table === 'players') {
+            // Real filter evaluation, not a no-op -- see the players
+            // update/delete comment above for why. Every .eq() the app
+            // sends (team_id, season_year, id) has to actually narrow
+            // this, or the whole feature this exists to test cannot be
+            // told apart from doing nothing.
+            const f = this._filters || {};
+            data = db.players.filter(r => Object.keys(f).every(k => String(r[k]) === String(f[k])));
+          }
           else if (table === 'plays') {
             // The server holds what was preloaded PLUS anything inserted
             // during this session. Returning only the preloaded rows made
@@ -292,6 +342,15 @@ const DEFAULT_GAME = {
 };
 
 const DEFAULT_BRANDING = {
+  // id/name/current_season_year, added for roster.html and
+  // create_game.html's own "our team" fetches -- this is the same
+  // `teams` row those pages read, just with a different column list
+  // than whatever else already uses this object for colors/logo. Purely
+  // additive: nothing that only ever read the three fields below stops
+  // working.
+  id: 'test-team-1',
+  name: 'Neville',
+  current_season_year: 2026,
   primary_color: '#ffc72c',
   secondary_color: '#000000',
   logo_url: null
@@ -334,6 +393,12 @@ async function bootPage(file, opts = {}) {
     game: Object.assign({}, DEFAULT_GAME, opts.game || {}),
     branding: Object.assign({}, DEFAULT_BRANDING, opts.branding || {}),
     roster: opts.roster || defaultRoster(),
+    // The MASTER roster (roster.html, create_game.html's own fetch of
+    // it), separate from `roster` above -- which is game_rosters, a
+    // per-GAME snapshot. Added for the season-scoped roster feature:
+    // each row carries its own season_year, same shape the real table
+    // now does.
+    players: opts.players || [],
     existingPlays: opts.existingPlays || [],
     plays: [],
     // MULTIPLE GAMES, for season-report fuzzing specifically. Added 19
