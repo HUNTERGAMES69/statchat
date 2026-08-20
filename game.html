@@ -7522,21 +7522,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // above already does for its own sub-panel.
         document.getElementById('pp_fg_muff').style.display = e.target.checked ? 'block' : 'none';
         setKickResultLocked('pp_fgres', e.target.checked || isChecked('pp_fg_blocked_cb'));
-        // A muffed hold hands the ball over just like a miss, so the
-        // panel's spot field has to feed the save path. Ticking the
-        // toggle used to leave currentSpotGetter as whatever the field
-        // goal branch set at render, which was fine -- but prefilling
-        // the 20 here would be wrong, since no kick travelled downfield.
-        // No spot on a muffed hold: the play and the possession are dead
-        // where they stand, and field position gets established by the
-        // ensuing kick. Asking for a yard line here invents a decision
-        // the coach does not have to make.
-        const spotWrap = document.getElementById('pp_spot_wrap');
-        if (spotWrap) spotWrap.style.display = e.target.checked ? 'none' : 'block';
-        if (e.target.checked){
-          const yl = document.getElementById('pp_spot_yardline');
-          if (yl) yl.value = '';
-        }
+        // The paragraph that used to sit here ("No spot on a muffed
+        // hold...") hid pp_spot_wrap -- the field's OWN inner wrapper,
+        // separate from and nested inside pp_fg_spot_wrap, the outer one
+        // syncFgSpotVisibility already correctly shows -- whenever this
+        // toggle was checked. That was correct reasoning right up until
+        // the return/recovery feature above gave a muffed hold something
+        // to hand off at a real spot, same as a blocked kick already
+        // does; the hiding was never removed to match, so the outer box
+        // stayed visible while the field inside it -- the actual label,
+        // side buttons, and yard-line input -- was still hidden. Reported
+        // directly, with the working blocked case cited by name as the
+        // comparison: nothing was missing from the code, the one visible
+        // control was just sitting inside an invisible one. No longer
+        // touched here at all -- syncFgSpotVisibility is the only thing
+        // that should decide this field's visibility, exactly as it
+        // already is for the blocked branch, which never had a second,
+        // narrower hide layered on top of it.
         syncFgTdVisibility();
       });
       // SHARED TOUCHDOWN TOGGLE, visible for either Blocked or Muffed
