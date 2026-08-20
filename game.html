@@ -7299,8 +7299,40 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (type === 'punt'){
       const updatePuntTdVisibility = () => {
         const blocked = document.getElementById('pp_blocked').checked;
+        const muffed = document.getElementById('pp_muffed').checked;
         const ownRec = blocked && document.querySelector('input[name=pp_punt_blockrec]:checked').value === 'own';
-        document.getElementById('pp_punt_td_wrap').style.display = ownRec ? 'none' : 'block';
+        // MUFFED, kicking team recovers -- added 19 Aug 2026, reported
+        // directly. This function already correctly hid Touchdown for a
+        // blocked punt the kicking team recovered; the identical case for
+        // a MUFFED punt was simply never checked, so a coach who picked
+        // "recovered by the kicking team" under Muffed still saw the
+        // Touchdown toggle sitting there, answerable, for an outcome that
+        // never has one (the kicking team recovering their own ball has
+        // no flip and no return in this app's own model -- see
+        // muffSpotGetter's comment just above -- so there is nothing to
+        // return for a score).
+        const muffKickingRecovers = muffed &&
+          document.querySelector('input[name=pp_punt_muffrec]:checked').value === 'k';
+        const hideTd = ownRec || muffKickingRecovers;
+        document.getElementById('pp_punt_td_wrap').style.display = hideTd ? 'none' : 'block';
+        // Reset pp_td when it disappears, not just hide it -- otherwise a
+        // Touchdown checked before switching to a kicking-team recovery
+        // stays checked, hidden, and could still reach the submit code if
+        // the coach then switches to an outcome where it would apply. The
+        // exact stale-state shape found and fixed on the field goal panel
+        // earlier the same night, applied here before it was ever
+        // reported rather than after.
+        if (hideTd){
+          const cb = document.getElementById('pp_td');
+          const btn = document.getElementById('pp_td_toggle');
+          if (cb && cb.checked){
+            cb.checked = false;
+            if (btn){
+              btn.style.background = '#fff'; btn.style.color = '#555'; btn.style.borderColor = '#ccc';
+              btn.textContent = 'Touchdown';
+            }
+          }
+        }
       };
       // A muffed punt where the KICKING team recovers is the one punt
       // outcome that does not change possession, so it cannot be logged
@@ -8127,7 +8159,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (!sel.kicker) return;
       if (document.getElementById('pp_fg_muffhold').checked){
         // No kicker role: the attempt never happened, so nothing should
-        // reach his FG Att / FG Made line.
+        // reach his FG Att / FG Made line. roles stays at its outer
+        // default (null) for exactly that reason -- deliberately never
+        // assigned in this branch.
         //
         // RETURN/TD support added 19 Aug 2026, mirroring the blocked
         // branch just below it -- same sel.credit (the picker wiring
@@ -8142,36 +8176,44 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // the token outright, as this used to, shifts the yards into
         // the recovery-credit slot the moment nobody is named.
         const muffCreditTok = sel.credit || (muffRetyds ? '?' : '');
-        document.getElementById('code').value = sel.kicker + 'fg m' + (muffCreditTok ? ' ' + muffCreditTok : '') +
+        code = sel.kicker + 'fg m' + (muffCreditTok ? ' ' + muffCreditTok : '') +
           (muffRetyds ? ' ' + muffRetyds : '') + (td ? ' td' : '');
-        showConfirm();
-        // Deliberately no pending.reset: a muffed hold needs no takeover
-        // spot, so the early return past buildAndReview's assignment is
-        // exactly right here.
-        return;
-      }
-      const yds = yards('pp_yards') || '0';
-      const blocked = document.getElementById('pp_fg_blocked_cb').checked;
-      const res = blocked ? 'b' : document.querySelector('input[name=pp_fgres]:checked').value;
-      if (res === 'b'){
-        const retyds = yards('pp_blockretyds');
-        // '?' sent as the credit token whenever return yards are given
-        // without a name -- reported directly, 19 Aug 2026, from a real
-        // game: omitting the credit token outright when empty (the
-        // previous behaviour here) shifted the return yards into the
-        // recovery-credit slot the moment a coach entered yardage
-        // without naming who recovered it, which is a completely normal
-        // thing to do -- a coach sees the return, not always the jersey
-        // number. Found while building the identical field for the
-        // muffed-hold branch above and testing this one directly rather
-        // than trusting that it already worked.
-        const blockCreditTok = sel.credit || (retyds ? '?' : '');
-        code = sel.kicker + 'fg b' + (blockCreditTok ? ' ' + blockCreditTok : '') + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
+        // NO early return, unlike PAT's own muffed-hold branch just
+        // below (which is correct to skip the tail: a try always ends in
+        // a kickoff, never a drive starting at a spot, so it genuinely
+        // has nothing for pending.reset to hold). A field goal's muffed
+        // hold is different -- when nobody scores, the defense still
+        // takes over at a real field position, exactly like a missed or
+        // blocked kick does, and pp_fg_spot_wrap is already shown for
+        // it. Returning early here skipped the shared tail below that
+        // reads currentSpotGetter() into pending.reset, so the spot
+        // field was visible, accepted a value, and that value was then
+        // silently discarded -- reported directly, with the missed/
+        // blocked case cited by name as the working comparison.
       } else {
-        code = sel.kicker + 'fg ' + yds + ' ' + res;
+        const yds = yards('pp_yards') || '0';
+        const blocked = document.getElementById('pp_fg_blocked_cb').checked;
+        const res = blocked ? 'b' : document.querySelector('input[name=pp_fgres]:checked').value;
+        if (res === 'b'){
+          const retyds = yards('pp_blockretyds');
+          // '?' sent as the credit token whenever return yards are given
+          // without a name -- reported directly, 19 Aug 2026, from a real
+          // game: omitting the credit token outright when empty (the
+          // previous behaviour here) shifted the return yards into the
+          // recovery-credit slot the moment a coach entered yardage
+          // without naming who recovered it, which is a completely normal
+          // thing to do -- a coach sees the return, not always the jersey
+          // number. Found while building the identical field for the
+          // muffed-hold branch above and testing this one directly rather
+          // than trusting that it already worked.
+          const blockCreditTok = sel.credit || (retyds ? '?' : '');
+          code = sel.kicker + 'fg b' + (blockCreditTok ? ' ' + blockCreditTok : '') + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
+        } else {
+          code = sel.kicker + 'fg ' + yds + ' ' + res;
+        }
+        roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0, result: res } };
+        if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       }
-      roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0, result: res } };
-      if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
     } else if (type === 'pat'){
       if (!sel.kicker) return;
       if (document.getElementById('pp_pat_muffhold').checked){
