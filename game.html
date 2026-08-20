@@ -1744,13 +1744,49 @@ function parseInput(raw, state){
       // missed field goal and not a blocked one -- charging the kicker
       // with an attempt he never got to make would misstate his season.
       // No kicker role is attached at all, so nothing reaches his line.
-      return { text: TEAMS[off].name + ' — muffed hold, no kick attempted',
-        effect: {}, flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
+      //
+      // RETURN/TD support added 19 Aug 2026, mirroring the 'b' (blocked)
+      // branch just below -- a muffed snap or hold is a live ball on the
+      // ground exactly like a blocked kick is, and the defense picking
+      // it up and running it back is a real, reportable outcome. Reported
+      // directly: the blocked branch already had this, the muffed one
+      // never did.
+      //
+      // rec checked against '?' explicitly, not just truthiness -- found
+      // while building this, and it was ALREADY live in the blocked
+      // branch below: the submit code omits the credit token entirely
+      // when no recoverer was named, which shifts return yards into
+      // rec's own position the moment yards are given without a name.
+      // The kickoff-muffed branch ('km') had already solved exactly this
+      // by always sending a token, '?' meaning unnamed, so positions
+      // never move regardless of which optional field is filled in --
+      // read that before writing this rather than re-deriving it.
+      const rec = rest[1], retyds = rest[2];
+      const named = rec && rec !== '?';
+      let t = TEAMS[off].name + ' — muffed hold, no kick attempted';
+      if (named) t += ', recovered by ' + D(rec);
+      if (retyds) t += ', returned ' + retyds;
+      let score = null;
+      if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
+      // team: td ? def : off, matching the 'b' branch exactly -- whoever
+      // recovered gets the play; the kicking team keeps it (as it always
+      // has) unless the return actually scored.
+      return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter };
     }
     if (rest[0] === 'b' || rest[0] === 'B'){
+      // rec checked against '?' explicitly -- see the muffed-hold branch
+      // above for the full reasoning. Fixed here alongside it, the same
+      // night: this exact positional shift was ALREADY live whenever a
+      // block was returned for yards with nobody named, and was only
+      // found by testing that specific combination against THIS branch
+      // directly, not by reading the code -- it read as correct either
+      // way, because "if (rec)" is a perfectly reasonable-looking guard
+      // that happens to be silently wrong once the token it guards can
+      // be missing from the middle of the string rather than the end.
       const rec = rest[1], retyds = rest[2];
+      const named = rec && rec !== '?';
       let t = ST(p1) + ' field goal BLOCKED';
-      if (rec) t += ', recovered by ' + D(rec);
+      if (named) t += ', recovered by ' + D(rec);
       if (retyds) t += ', returned ' + retyds;
       let score = null;
       if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
@@ -5868,14 +5904,39 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_fgtee_readout" style="font-size:14px; font-weight:600; color:#1a4d2e; ' +
             'background:#eef6f1; border-left:3px solid #1a7a4c; border-radius:4px; ' +
             'padding:7px 10px; margin-top:10px;"></div>' +
+        '</div></div>' +
+        // BLOCKED / MUFFED HOLD / FAKE, one row, equal widths. Reported
+        // directly, 19 Aug 2026: these three used to sit inside the same
+        // flex row as Distance and the tee calculator, which is wide
+        // enough that Blocked fit on the first line while Muffed hold and
+        // Fake wrapped to a second, awkward one. Same pattern as the
+        // kickoff panel's own outcome row (Touchback/Muffed/Onside/OOB) --
+        // a dedicated row, nowrap, each button sharing the space equally.
+        '<div style="display:flex; gap:8px; flex-wrap:nowrap; margin-bottom:6px;">' +
+          ['pp_fg_blocked_cb|Blocked', 'pp_fg_muffhold|Muffed hold', 'pp_fg_fake|Fake']
+            .map(spec => {
+              const [id, label] = spec.split('|');
+              return '<div style="flex:1 1 0; min-width:0;">' + blockedToggleHtml(id, label) + '</div>';
+            }).join('') +
         '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_blocked_cb') + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_muffhold', 'Muffed hold') + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_fg_fake', 'Fake') + '</div></div>' +
         fakeBlockHtml('pp_fgfake', 'field goal') +
         '<div id="pp_fgres_wrap" style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="g" checked> Good</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="x"> Missed</label></div>' +
-        '<div id="pp_fg_blocked" style="display:none;">' + defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + tdBlock + '</div>' +
+        '<div id="pp_fg_blocked" style="display:none;">' + defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + '</div>' +
+        // MUFFED HOLD RECOVERY, added 19 Aug 2026 alongside the parseInput
+        // change above -- same shape as the blocked sub-panel just above
+        // (a live ball, a defense-side recovery credit, optional return
+        // yards), with its own suffixed credit fields (_fgmuff) so the
+        // two panels' pickers never collide if both happened to render at
+        // once mid-toggle.
+        '<div id="pp_fg_muff" style="display:none;">' + defBlock('Recovered by', '_fgmuff') + yardsBlock('Return yards (optional)', 'pp_fgmuffretyds') + '</div>' +
+        // SHARED touchdown toggle for whichever of the two is active --
+        // Blocked and Muffed hold are mutually exclusive (see clearOther
+        // below), so one toggle answers the same question for either,
+        // matching how the kickoff panel shares a single Touchdown
+        // question across its several outcome branches rather than
+        // giving each its own copy.
+        '<div id="pp_fg_td_wrap" style="display:none;">' + tdBlock + '</div>' +
         // A missed or blocked field goal hands the ball over, and without
         // a spot the drive has no field position -- which then refuses
         // every following scrimmage play. Punts, kickoffs, interceptions
@@ -6714,7 +6775,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
     }
 
-    ['', '_pb', '_fgb', '_2ptRush', '_2ptPass', '_rushfum', '_passfum', '_sackfum'].forEach(suffix => {
+    ['', '_pb', '_fgb', '_fgmuff', '_2ptRush', '_2ptPass', '_rushfum', '_passfum', '_sackfum'].forEach(suffix => {
       const creditGrid = document.getElementById('pp_credit_grid' + suffix);
       if (creditGrid) wirePickerButtons(panel, 'pp_credit_pick' + suffix, 'pp_credit_manual' + suffix, (num, resolvedName, unit) => {
         // Writing a resolved ambiguous name back has to target the roster
@@ -7401,12 +7462,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('pp_fg_blocked').style.display = e.target.checked ? 'block' : 'none';
         setKickResultLocked('pp_fgres', e.target.checked || isChecked('pp_fg_muffhold'));
         if (e.target.checked) prefillMissedFgSpot();
+        syncFgTdVisibility();
       });
       // A muffed hold is neither good nor missed -- no kick happened --
       // so the result pair is locked out entirely, and Blocked cannot be
       // true at the same time.
       document.getElementById('pp_fg_muffhold').addEventListener('change', (e) => {
         if (e.target.checked) clearOther('pp_fg_blocked_cb');
+        // MUFFED HOLD RECOVERY sub-panel, added 19 Aug 2026 alongside the
+        // parseInput change of the same name -- the muffed-hold branch
+        // gains the same return/recovery/TD capability the blocked branch
+        // already had, so it needs the same show/hide the blocked toggle
+        // above already does for its own sub-panel.
+        document.getElementById('pp_fg_muff').style.display = e.target.checked ? 'block' : 'none';
         setKickResultLocked('pp_fgres', e.target.checked || isChecked('pp_fg_blocked_cb'));
         // A muffed hold hands the ball over just like a miss, so the
         // panel's spot field has to feed the save path. Ticking the
@@ -7423,7 +7491,39 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const yl = document.getElementById('pp_spot_yardline');
           if (yl) yl.value = '';
         }
+        syncFgTdVisibility();
       });
+      // SHARED TOUCHDOWN TOGGLE, visible for either Blocked or Muffed
+      // hold, added 19 Aug 2026 when the touchdown toggle moved out of
+      // the blocked-only sub-panel to be shared with the new muffed-hold
+      // one. Explicitly UNCHECKS pp_td when hiding it -- clearOther (used
+      // above to keep Blocked/Muffed hold mutually exclusive) only ever
+      // clears the OTHER outcome toggle, never this shared one, so
+      // without this a coach who checked Touchdown, then unticked both
+      // outcomes to submit an ordinary good/missed kick instead, would
+      // have silently carried a stale, hidden "touchdown" into that
+      // submission. Left CHECKED when switching between Blocked and
+      // Muffed hold themselves: the underlying question ("did this end
+      // in a touchdown") is the same one either way, and a coach who
+      // already answered it should not have to answer it twice just for
+      // picking the other outcome by mistake first.
+      function syncFgTdVisibility(){
+        const wrap = document.getElementById('pp_fg_td_wrap');
+        if (!wrap) return;
+        const show = isChecked('pp_fg_blocked_cb') || isChecked('pp_fg_muffhold');
+        wrap.style.display = show ? 'block' : 'none';
+        if (!show){
+          const cb = document.getElementById('pp_td');
+          const btn = document.getElementById('pp_td_toggle');
+          if (cb && cb.checked){
+            cb.checked = false;
+            if (btn){
+              btn.style.background = '#fff'; btn.style.color = '#555'; btn.style.borderColor = '#ccc';
+              btn.textContent = 'Touchdown';
+            }
+          }
+        }
+      }
       // NFHS: a missed field goal that reaches the end zone is a
       // touchback, so the defense takes over at its own 20 -- which is
       // where most misses end up. Pre-filled rather than forced: a short
@@ -7460,6 +7560,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (el) el.addEventListener('change', syncFgSpotVisibility);
       });
       syncFgSpotVisibility();
+      syncFgTdVisibility();
 
       // THE TEE CALCULATOR. Distance = where the tee is, plus ten.
       (function wireFgTee(){
@@ -8027,7 +8128,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (document.getElementById('pp_fg_muffhold').checked){
         // No kicker role: the attempt never happened, so nothing should
         // reach his FG Att / FG Made line.
-        document.getElementById('code').value = sel.kicker + 'fg m';
+        //
+        // RETURN/TD support added 19 Aug 2026, mirroring the blocked
+        // branch just below it -- same sel.credit (the picker wiring
+        // above now covers the _fgmuff suffix too, so whichever of the
+        // two sub-panels the coach actually used populates the same
+        // shared variable), same dedicated return-yards field, same
+        // shared pp_td.
+        const muffRetyds = yards('pp_fgmuffretyds');
+        // '?' sent as the credit token whenever return yards are given
+        // without a name -- see parseInput's 'fg' branch (and the
+        // matching fix on the blocked case just below) for why: omitting
+        // the token outright, as this used to, shifts the yards into
+        // the recovery-credit slot the moment nobody is named.
+        const muffCreditTok = sel.credit || (muffRetyds ? '?' : '');
+        document.getElementById('code').value = sel.kicker + 'fg m' + (muffCreditTok ? ' ' + muffCreditTok : '') +
+          (muffRetyds ? ' ' + muffRetyds : '') + (td ? ' td' : '');
         showConfirm();
         // Deliberately no pending.reset: a muffed hold needs no takeover
         // spot, so the early return past buildAndReview's assignment is
@@ -8039,7 +8155,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const res = blocked ? 'b' : document.querySelector('input[name=pp_fgres]:checked').value;
       if (res === 'b'){
         const retyds = yards('pp_blockretyds');
-        code = sel.kicker + 'fg b' + (sel.credit ? ' ' + sel.credit : '') + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
+        // '?' sent as the credit token whenever return yards are given
+        // without a name -- reported directly, 19 Aug 2026, from a real
+        // game: omitting the credit token outright when empty (the
+        // previous behaviour here) shifted the return yards into the
+        // recovery-credit slot the moment a coach entered yardage
+        // without naming who recovered it, which is a completely normal
+        // thing to do -- a coach sees the return, not always the jersey
+        // number. Found while building the identical field for the
+        // muffed-hold branch above and testing this one directly rather
+        // than trusting that it already worked.
+        const blockCreditTok = sel.credit || (retyds ? '?' : '');
+        code = sel.kicker + 'fg b' + (blockCreditTok ? ' ' + blockCreditTok : '') + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
       } else {
         code = sel.kicker + 'fg ' + yds + ' ' + res;
       }
