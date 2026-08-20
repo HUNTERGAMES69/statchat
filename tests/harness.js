@@ -101,6 +101,15 @@ function makeMockSupabase(db) {
       // once the .eq() filters have been collected.
       delete() { this._op = 'delete'; return this; },
       eq(col, val) { this._filters[col] = val; return this; },
+      // Real PostgREST syntax: comma-separated col.op.value clauses,
+      // OR'd together. Added specifically for the preseason-exclusion
+      // filter (season_report.html, player_report.html), which needs
+      // "is_preseason is null OR is_preseason = false" -- a plain .eq()
+      // cannot express that, since SQL's NULL = false is itself NULL,
+      // not true, and would wrongly exclude every game saved before the
+      // column existed. Nothing calls .or() before this, so adding it
+      // cannot change any existing test's behaviour.
+      or(filterStr) { this._orFilter = filterStr; return this; },
       order() { return this; },
       limit() { return this; },
       then(resolve, reject) {
@@ -168,7 +177,29 @@ function makeMockSupabase(db) {
           // "is this hidden from a view account?" was silently always
           // asking about an admin, and passed regardless.
           if (table === 'profiles') data = [{ role: db.role, id: 'test-user-id' }];
-          else if (table === 'games') data = db.games ? db.games.map(g => g.game) : [db.game];
+          else if (table === 'games') {
+            data = db.games ? db.games.map(g => g.game) : [db.game];
+            // Real OR-filter evaluation, not a no-op -- see .or() above
+            // for why this exists. Parses "col.op.val,col.op.val", ORs
+            // the clauses together, and keeps only rows matching at
+            // least one. Only the two operators the app actually sends
+            // are implemented (is.null and eq.<bool>); anything else
+            // would throw rather than silently pass everything through,
+            // since a filter that quietly does nothing is worse than no
+            // filter at all -- exactly the reasoning already written
+            // above for the explicit column list.
+            if (this._orFilter) {
+              const conditions = this._orFilter.split(',').map(c => {
+                const [col, op, val] = c.split('.');
+                return { col, op, val };
+              });
+              data = data.filter(row => conditions.some(({ col, op, val }) => {
+                if (op === 'is' && val === 'null') return row[col] === null || row[col] === undefined;
+                if (op === 'eq' && (val === 'true' || val === 'false')) return row[col] === (val === 'true');
+                throw new Error('mock .or() does not implement "' + col + '.' + op + '.' + val + '" -- add it rather than silently passing everything through');
+              }));
+            }
+          }
           else if (table === 'game_rosters') {
             if (db.games) {
               const gid = this._filters.game_id;
