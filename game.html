@@ -8512,8 +8512,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       })();
       const followsTouchdown = !!(prevReal && prevReal.effect && prevReal.effect.score &&
                                   prevReal.effect.score.points === 6);
+      // isTry, widened 20 Aug 2026, reported directly: this only matched
+      // a SUCCESSFUL try (score of 1 or 2), so a missed, blocked, or
+      // turned-over one still fell through to needsClock's general case
+      // below and prompted for a clock anyway. A try's own clock
+      // relevance is already covered on the touchdown before it and the
+      // kickoff after it -- the try itself is an administrative down
+      // between two clock-stopped moments, and that is just as true
+      // whether the kick was good or not. Checked directly against a
+      // good PAT, a missed PAT, a blocked PAT, a no-good 2-point try, and
+      // a fumbled/turned-over 2-point try: all five carry
+      // effect.endsDrive with no flip and no newPossession, so that
+      // shape alone -- not the score -- is what actually identifies a
+      // try. The exclusions guard the one thing followsTouchdown does
+      // not: a play that is not a try at all but still happens to end a
+      // drive right after a touchdown, which would need its clock
+      // exactly as normal.
       const isTry = followsTouchdown && !!(pending.effect && pending.effect.endsDrive &&
-        pending.effect.score && (pending.effect.score.points === 1 || pending.effect.score.points === 2));
+        !pending.effect.flip && !pending.effect.newPossession);
       const isTouchdown = !!(pending.effect && pending.effect.score &&
                              pending.effect.score.points === 6);
       // NOT IN OVERTIME. There is no game clock to read: each side is
