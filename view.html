@@ -266,6 +266,14 @@
   let currentGameStatus = null;
   let TEAMS = { teamA: {}, teamB: {} };
   let plays = [], startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
+  // GAME PHASE, module-level rather than local to renderAll(). Added 19
+  // Aug 2026 for the box score's leader highlight, which has to read the
+  // current phase from renderBoxScore() too -- and renderBoxScore() is
+  // ALSO called directly from the resize and load listeners below,
+  // outside renderAll() entirely, where a value only ever assigned
+  // inside renderAll() would not exist. Set fresh every time renderAll()
+  // computes it; read from wherever needs the current one.
+  let phase = null;
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION'){
@@ -458,6 +466,19 @@ function extractNameTag(rawName){
   function renderTeamBoxScore(teamKey, box){
       const team = TEAMS[teamKey];
       const s = box[teamKey];
+      // LEADER HIGHLIGHT, added 19 Aug 2026 -- only at halftime or final,
+      // never during live play. An earlier version of this exact idea
+      // was built and then deliberately removed from these tables: with
+      // the rows already sorted leader-first, a highlight during live
+      // play said nothing the order did not already say, and read as if
+      // it might mean something else on a panel that changes every
+      // snap. Neither objection holds at a fixed summary moment -- the
+      // leader is not about to change, and calling it out reads as a
+      // headline, not a live signal. Reported directly, scoped to
+      // exactly these two phases; see the module-level `phase` variable
+      // above for why it is not local to renderAll().
+      const highlightLeader = phase === 'HALFTIME' || phase === 'FINAL';
+      const leaderTint = highlightLeader && team && team.bg ? mixHex(team.bg, '#ffffff', 0.88) : null;
       // Built into named holders rather than appended straight to the
       // columns, because the display order is not the order the sections
       // are computed in -- rushing is calculated before receiving but
@@ -555,14 +576,27 @@ function extractNameTag(rawName){
         const n = parseFloat(t);
         return isNaN(n) ? true : n !== 0;
       });
-      const table = (headers, rows) => {
+      const table = (headers, rows, applyLeaderHighlight) => {
         let h = '<table class="player-stat-table"><tr><th></th>' + headers.map(x => '<th>' + x + '</th>').join('') + '</tr>';
+        let highlighted = false;
         rows.forEach(r => {
-          // No leader highlight. The rows are already sorted with the
-          // leader first, so the colour was saying something the order
-          // already said -- and a tinted row on a panel that is also
-          // colour-coded by team read as if it meant something else.
-          h += '<tr><td>' + r.name + '</td>' + r.values.map(v => '<td>' + v + '</td>').join('') + '</tr>';
+          // Leader highlight, scoped narrowly -- see the note by
+          // leaderTint's own declaration above for the full history and
+          // reasoning. Three separate gates, all required: leaderTint
+          // itself is only non-null at halftime or final; applyLeaderHighlight
+          // is only passed true for Passing/Rushing/Receiving, never
+          // special teams (not asked for there); and only the FIRST
+          // qualifying row, since rows are already sorted leader-first
+          // and only one leader is being called out per category. TEAM
+          // and Unknown are bookkeeping, not a player -- excluded even
+          // though sortByYds already pins them last, since an category
+          // with no individually-credited stat at all would otherwise
+          // highlight a bucket rather than a person.
+          const shouldHighlight = applyLeaderHighlight && leaderTint && !highlighted &&
+            r.name !== 'TEAM' && r.name !== 'Unknown';
+          if (shouldHighlight) highlighted = true;
+          const style = shouldHighlight ? ' style="background:' + leaderTint + ';"' : '';
+          h += '<tr' + style + '><td>' + r.name + '</td>' + r.values.map(v => '<td>' + v + '</td>').join('') + '</tr>';
         });
         return h + '</table>';
       };
@@ -577,7 +611,7 @@ function extractNameTag(rawName){
           const d = s.passing[n];
           const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
           return { name: n, values: [d.comp||0, d.att||0, compPct, d.yds||0, d.td||0, d.intThrown||0, d.sacked||0] };
-        }).filter(rowHasValue)), sumBucket(s.passing, 'yds'));
+        }).filter(rowHasValue), true), sumBucket(s.passing, 'yds'));
       }
       const rushSorted = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
       const rushNums = capWithTdException(rushSorted, s.rushing, 'td');
@@ -585,7 +619,7 @@ function extractNameTag(rawName){
         rushHtml += tile('Rushing', table(['Att','Yds','TD'], rushNums.map((n, i) => {
           const d = s.rushing[n];
           return { name: n, values: [d.att||0, d.yds||0, d.td||0] };
-        }).filter(rowHasValue)), sumBucket(s.rushing, 'yds'));
+        }).filter(rowHasValue), true), sumBucket(s.rushing, 'yds'));
       }
       // A target alone does not earn a row on the live view. Adding targets
       // meant anyone thrown at once appeared with 0 catches and 0 yards,
@@ -602,7 +636,7 @@ function extractNameTag(rawName){
         recHtml += tile('Receiving', table(['Rec','Tgt','Yds','TD'], recNums.map((n, i) => {
           const d = s.receiving[n];
           return { name: n, values: [d.rec||0, d.tgt||0, d.yds||0, d.td||0] };
-        }).filter(rowHasValue)), sumBucket(s.receiving, 'yds'));
+        }).filter(rowHasValue), true), sumBucket(s.receiving, 'yds'));
       }
       // kickoffs belongs in this gate too -- without it a pure kickoff
       // specialist never entered the loop at all, so the kickoff table
@@ -827,7 +861,10 @@ function extractNameTag(rawName){
     // back to halftime -- the two pages disagreeing about the same log.
     const secondHalfStarted = halftimeIdx !== -1 &&
       plays.some((p, i) => i > halftimeIdx && !isAdminMarker(p));
-    const phase =
+    // MODULE-LEVEL phase, not const -- see its declaration above for why:
+    // renderBoxScore() needs the current value too, and is also called
+    // directly from resize/load, outside this function.
+    phase =
       currentGameStatus === 'final' || plays.some(p => isDiv(p, 'Final')) ? 'FINAL'
       : (halftimeIdx !== -1 && !secondHalfStarted) ? 'HALFTIME'
       : !plays.some(p => p.roles || (p.effect && p.effect.isStat)) ? 'NOT STARTED'
