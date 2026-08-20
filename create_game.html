@@ -632,9 +632,47 @@
         img.src = eg.opponent_logo_url;
         img.style.display = 'inline-block';
       }
-      const { data: existingOppRoster } = await supabaseClient
-        .from('game_rosters').select('id').eq('game_id', editGameId).eq('team_side', 'teamB');
-      const oppCount = existingOppRoster ? existingOppRoster.length : 0;
+      // Reported directly, with a screenshot: every seeded opponent
+      // starter came back "not on the roster loaded here" on revisiting
+      // an existing game, even though the roster was genuinely still
+      // saved -- "Currently saved: 5 opponent player(s)" said so on the
+      // very same screen. It did not happen for OUR OWN team, and the
+      // reason is the asymmetry between the two sides, not a bug
+      // specific to starters: our roster is reloaded fresh from the
+      // players table every time this page opens (that table exists
+      // independently of any one game), so oppResolved's counterpart
+      // ALWAYS gets rebuilt with real data. The opponent roster has no
+      // such table -- game_rosters IS the only record of it -- and the
+      // block that used to sit here only ever fetched a COUNT (`select
+      // id`) to print "Currently saved: N", never the actual jersey
+      // numbers and names oppResolved needs. So it stayed at its
+      // initial {}, and candidatesForNumber('opp', ...) found nothing
+      // for every number, for every game, the moment this page was
+      // reopened without a fresh upload.
+      //
+      // Fixed the same way "our" team already handles its OWN saved
+      // conflict choices a few lines below: read the full saved rows,
+      // and feed them through resolveByNumber with explicitUnit set to
+      // whatever was actually saved, so nothing has to guess a unit
+      // from a position that may never have existed. Deliberately does
+      // NOT set oppRosterTouched -- this is a reload for display and
+      // starter-matching, not an edit, and the save-time logic further
+      // down leaves an untouched opponent roster alone on purpose.
+      const { data: savedOppRows } = await supabaseClient
+        .from('game_rosters').select('jersey_number, unit, player_id, player_name, position')
+        .eq('game_id', editGameId).eq('team_side', 'teamB');
+      const oppCount = savedOppRows ? savedOppRows.length : 0;
+      if (oppCount > 0){
+        const oppEntries = savedOppRows.map(row => ({
+          number: row.jersey_number, name: row.player_name, position: row.position,
+          explicitUnit: row.unit, playerId: row.player_id
+        }));
+        const { resolved, conflicts, needsAssignment } = resolveByNumber(oppEntries);
+        oppResolved = resolved;
+        oppConflictsList = conflicts;
+        renderAssignmentUI('opponentAssignments', 'opp', needsAssignment, oppResolved);
+        renderConflictUI('opponentConflicts', 'opp', conflicts, oppResolved);
+      }
       document.getElementById('currentOppRosterNote').innerHTML =
         '<div class="roster-summary" style="color:#888;">' +
         (oppCount > 0 ? 'Currently saved: ' + oppCount + ' opponent player(s). Upload a new file below only if you need to replace it.' : 'No opponent roster currently saved for this game.') +
