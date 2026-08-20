@@ -726,6 +726,64 @@ Everything `view.html` computes:
 
 ---
 
+## 8g. Roster import: a seeded starter with no recognized position reports "not on the roster" until the coach resolves the unit — NOTED 20 Aug 2026, BEFORE THE SEASON TIMELINE
+
+Reported directly by Andy, from real use with the Sterlington roster
+(94 players, no position column at all — an entirely normal shape for
+an opponent roster typed up by hand or exported from a program that
+never asked for one).
+
+**The exact symptom:** import a roster with no positions, seed a
+likely starter by jersey number, and `renderStarterResolve` reports
+"not on the roster loaded here" for every one of them — even though
+the roster import itself reported success and the player is genuinely
+there. Assign that same player to Offense or Defense through the
+"needs assignment" prompt this same roster import already shows, and
+the identical seed immediately resolves correctly, by name.
+
+**Root cause, confirmed directly against `resolveByNumber` and
+`candidatesForNumber` rather than guessed at.** A player with no
+recognizable position goes into `unknown`, not into any of the three
+`offense`/`defense`/`special` buckets — so `resolved[num]` ends up as
+`{offense: [], defense: [], special: []}`, all three genuinely empty,
+until the coach picks one via the needs-assignment radios. Until then,
+`candidatesForNumber` finds nothing in any of the three buckets and
+correctly reports zero candidates — "not on the roster" is not wrong,
+it is describing the true state: this number has not been filed under
+any unit yet, so there is nothing for a starter slot to point at.
+
+**Not itself a bug in the sense of wrong data** — nothing is lost, and
+resolving the unit assignment fixes it completely and immediately, as
+Andy found. The real gap is sequencing and visibility: a coach who
+seeds starters first and resolves units second (a natural order — name
+your six starters, THEN clean up the rest of the list) sees a wall of
+"not on the roster" messages that look like a failed import, when the
+actual fix is a few unrelated radio buttons further down the same
+page. Nothing on screen currently connects the two.
+
+- [ ] **Decide the fix before relying on this for a real opponent
+  roster.** Candidates, cheapest first:
+  - A line under any "not on the roster" seed message specifically
+    when that number IS present in `needsAssignment`: "#7 needs a
+    unit assigned below before it can be seeded — see 'players with a
+    position we didn't recognize.'" Distinguishes "this number
+    genuinely is not on the roster" from "this number is on the
+    roster but not filed under a unit yet," which read identically
+    today and mean very different things.
+  - Re-render `renderStarterResolve` automatically the moment a
+    needs-assignment radio is picked, rather than only on the next
+    full re-render — so resolving units and seeding starters can
+    happen in either order without a stale message sitting on screen.
+  - Reorder the page so needs-assignment resolution sits ABOVE the
+    starter-seeding fields, encouraging the sequence that already
+    works, rather than relying on the coach discovering it.
+- [ ] **Cheap, immediate mitigation if this comes up again before a
+  decision is made:** resolve every needs-assignment player's unit
+  FIRST, then seed starters. The seeding fields do not need to be
+  touched again once that is done.
+
+---
+
 ## 9. ROAD TO FIRST REAL GAME — agreed Aug 10, 2026
 
 **First real game: ~Aug 24, 2026.** Andy's three criteria, in his words:
