@@ -702,8 +702,29 @@
       document.getElementById('designator').value = 'G' + nextNum;
     }
 
+    // season_year IS REQUIRED HERE. Without it, this resolves against
+    // EVERY season this team has ever had at once -- last year's
+    // roster and this year's mixed into one picker, with no way to
+    // tell which number means which person anymore.
+    //
+    // Reads the season year THIS GAME is actually set to, not
+    // whatever the team's own "current" pointer happens to say right
+    // now -- the two normally agree, but not necessarily: reopening an
+    // OLD game to fix an unrelated field must resolve against THAT
+    // game's own, historical roster, never against whatever roster is
+    // active today. This field is already populated by this point,
+    // either from the existing game's own season_year (edit) or the
+    // team's current_season_year (new game) a few lines up.
+    //
+    // The fallback matches roster.html's own, for the one team that
+    // has genuinely never set a season year at all -- parseInt of an
+    // empty string is NaN, and filtering by NaN would return zero
+    // players rather than the whole roster, reading as an empty
+    // roster rather than an unconfigured one.
+    const gameSeasonYear = parseInt(document.getElementById('seasonYear').value, 10) || new Date().getFullYear();
     const { data: players, error: playersError } = await supabaseClient
-      .from('players').select('name, primary_position, default_jersey_number, id').eq('team_id', ourTeamId);
+      .from('players').select('name, primary_position, default_jersey_number, id')
+      .eq('team_id', ourTeamId).eq('season_year', gameSeasonYear);
     if (playersError){
       showView('mainView');
       showMsg('setupMsg', 'Could not load your roster: ' + playersError.message, 'error');

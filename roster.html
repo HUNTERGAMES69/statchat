@@ -82,16 +82,25 @@
       </div>
       <p class="sub">This roster is used every week — no need to re-upload it per game.</p>
       <div id="rosterMsg"></div>
-      <div style="margin-bottom:16px;">
+
+      <div style="margin-bottom:16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <label for="rosterSeasonPicker" style="margin:0; display:inline; font-size:13px;">Season</label>
+        <select id="rosterSeasonPicker" style="width:auto; min-width:100px;"></select>
+      </div>
+      <div id="rosterReadOnlyBanner" class="hidden" style="background:#eef1f4; border:1px solid #cfd6dc; border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:13px; color:#4a5563;">
+        <strong>Read-only.</strong> Past seasons are kept exactly as they were, for reference — nothing here can be added, edited, or removed. Switch to the current season above to make changes.
+      </div>
+
+      <div id="rosterEditingControls" style="margin-bottom:16px;">
         <button id="uploadRosterBtn" class="secondary">Upload roster spreadsheet (.xlsx)</button>
         <input type="file" id="rosterFile" accept=".xlsx,.xls" style="display:none;">
-        <button id="clearRosterBtn" class="danger" style="margin-left:8px;">Clear roster for new season</button>
+        <button id="clearRosterBtn" class="danger" style="margin-left:8px;">Clear this season's roster</button>
       </div>
 
       <div id="clearRosterPanel" class="hidden" style="border:1px solid #f0d0a0; background:#fffaf0; border-radius:10px; padding:16px; margin-bottom:16px;">
-        <p style="font-weight:700; margin:0 0 8px;">Clear the roster for a new season</p>
-        <p class="sub" style="margin:0 0 8px;">Removes <strong id="clearRosterCount">every player</strong> from this roster so you can upload next year's squad. Uploading normally MERGES into what is already here, which is right during a season and wrong at the start of one &mdash; last year's seniors would sit in the pickers all autumn.</p>
-        <p class="sub" style="margin:0 0 8px;"><strong>Past seasons are not affected.</strong> Every finished game keeps its own roster snapshot, taken when the game was created, and all stats are calculated from the plays themselves. Old recaps, stat packages and season reports read exactly the same afterwards.</p>
+        <p style="font-weight:700; margin:0 0 8px;">Clear this season's roster</p>
+        <p class="sub" style="margin:0 0 8px;">Removes <strong id="clearRosterCount">every player</strong> from the currently selected season. Uploading normally MERGES into what is already here, which is right during a season and wrong when you want a clean start &mdash; use this to wipe a wrong upload and try again.</p>
+        <p class="sub" style="margin:0 0 8px;"><strong>Other seasons are never affected</strong> by this, or by anything else on this page &mdash; each season's roster is its own, separate list. Every finished game also keeps its own roster snapshot, taken when the game was created, and all stats are calculated from the plays themselves. Old recaps, stat packages and season reports read exactly the same afterwards.</p>
         <p class="sub" style="margin:0 0 10px;">Type <strong>CLEAR</strong> to confirm.</p>
         <input type="text" id="clearRosterInput" placeholder="CLEAR" style="width:140px;">
         <div class="row" style="margin-top:10px;">
@@ -101,7 +110,7 @@
       </div>
       <div id="uploadPreview" class="hidden" style="background:#f7f6f2; border-radius:8px; padding:14px; margin-bottom:16px;"></div>
       <div class="rosterList" id="rosterBody"></div>
-      <div class="add-row">
+      <div class="add-row" id="rosterAddRow">
         <div><label>#</label><input type="text" id="newNumber" style="width:100%;"></div>
         <div style="flex:2;"><label>Name</label><input type="text" id="newName" style="width:100%;"></div>
         <div><label>Position</label>
@@ -160,6 +169,17 @@
   }
 
   let ourTeamId = null;
+  // The season this roster page is actively working with -- the value
+  // new uploads and manual adds get tagged with, and the one WITHOUT
+  // which the "current" comparison below has nothing to compare
+  // against. Distinct from viewingSeasonYear: a coach can look at a
+  // past season's roster (read-only) while this stays pointed at the
+  // real, active one throughout.
+  let currentSeasonYear = null;
+  // Whichever season the picker is showing right now. Starts equal to
+  // currentSeasonYear and only differs once the coach deliberately
+  // switches it.
+  let viewingSeasonYear = null;
 
   function showView(name){
     ['loading', 'teamSetupView', 'rosterView'].forEach(v => {
@@ -200,7 +220,7 @@
   async function loadTeam(){
     const { data, error } = await supabaseClient
       .from('teams')
-      .select('id, name')
+      .select('id, name, current_season_year')
       .eq('is_our_team', true)
       .limit(1);
     if (error){
@@ -211,6 +231,15 @@
     if (data && data.length > 0){
       const team = data[0];
       ourTeamId = team.id;
+      // Falls back to the calendar year rather than leaving this null
+      // outright. A team that has never set a season year is a real,
+      // if unlikely, state -- customize.html has always allowed it --
+      // and null here would mean nothing is ever "current", the
+      // upload and clear-roster controls would have no season to
+      // attach to, and the whole page would read as broken rather
+      // than as unconfigured.
+      currentSeasonYear = team.current_season_year || new Date().getFullYear();
+      viewingSeasonYear = currentSeasonYear;
       document.getElementById('rosterTitle').textContent = team.name + ' Roster';
       showView('rosterView');
       loadRoster();
@@ -235,29 +264,73 @@
       return;
     }
     ourTeamId = data.id;
+    // A team just created has no current_season_year set at all --
+    // same fallback loadTeam() uses, for the same reason.
+    currentSeasonYear = new Date().getFullYear();
+    viewingSeasonYear = currentSeasonYear;
     document.getElementById('rosterTitle').textContent = data.name + ' Roster';
     showView('rosterView');
     loadRoster();
   });
 
+  async function refreshSeasonPicker(){
+    // No DB-level DISTINCT here, matching the same pattern
+    // player_report.html already uses for its own season list:
+    // select the column, dedupe client-side. Rosters are small enough
+    // that the extra round trip costs nothing.
+    const { data } = await supabaseClient
+      .from('players').select('season_year').eq('team_id', ourTeamId);
+    const years = new Set((data || []).map(p => p.season_year).filter(y => y !== null && y !== undefined));
+    // currentSeasonYear is ALWAYS an option, even with zero players
+    // tagged for it yet -- the moment right after clearing (or right
+    // after bumping the season on customize.html) a coach needs to be
+    // able to select the new, empty season to start uploading into it,
+    // not just the years that already have rows.
+    years.add(currentSeasonYear);
+    const sorted = [...years].sort((a, b) => b - a);
+    const picker = document.getElementById('rosterSeasonPicker');
+    picker.innerHTML = sorted.map(y =>
+      '<option value="' + y + '"' + (y === viewingSeasonYear ? ' selected' : '') + '>' + y +
+      (y === currentSeasonYear ? ' (current)' : '') + '</option>').join('');
+  }
+
+  document.getElementById('rosterSeasonPicker').addEventListener('change', () => {
+    viewingSeasonYear = parseInt(document.getElementById('rosterSeasonPicker').value, 10);
+    loadRoster();
+  });
+
   async function loadRoster(){
     clearMsg('rosterMsg');
+    await refreshSeasonPicker();
     const { data, error } = await supabaseClient
       .from('players')
       .select('id, name, primary_position, default_jersey_number')
       .eq('team_id', ourTeamId)
+      .eq('season_year', viewingSeasonYear)
       .order('default_jersey_number', { ascending: true });
     if (error){
       showMsg('rosterMsg', 'Could not load roster: ' + error.message, 'error');
       return;
     }
-    renderRoster(data || []);
+    // Past seasons are read-only: kept exactly as they were, for
+    // reference, with no add/edit/remove/upload/clear control shown at
+    // all. Deliberately decided this way, not left implicit -- a
+    // control that is merely disabled still invites a click and a
+    // confusing rejection; one that never renders asks nothing of the
+    // coach that a past season could not honestly answer.
+    const isReadOnly = viewingSeasonYear !== currentSeasonYear;
+    document.getElementById('rosterReadOnlyBanner').classList.toggle('hidden', !isReadOnly);
+    document.getElementById('rosterEditingControls').classList.toggle('hidden', isReadOnly);
+    document.getElementById('rosterAddRow').classList.toggle('hidden', isReadOnly);
+    renderRoster(data || [], isReadOnly);
   }
 
-  function renderRoster(players){
+  function renderRoster(players, isReadOnly){
     const body = document.getElementById('rosterBody');
     if (players.length === 0){
-      body.innerHTML = '<div style="color:#999; padding:10px 0;">No players yet — add your first one below.</div>';
+      body.innerHTML = isReadOnly
+        ? '<div style="color:#999; padding:10px 0;">No players recorded for this season.</div>'
+        : '<div style="color:#999; padding:10px 0;">No players yet — add your first one below.</div>';
       return;
     }
     body.innerHTML = players.map(p => {
@@ -269,18 +342,29 @@
         '</div>' +
         '<div class="rosterLine2">' +
           '<span class="rosterPos">' + (p.primary_position || '') + '</span>' +
+          // Read-only means no controls at all, not disabled ones --
+          // see loadRoster()'s own comment for why that distinction
+          // matters here.
+          (isReadOnly ? '' :
           '<span class="rosterActions">' +
             '<button class="secondary editBtn" data-id="' + p.id + '">Edit</button>' +
             '<button class="danger removeBtn" data-id="' + p.id + '">Remove</button>' +
-          '</span>' +
+          '</span>') +
         '</div>' +
       '</div>';
     }).join('');
+    if (isReadOnly) return;
     body.querySelectorAll('.editBtn').forEach(b => b.addEventListener('click', () => startEdit(b.dataset.id, players)));
     body.querySelectorAll('.removeBtn').forEach(b => b.addEventListener('click', () => removePlayer(b.dataset.id)));
   }
 
   function startEdit(id, players){
+    // Defensive, not the primary guard -- renderRoster never attaches
+    // this listener to a button at all when read-only, so this should
+    // be unreachable in practice. Kept anyway: the cost of one extra
+    // check is nothing next to what a wrongly-edited past season would
+    // cost to notice and undo.
+    if (viewingSeasonYear !== currentSeasonYear) return;
     const p = players.find(pl => pl.id === id);
     if (!p) return;
     const row = document.querySelector('.rosterRow[data-id="' + id + '"]');
@@ -310,6 +394,7 @@
   }
 
   async function removePlayer(id){
+    if (viewingSeasonYear !== currentSeasonYear) return;
     if (!confirm('Remove this player from the roster? This does not affect any past game data.')) return;
     const { error } = await supabaseClient.from('players').delete().eq('id', id);
     if (error){
@@ -320,6 +405,10 @@
   }
 
   document.getElementById('addPlayerBtn').addEventListener('click', async () => {
+    if (viewingSeasonYear !== currentSeasonYear){
+      showMsg('rosterMsg', 'Switch to the current season before adding a player.', 'error');
+      return;
+    }
     const number = document.getElementById('newNumber').value.trim();
     const name = document.getElementById('newName').value.trim();
     const position = document.getElementById('newPosition').value;
@@ -329,7 +418,7 @@
     }
     const { error } = await supabaseClient
       .from('players')
-      .insert({ team_id: ourTeamId, name, primary_position: position || null, default_jersey_number: number || null });
+      .insert({ team_id: ourTeamId, name, primary_position: position || null, default_jersey_number: number || null, season_year: currentSeasonYear });
     if (error){
       showMsg('rosterMsg', error.message, 'error');
       return;
@@ -376,10 +465,10 @@
   // against.
   document.getElementById('clearRosterBtn').addEventListener('click', async () => {
     const { data: current } = await supabaseClient
-      .from('players').select('id').eq('team_id', ourTeamId);
+      .from('players').select('id').eq('team_id', ourTeamId).eq('season_year', currentSeasonYear);
     const n = (current || []).length;
     if (!n){
-      showMsg('rosterMsg', 'The roster is already empty.', 'success');
+      showMsg('rosterMsg', 'This season\'s roster is already empty.', 'success');
       return;
     }
     document.getElementById('clearRosterCount').textContent =
@@ -399,8 +488,12 @@
     const btn = document.getElementById('clearRosterConfirmBtn');
     btn.disabled = true;
 
+    // season_year IS REQUIRED HERE, on every one of the three queries
+    // below. Without it, "clear this season" silently goes back to
+    // being "clear every season this team has ever had" -- the exact
+    // thing this whole feature exists to stop.
     const { data: current, error: loadError } = await supabaseClient
-      .from('players').select('id').eq('team_id', ourTeamId);
+      .from('players').select('id').eq('team_id', ourTeamId).eq('season_year', currentSeasonYear);
     if (loadError){
       showMsg('rosterMsg', 'Could not read the roster: ' + loadError.message +
         ' — nothing has been changed.', 'error');
@@ -421,7 +514,7 @@
         return;
       }
       const { error: deleteError } = await supabaseClient
-        .from('players').delete().eq('team_id', ourTeamId);
+        .from('players').delete().eq('team_id', ourTeamId).eq('season_year', currentSeasonYear);
       if (deleteError){
         showMsg('rosterMsg', 'Could not clear the roster: ' + deleteError.message, 'error');
         btn.disabled = false;
@@ -435,9 +528,8 @@
     // has to come AFTER the reload or it is wiped the instant it appears.
     // Found by the test, not by looking.
     await loadRoster();
-    showMsg('rosterMsg', 'Roster cleared — ' + ids.length + ' player' +
-      (ids.length === 1 ? '' : 's') + ' removed. Past seasons are untouched. ' +
-      'Upload next season\'s roster when you are ready.', 'success');
+    showMsg('rosterMsg', 'Roster cleared for ' + currentSeasonYear + ' — ' + ids.length + ' player' +
+      (ids.length === 1 ? '' : 's') + ' removed. Every other season is unaffected.', 'success');
   });
 
   document.getElementById('uploadRosterBtn').addEventListener('click', () => {
@@ -449,6 +541,14 @@
   document.getElementById('rosterFile').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    // Same defensive reasoning as addPlayerBtn above: the file input
+    // has no visual state of its own to hide, so this is the one place
+    // that genuinely needs the check rather than just restating one
+    // that renderRoster's own markup already enforces.
+    if (viewingSeasonYear !== currentSeasonYear){
+      showMsg('rosterMsg', 'Switch to the current season before uploading a roster.', 'error');
+      return;
+    }
     const preview = document.getElementById('uploadPreview');
     preview.classList.remove('hidden');
     preview.innerHTML = '<p style="font-size:13px; color:#888; margin:0;">Reading file…</p>';
@@ -482,12 +582,18 @@
         return;
       }
 
-      // Skip anyone already on the roster by name, so re-uploading the
-      // same (or an updated) file doesn't create duplicates.
+      // Skip anyone already on THIS SEASON's roster by name, so
+      // re-uploading the same (or an updated) file doesn't create
+      // duplicates. Scoped to season_year deliberately: players
+      // overlap between seasons constantly, and a name that already
+      // exists in a PAST season must never suppress adding that same,
+      // returning player to the CURRENT one -- a name match only means
+      // something within one season.
       const { data: existing, error } = await supabaseClient
         .from('players')
         .select('name')
-        .eq('team_id', ourTeamId);
+        .eq('team_id', ourTeamId)
+        .eq('season_year', currentSeasonYear);
       if (error){
         preview.innerHTML = '<p style="color:#a32d2d; margin:0;">Could not check existing roster: ' + error.message + '</p>';
         return;
@@ -499,13 +605,13 @@
       pendingUploadRows = newRows;
       preview.innerHTML =
         '<p style="font-size:14px; margin:0 0 8px;"><strong>' + newRows.length + '</strong> new player(s) will be added.' +
-        (skipped > 0 ? ' <strong>' + skipped + '</strong> already on the roster and will be skipped.' : '') + '</p>' +
+        (skipped > 0 ? ' <strong>' + skipped + '</strong> already on this season\'s roster and will be skipped.' : '') + '</p>' +
         (newRows.length > 0 ? '<button id="confirmUploadBtn">Add ' + newRows.length + ' players</button> ' : '') +
         '<button class="secondary" id="cancelUploadBtn">Cancel</button>';
 
       const confirmBtn = document.getElementById('confirmUploadBtn');
       if (confirmBtn) confirmBtn.addEventListener('click', async () => {
-        const toInsert = pendingUploadRows.map(p => Object.assign({ team_id: ourTeamId }, p));
+        const toInsert = pendingUploadRows.map(p => Object.assign({ team_id: ourTeamId, season_year: currentSeasonYear }, p));
         const { error: insertError } = await supabaseClient.from('players').insert(toInsert);
         if (insertError){
           preview.innerHTML = '<p style="color:#a32d2d; margin:0;">' + insertError.message + '</p>';
