@@ -22,10 +22,20 @@
 // Each of those produced a filled-in form that quietly returned null, so
 // these assert the SAVED RESULT rather than the presence of the fields.
 //
-// NOT covered, deliberately: muffed holds on a PAT or field goal. The play
-// and the possession are dead where they stand and field position is
-// established by the ensuing kick, so there is no takeover spot to ask
-// for. Adding one there would invent a decision the coach does not make.
+// NOT covered, deliberately: a muffed hold on a PAT. A try always ends
+// in a kickoff regardless of outcome, never a drive starting at a
+// spot, so there is genuinely nothing for a takeover spot to say.
+//
+// A field goal's OWN muffed hold used to be exempt for the same
+// reason -- but that stopped being true 19 Aug 2026, when a return/
+// recovery feature was added to it (mirroring the blocked branch): a
+// muffed hold with no touchdown now hands the ball to a specific
+// recovering team at a specific spot, exactly like a missed or
+// blocked kick already does, and needs the same check -- added below.
+// Reported directly: the spot field was already visible and accepted
+// input, but the value was silently discarded, because the submit
+// code still carried the OLD reasoning's early return, skipping past
+// the shared code that would have read it.
 
 const { bootGamePage } = require('./harness');
 const { setDrive, click, typeInto } = require('./ui_driver');
@@ -82,6 +92,18 @@ const CASES = [
     const p = doc.getElementById('playPanel');
     typeInto(win, doc.getElementById('pp_carrier_manual'), '22');
     setSpot(win, doc, p, 'pp_spot', 'own', '38');
+  }],
+  // Added 19 Aug 2026 -- see the file header above for why this is new
+  // rather than something that regressed. No touchdown, so the drive
+  // genuinely ends with the defense taking over at a real spot, the
+  // same shape the blocked branch already covers a few cases up.
+  ['field goal muffed hold, no touchdown', 'own 35', (h, win, doc) => {
+    setDrive(h, { down: 3, distance: 2, side: 'opp', yardline: 40 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="fg"]'));
+    const p = doc.getElementById('playPanel');
+    click(win, p.querySelector('.pp_kicker_pick'));
+    click(win, doc.getElementById('pp_fg_muffhold_toggle'));
+    setSpot(win, doc, p, 'pp_spot', 'own', '35');
   }],
   ['punt', 'own 30', (h, win, doc) => {
     setDrive(h, { down: 4, distance: 9, side: 'own', yardline: 30 });
