@@ -916,19 +916,45 @@ function extractNameTag(rawName){
       // the filter above: excluding it entirely made the score look
       // like it had not happened at all, rather than what it actually
       // is -- exactly how this drive ended, the same way a punt or an
-      // interception is. What still gets excluded is anything AFTER
-      // that score: the PAT/2PT try (a separate, later play; excluded
-      // by roles.playType specifically, since a try also carries its
-      // own effect.score and would otherwise pass this same check) and
-      // the ensuing kickoff (which carries no score at all, and is
-      // correctly excluded by the team check above on its own).
+      // interception is.
+      //
+      // EXTENDED the same night, a few messages later, to the TRY that
+      // follows: a PAT/2PT was still being excluded outright, on the
+      // reasoning that it was "the next team's business" -- it is not,
+      // it is the scoring team's own follow-up to their OWN score, and
+      // hiding it made a completed PAT look like it never happened at
+      // all. What is STILL correctly excluded is only the ensuing
+      // kickoff (which carries no score and no playType this filter
+      // treats specially, so the team check above excludes it on its
+      // own, same as before).
       const driveTeam = resetIdxs.length
         ? computeState(plays.slice(0, resetIdxs[resetIdxs.length - 1] + 1)).possession
         : null;
       const currentDriveOwnTeamPlays = currentDrivePlays.filter(p => {
         if (p.isDivider || !p.team || p.team === driveTeam) return true;
         const pt = p.roles && p.roles.playType;
-        return !!(p.effect && p.effect.score && pt !== 'pat' && pt !== 'twopt');
+        // A try (PAT/2PT) that follows a defensive score's own
+        // touchdown, captured REGARDLESS OF TEAM. Reported directly
+        // from a real game, 19 Aug 2026: the scoring exception just
+        // above already keeps the touchdown itself visible even when
+        // the OTHER team scored it, on exactly this reasoning -- but
+        // the try that follows it was still excluded outright, on the
+        // earlier (and, per that report, wrong) reasoning that it was
+        // "the next team's business". It is not. It is the SAME
+        // team's own follow-up to their OWN score, and excluding it
+        // made a completed PAT look like it had never happened at
+        // all, on the one page a crew is actually watching live --
+        // confirmed directly by a side-by-side screenshot: game.html's
+        // own internal log (no such filter) showed the PAT plainly;
+        // this page's Current Drive did not.
+        //
+        // Detected by playType alone, not by effect.score -- a MISSED
+        // try carries no score at all (its own effect is just
+        // { endsDrive: true }, see parseInput's 'pa'/'tpr'/'tpp'
+        // branches) and would otherwise still vanish from the log
+        // exactly like the made ones used to, the moment it failed.
+        if (pt === 'pat' || pt === 'twopt') return true;
+        return !!(p.effect && p.effect.score);
       });
       document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDriveOwnTeamPlays.filter(x => !isDriveTileNoise(x)).slice().reverse(), true) || '<div style="color:#999;">no active drive yet</div>';
 
