@@ -809,6 +809,12 @@
     seasonGames = [];
     const { data: gameRows, error: gamesError } = await supabaseClient
       .from('games').select('*').eq('season_year', year).eq('status', 'final')
+      // Same exclusion as season_report.html, and the same reason for
+      // .or() over .eq('is_preseason', false): NULL = false is itself
+      // NULL in SQL, not true, so a plain equality check would have
+      // dropped every game saved before this column existed out of
+      // every player's season the moment this shipped.
+      .or('is_preseason.is.null,is_preseason.eq.false')
       .order('game_date', { ascending: true });
     if (gamesError){ showError('Could not load games: ' + gamesError.message); return; }
     if (!gameRows || !gameRows.length){
@@ -865,7 +871,14 @@
     ourBranding = (teamRows && teamRows[0]) || {};
 
     const { data: allGames, error } = await supabaseClient
-      .from('games').select('season_year').eq('status', 'final');
+      .from('games').select('season_year').eq('status', 'final')
+      // Same reasoning as loadSeason() above: without this, a season
+      // made up entirely of preseason games would still appear in this
+      // dropdown, and picking it would land on "No finalized games in
+      // this season yet" -- a confusing way to discover a season has
+      // nothing to show, when the app already knew that before the
+      // click.
+      .or('is_preseason.is.null,is_preseason.eq.false');
     if (error){ showError('Could not load seasons: ' + error.message); return; }
     const years = [...new Set((allGames || []).map(g => g.season_year).filter(y => y))]
       .sort((a, b) => b - a);

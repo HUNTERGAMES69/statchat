@@ -68,6 +68,12 @@
           <select id="homeAway"><option value="home">Home</option><option value="away">Away</option></select>
         </label>
       </div>
+      <label style="display:flex; align-items:center; gap:8px; margin:12px 0 0; font-weight:400; cursor:pointer;">
+        <input type="checkbox" id="isPreseason" style="width:auto; margin:0;"> This is a preseason game
+      </label>
+      <div id="preseasonWarning" class="hidden" style="background:#fff3cd; border:1px solid #e0b400; border-radius:8px; padding:10px 12px; margin-top:8px; font-size:13px; color:#7a5c00;">
+        Excluded from Season Report and Player Report — every other total for the season stays exactly what it would be without this game. The game itself, its recap, and its own stat package are unaffected; this only pulls it out of season-wide aggregation.
+      </div>
     </div>
 
     <div class="card">
@@ -611,6 +617,13 @@
       const isHomeExisting = eg.our_team_is_home;
       document.getElementById('homeAway').value = isHomeExisting ? 'home' : 'away';
       document.getElementById('opponentName').value = isHomeExisting ? eg.away_team_name : eg.home_team_name;
+      // Requested directly: a way to keep a preseason game out of the
+      // season-wide totals without deleting it or leaving it out of the
+      // schedule. !! guards a column that is null for every game saved
+      // before this existed -- those must read as false, not as
+      // whatever a bare null happens to do in a checkbox's `checked`.
+      document.getElementById('isPreseason').checked = !!eg.is_preseason;
+      updatePreseasonWarning();
       if (eg.opponent_primary_color) document.getElementById('oppPrimaryColorInput').value = eg.opponent_primary_color;
       if (eg.opponent_secondary_color) document.getElementById('oppSecondaryColorInput').value = eg.opponent_secondary_color;
       const seeds = eg.seed_starters || {};
@@ -758,6 +771,13 @@
       setFormLocked(false);
     }
   });
+
+  // Shown only while the box is checked -- the warning describes a
+  // choice actively in effect, not a general note about the feature.
+  function updatePreseasonWarning(){
+    document.getElementById('preseasonWarning').classList.toggle('hidden', !document.getElementById('isPreseason').checked);
+  }
+  document.getElementById('isPreseason').addEventListener('change', updatePreseasonWarning);
 
   // The format is shown BEFORE the file picker, not after a failed
   // import. A roster is typed up once, usually from a programme, and the
@@ -1168,7 +1188,8 @@
       quarter_length_seconds: quarterLenMin * 60,
       opponent_primary_color: document.getElementById('oppPrimaryColorInput').value,
       opponent_secondary_color: document.getElementById('oppSecondaryColorInput').value,
-      seed_starters: seedStarters
+      seed_starters: seedStarters,
+      is_preseason: document.getElementById('isPreseason').checked
     };
 
     let gameId;

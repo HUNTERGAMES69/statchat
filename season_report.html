@@ -634,6 +634,15 @@ function isAdminMarker(p){
 
     const { data: gameRows, error: gameError } = await supabaseClient
       .from('games').select('*').eq('season_year', parseInt(season)).eq('status', 'final')
+      // Preseason games are excluded from every season-wide total.
+      // is_preseason is null on every game saved before this existed,
+      // and NULL = false is itself NULL in SQL -- not true -- so
+      // .eq('is_preseason', false) would have silently dropped every
+      // one of those games from every season report the moment this
+      // shipped. .or() with an explicit `is.null` clause is what
+      // actually means "not marked preseason", covering null and
+      // false alike; only a genuine true is excluded.
+      .or('is_preseason.is.null,is_preseason.eq.false')
       .order('game_date', { ascending: true });
     if (gameError){
       showView('errorView');

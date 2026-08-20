@@ -128,6 +128,13 @@
   .shared-badge { display:inline-block; margin-left:8px; padding:2px 8px; border-radius:4px;
                   background:#eef1f4; color:#4a5563; font-size:11px; font-weight:700;
                   letter-spacing:0.06em; vertical-align:middle; }
+  /* Same quiet treatment as SHARED, not the pulsing ON AIR one -- a
+     preseason game is a standing classification, not something live.
+     Amber to match the warning shown at setup time, so the two read as
+     the same idea in two places. */
+  .preseason-badge { display:inline-block; margin-left:8px; padding:2px 8px; border-radius:4px;
+                      background:#fff3cd; color:#7a5c00; font-size:11px; font-weight:700;
+                      letter-spacing:0.06em; vertical-align:middle; }
   .onair-badge { display:inline-block; margin-left:10px; padding:2px 9px; border-radius:4px;
                  background:#b00020; color:#fff; font-size:11px; font-weight:800;
                  letter-spacing:0.08em; vertical-align:middle;
@@ -473,7 +480,10 @@
       // g.is_broadcast -- without it they silently read `undefined`, the
       // badge never appears and the button always says "Set as ON AIR"
       // even for the game that is already on air.
-      .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status, final_score_us, final_score_opp, is_broadcast')
+      // is_preseason, added for the same reason: the badge below reads
+      // g.is_preseason directly, and would silently never show without
+      // it named here too.
+      .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status, final_score_us, final_score_opp, is_broadcast, is_preseason')
       .order('game_date', { ascending: false });
     if (error){
       showMsg('dashboardMsg', 'Could not load games: ' + error.message, 'error');
@@ -698,6 +708,13 @@
           // the game you are looking at; only this list can tell you about
           // the ones you are not.
           (g.is_public ? '<span class="shared-badge">\u25CF SHARED</span>' : '') +
+          // Same reasoning as SHARED, and it matters more here: a game
+          // marked preseason is silently missing from every season
+          // total, and that is exactly the kind of thing to forget
+          // months later. Season Report and Player Report can each
+          // tell you it excluded something when you go looking; only
+          // this list says so before you go looking.
+          (g.is_preseason ? '<span class="preseason-badge">PRESEASON</span>' : '') +
           '</div><div class="game-meta">' + homeAway + ' \u00b7 ' + dateStr + '</div></div>' +
         '</div>' +
         '<div class="game-right">' + rightHtml + '</div>' +
