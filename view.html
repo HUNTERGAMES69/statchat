@@ -1763,7 +1763,17 @@ function extractNameTag(rawName){
     // LAST one to run wins for the rest of this page. Doing this first
     // means the current game's own buildTeams() call is always that
     // last one, regardless of what happened during aggregation.
-    if (game.status === 'not_started'){
+    //
+    // 'setup', not 'not_started' -- a real error, caught directly: this
+    // read 'not_started' from the first draft on, a string that does
+    // not occur anywhere in this app. create_game.html writes 'setup'
+    // for a freshly created game (gamePayload.status = 'setup'), and
+    // every other page's own currentGameStatus default agrees. The
+    // wrong string meant this condition was never once true against a
+    // real game, in testing or otherwise -- confirmed only once a real
+    // season's own games showed nothing, and traced back to this exact
+    // line rather than guessed at.
+    if (game.status === 'setup'){
       await loadSeasonStatsForNotStarted(game, ourBranding);
     }
 
@@ -1879,16 +1889,16 @@ function extractNameTag(rawName){
   // payload -- same reasoning as reloadPlaysAndRender() above: a
   // filtered re-read is one query and is never wrong, where a payload
   // depends on replica identity settings this app does not control for
-  // this table. If the game has moved on from not_started, drops the
-  // stale Season Stats snapshot and re-renders immediately -- matching
-  // "the moment Start Game is pressed" exactly, not the moment a play
+  // this table. If the game has moved on from 'setup', drops the stale
+  // Season Stats snapshot and re-renders immediately -- matching "the
+  // moment Start Game is pressed" exactly, not the moment a play
   // eventually follows it.
   async function checkForGameStart(){
     if (!seasonStatsForNotStarted) return;
     const { data: rows } = await supabaseClient
       .from('games').select('status').eq('id', currentGameId).limit(1);
     const status = rows && rows[0] && rows[0].status;
-    if (status && status !== 'not_started'){
+    if (status && status !== 'setup'){
       seasonStatsForNotStarted = null;
       const h = document.getElementById('teamAHeading');
       if (h) h.textContent = TEAMS.teamA.name + ' Stats';
