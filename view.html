@@ -1081,8 +1081,40 @@ function extractNameTag(rawName){
       // of the page already uses, so the two can never disagree.
       // Previous Drive is deliberately untouched by this -- its own
       // renderDriveSummary() below is unchanged.
+      let currentDriveDisplayList = currentDriveOwnTeamPlays.filter(x => !isDriveTileNoise(x));
+      // Requested directly: an ordinary kickoff was invisible in BOTH
+      // drive tiles -- filed under the KICKING team at the tail of the
+      // old segment (the app's own convention: the kicking team is
+      // still "on offense" the instant they kick), with the new
+      // segment starting at the "New drive" marker right after it. So
+      // between the kickoff and the receiving team's first snap, this
+      // tile read "no active drive yet" as though nothing had
+      // happened. When the new segment has no visible plays yet, reach
+      // one play back past the boundary and, if it is a kickoff, show
+      // it -- with the resulting drive start (1st & 10 at the return
+      // spot) beneath it from the same state the banner uses.
+      //
+      // DISPLAY ONLY, verified rather than assumed: the play is READ
+      // for rendering and never moved, copied into the segment, or
+      // modified -- possessions (countPossessions), both drive
+      // summaries (computeDriveSummary), and the box score all compute
+      // from the untouched plays array and cannot see this. A kick
+      // RETURNED FOR A TOUCHDOWN never reaches this branch at all: its
+      // score keeps it visible in the old segment's own log (the
+      // scoring exception above), no new segment starts, and the list
+      // here is not empty. Only a kickoff qualifies -- a punt already
+      // shows as the Previous Drive's own outcome line, so the nearest
+      // real play being anything else changes nothing.
+      if (!currentDriveDisplayList.length && resetIdxs.length){
+        for (let i = resetIdxs[resetIdxs.length - 1] - 1; i >= 0; i--){
+          const cand = plays[i];
+          if (!cand || cand.isDivider || isDriveTileNoise(cand)) continue;
+          if (cand.roles && cand.roles.playType === 'kickoff') currentDriveDisplayList = [cand];
+          break;
+        }
+      }
       document.getElementById('driveLogScroll').innerHTML =
-        renderCurrentDriveLastPlay(currentDriveOwnTeamPlays.filter(x => !isDriveTileNoise(x)), state, distDisplay);
+        renderCurrentDriveLastPlay(currentDriveDisplayList, state, distDisplay);
 
       const currentSummary = resetIdxs.length
         ? computeDriveSummary(resetIdxs[resetIdxs.length - 1], plays.length)
