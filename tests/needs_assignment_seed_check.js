@@ -2,18 +2,25 @@
 // -------------------------------------------------------------------
 // Reported directly, 20 Aug 2026, from real use with the Sterlington
 // roster: seed a likely starter by jersey number for a player whose
-// position wasn't recognized on import, and the seed area reports
-// "not on the roster loaded here" -- correctly, since that number
-// genuinely has not been filed under any unit yet. Assign that same
-// player to Offense or Defense through the "needs assignment" prompt,
-// and the underlying data becomes correct immediately -- but the
-// message already on screen stayed stale until something ELSE
-// happened to re-trigger renderStarterResolve, since nothing in the
-// assignment radio's own handler ever called it.
+// position wasn't recognized on import, and the seed area reported
+// "not on the roster loaded here" -- the SAME text used for a number
+// genuinely nobody wears, even though this one was really just sitting
+// unresolved. Assign that same player to Offense or Defense through the
+// "needs assignment" prompt, and the underlying data becomes correct
+// immediately -- but the message already on screen stayed stale until
+// something ELSE happened to re-trigger renderStarterResolve, since
+// nothing in the assignment radio's own handler ever called it.
 //
 // Fixed by calling renderStarterResolve(teamKey) at the end of that
 // same handler. Covers both sides, since renderAssignmentUI is the one
 // shared function serving 'our' and 'opp' alike.
+//
+// A second fix landed the same day, after Andy reported the message
+// was still confusing in practice: the "before" state now reads "on
+// the roster, but needs a unit picked below" for a number genuinely
+// awaiting assignment, distinct from "not on the roster loaded here"
+// for a number nobody wears at all -- the two used to be
+// indistinguishable. This file's assertions were updated to match.
 
 const { bootPage } = require('./harness');
 
@@ -59,8 +66,8 @@ async function run() {
   {
     const { before, after, radioFound } = await seedThenResolve('opp', null, true);
     if (!radioFound) fail('opp-radio-missing', 'expected the needs-assignment radio to render for the uploaded opponent roster');
-    if (!/not on the roster/.test(before)) {
-      fail('opp-before', 'expected the seed to read "not on the roster" before resolving the unit, got: ' + before);
+    if (!/needs a unit picked below/.test(before)) {
+      fail('opp-before', 'expected the seed to read "needs a unit picked below" before resolving the unit, got: ' + before);
     }
     if (!/✓ QB #7 — O Quarterback/.test(after || '')) {
       fail('opp-after', 'expected the seed to update to "✓ QB #7 — O Quarterback" immediately after resolving the unit, with no other interaction, got: ' + after);
@@ -74,8 +81,8 @@ async function run() {
     ];
     const { before, after, radioFound } = await seedThenResolve('our', players, false);
     if (!radioFound) fail('our-radio-missing', 'expected the needs-assignment radio to render for the loaded roster');
-    if (!/not on the roster/.test(before)) {
-      fail('our-before', 'expected the seed to read "not on the roster" before resolving the unit, got: ' + before);
+    if (!/needs a unit picked below/.test(before)) {
+      fail('our-before', 'expected the seed to read "needs a unit picked below" before resolving the unit, got: ' + before);
     }
     if (!/✓ QB #7 — N Quarterback/.test(after || '')) {
       fail('our-after', 'expected the seed to update to "✓ QB #7 — N Quarterback" immediately after resolving the unit, got: ' + after);
