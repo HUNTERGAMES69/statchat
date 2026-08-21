@@ -42,7 +42,7 @@ async function run() {
     const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
     await new Promise(r => setTimeout(r, 150));
     const html = v.document.getElementById('driveLogScroll').innerHTML;
-    if (!/font-size:30px/.test(html)) fail('last-play-size', 'expected the last play at 30px, got: ' + html);
+    if (!/font-size:36px/.test(html)) fail('last-play-size', 'expected the last play at 36px, got: ' + html);
     if (!/pass to N Receiver for 12/.test(html)) fail('last-play-is-last', 'expected only the SECOND (most recent) play to show, got: ' + html);
     if (/rush for 8/.test(html)) fail('last-play-not-both', 'expected the FIRST play to be absent -- only the last play should show, got: ' + html);
     if (!/1st &amp; 10 at own 45/.test(html)) fail('down-distance-line', 'expected "1st & 10 at own 45" underneath the play, got: ' + html);
@@ -190,7 +190,7 @@ async function run() {
     const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
     await new Promise(r => setTimeout(r, 150));
     const html = v.document.getElementById('driveLogScroll').innerHTML;
-    if (!/font-size:22px/.test(html)) fail('down-distance-larger', 'expected the down/distance line at 22px, got: ' + html);
+    if (!/font-size:24px/.test(html)) fail('down-distance-larger', 'expected the down/distance line at 24px, got: ' + html);
     if (!/margin-top:18px/.test(html)) fail('play-text-spacing', 'expected margin-top:18px above the play text, got: ' + html);
     v.close();
   }
@@ -211,9 +211,14 @@ async function run() {
       tryOutcome: { text: 'N Kicker (Neville) PAT good', good: true }
     };
     const html = v.evalIn('renderDriveSummary(' + JSON.stringify(summary) + ')');
-    if (!/font-size:16px/.test(html)) fail('prev-drive-outcome-larger', 'expected the outcome line at 16px, got: ' + html);
-    if (/font-size:30px/.test(html)) fail('prev-drive-not-as-large-as-current', 'Previous Drive\'s outcome text must stay well under Current Drive\'s 30px, got: ' + html);
+    if (!/font-size:20px/.test(html)) fail('prev-drive-outcome-larger', 'expected the outcome line at 20px, got: ' + html);
+    if (/font-size:36px/.test(html)) fail('prev-drive-not-as-large-as-current', 'Previous Drive\'s outcome text must stay well under Current Drive\'s 36px, got: ' + html);
     if (!/PAT good/.test(html)) fail('prev-drive-try-line', 'expected the PAT sub-line to still render, got: ' + html);
+    // Requested directly in the same follow-up: the PAT/try sub-line
+    // was still too small next to the now-larger outcome line above
+    // it -- bumped from 12px to 15px, still visibly the smaller of the
+    // two on purpose.
+    if (!/font-size:15px/.test(html)) fail('prev-drive-try-line-larger', 'expected the PAT sub-line at 15px, got: ' + html);
     v.close();
   }
 
@@ -228,6 +233,9 @@ async function run() {
     const style = v.window.getComputedStyle(el);
     if (style.marginTop !== 'auto') fail('pinned-to-bottom', 'expected margin-top:auto to pin Previous Drive to the bottom of the quad, got: ' + style.marginTop);
     if (!/1px solid/.test(style.borderTop)) fail('divider-above', 'expected a visible border-top divider now that Previous Drive is pinned, got: ' + style.borderTop);
+    // Requested directly, same follow-up: the content sat flush against
+    // the tile's bottom edge with no breathing room once pinned there.
+    if (style.paddingBottom !== '16px') fail('bottom-spacing', 'expected 16px of padding below Previous Drive\'s own content, got: ' + style.paddingBottom);
     v.close();
   }
 
