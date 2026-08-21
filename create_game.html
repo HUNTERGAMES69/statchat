@@ -596,6 +596,13 @@
   let ourResolved = {}, ourConflictsList = [];
   let oppRosterSkipped = false;
   let oppResolved = {}, oppConflictsList = [];
+  // Requested directly: 94 players with no positions at all makes
+  // resolving every one of them to a unit genuinely impractical, and
+  // Andy should never have to. These track whichever players are
+  // still unresolved at save time, so buildGameRosterRows (below) can
+  // save them too -- unassigned, but present -- rather than silently
+  // dropping anyone who was never manually filed under a unit.
+  let ourNeedsAssignment = [], oppNeedsAssignment = [];
 
   function showView(name){
     ['loading', 'mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
@@ -729,6 +736,7 @@
         const { resolved, conflicts, needsAssignment } = resolveByNumber(oppEntries);
         oppResolved = resolved;
         oppConflictsList = conflicts;
+        oppNeedsAssignment = needsAssignment;
         renderAssignmentUI('opponentAssignments', 'opp', needsAssignment, oppResolved);
         renderConflictUI('opponentConflicts', 'opp', conflicts, oppResolved);
       }
@@ -815,6 +823,7 @@
 
     ourResolved = resolved;
     ourConflictsList = conflicts;
+    ourNeedsAssignment = needsAssignment;
     document.getElementById('ourRosterStatus').innerHTML =
       '<div class="roster-summary">' + entries.length + ' players loaded from your roster' +
       (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>' +
@@ -1002,6 +1011,7 @@
       }
       const { resolved, conflicts, needsAssignment, sharedInfo } = resolveByNumber(entries);
       oppResolved = resolved;
+      oppNeedsAssignment = needsAssignment;
       oppRosterTouched = true;
       oppRosterSkipped = false;
       oppConflictsList = conflicts;
@@ -1030,7 +1040,7 @@
     reader.readAsArrayBuffer(file);
   });
 
-  function buildGameRosterRows(resolved, teamSide){
+  function buildGameRosterRows(resolved, teamSide, needsAssignment){
     const rows = [];
     Object.keys(resolved).forEach(num => {
       ['offense','defense','special'].forEach(unit => {
@@ -1053,6 +1063,40 @@
             player_id: entry.playerId || null
           });
         });
+      });
+    });
+    // Requested directly: resolving every unrecognized-position player
+    // to a unit is genuinely impractical on a 94-player roster with no
+    // position column at all, and nobody should have to. A player left
+    // unresolved here used to get NO row at all -- invisible to
+    // game_rosters entirely, which is what made a manually-typed number
+    // during the game read as "not on the roster" even though the
+    // player genuinely was uploaded. Saved now with unit: null instead:
+    // still absent from the unit-specific picker lists (there is
+    // nothing to file them under), but present for the "is this number
+    // really on the roster" check that matters live -- see engine.js's
+    // rosterName/playerName and every buildTeams copy's rosterUnassigned
+    // bucket.
+    //
+    // Filtered by reference against what is already in `resolved`,
+    // not just skipped wholesale: a player who WAS resolved via the
+    // assignment radio this same session is moved into a real unit
+    // bucket above, but the needsAssignment array itself is never
+    // pruned when that happens -- so without this check, an already-
+    // resolved player would ALSO get a second, unit-less row here,
+    // duplicating him under his own number.
+    (needsAssignment || []).forEach(({ num, entry }) => {
+      const bucket = resolved[num] || { offense: [], defense: [], special: [] };
+      const alreadyResolved = ['offense', 'defense', 'special']
+        .some(u => (bucket[u] || []).indexOf(entry) !== -1);
+      if (alreadyResolved) return;
+      rows.push({
+        team_side: teamSide,
+        jersey_number: num,
+        player_name: entry.name,
+        unit: null,
+        position: firstPosOf(entry.position),
+        player_id: entry.playerId || null
       });
     });
     return rows;
@@ -1307,8 +1351,8 @@
     }
 
     const rosterRows = [
-      ...buildGameRosterRows(ourResolved, 'teamA'),
-      ...(!editGameId || oppRosterTouched ? buildGameRosterRows(oppResolved, 'teamB') : [])
+      ...buildGameRosterRows(ourResolved, 'teamA', ourNeedsAssignment),
+      ...(!editGameId || oppRosterTouched ? buildGameRosterRows(oppResolved, 'teamB', oppNeedsAssignment) : [])
     ].map(r => Object.assign({ game_id: gameId }, r));
 
     if (rosterRows.length > 0){

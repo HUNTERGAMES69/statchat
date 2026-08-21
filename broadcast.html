@@ -157,10 +157,10 @@
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
     const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
     TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: ourBranding.logo_url || null };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, rosterUnassigned:{}, posOffense:{}, logo: ourBranding.logo_url || null };
     const oppPrimary = game.opponent_primary_color || '#8B0000', oppSecondary = game.opponent_secondary_color || '#ffffff';
     TEAMS.teamB = { name: oppName, bg: oppPrimary, text: oppSecondary,
-      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{}, logo: game.opponent_logo_url || null };
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, rosterUnassigned:{}, posOffense:{}, logo: game.opponent_logo_url || null };
     // Each team's color is set independently -- nothing checks that
     // they're actually distinguishable from each other, and two
     // different schools can genuinely share a similar accent color.
@@ -183,6 +183,13 @@
       if (r.unit === 'offense'){ team.rosterOffense[r.jersey_number] = r.player_name; team.posOffense[r.jersey_number] = r.position; }
       else if (r.unit === 'defense'){ team.rosterDefense[r.jersey_number] = r.player_name; }
       else if (r.unit === 'special'){ team.rosterSpecialTeams[r.jersey_number] = r.player_name; }
+      // Requested directly: resolving every unrecognized-position player
+      // to a unit is impractical on a large, position-less roster.
+      // Still absent from the three unit-specific picker lists above --
+      // there is nothing to file him under -- but named here so
+      // rosterName/playerName (engine.js) can resolve him once he is
+      // actually credited on a play, instead of reading as a call-up.
+      else if (r.player_name){ team.rosterUnassigned[r.jersey_number] = r.player_name; }
     });
   }
 
