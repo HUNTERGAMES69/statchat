@@ -22,7 +22,7 @@
 //    that raw value back into a displayable clock reading.
 
 const { bootGamePage, bootPage } = require('./harness');
-const { enterPlay, setDrive } = require('./ui_driver');
+const { enterPlay, setDrive, enterTimeout } = require('./ui_driver');
 
 async function run() {
   const failures = [];
@@ -379,6 +379,85 @@ async function run() {
     if (!/rush for 5/.test(html)) fail('kickoff-window-closes', 'expected the new drive\'s own play, got: ' + html);
     const poss2 = JSON.parse(v.evalIn('JSON.stringify(countPossessions(plays))'));
     if (poss2.teamA !== 1 || poss2.teamB !== 1) fail('kickoff-window-possessions-after', 'expected possessions still 1/1 after the snap, got: ' + JSON.stringify(poss2));
+    v.close();
+  }
+
+  // --- 14. Requested directly: a timeout must be ADDITIVE to the last
+  // play, never replace it as the headline -- the same principle as
+  // the touchdown/try lock. Trailing timeouts render as amber
+  // sub-lines after the down/distance line; the play stays put. Also
+  // composes with BOTH earlier features: a timeout after a PAT leaves
+  // the touchdown+try pairing intact, and a timeout in the kickoff
+  // window pairs with the kickoff instead of replacing it.
+  {
+    // (a) Mid-drive: play headline, down/distance, then the timeout.
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '8' });
+    enterTimeout(h, 'teamA');
+    let rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    let v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    let html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (!/font-size:36px[^>]*>[^<]*rush for 8/.test(html)) fail('timeout-additive', 'expected the rush still as the headline, got: ' + html);
+    if (!/color:#7a5c00[^>]*>Timeout — /.test(html)) fail('timeout-line', 'expected the timeout as an amber sub-line, got: ' + html);
+    if (html.indexOf('rush for 8') > html.indexOf('Timeout')) fail('timeout-order', 'the play must come BEFORE the timeout line, got: ' + html);
+    v.close();
+
+    // (b) A second consecutive timeout stacks beneath the first.
+    enterTimeout(h, 'teamA');
+    rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    html = v.document.getElementById('driveLogScroll').innerHTML;
+    if ((html.match(/Timeout — /g) || []).length !== 2) fail('timeout-consecutive', 'expected both consecutive timeouts shown, got: ' + html);
+    v.close();
+
+    // (c) The next snap clears them.
+    enterPlay(h, { type: 'pass', passer: '7', receiver: '80', yards: '12' });
+    rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+    v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (/Timeout/.test(html)) fail('timeout-clears', 'expected the timeouts gone once the next snap landed, got: ' + html);
+    if (!/pass to N Receiver for 12/.test(html)) fail('timeout-clears', 'expected the new play as the headline, got: ' + html);
+    v.close();
+  }
+  {
+    // (d) After a PAT: the touchdown+try lock survives, timeout beneath.
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'opp', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '25', td: true });
+    enterPlay(h, { type: 'pat', kicker: '3', result: 'g' });
+    enterTimeout(h, 'teamA');
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+    const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    const html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (!/TOUCHDOWN/.test(html)) fail('timeout-after-try-lock', 'expected the touchdown still locked as the headline, got: ' + html);
+    if (!/PAT — GOOD/.test(html)) fail('timeout-after-try-lock', 'expected the PAT line preserved, got: ' + html);
+    if (!/Timeout — /.test(html)) fail('timeout-after-try-line', 'expected the timeout beneath the pair, got: ' + html);
+    v.close();
+  }
+  {
+    // (e) In the kickoff window: kickoff headline, timeout beneath --
+    // not the timeout replacing the kickoff.
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'opp', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '25', td: true });
+    enterPlay(h, { type: 'pat', kicker: '3', result: 'g' });
+    enterPlay(h, { type: 'kickoff', kicker: '3', credit: '21', retyds: '20', spot: { side: 'own', yardline: 30 } });
+    enterTimeout(h, 'teamA');
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+    const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    const html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (!/kicks off/.test(html)) fail('timeout-kickoff-window', 'expected the kickoff still as the headline, got: ' + html);
+    if (!/Timeout — /.test(html)) fail('timeout-kickoff-window', 'expected the timeout beneath the kickoff, got: ' + html);
+    if (html.indexOf('kicks off') > html.indexOf('Timeout')) fail('timeout-kickoff-order', 'the kickoff must come BEFORE the timeout line, got: ' + html);
     v.close();
   }
 
