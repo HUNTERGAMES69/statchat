@@ -332,6 +332,56 @@ async function run() {
     v.close();
   }
 
+  // --- 13. Requested directly: an ordinary kickoff was invisible in
+  // BOTH drive tiles -- filed under the kicking team at the tail of
+  // the OLD segment, with the new segment starting at the "New drive"
+  // marker right after it, so the window between the kickoff and the
+  // receiving team's first snap read "no active drive yet". Now that
+  // window shows the kickoff itself, with the resulting drive start
+  // beneath it. Display only, with the possession count explicitly
+  // asserted unchanged -- the one stat the request specifically
+  // demanded be protected.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'opp', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '25', td: true });
+    enterPlay(h, { type: 'pat', kicker: '3', result: 'g' });
+    enterPlay(h, { type: 'kickoff', kicker: '3', credit: '21', retyds: '20', spot: { side: 'own', yardline: 30 } });
+    let rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+
+    // (a) The window: kickoff shows, drive-start line beneath it.
+    let v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    let html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (!/kicks off/.test(html)) fail('kickoff-window', 'expected the kickoff shown in the window before the first snap, got: ' + html);
+    if (!/1st &amp; 10 at own 30/.test(html)) fail('kickoff-window-downline', 'expected the resulting drive start beneath the kickoff, got: ' + html);
+
+    // (b) Possession count and box score: byte-identical plays array
+    // after a full render pass that runs this exact branch, and the
+    // expected possession numbers -- one each, the kickoff having
+    // handed the ball over exactly once.
+    const before = v.evalIn('JSON.stringify(plays)');
+    v.evalIn('renderAll()');
+    const after = v.evalIn('JSON.stringify(plays)');
+    if (before !== after) fail('kickoff-window-no-mutation', 'the render pass modified the plays array every stat computes from');
+    const poss = JSON.parse(v.evalIn('JSON.stringify(countPossessions(plays))'));
+    if (poss.teamA !== 1 || poss.teamB !== 1) fail('kickoff-window-possessions', 'expected possessions 1/1 during the window, got: ' + JSON.stringify(poss));
+    v.close();
+
+    // (c) The window closes: the first snap replaces the kickoff.
+    enterPlay(h, { type: 'rush', carrier: '30', yards: '5' });
+    rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+    v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (/kicks off/.test(html)) fail('kickoff-window-closes', 'expected the kickoff replaced once the first snap landed, got: ' + html);
+    if (!/rush for 5/.test(html)) fail('kickoff-window-closes', 'expected the new drive\'s own play, got: ' + html);
+    const poss2 = JSON.parse(v.evalIn('JSON.stringify(countPossessions(plays))'));
+    if (poss2.teamA !== 1 || poss2.teamB !== 1) fail('kickoff-window-possessions-after', 'expected possessions still 1/1 after the snap, got: ' + JSON.stringify(poss2));
+    v.close();
+  }
+
   return failures;
 }
 
