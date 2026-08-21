@@ -252,6 +252,86 @@ async function run() {
     v.close();
   }
 
+  // --- 11. Requested directly: when a drive ends in a touchdown, the
+  // try (PAT/2PT) that follows must not REPLACE the touchdown as the
+  // headline. The touchdown stays locked in place and the try's own
+  // result renders as a colored sub-line beneath it -- green when
+  // good, red otherwise -- the same pairing Previous Drive's summary
+  // presents. The moment the next drive actually registers (kickoff +
+  // its first play), the display moves on to the new play with no
+  // residue.
+  {
+    // (a) TD alone -- shows the touchdown, no sub-line yet.
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'opp', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '25', td: true });
+    let rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    let v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    let html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (!/TOUCHDOWN/.test(html)) fail('td-lock-stage1', 'expected the touchdown as the headline before the try, got: ' + html);
+    if (/PAT/.test(html)) fail('td-lock-stage1', 'no try has been entered yet, nothing about a PAT should show, got: ' + html);
+    v.close();
+
+    // (b) Made PAT entered -- touchdown stays the headline, PAT is a
+    // green sub-line, in that order.
+    enterPlay(h, { type: 'pat', kicker: '3', result: 'g' });
+    rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (!/font-size:36px[^<]*"[^>]*>[^<]*rush for 25/.test(html)) fail('td-lock-stage2', 'expected the TOUCHDOWN still as the 36px headline after the PAT, got: ' + html);
+    if (!/PAT — GOOD/.test(html)) fail('td-lock-stage2', 'expected the PAT result as its own line, got: ' + html);
+    if (!/color:#1a7a4c[^>]*>[^<]*PAT — GOOD/.test(html)) fail('td-lock-stage2-color', 'expected the made PAT sub-line in green, got: ' + html);
+    if (html.indexOf('TOUCHDOWN') > html.indexOf('PAT — GOOD')) fail('td-lock-stage2-order', 'the touchdown must come BEFORE the PAT sub-line, got: ' + html);
+    v.close();
+
+    // (c) Next drive underway -- kickoff plus the new drive's first
+    // play. The lock releases on its own; the new play shows normally.
+    enterPlay(h, { type: 'kickoff', kicker: '3', credit: '21', retyds: '20', spot: { side: 'own', yardline: 30 } });
+    enterPlay(h, { type: 'rush', carrier: '30', yards: '5' });
+    rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+    v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (/TOUCHDOWN|PAT/.test(html)) fail('td-lock-stage3', 'expected the display to move on once the next drive registered, got: ' + html);
+    if (!/rush for 5/.test(html)) fail('td-lock-stage3', 'expected the new drive\'s own play, got: ' + html);
+    v.close();
+  }
+
+  // --- 12. A MISSED try renders red, and a 2PT is handled the same
+  // way a PAT is -- detected by playType, exactly like
+  // computeDriveSummary, never by .result alone.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'opp', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '25', td: true });
+    enterPlay(h, { type: 'pat', kicker: '3', result: 'x' });
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+    const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    const html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (!/TOUCHDOWN/.test(html)) fail('missed-try-lock', 'expected the touchdown still locked as the headline, got: ' + html);
+    if (!/color:#a32d2d[^>]*>[^<]*PAT — MISSED/.test(html)) fail('missed-try-red', 'expected the missed PAT sub-line in red, got: ' + html);
+    v.close();
+  }
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'opp', yardline: 25 });
+    enterPlay(h, { type: 'pass', passer: '7', receiver: '80', yards: '25', td: true });
+    enterPlay(h, { type: 'twopt', sub: 'rush', carrier: '22', result: 'g' });
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+    const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    const html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (!/TOUCHDOWN/.test(html)) fail('twopt-lock', 'expected the touchdown still locked as the headline after a 2PT, got: ' + html);
+    if (!/color:#1a7a4c[^>]*>[^<]*2PT[^<]*GOOD/.test(html)) fail('twopt-green', 'expected the good 2PT sub-line in green, got: ' + html);
+    v.close();
+  }
+
   return failures;
 }
 
