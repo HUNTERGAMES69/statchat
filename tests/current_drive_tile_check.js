@@ -234,7 +234,17 @@ async function run() {
     await new Promise(r => setTimeout(r, 100));
     const el = v.document.querySelector('.drive-previous');
     const style = v.window.getComputedStyle(el);
-    if (style.marginTop !== '18px') fail('moderate-gap-above', 'expected a fixed 18px gap above Previous Drive, not margin-top:auto (which pins to the absolute bottom instead), got: ' + style.marginTop);
+    if (style.marginTop !== '30px') fail('moderate-gap-above', 'expected a fixed 30px gap above Previous Drive, not margin-top:auto (which pins to the absolute bottom instead), got: ' + style.marginTop);
+    // Reported directly from a live screenshot: at desktop width the
+    // stacked tiles' text read too small against tiles stretched that
+    // wide -- bumped to 28px values with 13px labels, checked as
+    // computed styles rather than markup so a stray override anywhere
+    // else in the stylesheet would still be caught.
+    v.evalIn('document.getElementById("prevDriveLogScroll").innerHTML = renderDriveSummary({ team: "teamA", rushes: 1, rushYds: 5, passes: 1, passYds: 8, totalPlays: 2, totalYds: 13, top: 60, scoringPlayText: null, lastPlayText: "x", tryOutcome: null })');
+    const val = v.document.querySelector('.inline-stat-item .stat-value');
+    const lab = v.document.querySelector('.inline-stat-item .stat-label');
+    if (v.window.getComputedStyle(val).fontSize !== '28px') fail('tile-value-size', 'expected tile values at 28px, got: ' + v.window.getComputedStyle(val).fontSize);
+    if (v.window.getComputedStyle(lab).fontSize !== '13px') fail('tile-label-size', 'expected tile labels at 13px, got: ' + v.window.getComputedStyle(lab).fontSize);
     if (!/1px solid/.test(style.borderTop)) fail('divider-above', 'expected a visible border-top divider above Previous Drive, got: ' + style.borderTop);
     // Requested directly, same follow-up: the content sat flush against
     // the tile's bottom edge with no breathing room once pinned there.
