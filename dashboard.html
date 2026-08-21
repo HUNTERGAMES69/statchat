@@ -608,6 +608,14 @@
     const r = { w:0, l:0, t:0, homeW:0, homeL:0, awayW:0, awayL:0, played:0 };
     (games || []).forEach(g => {
       if (g.status !== 'final') return;
+      // Wholly ignored, the same way it already is for Season Report
+      // and Player Report -- a preseason game contributes nothing here,
+      // not a counted loss and not a counted win. Checked ahead of the
+      // score fields below on purpose: a preseason game that was never
+      // finalized would already be skipped by `status`, but one that
+      // WAS finalized (a scrimmage played and closed out like any other
+      // game) needs this separate check to stay out of the record too.
+      if (g.is_preseason) return;
       if (g.final_score_us == null || g.final_score_opp == null) return;
       r.played++;
       const us = g.final_score_us, them = g.final_score_opp;
