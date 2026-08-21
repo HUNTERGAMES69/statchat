@@ -848,6 +848,31 @@ function confirmClockAdvances(absSec, clockVal){
   }
   return true;
 }
+// The 0:00 that closes a half or the game. Reported directly, 21 Aug
+// 2026: pressing End 1st half made no clock entry and no TOP update at
+// all. Reproduced exactly -- clockToAbsSeconds(state.quarter, '0:00')
+// trusts the DERIVED quarter, and the Q2/Q4 markers are the only
+// manual ones (Q1 and Q3 come free with Start game / Start 2nd half).
+// With a Q2 marker never pressed, the 0:00 computed a full quarter
+// early, landed BEFORE clock time already recorded, and tripped the
+// backwards-clock dialog above -- where Cancel, the reasonable answer
+// to a wrong-looking value, silently aborted the ENTIRE half close:
+// no clock entry, no divider, no phase change. OK was no better: a
+// backwards entry that paired to zero possession time.
+//
+// A half's own 0:00 can never legitimately come before clock time the
+// game has already recorded, so when the derived quarter lags, snap
+// forward to the end of the quarter the LAST RECORDED CLOCK actually
+// sits in. When the markers are in and the derived quarter is right,
+// nothing here changes anything.
+function halfEndClock(state){
+  let absSec = clockToAbsSeconds(state.quarter, '0:00');
+  const lastAbs = getLastClockAbsSec();
+  if (lastAbs !== null && absSec < lastAbs){
+    absSec = Math.ceil(lastAbs / quarterLengthSec) * quarterLengthSec;
+  }
+  return { absSec, quarter: Math.max(state.quarter, Math.round(absSec / quarterLengthSec)) };
+}
 function formatDuration(sec){
   const m = Math.floor(sec / 60), s = Math.round(sec % 60);
   return m + ':' + String(s).padStart(2, '0');
@@ -3663,9 +3688,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       TEAMS.teamB.name + ' ' + state.scores.teamB + '.\n\n' +
       'This closes the first half and moves to halftime.');
     if (!ok) return false;
-    const absSec = clockToAbsSeconds(state.quarter, '0:00');
-    if (!confirmClockAdvances(absSec, '0:00')) return false;
-    pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
+    const heClock = halfEndClock(state);
+    if (!confirmClockAdvances(heClock.absSec, '0:00')) return false;
+    pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec: heClock.absSec } }, quarter: heClock.quarter });
     pushAndPersist({ id: nextId++, text: 'End of 1st half', effect: {}, isDivider: true });
     gamePhase = 'halftime';
     persistUiState();
@@ -3850,8 +3875,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
     const ok = confirm('End the game now? Final score: ' + TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' + TEAMS.teamB.name + ' ' + state.scores.teamB + '.\n\nThis locks in the game as final.');
     if (!ok) return;
-    const absSec = clockToAbsSeconds(state.quarter, '0:00');
-    if (!confirmClockAdvances(absSec, '0:00')) return;
+    const heClock = halfEndClock(state);
+    if (!confirmClockAdvances(heClock.absSec, '0:00')) return;
     // Re-finalizing after an unlock must not stack a second set of
     // closing plays on top of the first. If the log still ends with the
     // Final divider, nothing has been added since it was finalized.
@@ -3863,7 +3888,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // still in flight loses the race: both rows are rejected, land in
       // the offline queue, and retry forever against a game that will
       // never accept them.
-      await pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec } }, quarter: state.quarter });
+      await pushAndPersist({ id: nextId++, text: 'Clock — 0:00 end of possession (' + TEAMS[state.possession].name + ')', effect: { clockEvent: { type: 'end', team: state.possession, absSec: heClock.absSec } }, quarter: heClock.quarter });
       await pushAndPersist({ id: nextId++, text: 'Final', effect: {}, isDivider: true });
     }
     gamePhase = 'ended';
