@@ -2,7 +2,7 @@
 // cumulative stats for our own team while a game has not started yet
 // -----------------------------------------------------------------------
 // Requested directly, analyzed and mocked up before any code changed.
-// While game.status === 'not_started', view.html's bottom-left tile
+// While game.status === 'setup', view.html's bottom-left tile
 // (normally this game's own box score, always empty until the game is
 // underway) shows the sum of every prior FINISHED, non-preseason game
 // this season instead -- the same tiles (Rushing/Passing/Receiving/
@@ -57,7 +57,7 @@ async function run() {
     const game1Plays = await buildFinishedGame(20, 15, '80');
     const game2Plays = await buildFinishedGame(10, 9, '84');
     const games = [
-      { game: { id: 'current-game', status: 'not_started', season_year: 2026, game_date: '2026-08-22', designator: 'Week 3', home_team_name: 'Neville', away_team_name: 'Some New Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] },
+      { game: { id: 'current-game', status: 'setup', season_year: 2026, game_date: '2026-08-22', designator: 'Week 3', home_team_name: 'Neville', away_team_name: 'Some New Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] },
       { game: { id: 'g1', status: 'final', season_year: 2026, game_date: '2026-08-01', designator: 'Week 1', home_team_name: 'Neville', away_team_name: 'Opp One', our_team_is_home: true, is_preseason: false }, roster: defaultRoster(), plays: game1Plays },
       { game: { id: 'g2', status: 'final', season_year: 2026, game_date: '2026-08-08', designator: 'Week 2', home_team_name: 'Neville', away_team_name: 'Opp Two', our_team_is_home: true, is_preseason: false }, roster: defaultRoster(), plays: game2Plays }
     ];
@@ -84,7 +84,7 @@ async function run() {
   // --- 2. No prior finished games this season at all -- game 1.
   {
     const games = [
-      { game: { id: 'current-game', status: 'not_started', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] }
+      { game: { id: 'current-game', status: 'setup', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] }
     ];
     const w = await bootPage('view.html', { query: '?id=current-game', games, readyWhen: win => (win.document.getElementById('boxScoreTeamA') || {}).innerHTML });
     await new Promise(r => setTimeout(r, 200));
@@ -102,7 +102,7 @@ async function run() {
   {
     const game1Plays = await buildFinishedGame(20, 15, '80');
     const games = [
-      { game: { id: 'current-game', status: 'not_started', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] },
+      { game: { id: 'current-game', status: 'setup', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] },
       { game: { id: 'g1', status: 'final', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Scrimmage Opp', our_team_is_home: true, is_preseason: true }, roster: defaultRoster(), plays: game1Plays }
     ];
     const w = await bootPage('view.html', { query: '?id=current-game', games, readyWhen: win => (win.document.getElementById('boxScoreTeamA') || {}).innerHTML });
@@ -119,7 +119,7 @@ async function run() {
   {
     const game1Plays = await buildFinishedGame(20, 15, '80');
     const games = [
-      { game: { id: 'current-game', status: 'not_started', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] },
+      { game: { id: 'current-game', status: 'setup', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] },
       { game: { id: 'g1', status: 'final', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Opp One', our_team_is_home: true, is_preseason: false }, roster: defaultRoster(), plays: game1Plays }
     ];
     const w = await bootPage('view.html', { query: '?id=current-game', games, readyWhen: win => (win.document.getElementById('boxScoreTeamB') || {}).innerHTML });
@@ -163,7 +163,7 @@ async function run() {
   {
     const game1Plays = await buildFinishedGame(8, 0, '80', true);
     const games = [
-      { game: { id: 'current-game', status: 'not_started', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] },
+      { game: { id: 'current-game', status: 'setup', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] },
       { game: { id: 'g1', status: 'final', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Opp One', our_team_is_home: true, is_preseason: false }, roster: defaultRoster(), plays: game1Plays }
     ];
     const w = await bootPage('view.html', { query: '?id=current-game', games, readyWhen: win => (win.document.getElementById('boxScoreTeamA') || {}).innerHTML });
@@ -184,7 +184,7 @@ async function run() {
   // the page only ever subscribed to the `plays` table.
   {
     const games = [
-      { game: { id: 'current-game', status: 'not_started', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] }
+      { game: { id: 'current-game', status: 'setup', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] }
     ];
     const w = await bootPage('view.html', { query: '?id=current-game', games, readyWhen: win => (win.document.getElementById('boxScoreTeamA') || {}).innerHTML });
     await new Promise(r => setTimeout(r, 200));
@@ -212,7 +212,7 @@ async function run() {
   // reload anywhere in between.
   {
     const games = [
-      { game: { id: 'current-game', status: 'not_started', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] }
+      { game: { id: 'current-game', status: 'setup', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] }
     ];
     const w = await bootPage('view.html', { query: '?id=current-game', games, readyWhen: win => (win.document.getElementById('boxScoreTeamA') || {}).innerHTML });
     await new Promise(r => setTimeout(r, 200));
@@ -245,7 +245,7 @@ async function run() {
   // finished games rendered this tile completely blank.
   {
     const games = [
-      { game: { id: 'current-game', status: 'not_started', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] },
+      { game: { id: 'current-game', status: 'setup', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] },
       { game: { id: 'g1', status: 'final', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Opp One', our_team_is_home: true, is_preseason: false }, roster: defaultRoster(), plays: [] }
     ];
     const w = await bootPage('view.html', { query: '?id=current-game', games, readyWhen: win => (win.document.getElementById('boxScoreTeamA') || {}).innerHTML });

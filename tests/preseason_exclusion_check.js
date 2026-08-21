@@ -132,7 +132,7 @@ async function run() {
     ['true', true, true], ['false', false, false], ['undefined', undefined, false]
   ]) {
     const gameFields = { id: 'g1', designator: 'G1', season_year: 2026, game_date: '2026-08-15',
-      home_team_name: 'Neville', away_team_name: 'Some Opponent', our_team_is_home: true, status: 'not_started' };
+      home_team_name: 'Neville', away_team_name: 'Some Opponent', our_team_is_home: true, status: 'setup' };
     if (value !== undefined) gameFields.is_preseason = value;
     const w = await bootPage('dashboard.html', {
       game: gameFields,
