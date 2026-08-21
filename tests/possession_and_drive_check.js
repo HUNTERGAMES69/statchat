@@ -130,7 +130,7 @@ async function run() {
     const tiles = v.document.getElementById('currentDriveTiles').textContent.replace(/\s+/g, ' ');
     if (!/TOP/.test(tiles)) fail('TOP tile', 'Current Drive has no TOP tile: ' + tiles.trim());
     // 11:37 -> 10:14 is 1:23.
-    if (!/TOP\s*1:23/.test(tiles)) {
+    if (!/1:23\s*TOP/.test(tiles)) {
       fail('TOP tile', 'Current Drive TOP should be 1:23, tiles read: ' + tiles.trim());
     }
     v.close();

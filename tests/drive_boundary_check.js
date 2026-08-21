@@ -160,17 +160,17 @@ async function run() {
     assertNoAdminStarts('punt', starts, rows);
 
     const prev = v.document.getElementById('prevDriveLogScroll').textContent.replace(/\s+/g, ' ');
-    if (!/RUSH\s*1\/12/.test(prev)) fail('punt', 'rush tile wrong: ' + prev.trim());
-    if (!/PASS\s*1\/20/.test(prev)) fail('punt', 'pass tile wrong: ' + prev.trim());
+    if (!/1\/12\s*RUSH/.test(prev)) fail('punt', 'rush tile wrong: ' + prev.trim());
+    if (!/1\/20\s*PASS/.test(prev)) fail('punt', 'pass tile wrong: ' + prev.trim());
     // TOTAL plays/yards, matching the Current Drive tile. This asserted
     // 'YARDS 32' until 14 Aug 2026, when the previous-drive tile still
     // counted a different thing under a different name from the live one
     // beside it -- the same four tiles in the same order, and only three
     // of them comparable.
-    if (!/TOTAL\s*2\/32/.test(prev)) fail('punt', 'total tile wrong, expected 2/32: ' + prev.trim());
+    if (!/2\/32\s*TOTAL/.test(prev)) fail('punt', 'total tile wrong, expected 2/32: ' + prev.trim());
     // 10:00 -> 6:30 is 3:30 of possession. A broken drive split makes
     // this 0:00, so it doubles as a boundary check.
-    if (!/TOP\s*3:30/.test(prev)) fail('punt', 'time of possession wrong: ' + prev.trim());
+    if (!/3:30\s*TOP/.test(prev)) fail('punt', 'time of possession wrong: ' + prev.trim());
     // The drive ended in a punt; the trailing clock line must not be
     // what gets shown as the summary.
     if (!prev.includes('punts 40')) {
@@ -200,7 +200,7 @@ async function run() {
       fail('manual-flip', 'current drive begins on the flip marker itself: ' + current.trim());
     }
     const prev = v.document.getElementById('prevDriveLogScroll').textContent.replace(/\s+/g, ' ');
-    if (!/TOTAL\s*1\/8/.test(prev)) fail('manual-flip', 'previous drive total wrong, expected 1/8: ' + prev.trim());
+    if (!/1\/8\s*TOTAL/.test(prev)) fail('manual-flip', 'previous drive total wrong, expected 1/8: ' + prev.trim());
     // The two panels must carry the SAME labels -- with one deliberate
     // exception, added 21 Aug 2026: the current drive's fourth tile
     // reads SOP, not TOP, for as long as the drive is still open (no

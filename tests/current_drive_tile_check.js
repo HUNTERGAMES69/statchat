@@ -74,7 +74,7 @@ async function run() {
     const html = v.document.getElementById('currentDriveTiles').innerHTML;
     if (!/SOP/.test(html)) fail('sop-label', 'expected the fourth tile to read SOP while the drive is open, got: ' + html);
     if (!/11:24/.test(html)) fail('sop-value', 'expected the logged start-of-possession clock 11:24, got: ' + html);
-    if (/<b[^>]*>TOP/.test(html)) fail('sop-not-top', 'must not still read TOP while the drive has no closing clock event, got: ' + html);
+    if (/<span class="stat-label"[^>]*>TOP/.test(html)) fail('sop-not-top', 'must not still read TOP while the drive has no closing clock event, got: ' + html);
     // The distinct amber styling from the approved mockup -- deliberate,
     // not incidental: it is a clock reading, not an accumulated stat,
     // and looking identical to the other three tiles would read as a
@@ -99,7 +99,7 @@ async function run() {
     const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('currentDriveTiles') || {}).innerHTML });
     await new Promise(r => setTimeout(r, 150));
     const html = v.document.getElementById('currentDriveTiles').innerHTML;
-    if (!/<b[^>]*>TOP/.test(html)) fail('top-returns-label', 'expected the fourth tile to read TOP again once closed, got: ' + html);
+    if (!/<span class="stat-label"[^>]*>TOP/.test(html)) fail('top-returns-label', 'expected the fourth tile to read TOP again once closed, got: ' + html);
     if (!/1:24/.test(html)) fail('top-returns-value', 'expected the real elapsed duration 1:24, got: ' + html);
     if (/SOP/.test(html)) fail('top-not-sop', 'must not still read SOP once the drive has a closing clock event, got: ' + html);
     v.close();
@@ -191,7 +191,7 @@ async function run() {
     await new Promise(r => setTimeout(r, 150));
     const html = v.document.getElementById('driveLogScroll').innerHTML;
     if (!/font-size:24px/.test(html)) fail('down-distance-larger', 'expected the down/distance line at 24px, got: ' + html);
-    if (!/margin-top:18px/.test(html)) fail('play-text-spacing', 'expected margin-top:18px above the play text, got: ' + html);
+    if (!/margin-top:16px/.test(html)) fail('play-text-spacing', 'expected margin-top:16px above the play text, got: ' + html);
     v.close();
   }
 
@@ -218,21 +218,24 @@ async function run() {
     // was still too small next to the now-larger outcome line above
     // it -- bumped from 12px to 15px, still visibly the smaller of the
     // two on purpose.
-    if (!/font-size:15px/.test(html)) fail('prev-drive-try-line-larger', 'expected the PAT sub-line at 15px, got: ' + html);
+    if (!/font-size:16px/.test(html)) fail('prev-drive-try-line-larger', 'expected the PAT sub-line at 16px, got: ' + html);
     v.close();
   }
 
-  // --- 10. Previous Drive is pinned to the bottom of the tile via the
-  // quad's own flex column (margin-top:auto), with a visible divider
-  // above it now that it is no longer simply the next thing in the
-  // document flow.
+  // --- 10. Previous Drive sits a fixed, moderate distance below
+  // Current Drive's own content -- changed from margin-top:auto
+  // (which pinned it to the absolute bottom edge, but pushed ALL the
+  // tile's leftover space above it instead) to a fixed gap, so
+  // whatever space remains falls below it near the tile's own bottom
+  // edge, where padding-bottom already accounts for it. Still has a
+  // visible divider above it either way.
   {
     const v = await bootPage('view.html', { existingPlays: [], readyWhen: win => (win.document.getElementById('prevDriveLogScroll') || {}).innerHTML !== undefined });
     await new Promise(r => setTimeout(r, 100));
     const el = v.document.querySelector('.drive-previous');
     const style = v.window.getComputedStyle(el);
-    if (style.marginTop !== 'auto') fail('pinned-to-bottom', 'expected margin-top:auto to pin Previous Drive to the bottom of the quad, got: ' + style.marginTop);
-    if (!/1px solid/.test(style.borderTop)) fail('divider-above', 'expected a visible border-top divider now that Previous Drive is pinned, got: ' + style.borderTop);
+    if (style.marginTop !== '18px') fail('moderate-gap-above', 'expected a fixed 18px gap above Previous Drive, not margin-top:auto (which pins to the absolute bottom instead), got: ' + style.marginTop);
+    if (!/1px solid/.test(style.borderTop)) fail('divider-above', 'expected a visible border-top divider above Previous Drive, got: ' + style.borderTop);
     // Requested directly, same follow-up: the content sat flush against
     // the tile's bottom edge with no breathing room once pinned there.
     if (style.paddingBottom !== '16px') fail('bottom-spacing', 'expected 16px of padding below Previous Drive\'s own content, got: ' + style.paddingBottom);
