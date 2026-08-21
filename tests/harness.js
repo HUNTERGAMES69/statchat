@@ -220,6 +220,23 @@ function makeMockSupabase(db) {
           if (table === 'profiles') data = [{ role: db.role, id: 'test-user-id' }];
           else if (table === 'games') {
             data = db.games ? db.games.map(g => g.game) : [db.game];
+            // Real .eq() filter evaluation too, now -- but ONLY when the
+            // multi-game array is in play. Added for view.html's Season
+            // Stats tile, which needs two structurally different queries
+            // against the SAME table within one test: fetch-by-id for
+            // the current game, and fetch-by-season_year+status for
+            // every prior finished one. The single-game db.game fallback
+            // stays exactly as permissive as it always was -- every
+            // existing single-game test already relies on `.eq('id',
+            // ...)` matching regardless of what id it actually set, and
+            // there is only ever one game to distinguish it from
+            // anyway, so real filtering there would add risk without
+            // adding anything a single-game test could actually need.
+            if (db.games) {
+              Object.keys(this._filters || {}).forEach(col => {
+                data = data.filter(row => String(row[col]) === String(this._filters[col]));
+              });
+            }
             // Real OR-filter evaluation, not a no-op -- see .or() above
             // for why this exists. Parses "col.op.val,col.op.val", ORs
             // the clauses together, and keeps only rows matching at
