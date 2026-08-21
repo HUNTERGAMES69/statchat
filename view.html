@@ -1105,11 +1105,20 @@ function extractNameTag(rawName){
       // here is not empty. Only a kickoff qualifies -- a punt already
       // shows as the Previous Drive's own outcome line, so the nearest
       // real play being anything else changes nothing.
-      if (!currentDriveDisplayList.length && resetIdxs.length){
+      // Extended for the timeout follow-up: a timeout called in this
+      // same window (after the kickoff, before the first snap) used to
+      // leave the list non-empty and skip this reach-back entirely, so
+      // the timeout REPLACED the kickoff as the headline -- the exact
+      // replace-the-play behavior the timeout change exists to prevent.
+      // "No plays yet" now means no plays OTHER THAN timeouts, and the
+      // kickoff is PREPENDED rather than assigned, so the timeout-
+      // peeling inside renderCurrentDriveLastPlay pairs the two:
+      // kickoff as the headline, timeout as its amber sub-line.
+      if (!currentDriveDisplayList.some(p => !(p.effect && p.effect.timeout)) && resetIdxs.length){
         for (let i = resetIdxs[resetIdxs.length - 1] - 1; i >= 0; i--){
           const cand = plays[i];
           if (!cand || cand.isDivider || isDriveTileNoise(cand)) continue;
-          if (cand.roles && cand.roles.playType === 'kickoff') currentDriveDisplayList = [cand];
+          if (cand.roles && cand.roles.playType === 'kickoff') currentDriveDisplayList = [cand].concat(currentDriveDisplayList);
           break;
         }
       }
@@ -1297,6 +1306,29 @@ function extractNameTag(rawName){
   // other caller (allPlaysScroll) has no use for.
   function renderCurrentDriveLastPlay(list, state, distDisplay){
     if (!list.length) return '<div style="color:#999;">no active drive yet</div>';
+    // Requested directly: a timeout must be ADDITIVE to the last play,
+    // never replace it as the headline -- the same principle as the
+    // touchdown/try lock below. Every trailing timeout is peeled off
+    // the end of the list into its own amber sub-line (amber matching
+    // the SOP tile: a clock event, not a play), and everything below
+    // -- including the try-lock -- operates on what remains, so a
+    // timeout called after a PAT leaves the touchdown+try pairing
+    // fully intact with the timeout beneath both. Rendered LAST, after
+    // the down/distance line, reading chronologically: the play, the
+    // situation it produced, then the stoppage called on top of it.
+    //
+    // If the segment holds NOTHING BUT timeouts (end === 0), nothing
+    // is peeled and the newest timeout stays the headline -- the only
+    // event that exists is still better shown than hidden.
+    let timeoutLines = '';
+    let end = list.length;
+    while (end > 0 && list[end - 1].effect && list[end - 1].effect.timeout) end--;
+    if (end > 0 && end < list.length){
+      timeoutLines = list.slice(end).map(t =>
+        '<div style="font-size:24px; font-weight:600; margin-top:8px; color:#7a5c00;">' +
+        stripTeamNames(t.text || '') + '</div>').join('');
+      list = list.slice(0, end);
+    }
     let p = list[list.length - 1];
     // Requested directly: when the drive just ended in a touchdown, the
     // try (PAT/2PT) that follows must not REPLACE the touchdown as the
@@ -1372,7 +1404,7 @@ function extractNameTag(rawName){
       ? '<div style="font-size:24px; font-weight:600; color:#555; margin-top:8px;">' +
         ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabel(state.fieldPos) + '</div>'
       : '';
-    return playHtml + tryLine + downLine;
+    return playHtml + tryLine + downLine + timeoutLines;
   }
 
   function computeDriveSummary(startIdx, endIdx){
