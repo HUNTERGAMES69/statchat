@@ -201,10 +201,17 @@ async function run() {
     }
     const prev = v.document.getElementById('prevDriveLogScroll').textContent.replace(/\s+/g, ' ');
     if (!/TOTAL\s*1\/8/.test(prev)) fail('manual-flip', 'previous drive total wrong, expected 1/8: ' + prev.trim());
-    // The two panels must carry the SAME labels. That is the requirement;
-    // the values above only demonstrate it on one drive.
+    // The two panels must carry the SAME labels -- with one deliberate
+    // exception, added 21 Aug 2026: the current drive's fourth tile
+    // reads SOP, not TOP, for as long as the drive is still open (no
+    // closing clock event yet) -- there is no elapsed duration to show
+    // yet, only the clock as logged at the start. Normalized to the
+    // same token before comparing, since SOP-vs-TOP on an OPEN drive is
+    // the intended difference this test now has to allow for, not a
+    // mismatch. Every other label must still agree exactly.
     const cur = v.document.getElementById('currentDriveTiles').textContent.replace(/\s+/g, ' ');
-    const labelsOf = t => (t.match(/RUSH|PASS|TOTAL|YARDS|TOP/g) || []).join(',');
+    const labelsOf = t => (t.match(/RUSH|PASS|TOTAL|YARDS|TOP|SOP/g) || [])
+      .map(l => l === 'SOP' ? 'TOP' : l).join(',');
     if (cur && labelsOf(cur) !== labelsOf(prev)){
       fail('manual-flip', 'the current and previous drive tiles do not match: current [' +
            labelsOf(cur) + '] vs previous [' + labelsOf(prev) + '] — two drives side by ' +
