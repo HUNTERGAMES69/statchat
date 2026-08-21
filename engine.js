@@ -221,6 +221,16 @@ function rosterName(teamKey, num, order){
     const roster = buckets[unit];
     if (roster && roster[num]) return roster[num];
   }
+  // On the roster, but no unit was ever resolved for this number --
+  // still a genuine, named player, not a call-up. Requested directly:
+  // resolving every unrecognized-position player to a unit is
+  // impractical on a large roster with no position data at all, and
+  // this is the fallback that keeps a manually-typed number from
+  // reading as "not on the roster" just because nobody ever picked
+  // Offense/Defense/Special for him at setup. Checked LAST, after
+  // every preferred unit has already failed to match, since a player
+  // WITH a known unit should always resolve through that first.
+  if (t.rosterUnassigned && t.rosterUnassigned[num]) return t.rosterUnassigned[num];
   return null;
 }
 
@@ -251,6 +261,11 @@ if (num === 'TEAM') return 'TEAM';
     const roster = buckets[unit];
     if (roster && roster[num]) return roster[num];
   }
+  // Same fallback as rosterName above, for the same reason: a player
+  // genuinely on the roster with no unit ever resolved for him must
+  // still show his real name in a recap, stat package, or report --
+  // not a bare "#22" -- once he has actually been credited on a play.
+  if (t.rosterUnassigned && t.rosterUnassigned[num]) return t.rosterUnassigned[num];
   return '#' + num;
 }
 
