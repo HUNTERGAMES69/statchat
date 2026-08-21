@@ -495,7 +495,7 @@ function extractNameTag(rawName){
     return '<tr>' + cells.map(c => '<td>' + c + '</td>').join('') + '</tr>';
   }
 
-  function renderTeamBoxScore(teamKey, box){
+  function renderTeamBoxScore(teamKey, box, overrideDefensePlays){
       const team = TEAMS[teamKey];
       const s = box[teamKey];
       // LEADER HIGHLIGHT, added 19 Aug 2026 -- only at halftime or final,
@@ -733,8 +733,17 @@ function extractNameTag(rawName){
       // s.defense meant a sack with nobody credited recorded no sack at
       // all -- the Defense tile simply did not render. The event
       // happened whether or not anyone was identified.
+      //
+      // overrideDefensePlays, added 21 Aug 2026 for the not-started-game
+      // Season Stats tile: this reduction has always counted straight
+      // from the CURRENT game's own module-level `plays`, which is
+      // exactly empty for a game that has not started -- computeBoxScore
+      // alone was never going to produce a real Defense tile no matter
+      // what `box` it was handed, since this section never reads `box`
+      // for its numbers at all. Every existing caller passes nothing
+      // here and falls through to the unchanged, original behaviour.
       const opp = otherTeam(teamKey);
-      const defTotals = plays.reduce((acc, p) => {
+      const defTotals = (overrideDefensePlays || plays).reduce((acc, p) => {
         const r = p.roles; if (!r) return acc;
         const e = p.effect || {};
         // A fumble that ended a SACK is still a sack -- reported
@@ -810,7 +819,25 @@ function extractNameTag(rawName){
 
   function renderBoxScore(){
     const box = computeBoxScore(plays);
-    const a = renderTeamBoxScore('teamA', box);
+    // Requested directly: while a game has not started, teamA's tile
+    // shows this season's cumulative stats instead of this game's own
+    // (always empty at this point, since nothing has been entered
+    // yet) -- computed once in init(), reused here on every render
+    // rather than refetched. teamB (the opponent) is deliberately
+    // untouched either way.
+    let a;
+    if (seasonStatsForNotStarted && seasonStatsForNotStarted.gameCount > 0){
+      a = renderTeamBoxScore('teamA', seasonStatsForNotStarted.aggregatedBox, seasonStatsForNotStarted.allSeasonPlays);
+    } else if (seasonStatsForNotStarted){
+      // No prior finished games this season at all -- game 1. Shown
+      // directly rather than through renderTeamBoxScore, which has no
+      // concept of "no season yet" and would otherwise fall through to
+      // its own generic "No stats yet for [team]." empty state, saying
+      // something true but not the more specific thing this actually is.
+      a = { html: '<div style="color:#999; padding:20px 0; text-align:center;">no season stats yet</div>', totalRows: 0 };
+    } else {
+      a = renderTeamBoxScore('teamA', box);
+    }
     const b = renderTeamBoxScore('teamB', box);
     const quadBL = document.getElementById('quadBL'), quadBR = document.getElementById('quadBR');
     quadBL.style.setProperty('--stat-scale', 1);
@@ -1576,6 +1603,100 @@ function extractNameTag(rawName){
     document.getElementById('teamSummaryContainer').innerHTML = html;
   }
 
+  // Requested directly, mocked up and approved before this was built:
+  // while a game has not started, the bottom-left tile shows this
+  // season's cumulative stats for our own team instead of this game's
+  // own (which would otherwise just be empty, since nothing has been
+  // entered yet). Set once in init(), before the CURRENT game's own
+  // buildTeams() call, and read from again on every render rather than
+  // refetched -- see loadSeasonStatsForNotStarted() below for why the
+  // ordering there matters.
+  //
+  // { aggregatedBox, allSeasonPlays, gameCount } | null. null means
+  // either the game has actually started (the normal, live tile
+  // applies) or this was never checked for this game at all.
+  let seasonStatsForNotStarted = null;
+
+  // There is no stored, precomputed season-stats table anywhere in
+  // this app -- confirmed directly before building this, not assumed.
+  // season_report.html derives its own season totals fresh, in the
+  // browser, every single time it loads: for each finished game,
+  // rebuild that game's own roster/team context, compute that game's
+  // own box score, merge the result into a running total. This does
+  // the identical thing, for the same reason -- there is no cheaper
+  // source to read from, since nothing anywhere writes this total back
+  // to the database once computed. A third page doing the same
+  // derivation, not a shortcut around it.
+  async function loadSeasonStatsForNotStarted(game, ourBranding){
+    const { data: priorGames, error } = await supabaseClient
+      .from('games').select('*')
+      .eq('season_year', game.season_year).eq('status', 'final')
+      // Same reasoning as season_report.html and player_report.html:
+      // NULL is not false in SQL, so a plain .eq('is_preseason', false)
+      // would have silently excluded every game saved before that
+      // column existed.
+      .or('is_preseason.is.null,is_preseason.eq.false');
+    if (error || !priorGames || !priorGames.length){
+      seasonStatsForNotStarted = { aggregatedBox: null, allSeasonPlays: [], gameCount: 0 };
+      return;
+    }
+
+    const aggRushing = {}, aggPassing = {}, aggReceiving = {}, aggSpecialTeams = {};
+    const allSeasonPlays = [];
+    // Identical to season_report.html's own mergeInto -- summed except
+    // for a "long" figure, which is a max, not a running total.
+    const mergeInto = (target, key, delta) => {
+      if (!target[key]) target[key] = {};
+      Object.keys(delta).forEach(k => {
+        if (k === 'long' || k === 'fgLong' || k === 'puntLong'){
+          target[key][k] = Math.max(target[key][k] || 0, delta[k] || 0);
+        } else {
+          target[key][k] = (target[key][k] || 0) + (delta[k] || 0);
+        }
+      });
+    };
+
+    for (const priorGame of priorGames){
+      const { data: rosterRows } = await supabaseClient
+        .from('game_rosters').select('*').eq('game_id', priorGame.id);
+      const { data: rawPlays } = await supabaseClient
+        .from('plays').select('*').eq('game_id', priorGame.id).order('sequence_number', { ascending: true });
+      const gamePlays = (rawPlays || []).map(p => ({
+        text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+        roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+      }));
+      // Rebuilds the SAME global TEAMS object the current, not-started
+      // game is about to use for real -- deliberately safe, because
+      // this entire function runs and finishes BEFORE buildTeams() is
+      // called for the actual current game a few lines later in
+      // init(). Whatever TEAMS looks like when this returns is
+      // correctly overwritten immediately afterward; nothing else
+      // reads TEAMS in between.
+      buildTeams(priorGame, rosterRows || [], ourBranding);
+      const box = computeBoxScore(gamePlays);
+      ['rushing', 'passing', 'receiving'].forEach(cat => {
+        const target = cat === 'rushing' ? aggRushing : cat === 'passing' ? aggPassing : aggReceiving;
+        Object.keys(box.teamA[cat]).forEach(n => mergeInto(target, n, box.teamA[cat][n]));
+      });
+      Object.keys(box.teamA.specialTeams).forEach(n => mergeInto(aggSpecialTeams, n, box.teamA.specialTeams[n]));
+      // Kept, not just merged and discarded: renderTeamBoxScore's own
+      // Defense tile has never read its numbers from `box` at all (see
+      // the comment on defTotals above) -- it reduces straight over
+      // whichever plays array it is handed. Concatenating every prior
+      // game's plays here, then handing the combined array in as
+      // overrideDefensePlays, reuses that exact same reduction
+      // unchanged rather than re-deriving int/fumRec/sacks/tfl a second
+      // way that could quietly disagree with it.
+      allSeasonPlays.push(...gamePlays);
+    }
+
+    seasonStatsForNotStarted = {
+      aggregatedBox: { teamA: { rushing: aggRushing, passing: aggPassing, receiving: aggReceiving, specialTeams: aggSpecialTeams } },
+      allSeasonPlays,
+      gameCount: priorGames.length
+    };
+  }
+
   async function init(){
     const params = new URLSearchParams(window.location.search);
     currentGameId = params.get('id');
@@ -1605,6 +1726,20 @@ function extractNameTag(rawName){
     currentGameStatus = game.status;
     quarterLengthSec = game.quarter_length_seconds || 720;
 
+    const { data: teamRows } = await supabaseClient
+      .from('teams').select('primary_color, secondary_color, logo_url').eq('is_our_team', true).limit(1);
+    const ourBranding = (teamRows && teamRows[0]) || {};
+
+    // Requested directly: this has to run and finish BEFORE the current
+    // game's own buildTeams() call a few lines below, since it does its
+    // own buildTeams() calls internally, once per prior game, and the
+    // LAST one to run wins for the rest of this page. Doing this first
+    // means the current game's own buildTeams() call is always that
+    // last one, regardless of what happened during aggregation.
+    if (game.status === 'not_started'){
+      await loadSeasonStatsForNotStarted(game, ourBranding);
+    }
+
     const { data: rosterRows, error: rosterError } = await supabaseClient
       .from('game_rosters').select('*').eq('game_id', currentGameId);
     if (rosterError){
@@ -1613,14 +1748,17 @@ function extractNameTag(rawName){
       return;
     }
 
-    const { data: teamRows } = await supabaseClient
-      .from('teams').select('primary_color, secondary_color, logo_url').eq('is_our_team', true).limit(1);
-    const ourBranding = (teamRows && teamRows[0]) || {};
-
     buildTeams(game, rosterRows || [], ourBranding);
     ['teamA', 'teamB'].forEach(teamKey => {
       const h = document.getElementById(teamKey === 'teamA' ? 'teamAHeading' : 'teamBHeading');
-      h.textContent = TEAMS[teamKey].name + ' Stats';
+      // Season Stats only ever applies to OUR OWN team's tile (teamA),
+      // matching the request exactly -- the opponent changes every
+      // week, so a season total for them would not mean anything.
+      const showingSeasonStats = teamKey === 'teamA' && seasonStatsForNotStarted;
+      const n = showingSeasonStats ? seasonStatsForNotStarted.gameCount : 0;
+      h.textContent = TEAMS[teamKey].name + (showingSeasonStats
+        ? (n > 0 ? ' Season Stats — ' + n + ' game' + (n === 1 ? '' : 's') : ' Season Stats')
+        : ' Stats');
       h.style.background = TEAMS[teamKey].bg;
       h.style.color = safeTextColor(TEAMS[teamKey].bg, TEAMS[teamKey].text);
       h.style.padding = '6px 10px';
