@@ -130,6 +130,107 @@ async function run() {
     v.close();
   }
 
+  // === Follow-up requests, same tile, 21 Aug 2026 -- mocked up and
+  // approved before any of this was built ===
+
+  // --- 6. The redundant trailing down/distance already baked into the
+  // play's own stored text ("... — 2nd & 9", or "... — 1st down" for a
+  // conversion) is stripped from what THIS widget shows, since the
+  // standalone down/distance line now says the same thing -- but only
+  // here. The stored text itself, and every other reader of it, is
+  // untouched (covered separately, by inspecting db.plays directly).
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '8' });
+    enterPlay(h, { type: 'pass', passer: '7', receiver: '80', yards: '12' });
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    const storedText = rows[rows.length - 1].text;
+    h.close();
+
+    if (!/— 1st down$/.test(storedText)) {
+      fail('stored-text-untouched', 'expected the STORED play text to still carry its own trailing down/distance phrase unmodified, got: ' + storedText);
+    }
+
+    const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    const html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (/1st down/.test(html)) fail('suffix-stripped-conversion', 'expected the redundant "— 1st down" suffix stripped from THIS widget only, got: ' + html);
+    v.close();
+  }
+
+  // --- 7. TOUCHDOWN and turnover-on-downs are NOT stripped -- neither
+  // is duplicated by the standalone down/distance line (a drive that
+  // just ended has no next down to repeat), so removing them would
+  // delete information this widget states nowhere else.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'opp', yardline: 6 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '6', td: true });
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+
+    const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    const html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (!/TOUCHDOWN/.test(html)) fail('touchdown-not-stripped', 'TOUCHDOWN must remain -- it is not duplicated by any standalone line, got: ' + html);
+    v.close();
+  }
+
+  // --- 8. The down/distance line is larger (22px, up from 19px), and
+  // there is now visible spacing above the play text itself (18px),
+  // separating it from the tiles row above it.
+  {
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '8' });
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
+
+    const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    const html = v.document.getElementById('driveLogScroll').innerHTML;
+    if (!/font-size:22px/.test(html)) fail('down-distance-larger', 'expected the down/distance line at 22px, got: ' + html);
+    if (!/margin-top:18px/.test(html)) fail('play-text-spacing', 'expected margin-top:18px above the play text, got: ' + html);
+    v.close();
+  }
+
+  // --- 9. Previous Drive's own outcome text is larger too (16px, up
+  // from 13px) -- readable, but still well short of Current Drive's
+  // 30px headline, since this is a summary of a finished drive, not
+  // the thing the page is live for. Tested directly against
+  // renderDriveSummary() with a hand-built touchdown+PAT summary,
+  // rather than fighting a full possession-change UI sequence for a
+  // check that only needs the function's own output.
+  {
+    const v = await bootPage('view.html', { existingPlays: [], readyWhen: win => (win.document.getElementById('prevDriveLogScroll') || {}).innerHTML !== undefined });
+    await new Promise(r => setTimeout(r, 100));
+    const summary = {
+      team: 'teamA', rushes: 4, rushYds: 22, passes: 2, passYds: 18, totalPlays: 6, totalYds: 40, top: 165,
+      scoringPlayText: 'TOUCHDOWN, N Runningback 6 yd run', lastPlayText: null,
+      tryOutcome: { text: 'N Kicker (Neville) PAT good', good: true }
+    };
+    const html = v.evalIn('renderDriveSummary(' + JSON.stringify(summary) + ')');
+    if (!/font-size:16px/.test(html)) fail('prev-drive-outcome-larger', 'expected the outcome line at 16px, got: ' + html);
+    if (/font-size:30px/.test(html)) fail('prev-drive-not-as-large-as-current', 'Previous Drive\'s outcome text must stay well under Current Drive\'s 30px, got: ' + html);
+    if (!/PAT good/.test(html)) fail('prev-drive-try-line', 'expected the PAT sub-line to still render, got: ' + html);
+    v.close();
+  }
+
+  // --- 10. Previous Drive is pinned to the bottom of the tile via the
+  // quad's own flex column (margin-top:auto), with a visible divider
+  // above it now that it is no longer simply the next thing in the
+  // document flow.
+  {
+    const v = await bootPage('view.html', { existingPlays: [], readyWhen: win => (win.document.getElementById('prevDriveLogScroll') || {}).innerHTML !== undefined });
+    await new Promise(r => setTimeout(r, 100));
+    const el = v.document.querySelector('.drive-previous');
+    const style = v.window.getComputedStyle(el);
+    if (style.marginTop !== 'auto') fail('pinned-to-bottom', 'expected margin-top:auto to pin Previous Drive to the bottom of the quad, got: ' + style.marginTop);
+    if (!/1px solid/.test(style.borderTop)) fail('divider-above', 'expected a visible border-top divider now that Previous Drive is pinned, got: ' + style.borderTop);
+    v.close();
+  }
+
   return failures;
 }
 
