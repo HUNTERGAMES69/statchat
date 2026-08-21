@@ -147,6 +147,41 @@ async function run() {
     w.close();
   }
 
+  // === dashboard.html: the team record box (the black-highlighted
+  // "season-record" band) also wholly ignores a preseason game --
+  // requested directly as a follow-up, since the original feature only
+  // covered Season Report and Player Report. Not a counted win, not a
+  // counted loss, not counted toward games played, home, or away. ===
+  {
+    const games = [
+      { game: { id: 'g1', status: 'final', season_year: 2026, game_date: '2026-08-01', designator: 'Regular Win', our_team_is_home: true, final_score_us: 21, final_score_opp: 14, is_preseason: false }, roster: [], plays: [] },
+      { game: { id: 'g2', status: 'final', season_year: 2026, game_date: '2026-08-02', designator: 'Regular Loss', our_team_is_home: false, final_score_us: 7, final_score_opp: 28, is_preseason: false }, roster: [], plays: [] },
+      { game: { id: 'g3', status: 'final', season_year: 2026, game_date: '2026-08-03', designator: 'Preseason Win', our_team_is_home: true, final_score_us: 40, final_score_opp: 0, is_preseason: true }, roster: [], plays: [] },
+      { game: { id: 'g4', status: 'final', season_year: 2026, game_date: '2026-08-04', designator: 'Preseason Loss', our_team_is_home: false, final_score_us: 0, final_score_opp: 40, is_preseason: true }, roster: [], plays: [] }
+    ];
+    const w = await bootPage('dashboard.html', { games, readyWhen: win => (win.document.getElementById('seasonRecord') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    const html = w.document.getElementById('seasonRecord').innerHTML;
+    if (!/1.?\u2013.?1/.test(html) || !/2 played/.test(html)) {
+      fail('dashboard-record-excludes-preseason', 'expected 1-1, 2 played (the two preseason games wholly ignored), got: ' + html);
+    }
+    w.close();
+  }
+  {
+    // A game with no is_preseason field at all -- every game saved
+    // before the column existed -- must still count normally.
+    const games = [
+      { game: { id: 'g1', status: 'final', season_year: 2026, game_date: '2026-08-01', designator: 'Old Game', our_team_is_home: true, final_score_us: 21, final_score_opp: 14 }, roster: [], plays: [] }
+    ];
+    const w = await bootPage('dashboard.html', { games, readyWhen: win => (win.document.getElementById('seasonRecord') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    const html = w.document.getElementById('seasonRecord').innerHTML;
+    if (!/1 played/.test(html)) {
+      fail('dashboard-record-undefined-still-counts', 'a game with no is_preseason field at all must still count, got: ' + html);
+    }
+    w.close();
+  }
+
   return failures;
 }
 
