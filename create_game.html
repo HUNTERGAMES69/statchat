@@ -249,6 +249,22 @@
     return out;
   }
 
+  // Distinguishes "this number genuinely is not on the roster" from
+  // "this number is on the roster, but hasn't been filed under a unit
+  // yet" -- reported directly: these read identically today ("not on
+  // the roster loaded here") and mean very different things. A
+  // resolved[num] entry only ever exists when at least one person on
+  // the uploaded roster wears that number (see resolveByNumber's outer
+  // loop, which only ever visits numbers that actually appear); all
+  // three unit lists still empty means that person is sitting in the
+  // needs-assignment list below, not missing.
+  function isAwaitingAssignment(side, num){
+    const resolved = side === 'our' ? ourResolved : oppResolved;
+    const bucket = (resolved || {})[String(num).trim()];
+    if (!bucket) return false;
+    return bucket.offense.length === 0 && bucket.defense.length === 0 && bucket.special.length === 0;
+  }
+
   function renderStarterResolve(side){
     const box = document.getElementById(side + 'StarterResolve');
     if (!box) return;
@@ -258,12 +274,18 @@
       if (!num){ delete seedChoice[side][role]; return; }
       const cands = candidatesForNumber(side, num);
       if (cands.length === 0){
-        // No roster loaded, or a number nobody wears. Not an error -- a
-        // coach may seed before uploading, or from memory -- but say so
-        // rather than showing a confident tick against nothing.
         delete seedChoice[side][role];
-        lines.push('<div style="font-size:13px; color:#888; margin-bottom:4px;">' +
-          role + ' #' + num + ' — not on the roster loaded here; the number will be used on its own.</div>');
+        if (isAwaitingAssignment(side, num)){
+          lines.push('<div style="font-size:13px; color:#a05a00; margin-bottom:4px;">' +
+            role + ' #' + num + ' — on the roster, but needs a unit picked below (' +
+            '"players with a position we didn\'t recognize") before it can be seeded.</div>');
+        } else {
+          // No roster loaded, or a number nobody wears. Not an error -- a
+          // coach may seed before uploading, or from memory -- but say so
+          // rather than showing a confident tick against nothing.
+          lines.push('<div style="font-size:13px; color:#888; margin-bottom:4px;">' +
+            role + ' #' + num + ' — not on the roster loaded here; the number will be used on its own.</div>');
+        }
         return;
       }
       if (cands.length === 1){
@@ -494,6 +516,22 @@
         // usually, since nothing here ever called it. The data was
         // already right the whole time; only the display was stale.
         renderStarterResolve(teamKey);
+        // Reported directly, 20 Aug 2026, separately from the above:
+        // "our" team's own roster asked this same question every
+        // single game, never remembering a previous answer -- because
+        // nothing here ever wrote it anywhere except THIS game's own
+        // game_rosters snapshot. "our" side has a real, permanent
+        // roster row to persist it to; the opponent side does not
+        // (there is no master table for an opponent roster at all, only
+        // a fresh per-game upload), so this only ever applies to 'our'.
+        // Fire-and-forget on purpose: this game's own setup is already
+        // correct in resolvedRef regardless of whether this succeeds,
+        // so a failure here costs nothing worse than being asked again
+        // next time -- exactly today's behavior, not a new risk.
+        if (teamKey === 'our' && entry.playerId){
+          supabaseClient.from('players').update({ unit_override: unit }).eq('id', entry.playerId)
+            .then(({ error }) => { if (error) console.warn('Could not remember this unit choice for next time:', error.message); });
+        }
       });
     });
   }
@@ -731,7 +769,7 @@
     // roster rather than an unconfigured one.
     const gameSeasonYear = parseInt(document.getElementById('seasonYear').value, 10) || new Date().getFullYear();
     const { data: players, error: playersError } = await supabaseClient
-      .from('players').select('name, primary_position, default_jersey_number, id')
+      .from('players').select('name, primary_position, default_jersey_number, id, unit_override')
       .eq('team_id', ourTeamId).eq('season_year', gameSeasonYear);
     if (playersError){
       showView('mainView');
@@ -739,9 +777,17 @@
       return;
     }
 
+    // Reported directly: resolving "our" team's needs-assignment radio
+    // (a player whose position isn't a recognized one) never stuck --
+    // every new game, or even reopening this same one, asked again for
+    // the same two players, since nothing about the choice was ever
+    // saved anywhere except THIS game's own game_rosters snapshot.
+    // unit_override is that missing, persistent home for it: read here
+    // and preferred over guessing from position, and written back the
+    // moment the radio is resolved, a few hundred lines down.
     const entries = (players || [])
       .filter(p => p.default_jersey_number)
-      .map(p => ({ number: p.default_jersey_number, name: p.name, position: p.primary_position, explicitUnit: null, playerId: p.id }));
+      .map(p => ({ number: p.default_jersey_number, name: p.name, position: p.primary_position, explicitUnit: p.unit_override || null, playerId: p.id }));
     let { resolved, conflicts, needsAssignment, sharedInfo } = resolveByNumber(entries);
 
     // In edit mode, resolveByNumber just re-picks a default (the first
