@@ -425,6 +425,19 @@ function formatDuration(sec){
   const m = Math.floor(sec / 60), s = Math.round(sec % 60);
   return m + ':' + String(s).padStart(2, '0');
 }
+// Ported from game.html, for the SOP tile: the reverse of
+// clockToAbsSeconds above -- turns the absolute-seconds-since-kickoff
+// value the scorer's start-of-possession clock entry was stored as
+// back into a displayable "11:24" clock reading. absSec counts UP from
+// the start of the game; a clock counts DOWN within its quarter, which
+// is why this is not simply a format call.
+function absSecToClockStr(absSec){
+  if (absSec === null || absSec === undefined) return null;
+  const q = Math.floor(absSec / quarterLengthSec) + 1;
+  const remaining = quarterLengthSec - (absSec - (q - 1) * quarterLengthSec);
+  const mins = Math.floor(remaining / 60), secs = remaining % 60;
+  return { q, text: mins + ':' + String(secs).padStart(2, '0') };
+}
 // markerLabel() lives in engine.js, loaded above. It was duplicated here
 // (and in view.html, and in broadcast.html) as three identical copies;
 // "own 50" had to be fixed in one place, not three. Removed 13 Aug 2026.
@@ -1006,7 +1019,15 @@ function extractNameTag(rawName){
         if (pt === 'pat' || pt === 'twopt') return true;
         return !!(p.effect && p.effect.score);
       });
-      document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDriveOwnTeamPlays.filter(x => !isDriveTileNoise(x)).slice().reverse(), true) || '<div style="color:#999;">no active drive yet</div>';
+      // Requested directly: rather than the full drive log, this now
+      // shows ONLY the most recent play, in a much larger font, with
+      // the down/distance/spot resulting from it directly underneath
+      // -- the exact same state and formatting the banner at the top
+      // of the page already uses, so the two can never disagree.
+      // Previous Drive is deliberately untouched by this -- its own
+      // renderDriveSummary() below is unchanged.
+      document.getElementById('driveLogScroll').innerHTML =
+        renderCurrentDriveLastPlay(currentDriveOwnTeamPlays.filter(x => !isDriveTileNoise(x)), state, distDisplay);
 
       const currentSummary = resetIdxs.length
         ? computeDriveSummary(resetIdxs[resetIdxs.length - 1], plays.length)
@@ -1016,13 +1037,31 @@ function extractNameTag(rawName){
             ['RUSH', currentSummary.rushes + '/' + currentSummary.rushYds],
             ['PASS', currentSummary.passes + '/' + currentSummary.passYds],
             ['TOTAL', currentSummary.totalPlays + '/' + currentSummary.totalYds],
-            // Time of possession, matching the Previous Drive tiles.
-            // This stays 0:00 until the drive's closing clock event is
-            // entered, because possessionTime only accumulates on an
-            // 'end' or 'transition' clock event -- there is no live game
-            // clock to measure against mid-drive.
-            ['TOP', formatDuration(currentSummary.top)]
-          ].map(([label, val]) => '<span class="inline-stat-item"><b>' + label + '</b>' + val + '</span>').join('') + '</div>'
+            // Requested directly: while the drive is still open (no
+            // closing clock event yet for driveTeam), this tile reads
+            // SOP -- the clock exactly as the scorer logged it at the
+            // START of the possession, not a computed duration, since
+            // there isn't one yet. The moment a closing clock value is
+            // entered, pendingClockStart[driveTeam] resets to null on
+            // its own (see engine.js's computeState) and this reverts
+            // to TOP with the real elapsed time, unchanged from before.
+            //
+            // Styled distinctly (amber, not the same tint as the other
+            // three) on purpose: it is showing a different KIND of
+            // thing -- a clock reading, not an accumulated stat -- and
+            // looking identical to the other three would read as a
+            // real duration before one exists.
+            (function(){
+              const pending = (state.pendingClockStart || {})[driveTeam];
+              if (pending !== null && pending !== undefined){
+                const clk = absSecToClockStr(pending);
+                return ['SOP', clk ? clk.text : '—', true];
+              }
+              return ['TOP', formatDuration(currentSummary.top), false];
+            })()
+          ].map(([label, val, sop]) => '<span class="inline-stat-item"' +
+              (sop ? ' style="background:#fff3cd; border:1px solid #e0b400;"' : '') + '>' +
+              '<b' + (sop ? ' style="color:#7a5c00;"' : '') + '>' + label + '</b>' + val + '</span>').join('') + '</div>'
         : '';
 
       const prevSummary = resetIdxs.length >= 2
@@ -1150,6 +1189,46 @@ function extractNameTag(rawName){
       }
       return '<div class="logline"' + style + '>' + qtag + text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
     }).join('');
+  }
+
+  // Requested directly, 21 Aug 2026: the Current Drive tile no longer
+  // lists every play -- just the most recent one, at a size meant to
+  // be read from across a room, with the down/distance/spot it left
+  // the offense facing directly underneath. `list` is in CHRONOLOGICAL
+  // order (oldest first), matching what currentDriveOwnTeamPlays
+  // already produces -- so the last element is the most recent play,
+  // with no reversing needed.
+  //
+  // Deliberately its own function rather than a mode of renderLogLines:
+  // that function's highlightFirst path exists for exactly one caller
+  // (this one, until today), and the two now want genuinely different
+  // things -- a single play at 30px plus a line of state renderLogLines
+  // has no concept of at all, versus a scrollable list of many. Forcing
+  // both through one function would have meant threading an unrelated
+  // "and also render this extra line" parameter through code that every
+  // other caller (allPlaysScroll) has no use for.
+  function renderCurrentDriveLastPlay(list, state, distDisplay){
+    if (!list.length) return '<div style="color:#999;">no active drive yet</div>';
+    const p = list[list.length - 1];
+    // Same text processing renderLogLines applies -- team names
+    // stripped (redundant here, since only one team's own drive is
+    // ever shown), TOUCHDOWN bolded for consistency with every other
+    // log line in the app, even though a 30px, already-bold line does
+    // not visually need the extra emphasis.
+    const text = stripTeamNames(p.text || '').replace(/TOUCHDOWN/g, '<strong>TOUCHDOWN</strong>');
+    const playHtml = '<div style="font-size:30px; font-weight:700; color:#111; line-height:1.2;">' +
+      text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
+    // Identical construction to the banner's own down/distance/spot
+    // text a few hundred lines up -- same hasDrive guard, same
+    // ordinal/markerLabel calls, same state and distDisplay passed in
+    // from the one place renderAll() already computed them. Anything
+    // else risks the two silently disagreeing about the same drive.
+    const hasDrive = !!state.down && state.fieldPos !== null && state.fieldPos !== undefined;
+    const downLine = hasDrive
+      ? '<div style="font-size:19px; font-weight:600; color:#555; margin-top:6px;">' +
+        ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabel(state.fieldPos) + '</div>'
+      : '';
+    return playHtml + downLine;
   }
 
   function computeDriveSummary(startIdx, endIdx){

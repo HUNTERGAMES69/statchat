@@ -860,6 +860,14 @@ function computeState(playsList){
     if (state.possession !== state.dirTeam) d = (d === 'right' ? 'left' : 'right');
     state.driveDir = d;
   }
+  // Requested directly: view.html's Current Drive tile needs to show
+  // WHEN the clock was logged at the start of an ongoing possession
+  // (before it has a closing value and can be turned into a real
+  // duration). pendingClockStart already tracks exactly that internally
+  // -- it was simply never handed back. A plain copy, not the live
+  // object itself, so nothing outside this function can mutate the
+  // value this function is still using on a later call.
+  state.pendingClockStart = { teamA: pendingClockStart.teamA, teamB: pendingClockStart.teamB };
   return state;
 }
 
