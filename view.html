@@ -1265,7 +1265,42 @@ function extractNameTag(rawName){
   // other caller (allPlaysScroll) has no use for.
   function renderCurrentDriveLastPlay(list, state, distDisplay){
     if (!list.length) return '<div style="color:#999;">no active drive yet</div>';
-    const p = list[list.length - 1];
+    let p = list[list.length - 1];
+    // Requested directly: when the drive just ended in a touchdown, the
+    // try (PAT/2PT) that follows must not REPLACE the touchdown as the
+    // headline -- the score is the story, the try is its follow-up.
+    // Lock the touchdown in place and show the try's own result as a
+    // colored sub-line beneath it, the same pairing Previous Drive's
+    // summary already presents. Nothing here needs clearing later: the
+    // moment the next drive actually registers (the ensuing kickoff --
+    // see findDriveStarts), this list becomes the NEW drive's plays and
+    // the display moves on on its own.
+    //
+    // Detection mirrors computeDriveSummary exactly, on purpose:
+    // playType 'pat'/'twopt' for the try (never .result alone, which a
+    // field goal's kicker also carries), points === 6 for the touchdown
+    // behind it (never effect.td, which a blocked-kick return score
+    // never sets). Both lessons were paid for once already in that
+    // function; re-deriving them differently here would just buy the
+    // same bugs a second time.
+    let tryLine = '';
+    const lastRoles = p.roles || {};
+    if (lastRoles.playType === 'pat' || lastRoles.playType === 'twopt'){
+      const tryRole = lastRoles.playType === 'pat' ? lastRoles.kicker : (lastRoles.carrier || lastRoles.passer);
+      for (let i = list.length - 2; i >= 0; i--){
+        const e = list[i].effect || {};
+        if (e.score && e.score.points === 6){
+          tryLine = '<div style="font-size:24px; font-weight:600; margin-top:8px; color:' +
+            (tryRole && tryRole.result === 'g' ? '#1a7a4c' : '#a32d2d') + ';">' +
+            stripTeamNames(p.text || '') + '</div>';
+          p = list[i];
+          break;
+        }
+      }
+      // No touchdown found behind the try -- nothing to lock onto, so
+      // fall through unchanged and show the try itself as the last
+      // play, exactly as before this existed.
+    }
     // The trailing " — 2nd & 9" (or, when the play converts the down,
     // the fixed phrase " — 1st down") every scrimmage play's own stored
     // text already carries -- added at entry time in game.html, and
@@ -1305,7 +1340,7 @@ function extractNameTag(rawName){
       ? '<div style="font-size:24px; font-weight:600; color:#555; margin-top:8px;">' +
         ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabel(state.fieldPos) + '</div>'
       : '';
-    return playHtml + downLine;
+    return playHtml + tryLine + downLine;
   }
 
   function computeDriveSummary(startIdx, endIdx){
