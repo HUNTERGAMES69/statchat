@@ -2020,7 +2020,19 @@ function offenseEligible(team, role){
   // roster[num] can be blank for someone typed in by hand whose name
   // lives in another unit's roster, so fall back to the cross-unit
   // resolver rather than rendering a nameless button.
-  }).map(num => ({ num, name: roster[num] || nameInOffense(team, num) }));
+  //
+  // rosterName(), not nameInOffense() -- reported directly, with a
+  // screenshot: a picker button for THIS team's own carrier showed
+  // "SHERMORION DISMUKE (Test Opp)" even though every other button on
+  // the same list was a bare name. nameInOffense() unconditionally
+  // appends "(TeamName)", which is correct for play-TEXT that names
+  // players from two different teams in one sentence, but wrong here --
+  // every button in this picker is already this one team's own player,
+  // so the team name is pure noise. It only ever fired for a player
+  // with no assigned unit (rosterOffense[num] is then blank, same as
+  // it always was), which is exactly the case the unassigned-roster fix
+  // introduced tonight made newly reachable.
+  }).map(num => ({ num, name: roster[num] || rosterName(team, num, ['offense', 'special', 'defense']) || ('#' + num) }));
   // A shared number does NOT excuse a player from the position filter.
   // Injecting every ambiguous entry into every picker put linemen in the
   // passer list and turned the panel into a wall of question marks.
@@ -2288,7 +2300,11 @@ function defenseEligible(team){
   const discoveredList = discovered[team].slice()
     .sort(byRecency(defRecency, (a, b) => (stats[team].credits[b]||0) - (stats[team].credits[a]||0)))
     .filter(num => !ambiguous[num])
-    .map(num => ({ num, name: TEAMS[team].rosterDefense[num] || '' }));
+    // rosterUnassigned fallback, same reasoning as offenseEligible above:
+    // a player with no assigned unit is not in rosterDefense at all, and
+    // this line's own bare '' fallback showed a blank button rather than
+    // his real name once he could actually be discovered here.
+    .map(num => ({ num, name: TEAMS[team].rosterDefense[num] || rosterName(team, num, ['defense', 'special', 'offense']) || '' }));
   return ambiguousList.concat(discoveredList);
 }
 function specialTeamsEligible(team){
@@ -2330,7 +2346,7 @@ function specialTeamsEligible(team){
   const resolvedList = nums
     .sort(byRecency(stRecency, (a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0)))
     .filter(num => !ambiguous[num])
-    .map(num => ({ num, name: roster[num] || nameInSpecialTeams(team, num) }));
+    .map(num => ({ num, name: roster[num] || rosterName(team, num, ['special', 'offense', 'defense']) || ('#' + num) }));
   return ambiguousList.concat(resolvedList);
 }
 // A returner is almost never a "discovered defender". Dedicated kick and
@@ -2382,7 +2398,7 @@ function returnerEligible(team){
     const num = r.defense.num;
     if (!num || seen[num]) return;
     seen[num] = true;
-    list.push({ num, name: nameInDefense(team, num) || '', unit: 'defense', pos: '' });
+    list.push({ num, name: rosterName(team, num, ['defense', 'special', 'offense']) || '', unit: 'defense', pos: '' });
   });
   list.sort(byRecency(recency, () => 0));
   return list;
