@@ -439,11 +439,20 @@ async function bootPage(file, opts = {}) {
     // way Supabase would, so a test can prove the page reacts.
     realtime: {
       channels: [], handlers: [], subscribed: [], removed: 0,
-      emit(event, payload) {
+      emit(event, payload, table) {
         let fired = 0;
         this.handlers.forEach(h => {
           const cfg = h.cfg || {};
           if (cfg.event && cfg.event !== event) return;
+          // table, added for view.html's Season Stats realtime fix:
+          // that page now has TWO subscriptions using the same event
+          // types ('UPDATE' on both `plays` and `games`), which this
+          // mock could not previously tell apart -- emit('UPDATE', ...)
+          // fired every UPDATE handler regardless of which table it
+          // was really for. Optional and defaults to matching every
+          // table, so the one existing caller that never passed one is
+          // completely unaffected.
+          if (table && cfg.table && cfg.table !== table) return;
           h.cb(payload || {});
           fired++;
         });

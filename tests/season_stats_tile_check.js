@@ -174,6 +174,97 @@ async function run() {
     w.close();
   }
 
+  // === Follow-up requests, same session: two gaps reported directly
+  // and reproduced exactly before being fixed ===
+
+  // --- 7. An already-open tab, loaded before the game starts, must
+  // revert the instant "Start Game" is pressed -- a pure games-table
+  // status update, with no play involved at all. Reported directly:
+  // this previously never happened without a full page reload, since
+  // the page only ever subscribed to the `plays` table.
+  {
+    const games = [
+      { game: { id: 'current-game', status: 'not_started', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] }
+    ];
+    const w = await bootPage('view.html', { query: '?id=current-game', games, readyWhen: win => (win.document.getElementById('boxScoreTeamA') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 200));
+    if (w.document.getElementById('teamAHeading').textContent !== 'Neville Season Stats') {
+      fail('start-game-precondition', 'expected Season Stats to be showing before Start Game is pressed, got: ' + w.document.getElementById('teamAHeading').textContent);
+    }
+
+    const entry = w.db.games.find(g => String(g.game.id) === 'current-game');
+    entry.game.status = 'in_progress';
+    const fired = w.db.realtime.emit('UPDATE', {}, 'games');
+    if (fired !== 1) fail('start-game-handler-fired', 'expected exactly one games-table UPDATE handler to fire, got: ' + fired);
+    await new Promise(r => setTimeout(r, 200));
+
+    const heading = w.document.getElementById('teamAHeading').textContent;
+    if (heading !== 'Neville Stats') fail('start-game-reverts-heading', 'expected the heading to revert the instant Start Game is pressed, with no reload, got: ' + heading);
+    const html2 = w.document.getElementById('boxScoreTeamA').innerHTML;
+    if (/Season Stats|no season stats yet/.test(html2)) {
+      fail('start-game-reverts-tile', 'expected the tile to revert to the normal, empty-game state, got: ' + html2);
+    }
+    w.close();
+  }
+
+  // --- 8. The full sequence: Start Game pressed, then a real play
+  // actually arrives -- both must be reflected correctly, with no
+  // reload anywhere in between.
+  {
+    const games = [
+      { game: { id: 'current-game', status: 'not_started', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] }
+    ];
+    const w = await bootPage('view.html', { query: '?id=current-game', games, readyWhen: win => (win.document.getElementById('boxScoreTeamA') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 200));
+
+    const entry = w.db.games.find(g => String(g.game.id) === 'current-game');
+    entry.game.status = 'in_progress';
+    w.db.realtime.emit('UPDATE', {}, 'games');
+    await new Promise(r => setTimeout(r, 200));
+
+    entry.plays.push({
+      id: 'p1', text: 'N Runningback (Neville) rush for 20', effect: { isStat: true, statYds: 20 },
+      roles: { carrier: { team: 'teamA', num: '22', yards: 20 }, playType: 'rush' },
+      quarter: 1, sequence_number: 1, team_side: 'teamA', is_divider: false, is_override: false, unresolved: false
+    });
+    w.db.realtime.emit('INSERT', {}, 'plays');
+    await new Promise(r => setTimeout(r, 200));
+
+    const heading = w.document.getElementById('teamAHeading').textContent;
+    if (heading !== 'Neville Stats') fail('full-sequence-heading', 'expected the ordinary heading after the full Start Game -> first play sequence, got: ' + heading);
+    const html2 = w.document.getElementById('boxScoreTeamA').innerHTML;
+    if (!html2.includes('20')) fail('full-sequence-shows-real-play', 'expected the real 20-yard rush to show, got: ' + html2);
+    w.close();
+  }
+
+  // --- 9. If computing the aggregate throws -- an older or unusual
+  // stored shape this had not been tested against -- it must fail to a
+  // distinct, honest message, not the misleading "no season stats yet"
+  // (which would misreport real games as if none existed) and not a
+  // silently blank tile. Reported directly: a real season with 5 real,
+  // finished games rendered this tile completely blank.
+  {
+    const games = [
+      { game: { id: 'current-game', status: 'not_started', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Some Opp', our_team_is_home: true, is_preseason: false }, roster: [], plays: [] },
+      { game: { id: 'g1', status: 'final', season_year: 2026, home_team_name: 'Neville', away_team_name: 'Opp One', our_team_is_home: true, is_preseason: false }, roster: defaultRoster(), plays: [] }
+    ];
+    const w = await bootPage('view.html', { query: '?id=current-game', games, readyWhen: win => (win.document.getElementById('boxScoreTeamA') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 200));
+
+    w.evalIn('window._origCBS = computeBoxScore; computeBoxScore = function(){ throw new Error("forced test failure"); };');
+    await w.evalIn('loadSeasonStatsForNotStarted({ season_year: 2026 }, {})');
+    const state = JSON.parse(w.evalIn('JSON.stringify(seasonStatsForNotStarted)'));
+    if (!state.loadError) fail('load-error-flag-set', 'expected loadError:true after a forced failure, got: ' + JSON.stringify(state));
+
+    w.evalIn('computeBoxScore = window._origCBS;');
+    w.evalIn('renderBoxScore()');
+    const html2 = w.document.getElementById('boxScoreTeamA').innerHTML;
+    if (!/season stats could not be loaded/.test(html2)) {
+      fail('load-error-message', 'expected the distinct error message, not the misleading "no season stats yet" or a blank tile, got: ' + html2);
+    }
+    w.close();
+  }
+
   return failures;
 }
 
