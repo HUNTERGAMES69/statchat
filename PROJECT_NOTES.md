@@ -2263,3 +2263,40 @@ exercised as a first-class page rather than drifting unwatched.
 
 `gametest3.html` is now a duplicate of `game.html` and should be deleted
 from the repo.
+
+
+## Halftime ends at "Start 2nd half", and the marker is cleaned up (22 August 2026)
+
+Two changes that only make sense together.
+
+`view.html` sat on its HALFTIME card until a real second-half play was
+entered, so the whole guided kickoff ran under a HALFTIME banner while the
+teams were visibly lining up. It now ends halftime on the Q3 quarter
+marker, which "Start 2nd half" writes immediately. The interval header
+also carries who kicks off next, in smaller print to the left of the word
+-- derived from the OPENING kickoff (whoever kicked to start the game
+receives now), not from possession, which at halftime belongs to whoever
+last had the ball and says nothing about what happens next.
+
+**That change alone would have reintroduced a documented bug**, and the
+comment saying so was still in the file: undoing the opening plays of a
+half leaves the Q3 marker behind, so a page keying off the marker insists
+on Q3 while `game.html` -- whose `derivePhase()` requires a real play --
+has gone back to halftime.
+
+So the residue is now removed at source. Undo already had the idea: a
+divider pulls its companion clock row. It now also pulls a stranded Q3
+marker, but only when NOTHING real remains after the interval, and only
+trailing markers -- a Q3 marker with plays behind it is a genuine record
+of when the quarter turned and is left alone. It joins `removedRows`, so
+the existing server-delete loop takes it too and "Redo last" puts it back
+with the play it left with.
+
+The alternative was to teach every reader of the log to ignore a marker
+that means nothing. A marker for a half with no plays in it is not a fact
+about the game, it is left-over state, and deleting it is cheaper than
+documenting it in three places.
+
+`tests/stranded_quarter_marker_check.js` covers all four cases: undo
+immediately after Start 2nd half, undo back across a completed kickoff,
+a legitimate marker surviving, and redo restoring a removed one.

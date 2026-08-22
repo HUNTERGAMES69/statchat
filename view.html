@@ -953,13 +953,36 @@ function extractNameTag(rawName){
     // said End of 1st half.
     const isDiv = (p, t) => p.isDivider && (p.text || '').trim() === t;
     const halftimeIdx = plays.findIndex(p => isDiv(p, 'End of 1st half'));
-    // "The second half has started" means a REAL play has been run since
-    // the interval, not merely that a quarter marker exists. Undoing the
-    // opening plays of a half leaves that marker behind, and keying off
-    // it made this page insist on Q3 while game.html had already gone
-    // back to halftime -- the two pages disagreeing about the same log.
+    // PRESSING "START 2ND HALF" ENDS HALFTIME HERE, without waiting for
+    // the kickoff to be entered. Requested directly: the guided kickoff
+    // takes a while to fill in, and for all of it this page sat on a
+    // HALFTIME card while the teams were visibly lining up.
+    //
+    // The rule used to be "a REAL play has been run since the interval",
+    // which is still what game.html's own derivePhase() uses. That was
+    // chosen because undoing the opening plays of a half leaves the
+    // quarter marker behind, so keying off the marker could make this
+    // page insist on Q3 while game.html had gone back to halftime.
+    //
+    // That trade is now taken deliberately, and it is the narrower of the
+    // two: the disagreement needs a kickoff to be entered AND then undone,
+    // and it lasts until the next play. Sitting on HALFTIME through every
+    // second-half kickoff is the common case, and it is wrong every time.
     const secondHalfStarted = halftimeIdx !== -1 &&
-      plays.some((p, i) => i > halftimeIdx && !isAdminMarker(p));
+      plays.some((p, i) => i > halftimeIdx &&
+        (!isAdminMarker(p) || (p.effect && p.effect.setQuarter >= 3)));
+
+    // WHO KICKS OFF TO START THE SECOND HALF, shown beside HALFTIME.
+    // Whoever kicked off to start the GAME receives now, so the second-half
+    // kicker is the other team. Derived from the opening kickoff rather
+    // than from possession, which at halftime belongs to whoever last had
+    // the ball and says nothing about what happens next.
+    let secondHalfKicker = null;
+    if (halftimeIdx !== -1){
+      const openingKick = plays.find(p => p.roles &&
+        (p.roles.playType === 'kickoff' || p.roles.playType === 'kickoff_return') && p.roles.kicker);
+      if (openingKick) secondHalfKicker = otherTeam(openingKick.roles.kicker.team);
+    }
     // MODULE-LEVEL phase, not const -- see its declaration above for why:
     // renderBoxScore() needs the current value too, and is also called
     // directly from resize/load, outside this function.
@@ -971,7 +994,16 @@ function extractNameTag(rawName){
     const qEl = document.getElementById('quarterText');
     if (phase){
       document.getElementById('downText').textContent = '';
-      qEl.textContent = phase;
+      // At halftime the header carries who kicks off next, smaller and to
+      // the left of the word itself -- the one thing a spectator wants
+      // during the interval that the scoreboard does not already say.
+      if (phase === 'HALFTIME' && secondHalfKicker && TEAMS[secondHalfKicker]){
+        qEl.innerHTML = '<span style="font-size:13px; font-weight:700; letter-spacing:0.02em; ' +
+          'opacity:0.75; margin-right:10px;">' + TEAMS[secondHalfKicker].name +
+          ' kicks off</span>' + phase;
+      } else {
+        qEl.textContent = phase;
+      }
       // Large and bold: this is the whole state of the game, and at 15px
       // regular it read as just another label beside the quarter.
       qEl.style.fontSize = '26px';

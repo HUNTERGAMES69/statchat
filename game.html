@@ -9785,6 +9785,35 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         removedRows.unshift(plays.pop());
       }
     }
+    // A STRANDED SECOND-HALF QUARTER MARKER COMES WITH IT.
+    // -------------------------------------------------------------------
+    // "Start 2nd half" writes "Quarter marker — start of Q3" and nothing
+    // else, so undoing the opening plays of the half used to leave that
+    // marker behind with no real play after it. derivePhase() reads the
+    // log and correctly says halftime, but the marker still says Q3 --
+    // and view.html, which now ends its HALFTIME card on that marker,
+    // would insist the second half had begun while this page offered
+    // "Start 2nd half" again. Two pages disagreeing about the same log.
+    //
+    // Removing the residue is the fix rather than teaching each reader to
+    // ignore it: a marker for a half that has no plays is not a fact
+    // about the game, it is left-over state.
+    //
+    // Only when NOTHING real remains after the interval, and only trailing
+    // markers -- a Q3 marker with plays behind it is a genuine record of
+    // when the quarter turned and is left alone. It joins removedRows, so
+    // the server delete below takes it too and "Redo last" puts it back.
+    const hIdx = plays.findIndex(p => p.isDivider && /end of (1st|first) half/i.test(p.text || ''));
+    if (hIdx !== -1 && !plays.slice(hIdx + 1).some(p => !isAdminMarker(p))){
+      while (plays.length > hIdx + 1){
+        const tail = plays[plays.length - 1];
+        if (tail && tail.effect && tail.effect.setQuarter >= 3){
+          removedRows.unshift(plays.pop());
+          continue;
+        }
+        break;
+      }
+    }
     // Keep them so "Redo last" can put them back exactly as they were,
     // with the same ids, roles, effects and sequence numbers -- and in
     // the order they were originally written.
