@@ -461,6 +461,43 @@ async function run() {
     v.close();
   }
 
+  // A LONG PLAY BREAKS AT ITS OWN CLAUSES rather than wherever the tile
+  // runs out of width. A kickoff with a return and a tackler passes 90
+  // characters, and wrapping on width splits a person's name as often as
+  // not. The play text has natural seams -- each trailing clause is
+  // introduced by a comma and a fixed phrase -- so the break goes there.
+  {
+    const h = await bootPage('view.html', { existingPlays: [],
+      readyWhen: win => !!win.document.getElementById('driveLogScroll') });
+    // Let the page's own deferred init run before touching or closing it.
+    // readyWhen fires as soon as the element exists, which is earlier than
+    // init's timer -- closing in between left that timer reading location
+    // off a torn-down window and crashing the run after it had passed.
+    await new Promise(r => setTimeout(r, 200));
+    const t = str => h.evalIn('breakPlayText(' + JSON.stringify(str) + ')');
+    const clauses = out => (out.match(/play-clause/g) || []).length;
+
+    const two = t('N Kicker kicks off, returned by Kayden Jones for 45, tackled by #22');
+    if (clauses(two) !== 2) fail('break:two', 'a return and a tackler are two clauses, got ' + clauses(two) + ': ' + two);
+    // SIBLINGS, not nested. Wrapping one clause at a time put each span
+    // inside the last, so the second indented twice for no visible reason.
+    if (/play-clause[^>]*>[^<]*<span class="play-clause"/.test(two)) {
+      fail('break:nested', 'clauses must be siblings, not nested: ' + two);
+    }
+    if (!/kicks off<span/.test(two)) fail('break:comma', 'the comma should go with the break: ' + two);
+
+    const inc = t("Parker Robinson pass incomplete, intended for Ze'Land Young");
+    if (clauses(inc) !== 1) fail('break:intended', 'an incompletion should break before "intended for": ' + inc);
+
+    const muff = t('Trey Johnson punts 56 — MUFFED, recovered by Neville');
+    if (clauses(muff) !== 1) fail('break:recovered', 'a recovery should break onto its own line: ' + muff);
+
+    // A short play is left exactly as it was.
+    const short = 'JaMarion Roberson rush for 7';
+    if (t(short) !== short) fail('break:short', 'a short play should be untouched, got ' + t(short));
+    h.close();
+  }
+
   return failures;
 }
 
