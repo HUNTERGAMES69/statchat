@@ -114,6 +114,16 @@ async function run() {
     if (!defs.some(d => /1 sack/.test(d))) fail('leaders:def-sack', 'the sack is missing from the defence line: ' + defs.join(' | '));
     if (!defs.some(d => /1 TFL/.test(d))) fail('leaders:def-tfl', 'a sack is also a tackle for loss: ' + defs.join(' | '));
     if (!defs.some(d => /1 INT/.test(d))) fail('leaders:def-int', 'the interception is missing from the defence line: ' + defs.join(' | '));
+    // EVERY row the same three-part shape, so the figures line up in one
+    // column. The defence row was built differently -- its numbers pushed
+    // left into the name's slot -- so the one row without a player was
+    // also the one whose numbers did not align with the rows above it.
+    [...doc.querySelectorAll('#liveBoxBody .ld-row')].forEach(r => {
+      const shape = [...r.children].map(c => c.className).join(',');
+      if (shape !== 'ld-tag,ld-name,ld-stat') {
+        fail('leaders:row-shape', 'a leaders row does not match the others: ' + shape + ' -- ' + r.textContent.trim());
+      }
+    });
     // BOTH teams have a block here, and should: each has a defence line.
     // A defence can have done something before anyone on that side's
     // offence has -- a three-and-out with a sack in it.
