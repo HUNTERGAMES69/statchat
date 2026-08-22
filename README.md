@@ -71,12 +71,47 @@ which tested nothing at all.
 | `shared_number_check.js` | Two players wearing one number. Covers both halves of the Aug 7 fix: `create_game.html` keeps every player instead of forcing a choice at import, and `game.html` records the collision and offers each with a "?". Also asserts no bare third button (which silently meant whichever row loaded second) and that a clean roster raises no ambiguity. |
 | `mutation_check.js` | Re-introduces nineteen known bugs and confirms the suite goes red for each. |
 
+### Added 22 August 2026
+
+| File | Covers |
+| --- | --- |
+| `guided_return_td_check.js` | A guided kickoff returned for a touchdown: scores, offers the try, hands off to the kickoff. Checks the frozen fallback too. |
+| `bad_snap_and_clock_prompt_check.js` | Bad snap says "fumble"; every clock field raises its own keypad. |
+| `stranded_quarter_marker_check.js` | Undo clears a stranded Q3 marker; an ordinary undo says nothing. |
+| `scoring_summary_tile_check.js` | The scoring summary at halftime, GAME FINAL at the end, and no first-half data after the interval. |
+| `right_rail_check.js` | Live totals, leaders, throttled validation, and the ON AIR health line. |
+| `broadcast_stats_overlay_check.js` | The team stats overlay: kept rows, cut rows, leaders, portrait, sponsor bar, silent on air. |
+
+`whitelist_check.js`, `current_drive_tile_check.js`, `picker_behaviour_check.js`,
+`optional_players_check.js`, `yardage_calculator_check.js`, `clock_display_check.js`
+and `fake_kick_check.js` all gained cases this session too — mostly layout
+rules that jsdom can only see if they are written as longhand CSS. See the
+note below.
+
+### jsdom cannot see CSS shorthands
+
+`getComputedStyle` under jsdom does not expand `flex: 1 1 0` into
+`flexGrow`/`flexBasis`, and does not resolve `:not(:first-of-type)` in the
+cascade. Both bit this session: assertions passed while the rule they were
+checking was absent. Where a test needs to see a rule, write the CSS
+longhand and hide with a plain class rather than a pseudo-selector.
+
 ## Writing expectations
 
 Expectations in `scripted_game.js` are written **from the rules of
 football**, never copied from what the app currently outputs. Copying
 current output produces a test that certifies present behaviour, bugs
 included — which is the failure mode that let the sack bug survive.
+
+## Do not interrupt `mutation_check.js`
+
+It deliberately breaks `game.html`, `view.html` and `engine.js` one mutant
+at a time and restores them at the end. A run killed part-way through
+leaves the source broken — this happened on 22 Aug 2026 and the stranded
+mutant (`returnerEligible` swapped for `defenseEligible`) read as a real
+engine bug until it was diffed against the repo. If a run cannot be given
+the time it needs, skip it: it is a test *about the tests*, not a
+correctness check on the app.
 
 ## About `mutation_check.js`
 

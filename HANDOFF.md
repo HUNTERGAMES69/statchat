@@ -1,134 +1,95 @@
-# StatChat — session handoff, 20 August 2026
+# StatChat — session handoff, 22 August 2026
 
-This file exists because a chat filled up mid-flight. It records what was
-in progress at the moment it ended, so the next session resumes rather
-than restarts.
+## The headline: the rail layout is now the live entry page
 
-`PROJECT_NOTES.md` holds the durable reasoning and `TODO.md` the work
-list. **This file is different: it is the state of things that were still
-moving.** Once the open decisions below are settled, fold anything worth
-keeping into those two and delete this.
+`gametest3.html`'s rail prototype was promoted into `game.html`. The URL did
+not change — `dashboard.html` still navigates to `game.html?id=`, so
+bookmarks, open tabs and deep links keep working.
 
-**The previous version of this file (17-19 August) has been folded in and
-replaced, not appended to.** Everything durable from those sessions —
-the fumble-entry fix, the picker bugs, the attribution-chain audit, the
-guided kickoff work — is already in `PROJECT_NOTES.md`'s own dated
-entries and `TODO.md`'s "Shipped" / dated-session sections. Nothing below
-duplicates it. If something from an earlier session seems to be missing
-here, it is because it already has a permanent home elsewhere and this
-file no longer needs to carry it.
+`game_legacy.html` is the fallback: the previous entry page, verbatim, with
+a banner at the top saying so. It **replaced** an older `game_legacy.html`
+that predated the keypad and carried none of the recent fixes — a fallback
+that can itself deadlock is not a fallback. The older file is in git
+history.
+
+**`gametest3.html` should be deleted from the repo.** It is now a
+byte-level duplicate of `game.html` and will drift the moment either is
+edited. Tracked in `TODO.md`.
 
 ---
 
-## Where things stand
+## What the entry page looks like now
 
-Everything from tonight's session is deployed. All 40 test suites pass,
-plus the golden snapshot (50/50 paths) and all five fuzzers, run fresh
-at the end of the session rather than trusted from earlier in it.
+- **Ladder** in a fixed left column. Every tree opens beside it and locks
+  to the top of the frame, so the panel never moves depending on which
+  button was pressed. Nothing open reads "Make a selection to begin".
+- **Left margin** holds the current drive with Undo/Redo.
+- **Right margin** holds two new panels: **Checks** (live `validateGame`,
+  debounced 400 ms because it is quadratic in play count) and **Live
+  totals** (both teams' figures, per-team leaders, team defence).
+- **Top row**: Dashboard, ON AIR, BROADCAST SETUP, HELP!, CREW VIEW — all
+  sized from the banner so the five blocks across the top match.
+- **Review** collapses the tree to just the confirm box; **Edit** restores
+  it with values intact. There is a Clear on the confirm box and another on
+  the phase row.
+- Kicker and punter collapse to one name plus `+N more`; the passer folds
+  to a chip once picked. No suggestion prefills a manual box any more — the
+  highlight says who is suggested.
+- Long picker lists (carrier, receiver, kicker, punter) run full width with
+  the `or type #` box at the end rather than in a reserved column.
 
-### Season-scoped rosters — the big piece, done and verified
+## Spectator and broadcast
 
-Requested directly: retain past seasons' rosters instead of losing them
-to "Clear roster." Built as a real schema change, not a workaround —
-`players` gained a `season_year` column.
+- `view.html`: halftime ends on "Start 2nd half" rather than on the
+  kickoff; the scoring summary takes the quad at halftime and reads GAME
+  FINAL at the end; the second-half kicker is named under it; play text
+  breaks at its own clauses; the down line uses **team names** rather than
+  own/opp.
+- **New**: `broadcast_stats.html` — team stats plus leaders, landscape and
+  `?layout=portrait`, with the Nettech sponsor bar. Needs
+  `sponsor_nettech_white.png` in the repo root.
 
-- `roster.html`: a season picker; the current season fully editable,
-  every other season fully read-only (no controls rendered at all, by
-  Andy's explicit decision — not merely disabled ones). "Clear roster"
-  rescoped to only ever touch the currently-viewed season, with its
-  existing unlink-before-delete safety step preserved exactly, just
-  correctly scoped now. Upload's duplicate-name check is scoped to the
-  current season only, so a returning player is never silently skipped
-  because his name matches someone from a past year.
-- `create_game.html`: "our roster" now resolves against **that specific
-  game's own** `season_year`, not whichever season is current today —
-  the piece that actually protects an old game from being silently
-  corrupted by a later season's roster if it is ever reopened to fix an
-  unrelated field. See `PROJECT_NOTES.md`'s dated entry for the full
-  reasoning and the risk this closes.
-- Explicitly declined, confirmed with Andy: no retroactive additions to
-  a past season, no "copy last season's roster forward."
-- Verified by deliberately breaking the two highest-stakes lines (the
-  Clear Roster delete's season scope, and `create_game.html`'s season
-  filter) and confirming the new tests caught each specific break before
-  restoring. `tests/season_scoped_roster_check.js` is new; required
-  extending `tests/harness.js` with real `players`-table support and a
-  generic `.in()` method, neither of which existed before (`roster.html`
-  had never been exercised by this harness at all until this feature).
+## Engine and correctness fixes this session
 
-### Preseason game exclusion — done and verified
-
-A checkbox at game setup, `is_preseason`, excludes a game from
-`season_report.html` and `player_report.html` while leaving its own
-recap and stat package untouched. Dashboard shows a PRESEASON tag.
-Required extending `tests/harness.js` with a real (not no-op) `.or()`
-implementation, since the exclusion filter has to treat `NULL` and
-`false` as the same thing — every game that existed before this column
-did is `NULL`, not `false`, and `NULL = false` is itself `NULL` in SQL,
-not `true`. Both migrations (`is_preseason`, `players.season_year`)
-are documented in the chat, not committed to the repo as `.sql` files —
-`sql/schema.sql` is still the standing gap noted in `TODO.md` section
-19; both new columns should be added to it whenever that gap is closed.
-
-### Sack-fumble defense credit — done, in eight places
-
-A sack that also produced a fumble recovered by the defense recorded
-the fumble but not the sack. Fixed in `engine.js`, then found
-independently un-fixed in seven more places across five files
-(`view.html`, `broadcast.html`, `stat_package.html`,
-`season_report.html`) that each reimplement "count sacks from the play
-log" by hand instead of sharing the engine's logic. Full account in
-`PROJECT_NOTES.md` — it is the same "one blind spot in many places"
-lesson from 19 August, recurring with a different field.
-
-### Smaller fixes, all shipped and tested this session
-
-- **Opponent roster reload on edit.** Reopening an existing game's
-  setup showed every seeded starter as "not on the roster loaded here,"
-  even when the roster was genuinely still saved — the edit-load path
-  only ever fetched a *count* of the opponent's saved roster, never the
-  actual data `oppResolved` needs. Fixed in `create_game.html`.
-- **Needs-assignment resolution now updates the starter seed live.**
-  Assigning a unit to a player whose position wasn't recognized on
-  import already fixed the underlying data immediately; the "not on the
-  roster" message already on screen just never refreshed until
-  something unrelated triggered a re-render. One added call closes it.
-- **Dashboard game-ID column** was 28px wide with no overflow handling,
-  so a longer designator visually overlapped the opponent name.
-  Widened with ellipsis on desktop; removed entirely on mobile rather
-  than truncated, since a CSS width-based character cutoff isn't exact.
-- Sterlington roster (94 players, no positions) generated as an
-  importable `.xlsx`; the import-time behavior of an unpositioned
-  roster with seeded starters was traced and confirmed directly against
-  the actual resolution code before delivering it, not assumed.
+- Guided kickoff **return touchdown deadlock**: `awaitingKickoff` and
+  `awaitingTry` could both fire, disabling every play type. Resolved in
+  favour of the try.
+- **Quarter boundary off-by-one**: 0:00 at the end of a quarter read as
+  12:00 of the next one, so a finalized game reported "12:00 (Q5)" and
+  invented an overtime. Applied at every quarter end, not just the last.
+- Undo now removes a **stranded Q3 marker** so `game.html` and `view.html`
+  cannot disagree about halftime.
+- Penalties show in the Current Drive tile whoever they were called on.
+- Bad snap recovered by the defence says "fumble"; an incompletion reads
+  "pass incomplete".
+- Flip possession asks first.
+- Clear now closes the manual entry panel, which it never did.
 
 ---
 
-## Not yet done — a genuinely open decision, unchanged from prior sessions
+## Not yet done
 
-**The `game.html` input-method prototype decision (keypad vs field
-strip vs tap-the-field) is still open and was not touched this
-session.** `gametest.html`, `gametest2.html`, `gametest3.html` remain
-untouched, three-way comparisons awaiting a full-game rehearsal on each.
-See `TODO.md`'s "Input prototypes" entry for the specifics — launchers
-attached at runtime by a `MutationObserver`, the keypad committing only
-on Done, the shared keypad/keyboard buffer, `inputmode="none"`'s Safari
-risk in `gametest3`. Nothing here has changed since it was last written
-up; it is repeated in this handoff only so the next session does not
-have to go hunting for which file has the answer.
+**Return stats.** Agreed and scoped, not started. `roles` does not persist
+return yardage — it exists only inside the play text — so that is the
+blocker and the first step. Then count it in `computeBoxScore`, then
+display in recap, stat package, season report, view, and a leader overlay.
+Andy's calls: kickoff and punt returns **combined**, and **yes** to the
+broadcast overlay. History will not backfill.
+
+**Roster quick reference** — discussed, not designed.
+
+**Duplicate surnames.** Picker buttons show surname only, so two players
+with the same surname read alike at a glance. Worth checking the real
+roster before the beta.
 
 ---
 
 ## Resuming
 
-The repo is the source of truth, and the code carries its own reasoning
-in comments. Start by reading `TODO.md` and `PROJECT_NOTES.md`, then
-this file, then pull the current files from
-`raw.githubusercontent.com/HUNTERGAMES69/statchat/main/` — GitHub can
-lag behind Andy's local copies if an upload was skipped, so verify
-against what he last downloaded rather than assuming.
+Pull from `raw.githubusercontent.com/HUNTERGAMES69/statchat/main/` first —
+do not assume the working copy is current.
 
-**Two SQL migrations exist only as the commands given directly to Andy
-in chat, not as committed files:** `players.season_year` and
-`games.is_preseason`. If `sql/schema.sql` is ever built (`TODO.md`
-section 19, still outstanding), both belong in it.
+**Do not run `tests/mutation_check.js` unless it can finish.** It
+deliberately breaks source files and restores them at the end; an
+interrupted run leaves `game.html` broken. This happened once this session
+and the stranded mutant looked like a real engine bug.

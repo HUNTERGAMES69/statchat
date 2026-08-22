@@ -2081,6 +2081,14 @@ watch for.
   `game.html` and delete the other two test files. DONE 22 Aug 2026: the
   rail layout in `gametest3.html` won and is now `game.html`; the previous
   page is the frozen fallback `game_legacy.html`. See PROJECT_NOTES.
+- [ ] **RETURN STATS — the agreed next feature.** Kickoff and punt returns
+  COMBINED, and yes to a broadcast leader overlay (Andy's calls, 22 Aug).
+  The blocker is that `roles` does not persist return yardage at all — it
+  exists only inside the play text — so step one is writing it there at
+  entry time, across all five paths that credit a returner (kickoff, punt,
+  blocked-kick return, muffed-kick recovery, guided kickoff return). Then
+  `computeBoxScore`, then recap / stat package / season report / view /
+  overlay. History will not backfill.
 - [ ] **Delete `gametest3.html` from the repo** — it is now a byte-level
   duplicate of `game.html` and will drift the moment either is edited.
   `gametest.html` and `gametest2.html` stay, marked DEAD PROTOTYPE;
