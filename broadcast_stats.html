@@ -109,15 +109,24 @@
            -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
            border-radius:14px;
            box-shadow:0 10px 40px rgba(0,0,0,0.45); padding:16px 20px; }
+  /* Width is set in script, from the LONGER of the two team names, and
+     the same value is given to both panels. A fixed basis alone did not
+     hold: flex items default to min-width:auto, so a nowrap name wider
+     than the basis simply pushed past it -- which is why the Neville
+     cards started further left than the West Monroe ones. */
   .lteam { flex:0 0 108px; text-align:center; }
   .lteam img { width:62px; height:62px; object-fit:contain; display:block; margin:0 auto 6px; }
-  .ltname { font-size:19px; font-weight:800; white-space:nowrap;
-            overflow:hidden; text-overflow:ellipsis; }
+  .ltname { font-size:19px; font-weight:800; white-space:normal;
+            overflow-wrap:break-word; }
   .lcards { flex:1 1 auto; display:flex; gap:10px; min-width:0; }
   .lcard { flex:1 1 0; min-width:0; background:#f4f6f9; border-radius:10px; padding:10px 12px; }
   .lcat { font-size:12.5px; font-weight:700; color:#4a5058; margin-bottom:2px; }
-  .lname { font-size:17px; font-weight:800; white-space:nowrap;
-           overflow:hidden; text-overflow:ellipsis; }
+  /* A PLAYER NAME IS NEVER CUT. It used to be nowrap + ellipsis, so a
+     long one was truncated to fit the card -- the one thing this graphic
+     must not do, since the name is the reason the card exists. It wraps
+     to a second line instead; the card grows, and the row grows with it. */
+  .lname { font-size:17px; font-weight:800; white-space:normal;
+           overflow-wrap:break-word; }
   .lval { font-size:30px; font-weight:800; line-height:1.1;
           font-variant-numeric:tabular-nums; }
   .lunit { font-size:14px; font-weight:700; color:#4a5058; margin-left:5px; }
@@ -1032,6 +1041,20 @@ function extractNameTag(rawName){
     document.getElementById('leaders').innerHTML = portrait
       ? ldSide('teamA') + ldSide('teamB')
       : ldSide(visitorKey) + ldSide(homeKey);
+
+    // ONE COLUMN WIDTH FOR BOTH PANELS, sized to the longer name so
+    // neither is cut. Measured from the name lengths rather than from
+    // the rendered boxes: reading offsetWidth here would mean laying out,
+    // writing, and laying out again on every poll, and the two panels
+    // would disagree for a frame each time.
+    const longest = Math.max((TEAMS.teamA.name || '').length,
+                             (TEAMS.teamB.name || '').length);
+    const perChar = portrait ? 8.4 : 10.6;   // 15px and 19px at weight 800
+    const col = Math.max(portrait ? 84 : 108, Math.round(longest * perChar) + 10);
+    document.querySelectorAll('#leaders .lteam').forEach(el => {
+      el.style.flexBasis = col + 'px';
+      el.style.width = col + 'px';
+    });
 
     document.getElementById('panel').style.display = 'block';
     const p = new URLSearchParams(window.location.search);
