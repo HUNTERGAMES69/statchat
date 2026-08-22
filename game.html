@@ -409,6 +409,20 @@
     margin-left:0; order:9; }
   #entryStage #playPanel .opt-block .pick-row > div { flex-basis:100%; }
 
+  /* THE EMPTY STAGE. Text above the mark, both centred on the same axis.
+     Sized in vh rather than a fixed height so it fills the space the
+     ladder leaves without dictating how tall the card is -- a fixed
+     height here would set the card's height on a short ladder and be
+     overflowed by a long one. */
+  #stageEmpty { display:none; flex-direction:column; align-items:center;
+                justify-content:center; min-height:38vh; gap:18px; text-align:center; }
+  .stage-empty-text { font-size:19px; font-weight:600; color:#8a8f98;
+                      letter-spacing:0.01em; }
+  /* Quiet: it is a placeholder, not a brand statement, and at full
+     strength it competed with the ladder for attention. */
+  .stage-empty-logo { width:76px; height:auto; border-radius:12px; opacity:0.28; }
+  @media (max-width:1219px) { #stageEmpty { min-height:22vh; } }
+
   /* Outcome toggles two-up rather than a single wide strip. */
   #entryStage #playPanel .toggle-grid { display:grid; grid-template-columns:1fr 1fr;
                                         gap:6px; margin-top:10px; }
@@ -690,6 +704,13 @@
         </div>
 
         <div id="entryStage">
+      <!-- What the stage says when nothing is open. Without it the area
+           beside the ladder was simply blank, which reads as something
+           failing to load rather than as waiting for you. -->
+      <div id="stageEmpty">
+        <div class="stage-empty-text">Make a selection to begin</div>
+        <img src="logo.png" alt="" class="stage-empty-logo">
+      </div>
       <div id="playPanel" style="display:none;"></div>
 
       <div id="manualPanel" style="display:none; background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:10px;">
@@ -3773,6 +3794,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // the log, the same call the box score itself makes. scheduleValidation
     // is NOT, so it debounces rather than running here.
     try { renderLiveBox(); } catch (e) {}
+    // DEFERRED a tick. renderAll runs at the START of several paths that
+    // then go on to hide something -- save hides the confirm card after
+    // rendering -- so a synchronous check here saw the card still up and
+    // left the placeholder hidden on an empty stage. Running once the
+    // stack has settled sees the finished state whatever order the
+    // caller worked in.
+    setTimeout(() => { try { syncStageEmpty(); } catch (e) {} }, 0);
     scheduleValidation();
     const state = computeState();
     const isGoalToGo = state.down && state.fieldPos !== null && (state.fieldPos + state.distance >= 100);
@@ -6033,17 +6061,66 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // opened -- panel gone, confirm card gone, code buffer empty. Some of
   // these re-rendered the same panel instead, which just wiped the
   // fields and left the tree sitting open.
+  // ONE PLACE DECIDES, and it reads the DOM rather than being told.
+  // Every path that opens or closes something on this stage would
+  // otherwise need a line here -- the ladder, Clear, Save, Edit, Review,
+  // the manual panel, the guided flow -- and the one that got forgotten
+  // would leave the placeholder sitting behind an open tree.
+  function syncStageEmpty(){
+    const el = document.getElementById('stageEmpty');
+    if (!el) return;
+    const isOpen = id => {
+      const n = document.getElementById(id);
+      return !!n && n.style.display !== 'none' && n.innerHTML.trim() !== '';
+    };
+    const busy = isOpen('playPanel') || isOpen('confirmCard') || isOpen('manualPanel') ||
+                 isOpen('clockPromptCard') || isOpen('guidedPanel');
+    el.style.display = busy ? 'none' : 'flex';
+  }
+
+  // WATCH THE PANEL rather than trust every opener to report in. The
+  // utility trees -- penalty, timeout, bad snap, flip, set clock -- build
+  // their own markup straight into #playPanel without going through
+  // renderPlayPanel or renderAll, so hooking the openers one at a time
+  // left whichever one nobody thought of showing the placeholder behind
+  // an open tree. That is the failure this whole function exists to
+  // avoid, so it should not depend on a list of call sites.
+  //
+  // childList and the style attribute are the only two things that can
+  // change whether a panel counts as open, so the observer is cheap.
+  (function watchStage(){
+    if (typeof MutationObserver === 'undefined') return;
+    ['playPanel', 'confirmCard', 'manualPanel'].forEach(id => {
+      const n = document.getElementById(id);
+      if (!n) return;
+      new MutationObserver(() => { try { syncStageEmpty(); } catch (e) {} })
+        .observe(n, { childList: true, attributes: true, attributeFilter: ['style'] });
+    });
+    try { syncStageEmpty(); } catch (e) {}
+  })();
+
   function collapsePlayPanel(){
     const panel = document.getElementById('playPanel');
     if (panel){ panel.style.display = 'none'; panel.innerHTML = ''; }
     const cc = document.getElementById('confirmCard');
     if (cc) cc.style.display = 'none';
+    // The manual panel too. Clear closed every tree but left this one
+    // open -- it is a separate element, so it survived a control whose
+    // whole promise is "put the stage back". Found because the empty-stage
+    // placeholder stayed hidden behind it after Clear.
+    const mp = document.getElementById('manualPanel');
+    if (mp && mp.style.display !== 'none'){
+      mp.style.display = 'none';
+      const mt = document.getElementById('manualText');
+      if (mt) mt.value = '';
+    }
     const code = document.getElementById('code');
     if (code) code.value = '';
     pending = null;
     document.querySelectorAll('.ptypeBtn').forEach(b => b.classList.remove('picked'));
     // Prototype: drop the rail's selected state and its offset with it.
     if (window.__railClear) window.__railClear();
+    syncStageEmpty();
     // Opening a tree scrolls down to it, so collapsing has to scroll back
     // -- otherwise Clear leaves the coach staring at empty space where
     // the panel used to be, with the play-type buttons off-screen above.
@@ -9271,6 +9348,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       fold();
     });
 
+    // Opening a tree does NOT go through renderAll, so nothing else would
+    // re-run the check -- the placeholder stayed on screen behind the
+    // panel. Called here, at the end of building one, which is the point
+    // every tree passes through however it was opened.
+    try { syncStageEmpty(); } catch (e) {}
+
     // Reveal the rest of a collapsed kicker/punter list.
     (function wireGridMore(){
       const panel = document.getElementById('playPanel');
@@ -11188,13 +11271,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     sel.value = plays.length ? plays[plays.length - 1].id : 'start';
   }
 
+  // Manual entry opens and closes its own panel without going through
+  // renderPlayPanel or renderAll, so it has to say so itself.
   document.getElementById('manualBtn').addEventListener('click', () => {
     populateInsertOptions();
     document.getElementById('manualPanel').style.display = 'block';
+    syncStageEmpty();
   });
   document.getElementById('cancelManual').addEventListener('click', () => {
     document.getElementById('manualPanel').style.display = 'none';
     document.getElementById('manualText').value = '';
+    syncStageEmpty();
   });
   document.getElementById('saveManual').addEventListener('click', async () => {
     const text = document.getElementById('manualText').value;
