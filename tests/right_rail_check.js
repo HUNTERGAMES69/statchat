@@ -391,7 +391,29 @@ async function run() {
 
     // OFF AIR: light grey, and it says what pressing it will do.
     if (win.getComputedStyle(el).display === 'none') fail('air:hidden', 'the control should always show');
-    if (!el.classList.contains('air-off')) fail('air:offclass', 'off air should carry the grey class');
+    if (!el.classList.contains('air-off')) fail('air:offclass', 'off air should carry the off-air class');
+    // WHITE WITH A DARK OUTLINE, not light grey. Light grey on a light
+    // page is this app's vocabulary for DISABLED, so the button read as a
+    // label rather than something to press. Reported directly.
+    const off = win.getComputedStyle(el);
+    if (off.backgroundColor === 'rgb(232, 232, 230)') {
+      fail('air:offgrey', 'the off-air button is back to the grey that read as disabled');
+    }
+    if (parseFloat(off.borderTopWidth) < 2) {
+      fail('air:offborder', 'off air needs its outline to read as a control, got ' + off.borderTopWidth);
+    }
+    // The red DOT, checked in the stylesheet -- jsdom cannot compute
+    // ::before. It is the only red on the control: a solid red fill must
+    // keep meaning exactly one thing, which is live.
+    {
+      const src = require('fs').readFileSync(__dirname + '/../game.html', 'utf8');
+      if (!/#onAirBanner\.air-off::before[^}]*background:#b00020/.test(src)) {
+        fail('air:offdot', 'the off-air button should carry the red dot that says what it turns on');
+      }
+      if (/#onAirBanner\.air-off\s*{[^}]*background:#b00020/.test(src)) {
+        fail('air:offfill', 'off air must not be filled red -- a red fill means live');
+      }
+    }
     if (!/SET AS ON AIR/.test(el.textContent)) {
       fail('air:offlabel', 'off air should read SET AS ON AIR, got ' + JSON.stringify(el.textContent.trim()));
     }
