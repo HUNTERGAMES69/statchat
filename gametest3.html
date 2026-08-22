@@ -3877,6 +3877,57 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     return writeGameFields({ game_phase: gamePhase, guided_state: guided }, 'Game state');
   }
 
+  // RAISE THE KEYPAD ON A CLOCK FIELD THE APP OPENED BY ITSELF.
+  // ---------------------------------------------------------------------
+  // Reported twice: the pad still waited for a tap on the confirm card's
+  // clock row in a real browser, though it opened correctly under test.
+  // The first version fired exactly once, two frames after the card was
+  // shown, and depended on two things being true at that instant --
+  // requestAnimationFrame having run, and attachPickers() having already
+  // classified the field. attachPickers is driven by a MutationObserver
+  // with a 30ms debounce, so on a slower frame the field can still be
+  // unclassified when the one attempt happens, and the attempt then does
+  // nothing at all and never comes back.
+  //
+  // Retried instead of timed. Each attempt is guarded exactly the way the
+  // tap handler guards its own: if the pad is already open on this field,
+  // it is left alone, so a later retry can never reset a value being
+  // typed. The kind is defaulted rather than read blindly -- these two
+  // fields are clock fields whether or not the classifier has reached
+  // them yet, which removes the second dependency outright.
+  function raiseClockPad(fieldId, rowId){
+    if (typeof openPad !== 'function') return;
+    const attempt = () => {
+      const fld = document.getElementById(fieldId);
+      if (!fld || fld.disabled) return;
+      // Still wanted? The row may have been hidden again, or the prompt
+      // resolved, between scheduling and firing.
+      if (rowId){
+        const row = document.getElementById(rowId);
+        if (!row || row.style.display === 'none') return;
+      } else if (!clockPrompt) return;
+      // Already open on this field -- leave the entry alone.
+      if (padEl && padEl.style.display !== 'none' && padTargetId === fieldId) return;
+      openPad(fld, fld, fld.dataset.pickerKind || 'clock');
+    };
+    // NOT called synchronously. Opening during the click that triggered
+    // it is self-defeating: the same click keeps bubbling to the
+    // document-level handler that closes the pad on any click outside
+    // #ydPad, so the pad opened and was shut again by its own event.
+    // Confirmed by instrumenting it -- the second attempt found the pad
+    // already built but display:none, which only closePad() does.
+    //
+    // Every attempt therefore runs after the click has finished, and
+    // there are three of them at widening intervals: the field is
+    // classified by a debounced MutationObserver, so a single attempt at
+    // a fixed moment can arrive before the app is ready for it and then
+    // never return. The guard above makes the extra attempts free.
+    if (window.requestAnimationFrame) window.requestAnimationFrame(attempt);
+    else setTimeout(attempt, 0);
+    setTimeout(attempt, 60);
+    setTimeout(attempt, 250);
+  }
+
   function showClockPrompt(ctx, thenFn){
     clockPrompt = ctx;
     clockPromptCallback = thenFn;
@@ -3911,14 +3962,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // Deferred a frame: attachPickers() runs from a MutationObserver and
     // may not have classified this field yet on the very first prompt,
     // and openPad needs the kind it assigns.
-    if (cpi && typeof openPad === 'function'){
-      const raise = () => {
-        if (!clockPrompt) return;                      // skipped/resolved already
-        if (cpi.dataset.pickerKind) openPad(cpi, cpi, cpi.dataset.pickerKind);
-      };
-      if (window.requestAnimationFrame) window.requestAnimationFrame(() => window.requestAnimationFrame(raise));
-      else setTimeout(raise, 0);
-    }
+    raiseClockPad('clockPromptInput');
   }
   function resolveClockPrompt(skip){
     const val = document.getElementById('clockPromptInput').value.trim();
@@ -9306,21 +9350,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // unasked and a clock value is the only thing it wants -- and the
       // same deferral, since attachPickers() classifies fields from a
       // MutationObserver and may not have reached this one yet.
-      if (needsClock){
-        const cci = document.getElementById('confirmClockInput');
-        if (cci && typeof openPad === 'function'){
-          const raise = () => {
-            // Gone again already (saved, edited, or the row re-hidden):
-            // opening a pad over a card nobody is looking at is worse
-            // than not opening one.
-            const row = document.getElementById('confirmClockRow');
-            if (!row || row.style.display === 'none') return;
-            if (cci.dataset.pickerKind) openPad(cci, cci, cci.dataset.pickerKind);
-          };
-          if (window.requestAnimationFrame) window.requestAnimationFrame(() => window.requestAnimationFrame(raise));
-          else setTimeout(raise, 0);
-        }
-      }
+      if (needsClock) raiseClockPad('confirmClockInput', 'confirmClockRow');
     }
     document.getElementById('confirmCard').style.display = 'block';
     const cc = document.getElementById('confirmCard');
