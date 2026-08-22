@@ -66,6 +66,11 @@
   .score-text { flex:1 1 auto; min-width:0; font-weight:600; color:#1a1a1a; }
   .score-tally { flex:0 0 auto; font-weight:800; font-variant-numeric:tabular-nums; color:#1a1a2e; }
   .score-detail { font-size:13px; font-weight:600; color:#5b6068; margin-left:6px; }
+  /* The SOP badge. Boxed rather than merely tinted: at label size a
+     colour change alone is easy to miss, and the point is that this one
+     reading is a different kind of thing from the three beside it. */
+  .stat-label-badge { background:#fff3cd; border:1px solid #e0b400;
+                      color:#7a5c00; border-radius:4px; padding:1px 6px; }
   /* Each trailing clause on its own line, indented slightly so a wrapped
      one still reads as belonging to the play above it rather than as a
      new play. */
@@ -1377,11 +1382,17 @@ function extractNameTag(rawName){
             // its own (see engine.js's computeState) and this reverts
             // to TOP with the real elapsed time, unchanged from before.
             //
-            // Styled distinctly (amber, not the same tint as the other
-            // three) on purpose: it is showing a different KIND of
-            // thing -- a clock reading, not an accumulated stat -- and
-            // looking identical to the other three would read as a
-            // real duration before one exists.
+            // The TILE matches its three neighbours; only the LABEL is
+            // marked. It used to be amber all over, which made the whole
+            // quad look uneven for something that is simply a fourth
+            // reading — and the amber sat behind the CLOCK VALUE too,
+            // tinting the one part of the tile that is a plain fact.
+            //
+            // What actually needs saying is that SOP is not the same kind
+            // of number as TOP: it is where the possession started, not
+            // how long it has run. So the badge goes on the label, which
+            // is the word that changes between the two states, and the
+            // value is left to read as the clock reading it is.
             (function(){
               const pending = (state.pendingClockStart || {})[driveTeam];
               if (pending !== null && pending !== undefined){
@@ -1390,10 +1401,10 @@ function extractNameTag(rawName){
               }
               return ['TOP', formatDuration(currentSummary.top), false];
             })()
-          ].map(([label, val, sop]) => '<span class="inline-stat-item"' +
-              (sop ? ' style="background:#fff3cd; border:1px solid #e0b400;"' : '') + '>' +
+          ].map(([label, val, sop]) => '<span class="inline-stat-item">' +
               '<span class="stat-value">' + val + '</span>' +
-              '<span class="stat-label"' + (sop ? ' style="color:#7a5c00;"' : '') + '>' + label + '</span></span>').join('') + '</div>'
+              '<span class="stat-label' + (sop ? ' stat-label-badge' : '') + '">' +
+              label + '</span></span>').join('') + '</div>'
         : '';
 
       // Null once the interval is the floor: the drive before it belongs
