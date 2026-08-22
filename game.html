@@ -608,11 +608,6 @@
       <button class="secondary" id="clockPromptSkip">Skip</button>
     </div>
 
-    <div id="guidedPanel" class="card" style="display:none;">
-      <h2>Kickoff</h2>
-      <div id="guidedContent"></div>
-    </div>
-
     <!-- Shown only when this game is the one the broadcast feed is
          reading. The scorer needs to know that what they type is going
          out live, not merely being recorded. Sits in the empty left
@@ -640,6 +635,24 @@
       </div>
     </div>
     <div class="card" id="entryCard">
+      <!-- INSIDE the entry card, not a sibling above it.
+           ---------------------------------------------------------------
+           This was a normal-flow sibling in #mainView, sitting above the
+           card -- so whenever it appeared or changed height it displaced
+           the whole centre column, and the drive dock and right rail
+           (which are positioned from the card) went down with it.
+           Three attempts were made to out-compute that displacement:
+           measure the card, then measure whichever card was on top, then
+           pin to the banner. Each fixed the arithmetic and none fixed the
+           cause, because the panel genuinely was pushing the column down.
+           Moved in here, it cannot: the card's own top never changes, and
+           the margins have nothing to chase. No measurement involved.
+           `card` class dropped -- it is inside one now, and a card within
+           a card draws a second border around the same content. -->
+      <div id="guidedPanel" style="display:none; margin-bottom:14px;">
+        <h2 style="margin-top:0;">Kickoff</h2>
+        <div id="guidedContent"></div>
+      </div>
       <div id="entryHeaderRow" style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
         <!-- Removed from the layout, not from the DOM: renderAll() still
              writes this and guarding every caller is not worth it in a
@@ -6263,34 +6276,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // happens to start with, so they measure the first card in it: the
   // guided panel when one is showing, the entry card otherwise. Only the
   // centre section moves.
+  // The margins measure the entry card, and the entry card no longer
+  // moves: the guided panel lives INSIDE it now rather than above it, so
+  // nothing in this column displaces anything outside it. Kept as a
+  // function only so both syncs share one definition.
   function columnTopRect(){
     const card = document.getElementById('entryCard');
     if (!card) return null;
-    // MEASURED FROM THE BANNER, which does not move.
-    // -------------------------------------------------------------------
-    // Two earlier attempts measured something inside the column -- first
-    // the entry card, then whichever card was on top of it. Both still
-    // moved, because everything in that column is displaced by whatever
-    // is above it, and the guided kickoff panel is exactly that.
-    //
-    // The banner is the one fixed reference on the page: offsetTop is its
-    // position in the DOCUMENT, unaffected by scroll or by its own
-    // stickiness (see syncAir, which had the same problem). The column
-    // always begins a constant distance below it, so the margins can be
-    // pinned there and stop caring what the centre section is doing.
-    //
-    // COLUMN_GAP is the margin under the banner plus the status line
-    // beneath it; it is a layout constant, not a measurement, which is
-    // the point -- a measured value is what kept moving.
-    const banner = document.querySelector('.banner');
     const c = card.getBoundingClientRect();
-    if (!banner) return { top: c.top, height: c.height };
-    const COLUMN_GAP = 46;
-    const bannerBottomDoc = banner.offsetTop + banner.offsetHeight;
-    // Back to viewport coordinates, since the caller adds pageYOffset.
-    const top = bannerBottomDoc + COLUMN_GAP - (window.pageYOffset || 0);
-    return { top: top, height: Math.max(c.bottom - top, c.height) };
+    return { top: c.top, height: c.height };
   }
+
 
   // ON AIR IS A TOGGLE ON THIS PAGE TOO.
   // ---------------------------------------------------------------------
