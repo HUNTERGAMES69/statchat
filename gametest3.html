@@ -288,6 +288,10 @@
     #entryStage #confirmCard { position:static; box-shadow:none; }
   }
   .logline { font-size:14px; padding:6px 0; border-bottom:1px solid #f2f2f2; }
+  /* Hanging indent for a wrapped play description -- see renderLogLines.
+     vertical-align:top keeps it on the same baseline as the #id and
+     quarter tags beside it rather than dropping a line. */
+  .logline .logtext { display:inline-block; vertical-align:top; }
   .badge { font-size:10px; padding:2px 6px; border-radius:8px; margin-left:6px; font-weight:600; }
   .badge.unresolved { background:#fff3cd; color:#7a6a2a; }
   .conflict-block { background:#fff3cd; border-radius:8px; padding:10px; margin-top:8px; }
@@ -3377,7 +3381,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // stripTeamNames: the log is grouped by drive and each line
         // already sits under a possession header, so "(Neville)" after
         // every name is a word the reader supplies for themselves.
-        return '<div class="logline">' + ctrls + ntag + qtag + stripTeamNames(p.text) + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
+        // The description is wrapped in its own box so that a line too
+        // long to fit wraps to where the DESCRIPTION starts, not back to
+        // the left edge under the play number. An inline-block establishes
+        // its own left edge for every line it contains, which is exactly
+        // the hanging indent wanted -- and unlike a flex row it leaves the
+        // floated controls above untouched.
+        return '<div class="logline">' + ctrls + ntag + qtag +
+          '<span class="logtext">' + stripTeamNames(p.text) +
+          (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') +
+          '</span></div>';
       }).join('');
     }
     document.getElementById('logScroll').innerHTML = renderLogLines(plays.slice().reverse(), correctionMode) || '<div style="color:#999;">no plays logged yet</div>';
