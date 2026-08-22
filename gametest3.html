@@ -89,6 +89,65 @@
   .floating-actions button { box-shadow:0 2px 8px rgba(0,0,0,0.2); }
   #playPanel, #utilPanel { background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:10px; scroll-margin-top:70px; }
   #confirmCard { background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:8px; }
+
+  /* ===================================================================
+     PROTOTYPE ONLY -- gametest3.html. Not in game.html.
+     ===================================================================
+     Play types as a fixed left RAIL, with the panel opening BESIDE it
+     instead of below it.
+
+     The problem this addresses is already documented in this file, in
+     the collapse handler: "Opening a tree scrolls down to it, so
+     collapsing has to scroll back -- otherwise Clear leaves the coach
+     staring at empty space where the panel used to be, with the
+     play-type buttons off-screen above." That scroll-back exists
+     because #playPanel and #confirmCard are siblings that render
+     UNDER four rows of type buttons and grow downward, so the pointer
+     walks down the column for every play and has to climb back up to
+     start the next one. The taller the tree, the longer the climb --
+     a fumble path adds whole sections.
+
+     Laid out as a row instead, the rail never moves and never gets
+     pushed down by panel content: it is sticky, so it stays put even
+     when a long tree scrolls, and the panel's first field starts at
+     the same height as the rail's top. The return trip becomes one
+     short sideways hop.
+
+     PURE MARKUP AND CSS. No ids or classes changed, no JS touched --
+     every panel builder still writes into #playPanel, every handler
+     still finds the same buttons. That is what makes this cheap to
+     judge on real plays and cheap to throw away. */
+  #entryLayout { display:flex; gap:16px; align-items:flex-start; }
+  #typeRail { flex:0 0 170px; position:sticky; top:76px; }
+  #typeRail .hint { margin:10px 0 4px; }
+  #typeRail .row { gap:5px; }
+  /* Two-up by default: the rail is narrow, and most of these labels are
+     one short word. */
+  #typeRail .row > button { flex:1 1 calc(50% - 3px); padding:9px 6px; font-size:13px; }
+  /* Rush and Pass are the overwhelming majority of entries, so they get
+     full width and a bigger target rather than sharing a row. */
+  #typeRail .rail-scrimmage > button { flex:1 1 100%; padding:13px 6px; font-size:15px; font-weight:700; }
+  /* Multi-word labels ("Adjust Down/Distance") wrap to three cramped
+     lines at half width. */
+  #typeRail .rail-wide > button { flex:1 1 100%; }
+  #entryStage { flex:1 1 auto; min-width:0; }
+  /* The panel is the top of its own column now, so the gap that used to
+     separate it from the buttons above would just indent it. */
+  #entryStage #playPanel, #entryStage #manualPanel { margin-top:0; }
+  /* Save follows the tree down instead of sitting a full panel-height
+     below the last field. Only bites when the tree is taller than the
+     viewport, which is exactly when the old layout hurt most. */
+  #entryStage #confirmCard { position:sticky; bottom:12px; box-shadow:0 -2px 10px rgba(0,0,0,0.10); }
+  /* Narrow screens fall back to the original stacked layout: a 170px
+     rail beside a panel does not fit a phone, and the vertical walk is
+     not the problem there anyway. */
+  @media (max-width: 899px) {
+    #entryLayout { display:block; }
+    #typeRail { position:static; }
+    #typeRail .row > button, #typeRail .rail-scrimmage > button { flex:0 1 auto; padding:8px 14px; font-size:14px; }
+    #entryStage #playPanel, #entryStage #manualPanel { margin-top:10px; }
+    #entryStage #confirmCard { position:static; box-shadow:none; }
+  }
   .logline { font-size:14px; padding:6px 0; border-bottom:1px solid #f2f2f2; }
   .badge { font-size:10px; padding:2px 6px; border-radius:8px; margin-left:6px; font-weight:600; }
   .badge.unresolved { background:#fff3cd; color:#7a6a2a; }
@@ -189,61 +248,71 @@
         <a id="recapLink" href="#" style="display:none; padding:8px 12px; border-radius:6px; background:#1a7a4c; color:#fff; font-size:13px; font-weight:600; text-decoration:none;">View game recap &rarr;</a>
       </div>
 
-      <p class="hint" style="margin:10px 0 6px;">Scrimmage</p>
-      <div class="row">
-        <button class="ptypeBtn" data-type="rush">Rush</button>
-        <button class="ptypeBtn" data-type="pass">Pass</button>
-      </div>
-      <p class="hint" style="margin:10px 0 6px;">Special teams</p>
-      <div class="row">
-        <button class="ptypeBtn" data-type="kickoff">Kickoff</button>
-        <button class="ptypeBtn" data-type="punt">Punt</button>
-        <button class="ptypeBtn" data-type="fg">Field goal</button>
-        <button class="ptypeBtn" data-type="pat">PAT</button>
-        <button class="ptypeBtn" data-type="twopt">2PT</button>
-      </div>
-      <p class="hint" style="margin:10px 0 6px;">Utilities</p>
-      <!-- Two deliberate rows: things that happen DURING a game on top,
-           corrections and manual overrides underneath. -->
-      <div class="row">
-        <button id="penUtilBtn" style="background:#ffc72c; color:#1a1a1a;">Penalty</button>
-        <button id="badSnapUtilBtn">Bad snap</button>
-        <button class="ptypeBtn" data-type="fumble">Fumble</button>
-        <button class="ptypeBtn" data-type="safety">Safety</button>
-        <button id="kneelUtilBtn">QB kneel</button>
-        <button id="timeoutUtilBtn">Timeout</button>
-      </div>
-      <div class="row" style="margin-top:6px;">
-        <button id="driveUtilBtn">Adjust Down/Distance</button>
-        <button id="flipBtn">Flip possession</button>
-        <button id="setClockUtilBtn" title="Opens the clock for the possession now in progress. Only use this at the START of a possession.">Set clock</button>
-        <button id="manualBtn" class="lastresort" title="Free text only — the play is flagged unresolved and contributes no stats, no yardage and no down change">⚠ Manual entry</button>
-      </div>
-
-      <div id="playPanel" style="display:none;"></div>
-
-      <div id="manualPanel" style="display:none; background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:10px;">
-        <p class="hint" style="margin:0 0 6px;">Manual entry (flags as unresolved for later review)</p>
-        <label>Insert after<select id="insertAfter" style="width:100%; margin-bottom:8px;"></select></label>
-        <input autocomplete="off" type="text" id="manualText" placeholder="Describe the play" style="width:100%; margin-bottom:8px;">
-        <div class="row"><button class="primary" id="saveManual">Save</button><button class="secondary" id="cancelManual">Cancel</button></div>
-      </div>
-
-      <div id="confirmCard" style="display:none;">
-        <div style="font-size:14px; color:#888; margin-bottom:4px;">Parsed as</div>
-        <div id="parsedText" style="font-size:16px; font-weight:600; margin-bottom:10px;"></div>
-        <div id="fieldPosWarning" style="display:none; background:#fff3cd; border:1px solid #e0b400; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:13px; color:#7a5c00;"></div>
-        <label id="flipRow" style="display:none;"><input autocomplete="off" type="checkbox" id="flipCheck" checked> <span id="flipLabel"></span></label>
-        <div id="confirmClockRow" style="display:none; margin-bottom:8px;">
-          <span id="confirmClockLabel">Clock</span>&nbsp;<input autocomplete="off" type="text" id="confirmClockInput" placeholder="M:SS or MSS" style="width:90px; display:inline-block;">
-          <span id="confirmClockLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:#f2f4f7; border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>
-          <div id="confirmClockWarn" style="font-size:12px; color:#a05a00; margin-top:4px;">
-            Optional — but with no clock this possession's time won't be counted.
+      <!-- PROTOTYPE LAYOUT (gametest3 only). The rail and the stage are
+           the only new elements; every button, id, class and handler
+           below is byte-identical to game.html. See the #entryLayout
+           block in the stylesheet for why. -->
+      <div id="entryLayout">
+        <div id="typeRail">
+          <p class="hint" style="margin-top:0;">Scrimmage</p>
+          <div class="row rail-scrimmage">
+            <button class="ptypeBtn" data-type="rush">Rush</button>
+            <button class="ptypeBtn" data-type="pass">Pass</button>
+          </div>
+          <p class="hint">Special teams</p>
+          <div class="row">
+            <button class="ptypeBtn" data-type="kickoff">Kickoff</button>
+            <button class="ptypeBtn" data-type="punt">Punt</button>
+            <button class="ptypeBtn" data-type="fg">Field goal</button>
+            <button class="ptypeBtn" data-type="pat">PAT</button>
+            <button class="ptypeBtn" data-type="twopt">2PT</button>
+          </div>
+          <p class="hint">Utilities</p>
+          <!-- Two deliberate groups, as before: things that happen DURING
+               a game first, corrections and manual overrides underneath. -->
+          <div class="row">
+            <button id="penUtilBtn" style="background:#ffc72c; color:#1a1a1a;">Penalty</button>
+            <button id="badSnapUtilBtn">Bad snap</button>
+            <button class="ptypeBtn" data-type="fumble">Fumble</button>
+            <button class="ptypeBtn" data-type="safety">Safety</button>
+            <button id="kneelUtilBtn">QB kneel</button>
+            <button id="timeoutUtilBtn">Timeout</button>
+          </div>
+          <div class="row rail-wide" style="margin-top:6px;">
+            <button id="driveUtilBtn">Adjust Down/Distance</button>
+            <button id="flipBtn">Flip possession</button>
+            <button id="setClockUtilBtn" title="Opens the clock for the possession now in progress. Only use this at the START of a possession.">Set clock</button>
+            <button id="manualBtn" class="lastresort" title="Free text only — the play is flagged unresolved and contributes no stats, no yardage and no down change">⚠ Manual entry</button>
           </div>
         </div>
-        <div class="row" style="margin-top:8px;">
-          <button class="primary" id="saveBtn">Save</button>
-          <button class="secondary" id="editBtn">Edit</button>
+
+        <div id="entryStage">
+          <div id="playPanel" style="display:none;"></div>
+
+          <div id="manualPanel" style="display:none; background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:10px;">
+            <p class="hint" style="margin:0 0 6px;">Manual entry (flags as unresolved for later review)</p>
+            <label>Insert after<select id="insertAfter" style="width:100%; margin-bottom:8px;"></select></label>
+            <input autocomplete="off" type="text" id="manualText" placeholder="Describe the play" style="width:100%; margin-bottom:8px;">
+            <div class="row"><button class="primary" id="saveManual">Save</button><button class="secondary" id="cancelManual">Cancel</button></div>
+          </div>
+
+          <div id="confirmCard" style="display:none;">
+            <div style="font-size:14px; color:#888; margin-bottom:4px;">Parsed as</div>
+            <div id="parsedText" style="font-size:16px; font-weight:600; margin-bottom:10px;"></div>
+            <div id="fieldPosWarning" style="display:none; background:#fff3cd; border:1px solid #e0b400; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:13px; color:#7a5c00;"></div>
+            <label id="flipRow" style="display:none;"><input autocomplete="off" type="checkbox" id="flipCheck" checked> <span id="flipLabel"></span></label>
+            <div id="confirmClockRow" style="display:none; margin-bottom:8px;">
+              <span id="confirmClockLabel">Clock</span>&nbsp;<input autocomplete="off" type="text" id="confirmClockInput" placeholder="M:SS or MSS" style="width:90px; display:inline-block;">
+              <span id="confirmClockLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:#f2f4f7; border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>
+              <div id="confirmClockWarn" style="font-size:12px; color:#a05a00; margin-top:4px;">
+                Optional — but with no clock this possession's time won't be counted.
+              </div>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <button class="primary" id="saveBtn">Save</button>
+              <button class="secondary" id="editBtn">Edit</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
