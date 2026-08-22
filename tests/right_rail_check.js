@@ -10,7 +10,7 @@
 // whistle is an unlock and a re-entry.
 
 const { bootGamePage } = require('./harness');
-const { enterPlay, setDrive } = require('./ui_driver');
+const { enterPlay, setDrive, click } = require('./ui_driver');
 
 async function run() {
   const failures = [];
@@ -373,6 +373,55 @@ async function run() {
         fail('drift:onair', 'the ON AIR tile moved after scrolling ' + scroll + 'px: ' + base + ' -> ' + got.air);
       }
     });
+    h.close();
+  }
+
+  // ON AIR IS A TOGGLE, WITH THE DASHBOARD'S WARNINGS.
+  // ---------------------------------------------------------------------
+  // It was a read-only badge, so a scorer who noticed at kickoff that the
+  // game was not on air had to leave the game to fix it. The warnings are
+  // the dashboard's word for word -- softening them here would mean the
+  // same action carried different protection depending which page you
+  // were on, and this is the page you are on while people are watching.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    const el = doc.getElementById('onAirBanner');
+    if (!el) { fail('air:missing', 'no ON AIR control'); h.close(); return failures; }
+
+    // OFF AIR: light grey, and it says what pressing it will do.
+    if (win.getComputedStyle(el).display === 'none') fail('air:hidden', 'the control should always show');
+    if (!el.classList.contains('air-off')) fail('air:offclass', 'off air should carry the grey class');
+    if (!/SET AS ON AIR/.test(el.textContent)) {
+      fail('air:offlabel', 'off air should read SET AS ON AIR, got ' + JSON.stringify(el.textContent.trim()));
+    }
+
+    // A game in progress asks twice before going on.
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '6' });
+    h.evalIn('window.__asked=[]; window.confirm=(m)=>{window.__asked.push(m.split(String.fromCharCode(10))[0]); return true;};');
+    click(win, el);
+    await new Promise(r => setTimeout(r, 250));
+    const asked = JSON.parse(h.evalIn('JSON.stringify(window.__asked)'));
+    if (!asked.some(m => /Put this game ON AIR/.test(m))) fail('air:onconfirm', 'no named confirm: ' + asked.join(' | '));
+    if (!asked.some(m => /IN PROGRESS/.test(m))) fail('air:onlive', 'a live game should warn a second time: ' + asked.join(' | '));
+    if (el.classList.contains('air-off') || !/ON AIR/.test(el.textContent)) {
+      fail('air:onstate', 'it should now read ON AIR, got ' + JSON.stringify(el.textContent.trim()));
+    }
+
+    // Taking a LIVE game off needs the word typed -- not a click.
+    h.evalIn('window.__asked=[]; window.prompt=()=>"nope";');
+    click(win, el);
+    await new Promise(r => setTimeout(r, 250));
+    if (/SET AS ON AIR/.test(el.textContent)) {
+      fail('air:offbywrongword', 'the wrong word should not take a live game off air');
+    }
+    h.evalIn('window.prompt = () => "off air";');
+    click(win, el);
+    await new Promise(r => setTimeout(r, 250));
+    if (!el.classList.contains('air-off') || !/SET AS ON AIR/.test(el.textContent)) {
+      fail('air:offstate', 'typing the word should take it off air, got ' + JSON.stringify(el.textContent.trim()));
+    }
     h.close();
   }
 
