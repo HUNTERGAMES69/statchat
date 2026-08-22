@@ -337,6 +337,48 @@ async function run() {
     h.close();
   }
 
+  // A KICKOFF TOUCHBACK CARRIES THE CLOCK FORWARD. The ball is dead the
+  // moment it reaches the end zone, so the receiving team's possession
+  // starts on the same clock the scoring play ended on -- a number the
+  // scorer typed one play ago.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'opp', yardline: 5 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '5', td: true, clock: '7:42' });
+    enterPlay(h, { type: 'pat', kicker: '3', result: 'g' });
+    const cc = () => doc.getElementById('confirmClockInput');
+
+    click(win, doc.querySelector('.ptypeBtn[data-type="kickoff"]'));
+    click(win, doc.querySelector('.pp_kicker_pick'));
+    click(win, doc.getElementById('pp_ko_touchback_toggle'));
+    click(win, doc.getElementById('pp_review'));
+    await new Promise(r => setTimeout(r, 300));
+    if (cc().value !== '7:42') {
+      fail('touchback:clock', 'a touchback should carry the last clock forward, got ' + JSON.stringify(cc().value));
+    }
+    click(win, doc.getElementById('saveBtn'));
+    await new Promise(r => setTimeout(r, 250));
+
+    // A RETURNED kickoff must NOT be prefilled -- time came off the clock,
+    // and a wrong number that fills itself in looks more trustworthy than
+    // one the scorer typed.
+    click(win, doc.getElementById('phaseClearBtn'));
+    await new Promise(r => setTimeout(r, 80));
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="kickoff"]'));
+    click(win, doc.querySelector('.pp_kicker_pick'));
+    typeInto(win, doc.getElementById('pp_retyds'), '22');
+    click(win, doc.querySelector('.pp_spot_side[data-side="own"]'));
+    typeInto(win, doc.getElementById('pp_spot_yardline'), '32');
+    click(win, doc.getElementById('pp_review'));
+    await new Promise(r => setTimeout(r, 300));
+    if (cc().value) {
+      fail('touchback:returned', 'a returned kickoff should not prefill the clock, got ' + JSON.stringify(cc().value));
+    }
+    h.close();
+  }
+
   return failures;
 }
 
