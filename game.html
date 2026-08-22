@@ -344,7 +344,41 @@
      the room it needs, the box keeps its fixed width at the right. */
   #entryStage #playPanel .pick-row { display:flex; align-items:flex-start; gap:8px; }
   #entryStage #playPanel .pick-row > div { flex:1 1 auto; min-width:0; }
-  #entryStage #playPanel .pick-row > input { flex:0 0 100px; }
+  /* A FIXED RIGHT COLUMN for the "type #" box. It used to be 100px wide
+     but positioned by whatever the grid beside it happened to measure, so
+     the boxes on passer, receiver and returner each landed at a different
+     x -- three ragged edges down one tree. Same width, but now the column
+     is the constant and the grid takes the remainder, so every box in
+     every tree lines up on one edge. Saves no height; it is the thing
+     that made the trees look untidy even when they fitted. */
+  /* Longhand, not the `flex` shorthand: identical in a browser, but the
+     shorthand is invisible to getComputedStyle under jsdom, so a test
+     asserting the column is fixed could not actually see it. */
+  #entryStage #playPanel .pick-row > input {
+    flex-grow:0; flex-shrink:0; flex-basis:96px; width:96px; align-self:flex-start; }
+  /* The label, inline instead of on its own line. Fixed width so the
+     grids start on a common edge too -- a ragged left is the same fault
+     as a ragged right. */
+  #entryStage #playPanel .pick-row > .pick-label {
+    flex-grow:0; flex-shrink:0; flex-basis:74px; font-size:12.5px; color:#6b7280; line-height:26px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* Air between one picker and the next. Requested: inlining the labels
+     removed their margins too, which left passer and receiver touching. */
+  /* Outcome toggles two-up rather than a single wide strip. */
+  #entryStage #playPanel .toggle-grid { display:grid; grid-template-columns:1fr 1fr;
+                                        gap:6px; margin-top:10px; }
+  #entryStage #playPanel .toggle-grid > * { margin:0; }
+  /* The spot on one line. The yard box keeps a fixed width and sits at
+     the end, so it lands on the same right edge as the "type #" boxes
+     above it rather than wherever the two side buttons happen to end. */
+  #entryStage #playPanel .spot-row { display:flex; align-items:center; gap:8px;
+                                     flex-wrap:wrap; margin-top:9px; }
+  #entryStage #playPanel .spot-row > button { flex:0 1 auto; margin:0; }
+  #entryStage #playPanel .spot-row > input { flex:0 0 96px; width:96px; margin-left:auto; }
+  #entryStage #playPanel .spot-label { flex:0 0 auto; line-height:normal; }
+  #entryStage #playPanel .pick-row + .pick-row,
+  #entryStage #playPanel .pick-row + .opt-block,
+  #entryStage #playPanel .opt-block + .pick-row { margin-top:9px; }
   /* The name-confirm box is inserted as a sibling of the manual input,
      so inside .pick-row it would otherwise be a third flex child fighting
      the grid for width. Full-width line of its own, always last. */
@@ -5833,11 +5867,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // Wrapped so a panel can hide the whole block. The muff flows supply
     // their own spot field, and showing both asked for the same yard
     // line twice.
-    return '<div id="' + idPrefix + '_wrap">' +
-      '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + (label || 'Starting spot for the ensuing drive (optional — leave blank to set later)') + '</p>' +
-      '<button type="button" class="' + idPrefix + '_side" data-side="own">' + driveTeamLabel + '</button> ' +
-      '<button type="button" class="' + idPrefix + '_side" data-side="opp">' + otherTeamLabel + '</button> ' +
-      '<input autocomplete="off" type="text" id="' + idPrefix + '_yardline" style="width:70px; display:inline-block;" placeholder="Yard line">' +
+    // ONE LINE: label, the two sides, the yard box. It was three stacked
+    // rows -- heading, sides, input -- and the tallest single thing on
+    // the punt tree.
+    //
+    // The heading keeps its full wording when it is the OPTIONAL variant,
+    // which carries a real instruction ("leave blank to set later") that
+    // a short label cannot replace. Only the required variant, whose text
+    // is a title rather than a direction, is shortened -- and it keeps
+    // the full sentence in a tooltip.
+    const longLabel = label || 'Starting spot for the ensuing drive (optional — leave blank to set later)';
+    const shortLabel = /required/i.test(longLabel) ? 'Spot' : longLabel;
+    return '<div id="' + idPrefix + '_wrap" class="spot-row">' +
+      '<span class="pick-label spot-label" title="' + longLabel.replace(/"/g, '') + '">' + shortLabel + '</span>' +
+      '<button type="button" class="' + idPrefix + '_side" data-side="own">' + driveTeamLabel + '</button>' +
+      '<button type="button" class="' + idPrefix + '_side" data-side="opp">' + otherTeamLabel + '</button>' +
+      '<input autocomplete="off" type="text" id="' + idPrefix + '_yardline" placeholder="Yard line">' +
       '</div>';
   }
   // Is an element actually on screen? Walks up looking for display:none
@@ -6512,10 +6557,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // list is usually one or two buttons, so the manual box was
       // claiming a whole row to itself for a field that is mostly
       // unused. Ids are untouched -- only the wrapper is new.
-      return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
-        '<div class="pick-row">' +
+      // LABEL INSIDE THE ROW. It used to own a line of its own -- 8px
+      // above, 4px below, plus the line itself -- on every picker, and
+      // the pass tree has three of them. Inline it costs nothing.
+      return '<div class="pick-row">' +
+          '<span class="pick-label">' + label + '</span>' +
           '<div id="pp_' + role + '_grid">' + pickerHtml(list, 'pp_' + role + '_pick', statFn) + '</div>' +
-          '<input autocomplete="off" type="text" id="pp_' + role + '_manual" placeholder="or type #" style="width:100px;">' +
+          '<input autocomplete="off" type="text" id="pp_' + role + '_manual" placeholder="or type #">' +
         '</div>';
     }
     function defBlock(label, suffix){
@@ -6523,7 +6571,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const list = defenseEligible(def);
       const inner = '<div class="pick-row">' +
           '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix) + '</div>' +
-          '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px;">' +
+          '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #">' +
         '</div>';
       // Optional credits collapse. "Tackled by (optional)" is a full
       // picker plus a manual box on every rush and pass, and it is
@@ -6532,7 +6580,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // untouched: only the ones whose own label says optional collapse,
       // so this can never hide something the play needs.
       if (!/optional/i.test(label)) {
-        return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' + inner;
+        return inner.replace('<div class="pick-row">',
+          '<div class="pick-row"><span class="pick-label">' + label + '</span>');
       }
       return '<div class="opt-block">' +
         '<button type="button" class="opt-toggle">+ ' + label.replace(/\s*\(optional\)\s*/i, '') + '</button>' +
@@ -6550,8 +6599,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       suffix = suffix || '';
       const list = returnerEligible(def);
       const inner = '<div class="pick-row">' +
-          '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, (num, p) => (p && p.pos) || '', 'no returners on the roster — type a number below') + '</div>' +
-          '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px;">' +
+          '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, (num, p) => (p && p.pos) || '', 'no returners on the roster — type a number') + '</div>' +
+          '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #">' +
         '</div>';
       // Collapses on the same rule as defBlock's optional credits: a full
       // picker grid plus a manual box, on every punt and every kickoff,
@@ -6562,7 +6611,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // a returner a play actually requires is never hidden behind a
       // button somebody has to know to press.
       if (!/optional/i.test(label)) {
-        return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' + inner;
+        return inner.replace('<div class="pick-row">',
+          '<div class="pick-row"><span class="pick-label">' + label + '</span>');
       }
       return '<div class="opt-block">' +
         '<button type="button" class="opt-toggle">+ ' + label.replace(/\s*\(optional\)\s*/i, '') + '</button>' +
@@ -7023,11 +7073,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // the landing spot off the field, not the distance.
         '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div>' + yardsBlock('Enter distance') + '</div>' +
         spotCalcHtml('Or enter downed/received on') + '</div>' +
-        '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_punt_touchback', 'Touchback') + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_blocked') + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_muffed', 'Muffed / fumbled catch') + '</div>' +
-        '<div style="margin-bottom:6px;">' + blockedToggleHtml('pp_punt_fake', 'Fake') + '</div></div>' +
+        // TWO-UP, not a four-across strip. At full width the four ran to
+        // the edge and read as one long band; paired, they read as four
+        // choices. Same controls, same ids, half the horizontal reach.
+        '<div class="toggle-grid">' +
+          blockedToggleHtml('pp_punt_touchback', 'Touchback') +
+          blockedToggleHtml('pp_blocked') +
+          blockedToggleHtml('pp_muffed', 'Muffed / fumbled catch') +
+          blockedToggleHtml('pp_punt_fake', 'Fake') +
+        '</div>' +
         fakeBlockHtml('pp_puntfake', 'punt') +
         '<div id="pp_punt_normal">' + retBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div>' +
           // SPOT TO SPOT, not a third number to type.
