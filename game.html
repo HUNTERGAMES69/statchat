@@ -1372,6 +1372,27 @@ function getLastClockAbsSec(){
   }
   return null;
 }
+// A TOUCHBACK TAKES NO TIME OFF THE CLOCK.
+// ---------------------------------------------------------------------
+// The ball is dead the moment it reaches the end zone, so the receiving
+// team's possession starts at the same clock the scoring play ended on.
+// The scorer would otherwise re-type a number the app already knows, on
+// every touchback, having just typed it after the score.
+//
+// Fills only an EMPTY box. If something is already there the scorer put
+// it there, and a helper that overwrites a typed value is worse than one
+// that does nothing.
+function prefillTouchbackClock(inputId){
+  const el = document.getElementById(inputId);
+  if (!el || el.value.trim()) return;
+  const last = absSecToClockStr(getLastClockAbsSec());
+  if (!last) return;
+  el.value = last.text;
+  // Marked so the confirm step can tell a derived value from a typed one
+  // -- the same distinction the spot calculator already draws.
+  el.dataset.fromTouchback = '1';
+}
+
 // THE LAST CLOCK ENTERED, as a coach would read it back.
 // ---------------------------------------------------------------------
 // Every clock box in the app now shows this beside it. The reason is
@@ -5553,6 +5574,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('gr_returner_manual'), document.getElementById('gr_yards').parentElement];
       const refreshGrTb = () => {
         const tb = grTbCb.checked;
+        if (tb) prefillTouchbackClock('guidedReturnClock');
         if (tb && grMuffCb.checked){ grMuffCb.checked = false; }
         document.getElementById('gr_muff_wrap').style.display = tb ? 'none' : '';
         document.getElementById('gr_muff_box').style.display = 'none';
@@ -9292,6 +9314,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       })();
       const refreshKoMode = () => {
         const tb = document.getElementById('pp_ko_touchback').checked;
+        // A touchback stops the clock where the scoring play left it.
+        if (tb) prefillTouchbackClock('confirmClockInput');
         const muffed = document.getElementById('pp_ko_muffed').checked;
         const onsideEl = document.getElementById('pp_ko_onside');
         const onside = !!(onsideEl && onsideEl.checked);
@@ -10248,6 +10272,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       } else if (isTouchback){
         code = sel.kicker + 'ko ' + yds + ' tb';
         roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0, touchback: true } };
+        // A TOUCHBACK CARRIES THE CLOCK FORWARD. The ball is dead the
+        // moment it reaches the end zone, so the receiving team's
+        // possession starts on the same clock the scoring play ended on --
+        // a number the scorer typed one play ago and would otherwise type
+        // again on every touchback.
+        //
+        // HERE, not in showConfirm. Three earlier placements failed and
+        // the reason is worth keeping: pending.roles is attached by the
+        // CALLER after showConfirm returns, so inside showConfirm the play
+        // type is still unknown and any test on it is false. This branch
+        // is the first point at which "this is a touchback" is a fact.
+        //
+        // Deferred a tick so it lands after showConfirm has emptied the
+        // field, which it does on every open.
+        setTimeout(() => {
+          const cc = document.getElementById('confirmClockInput');
+          if (cc) cc.value = '';
+          prefillTouchbackClock('confirmClockInput');
+        }, 0);
       } else if (koMuffed){
         const recTeamTok = document.querySelector('input[name=pp_ko_muffrec]:checked').value;
         const recRaw = (document.getElementById('pp_ko_muff_rec') || {}).value;
@@ -10793,6 +10836,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // and it fights the rail layout: fitPanel() and the top-lock already
     // put the stage where it should be.
     void cc;
+
   }
 
   document.getElementById('confirmClearBtn').addEventListener('click', () => {
@@ -11422,17 +11466,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<button type="button" id="pen_half_dist_btn" class="secondary" style="padding:8px 12px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">Half the distance</button>' +
       '</div>' +
       '<div id="pen_half_readout" style="display:none; font-size:13px; margin-top:6px;"></div>' +
-      // A SHORT LABEL ON A NARROW BOX, wrapped. It read
-      // "Dead-ball / after a kick or change of possession (move the ball,
-      // keep the down & distance)" -- a sentence on a button, running the
-      // full width of the panel for a control that is used rarely.
-      // The parenthetical is what the toggle DOES, which belongs in the
-      // title where it can be read on demand, not on the face of it.
+      // "Dead Ball / After Play" -- Andy's wording, 22 Aug.
+      //
+      // Two earlier versions were both wrong in the same direction. The
+      // first was a whole sentence: "Dead-ball / after a kick or change of
+      // possession (move the ball, keep the down & distance)". The second
+      // shortened it but kept the parenthetical on a second wrapped line,
+      // which turned a button into a paragraph -- taller than the two
+      // buttons beneath it and still the loudest thing in the box.
+      //
+      // One line, no wrap. What it DOES stays in the title, where it can
+      // be read on demand rather than occupying the face of a control
+      // used a few times a season.
       '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pen_no_down" style="display:none;">' +
       '<button type="button" id="pen_no_down_toggle" class="ptoggle" ' +
         'title="Moves the ball but keeps the down and distance — for a foul after a kick or a change of possession" ' +
         'style="padding:8px 12px; border-radius:6px; font-size:13.5px; font-weight:600; cursor:pointer; ' +
-        'max-width:210px; white-space:normal; text-align:left; line-height:1.25;">Dead-ball<br>(after a kick or change of possession)</button></div>' +
+        'white-space:nowrap;">Dead Ball / After Play</button></div>' +
       '<div style="margin-top:8px;">' +
         '<input autocomplete="off" type="checkbox" id="pen_first_down" style="display:none;">' +
         '<button type="button" id="pen_first_down_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Automatic first down</button>' +
