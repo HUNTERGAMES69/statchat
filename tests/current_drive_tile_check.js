@@ -77,11 +77,41 @@ async function run() {
     if (!/SOP/.test(html)) fail('sop-label', 'expected the fourth tile to read SOP while the drive is open, got: ' + html);
     if (!/11:24/.test(html)) fail('sop-value', 'expected the logged start-of-possession clock 11:24, got: ' + html);
     if (/<span class="stat-label"[^>]*>TOP/.test(html)) fail('sop-not-top', 'must not still read TOP while the drive has no closing clock event, got: ' + html);
-    // The distinct amber styling from the approved mockup -- deliberate,
-    // not incidental: it is a clock reading, not an accumulated stat,
-    // and looking identical to the other three tiles would read as a
-    // real duration before one exists.
-    if (!/background:#fff3cd/.test(html)) fail('sop-styling', 'expected the SOP tile\'s distinct amber background, got: ' + html);
+    // THE TILE MATCHES ITS NEIGHBOURS; ONLY THE LABEL IS BADGED. The
+    // whole tile used to be amber, which made the quad look uneven for
+    // what is simply a fourth reading, and tinted the clock value along
+    // with it. What needs saying is that SOP is a different KIND of
+    // number from TOP -- where the possession started, not how long it
+    // has run -- so the mark goes on the word that changes between the
+    // two states.
+    const win = v.window;
+    const items = [...v.document.querySelectorAll('#currentDriveTiles .inline-stat-item')];
+    if (items.length !== 4) fail('sop-tiles', 'expected four tiles, got ' + items.length);
+    const bgs = new Set(items.map(i => win.getComputedStyle(i).backgroundColor));
+    if (bgs.size !== 1) {
+      fail('sop-styling', 'the SOP tile should match its neighbours, got backgrounds: ' + [...bgs].join(', '));
+    }
+    const sopLabel = items.map(i => i.querySelector('.stat-label'))
+      .find(l => l && /SOP/.test(l.textContent));
+    if (!sopLabel) fail('sop-badge-missing', 'no SOP label found');
+    else {
+      if (!sopLabel.classList.contains('stat-label-badge')) {
+        fail('sop-badge', 'the SOP label should carry the badge that marks it as not a live stat');
+      }
+      // Boxed, not merely tinted: at label size a colour change alone is
+      // easy to miss.
+      const lc = win.getComputedStyle(sopLabel);
+      if (lc.backgroundColor === 'rgba(0, 0, 0, 0)') fail('sop-badge-fill', 'the badge needs a fill');
+      if (parseFloat(lc.borderTopWidth) <= 0) fail('sop-badge-border', 'the badge needs its outline');
+      // And the other three labels must NOT be badged.
+      items.map(i => i.querySelector('.stat-label'))
+        .filter(l => l && !/SOP/.test(l.textContent))
+        .forEach(l => {
+          if (l.classList.contains('stat-label-badge')) {
+            fail('sop-badge-spread', l.textContent + ' should not be badged');
+          }
+        });
+    }
     v.close();
   }
 
