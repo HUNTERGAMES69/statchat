@@ -20,7 +20,7 @@
 // actually is on that specific panel, not by inferring from its id.
 
 const { bootGamePage, defaultRoster } = require('./harness');
-const { setDrive, click } = require('./ui_driver');
+const { setDrive, click, enterPlay } = require('./ui_driver');
 
 // Everything live inside an element, ignoring anything hidden by an
 // ancestor. Buttons and inputs only — labels and text do no harm.
@@ -707,6 +707,40 @@ async function run() {
     // And a play tree.
     click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
     if (await shown()) fail('stage:tree', 'the placeholder is still showing behind the pass tree');
+    h.close();
+  }
+
+  // THE FIELD STRIP'S CHROME SITS BELOW THE FIELD, on the line that
+  // already carries the direction arrow and the team with the ball. That
+  // line was there anyway with dead space at both ends, so the label and
+  // Hide cost nothing there -- and the row they used to occupy above the
+  // field is gone.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 35 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '6' });
+    const fs = doc.getElementById('fieldStrip');
+    if (win.getComputedStyle(fs).display === 'none') { fail('strip:hidden', 'the strip should be showing'); h.close(); return failures; }
+    // Field FIRST, chrome after it.
+    const order = [...fs.children].map(c => c.id);
+    if (order[0] !== 'fieldStripBody') {
+      fail('strip:order', 'the field should come first, got ' + order.join(' > '));
+    }
+    if (!doc.getElementById('fieldStripFooter')) fail('strip:footer', 'no footer row');
+    // Pulled up onto the direction line rather than stacked under it --
+    // otherwise this move costs a row instead of saving one.
+    if (parseInt(win.getComputedStyle(doc.getElementById('fieldStripFooter')).marginTop, 10) >= 0) {
+      fail('strip:overlay', 'the footer should sit on the direction line, not below it');
+    }
+    // Hide and Show still work, and the warning slot survived the move.
+    if (!doc.getElementById('fieldStripWarn')) fail('strip:warn', 'the warning slot was lost');
+    click(win, doc.getElementById('fieldStripToggle'));
+    await new Promise(r => setTimeout(r, 80));
+    if (win.getComputedStyle(fs).display !== 'none') fail('strip:hide', 'Hide did not hide the strip');
+    click(win, doc.getElementById('fieldStripShow'));
+    await new Promise(r => setTimeout(r, 80));
+    if (win.getComputedStyle(fs).display === 'none') fail('strip:show', 'Show did not bring it back');
     h.close();
   }
 
