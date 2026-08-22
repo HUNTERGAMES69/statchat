@@ -1380,12 +1380,25 @@ function extractNameTag(rawName){
       // disagree about what moment this is. NOT shown for 'NOT STARTED':
       // that state already hands the bottom-left tile to season stats,
       // and an empty Scoring card would say nothing at all.
-      const showScoring = phase === 'HALFTIME' || phase === 'FINAL';
+      // AT FINAL THE QUAD JUST SAYS SO. The scoring summary earns its
+      // place at the interval, when the question is how the score got
+      // there and there is a second half still to come. Once the game is
+      // over that question is answered by the recap, and a spectator
+      // arriving at a finished stream wants one thing from this quarter
+      // of the screen: whether it is over. Reported directly.
+      const isFinal = phase === 'FINAL';
+      const showScoring = phase === 'HALFTIME';
       const scoringCard = document.getElementById('scoringCard');
       document.querySelectorAll('#quadTR .drive-current, #quadTR .drive-previous')
-        .forEach(el => { el.style.display = showScoring ? 'none' : ''; });
-      scoringCard.style.display = showScoring ? '' : 'none';
-      if (showScoring){
+        .forEach(el => { el.style.display = (showScoring || isFinal) ? 'none' : ''; });
+      scoringCard.style.display = (showScoring || isFinal) ? '' : 'none';
+      if (isFinal){
+        document.getElementById('scoringHeading').textContent = '';
+        document.getElementById('scoringBody').innerHTML =
+          '<div style="display:flex; align-items:center; justify-content:center; height:100%; ' +
+          'min-height:120px; font-size:44px; font-weight:800; letter-spacing:0.08em; ' +
+          'color:#1a1a2e;">GAME FINAL</div>';
+      } else if (showScoring){
         document.getElementById('scoringHeading').textContent =
           phase === 'HALFTIME' ? 'Scoring — first half' : 'Scoring — final';
         const rows = scoringSummary(plays);

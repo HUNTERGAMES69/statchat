@@ -1169,7 +1169,23 @@ function getLastClockAbsSec(){
 // its quarter, which is why this is not simply a format call.
 function absSecToClockStr(absSec){
   if (absSec === null || absSec === undefined) return null;
-  const q = Math.floor(absSec / quarterLengthSec) + 1;
+  // A TIME EXACTLY ON A QUARTER BOUNDARY ENDS THE QUARTER BEFORE IT, it
+  // does not begin the next one. 0:00 at the end of Q4 is stored as
+  // 4 x quarterLength, and the plain arithmetic below reads that as the
+  // FIRST tick of Q5 -- so a finalized game reported its last clock entry
+  // as "12:00 (Q5)", inventing an overtime period that never happened.
+  // Reported from a real game.
+  //
+  // The same slip applied at every quarter end, not just the last: the
+  // 0:00 that closes Q1 read as 12:00 (Q2). It only became obvious at
+  // the end of the game, where there is no next quarter for it to be
+  // plausibly mistaken for.
+  //
+  // absSec 0 is excluded deliberately -- that really is the start of Q1.
+  const onBoundary = absSec > 0 && absSec % quarterLengthSec === 0;
+  const q = onBoundary
+    ? absSec / quarterLengthSec
+    : Math.floor(absSec / quarterLengthSec) + 1;
   const remaining = quarterLengthSec - (absSec - (q - 1) * quarterLengthSec);
   const mins = Math.floor(remaining / 60), secs = remaining % 60;
   return { q, text: mins + ':' + String(secs).padStart(2, '0') };
