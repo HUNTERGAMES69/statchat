@@ -308,6 +308,35 @@ async function run() {
     g.close();
   }
 
+  // A TIME EXACTLY ON A QUARTER BOUNDARY ENDS THAT QUARTER, it does not
+  // begin the next one. 0:00 at the end of Q4 is stored as 4 x the
+  // quarter length, and plain arithmetic reads that as the first tick of
+  // Q5 -- so a finalized game reported its last clock entry as
+  // "12:00 (Q5)", inventing an overtime period that never happened.
+  // Reported from a real game. The same slip applied at every quarter
+  // end; it was only obvious at the last one, where there is no next
+  // quarter for it to be plausibly mistaken for.
+  {
+    const h = await bootGamePage();
+    const L = h.evalIn('quarterLengthSec');
+    const at = v => JSON.parse(h.evalIn('JSON.stringify(absSecToClockStr(' + v + '))'));
+    const expect = (v, text, q, why) => {
+      const r = at(v);
+      if (!r || r.text !== text || r.q !== q) {
+        fail('clock-boundary', why + ': expected ' + text + ' (Q' + q + '), got ' +
+          (r ? r.text + ' (Q' + r.q + ')' : 'null'));
+      }
+    };
+    expect(0, '12:00', 1, 'absSec 0 really is the start of Q1');
+    expect(L, '0:00', 1, 'the 0:00 that closes Q1');
+    expect(L - 1, '0:01', 1, 'one second left in Q1 is untouched');
+    expect(2 * L, '0:00', 2, 'the 0:00 that closes the first half');
+    expect(4 * L, '0:00', 4, 'the 0:00 that ends regulation must not read as Q5');
+    // Genuine overtime still reports Q5 -- the fix must not hide a real one.
+    expect(4 * L + 60, '11:00', 5, 'a real overtime period');
+    h.close();
+  }
+
   return failures;
 }
 

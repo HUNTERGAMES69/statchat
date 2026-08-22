@@ -76,12 +76,20 @@ async function run() {
     w.close();
   }
 
-  // --- 3. Final, reached by game status rather than a divider.
+  // --- 3. AT FINAL the quad just says so. The scoring summary earns its
+  //     place at the interval, when there is a second half still to come;
+  //     once the game is over that question belongs to the recap, and a
+  //     spectator arriving at a finished stream wants one thing from this
+  //     quarter of the screen.
   {
     const w = await view(rows, { id: 'test-game-1', status: 'final', season_year: 2026 });
-    if (!shown(w, '#scoringCard')) fail('final:scoring', 'the scoring summary should take the quad at final');
-    const head = w.document.getElementById('scoringHeading').textContent;
-    if (!/final/i.test(head)) fail('final:heading', 'expected a final heading, got: ' + head);
+    if (shown(w, '.drive-current')) fail('final:drive', 'the drive cards should be hidden at final');
+    if (!/GAME FINAL/.test(w.document.getElementById('scoringBody').textContent)) {
+      fail('final:text', 'expected GAME FINAL, got: ' + w.document.getElementById('scoringBody').textContent.trim());
+    }
+    if (w.document.querySelectorAll('.score-row').length) {
+      fail('final:no-summary', 'the scoring summary should not be listed once the game is over');
+    }
     w.close();
   }
 
@@ -93,7 +101,9 @@ async function run() {
       team_side: 'teamA', quarter: 1, sequence_number: 1 }];
     const w = await view(none, { id: 'test-game-1', status: 'final', season_year: 2026 });
     const body = w.document.getElementById('scoringBody').textContent.trim();
-    if (!/no scoring yet/i.test(body)) fail('final:empty', 'a scoreless final should say so, got: ' + JSON.stringify(body));
+    // A 0-0 final says GAME FINAL like any other -- the "no scoring yet"
+    // wording belongs to halftime, where more football is still coming.
+    if (!/GAME FINAL/.test(body)) fail('final:empty', 'a scoreless final should still read GAME FINAL, got: ' + JSON.stringify(body));
     w.close();
   }
 
