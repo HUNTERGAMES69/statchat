@@ -2486,7 +2486,31 @@ function computePlayerStats(){
     if (r.carrier){ stats[r.carrier.team].rushYds[r.carrier.num] = (stats[r.carrier.team].rushYds[r.carrier.num]||0) + (r.carrier.yards||0); noteOffense(r.carrier.team, r.carrier.num); }
     if (r.passer){ stats[r.passer.team].passYds[r.passer.num] = (stats[r.passer.team].passYds[r.passer.num]||0) + (r.passer.yards||0); noteOffense(r.passer.team, r.passer.num); }
     if (r.receiver){ stats[r.receiver.team].recYds[r.receiver.num] = (stats[r.receiver.team].recYds[r.receiver.num]||0) + (r.receiver.yards||0); noteOffense(r.receiver.team, r.receiver.num); }
-    if (r.defense){
+    // ONLY WHERE THE ENGINE ITSELF WOULD CREDIT A DEFENDER.
+    // -------------------------------------------------------------------
+    // r.defense is not only the tackler. The same key carries the KICK
+    // AND PUNT RETURNER -- the returning side is the defence at the
+    // moment of the kick -- as well as the interceptor and the fumble
+    // recoverer. This list fed the "Tackled by" picker, so a man who had
+    // only ever returned a kickoff was offered as a tackler for the rest
+    // of the game, and if he wore a shared number every player on that
+    // number came with him. Reported from a real game.
+    //
+    // computeBoxScore already gates its defensive credit on the play type
+    // (rush/pass/sack for tackles, int/sack/fumble for the rest), which is
+    // why the STATS were never wrong -- the returner was never credited a
+    // tackle, only offered as one. The same gate is applied here so the
+    // picker offers exactly the players the engine would credit, and the
+    // two cannot disagree.
+    //
+    // Deliberately NOT a new role key. Splitting the returner out would
+    // mean changing what is written at entry time, which every game
+    // already stored would then be missing -- and it would fix nothing
+    // that this does not, since the play type already says what the
+    // credit was for. The role split belongs with the return-stats work,
+    // where the yardage needs persisting too.
+    const DEFENSIVE_CREDIT_TYPES = ['rush', 'pass', 'sack', 'int', 'fumble'];
+    if (r.defense && DEFENSIVE_CREDIT_TYPES.indexOf(r.playType) !== -1){
       stats[r.defense.team].credits[r.defense.num] = (stats[r.defense.team].credits[r.defense.num]||0) + 1;
       if (discovered[r.defense.team].indexOf(r.defense.num) === -1) discovered[r.defense.team].push(r.defense.num);
     }
