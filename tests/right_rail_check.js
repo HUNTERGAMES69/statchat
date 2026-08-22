@@ -58,6 +58,26 @@ async function run() {
     if (rush && /3 att/.test(rush)) fail('leaders:rush-attempts', 'leaders rank on yards, not carries: ' + rush);
     if (!pass || !/2\/2, 27 yds/.test(pass)) fail('leaders:pass', 'expected 2/2 for 27, got: ' + pass);
     if (!rec || !/22 yds/.test(rec)) fail('leaders:rec', 'expected the 22-yard receiver to lead, got: ' + rec);
+    // No touchdowns in this drive, so no TD suffix. A trailing "0 TD" on
+    // every line would double the width of the busiest column to say
+    // nothing, and in a rail this narrow the name is what gets squeezed.
+    if (rows.some(r => /TD/.test(r))) fail('leaders:td-noise', 'no touchdowns were scored, so none should be listed: ' + rows.join(' | '));
+    h.close();
+  }
+
+  // --- 1b2. Touchdowns ARE shown once there are any.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '8' });
+    setDrive(h, { down: 1, distance: 10, side: 'opp', yardline: 20 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '20', td: true });
+    await new Promise(r => setTimeout(r, 700));
+    const rush = [...doc.querySelectorAll('#liveBoxBody .ld-row')]
+      .map(e => e.textContent.replace(/\s+/g, ' ').trim()).find(r => /^RUSH/.test(r));
+    if (!rush || !/1 TD/.test(rush)) fail('leaders:td', 'expected the touchdown on the rushing leader, got: ' + rush);
+    if (!/28 yds/.test(rush || '')) fail('leaders:td-yards', 'yards should still be there beside the TD, got: ' + rush);
     // A team with nothing yet has no leaders block -- a name against
     // 0 yds reads as a stat when it is not one.
     const blocks = doc.querySelectorAll('#liveBoxBody .ld-block');
