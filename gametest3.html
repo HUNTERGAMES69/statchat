@@ -162,12 +162,30 @@
      otherwise outrank. Kept to this prototype's own block so the
      override is visible in one place rather than scattered through the
      markup. */
-  #gameTitle { font-size:14px; font-weight:600; color:#777; margin:0; white-space:nowrap;
-               overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto; }
-  #entryHeaderRow { flex-wrap:nowrap !important; align-items:center !important; gap:10px !important; margin-bottom:6px; }
-  #onAirBanner { padding:3px 9px !important; font-size:10.5px !important; margin:0 !important;
-                 letter-spacing:0.04em !important; white-space:nowrap; flex:0 0 auto; }
-  #entryHeaderRow a { padding:5px 11px !important; font-size:12px !important; }
+  /* Header: one right-justified row, Dashboard -> ON AIR -> CREW VIEW.
+     The title is gone from the layout entirely (it was redundant with
+     the banner above), which is what frees the width for all three to
+     share a line. All three are sized from the SAME box: identical
+     font, padding, line-height and border-width, so they come out the
+     same height rather than nearly the same. CREW VIEW and ON AIR carry
+     a border in their own background colour purely so the 1px on
+     Dashboard does not make it a hair taller than the other two. */
+  #entryHeaderRow { flex-wrap:nowrap !important; align-items:center !important;
+                    justify-content:flex-end !important; gap:8px !important; margin-bottom:8px; }
+  .hdr-btn {
+    box-sizing:border-box; font-size:12px !important; line-height:18px !important;
+    padding:5px 11px !important; border-radius:6px !important;
+    border-width:1px !important; border-style:solid !important;
+    margin:0 !important; white-space:nowrap; flex:0 0 auto;
+    text-align:center; }
+  #onAirBanner.hdr-btn { border-color:#b00020 !important; letter-spacing:0.04em !important;
+                         animation:none !important; }
+  a#launchViewLink.hdr-btn { border-color:#b00020 !important; }
+  /* A seeded picker and its "or type #" box on one line: the grid takes
+     the room it needs, the box keeps its fixed width at the right. */
+  #entryStage #playPanel .pick-row { display:flex; align-items:flex-start; gap:8px; }
+  #entryStage #playPanel .pick-row > div { flex:1 1 auto; min-width:0; }
+  #entryStage #playPanel .pick-row > input { flex:0 0 100px; }
   /* The field-position card: its own padding and margins are inline. */
   #fieldStrip { padding:6px 10px !important; margin:5px 0 !important; }
   #fieldStrip > div:first-child { margin-bottom:3px !important; }
@@ -176,7 +194,10 @@
     /* Back to wrapping, and the title stops truncating -- the phone
        layout has the width to spare and not the vertical pressure. */
     #entryHeaderRow { flex-wrap:wrap !important; }
-    #gameTitle { white-space:normal; overflow:visible; }
+    /* Stacked again on a phone: three fixed-width controls on one line
+       is what pushes the ON AIR banner off the edge there. */
+    #entryStage #playPanel .pick-row { display:block; }
+    #entryStage #playPanel .pick-row > input { margin-top:4px; }
   }
   @media (max-width: 899px) {
     #entryLayout { display:block; }
@@ -236,32 +257,22 @@
 
     <div class="card">
       <div id="entryHeaderRow" style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
-        <h1 id="gameTitle">Game</h1>
+        <!-- Removed from the layout, not from the DOM: renderAll() still
+             writes this and guarding every caller is not worth it in a
+             prototype. It is redundant with the banner above, which
+             already carries both team names and the score. -->
+        <h1 id="gameTitle" style="display:none;">Game</h1>
+        <a class="hdr-btn" href="dashboard.html" style="text-decoration:none; border:1px solid #ccc; color:#444; font-weight:600; white-space:nowrap;">← Dashboard</a>
         <!-- Shown only when this game is the one the broadcast feed is
-             reading. The
-             scorer needs to know that what they type is going out live,
-             not merely being recorded. -->
-        <div id="onAirBanner" style="display:none;">&#9679; ON AIR &mdash; this game is feeding the broadcast</div>
-        <!-- margin-left:auto, NOT relying on the outer row's
-             justify-content:space-between. This row has THREE flex
-             children (title, ON AIR banner, this group) and wraps -- with
-             the banner showing, the title alone fills line one and this
-             group drops to a line of its own. space-between has nothing
-             to distribute between when a wrapped line holds only one
-             item, so it sat at the LEFT edge instead of the right.
-             Reported from a real device; jsdom has no real layout engine
-             and could not have caught this. margin-left:auto is immune to
-             the wrap: it claims the leftover space on WHATEVER line this
-             group ends up sharing, alone or not. -->
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;">
-          <a href="dashboard.html" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600; white-space:nowrap;">← Dashboard</a>
+             reading. The scorer needs to know that what they type is
+             going out live, not merely being recorded. -->
+        <div class="hdr-btn" id="onAirBanner" style="display:none;">&#9679; ON AIR &mdash; this game is feeding the broadcast</div>
           <!-- Solid red/white, matching #onAirBanner's own colour -- both
                are about the same thing, watching this game live, right
                now. CREW VIEW is last in this row on purpose: the rightmost
                position in a right-justified flex row is the edge of the
                page, the single most prominent spot on it. -->
-          <a id="launchViewLink" href="#" target="_blank" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:none; background:#b00020; color:#fff; font-size:13px; font-weight:600; white-space:nowrap;">CREW VIEW ↗</a>
-        </div>
+        <a class="hdr-btn" id="launchViewLink" href="#" target="_blank" style="text-decoration:none; background:#b00020; color:#fff; font-weight:600; white-space:nowrap;">CREW VIEW ↗</a>
       </div>
       <div id="gameMsg"></div>
       <div id="finalLockBanner" class="hidden" style="background:#fff3cd; border:1px solid #e0b400; border-radius:8px; padding:12px 14px; margin-bottom:16px;">
@@ -5610,16 +5621,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // earns its place in the ORDERING, which is why it is still built.
       void idStats; void numKey;
       const statFn = null;
+      // Requested directly: the "or type #" box sits BESIDE the seeded
+      // picker rather than under it. On the pass tree the quarterback
+      // list is usually one or two buttons, so the manual box was
+      // claiming a whole row to itself for a field that is mostly
+      // unused. Ids are untouched -- only the wrapper is new.
       return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
-        '<div id="pp_' + role + '_grid">' + pickerHtml(list, 'pp_' + role + '_pick', statFn) + '</div>' +
-        '<input autocomplete="off" type="text" id="pp_' + role + '_manual" placeholder="or type #" style="width:100px; margin-top:4px;">';
+        '<div class="pick-row">' +
+          '<div id="pp_' + role + '_grid">' + pickerHtml(list, 'pp_' + role + '_pick', statFn) + '</div>' +
+          '<input autocomplete="off" type="text" id="pp_' + role + '_manual" placeholder="or type #" style="width:100px;">' +
+        '</div>';
     }
     function defBlock(label, suffix){
       suffix = suffix || '';
       const list = defenseEligible(def);
       return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
-        '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix) + '</div>' +
-        '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px; margin-top:4px;">';
+        '<div class="pick-row">' +
+          '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix) + '</div>' +
+          '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px;">' +
+        '</div>';
     }
     // Dedicated returner picker for kickoffs and punts. It deliberately
     // reuses the credit field's ids and classes (pp_credit_grid /
@@ -5632,8 +5652,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       suffix = suffix || '';
       const list = returnerEligible(def);
       return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
-        '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, (num, p) => (p && p.pos) || '', 'no returners on the roster — type a number below') + '</div>' +
-        '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px; margin-top:4px;">';
+        '<div class="pick-row">' +
+          '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, (num, p) => (p && p.pos) || '', 'no returners on the roster — type a number below') + '</div>' +
+          '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px;">' +
+        '</div>';
     }
     // Field labels carry the choice being offered, so they were too quiet
     // at 13px #888 -- the same grey as every hint on the page.
