@@ -476,10 +476,37 @@ async function run() {
       // same default width whether or not the column is fixed, so a
       // width comparison passed even with the rule removed -- it could
       // not see the thing it was checking.
-      const bases = new Set(inputs.map(i => win.getComputedStyle(i).flexBasis));
+      // Kicker and punter boxes now live INSIDE their grid, flowing after
+      // the last name, so they are not part of the aligned column and
+      // are excluded from the width comparison below.
+      const columnInputs = inputs.filter(i => !i.closest('.grid-inline-manual') && !i.closest('.opt-block'));
+      const bases = new Set(columnInputs.map(i => win.getComputedStyle(i).flexBasis));
+      // continue, not return: this sits inside the per-tree loop, and a
+      // return here abandons run() itself -- the suite reported a
+      // TypeError on undefined failures rather than skipping one tree.
+      if (!columnInputs.length) continue;
       if (bases.size !== 1 || [...bases][0] === 'auto') {
         fail('layout:' + type + ':column', 'the manual boxes need one fixed column, got ' + [...bases].join(', '));
       }
+      // THE GRID MUST CLAIM NO INTRINSIC WIDTH. The row wraps -- the
+      // name-confirm box needs a full-width line -- and a wrapping flex
+      // container wraps its items rather than shrinking them. With basis
+      // auto the grid demanded the full width of its buttons, so on any
+      // picker with more than two or three names the label and the
+      // "type #" box were pushed onto their own lines. The pass tree hid
+      // this: its passer list is one or two buttons and fitted anyway.
+      [...doc.querySelectorAll('#playPanel .pick-row > div')].forEach(g => {
+        if (g.classList.contains('name-confirm')) return;
+        // An EXPANDED OPTIONAL BLOCK is deliberately different: its grid
+        // takes the full width so the manual box drops to its own line
+        // directly under the button that opened it, rather than floating
+        // against a far right edge with an often-empty grid beside it.
+        if (g.closest('.opt-block')) return;
+        if (win.getComputedStyle(g).flexBasis !== '0px') {
+          fail('layout:' + type + ':grid-basis',
+            'the picker grid must not claim its content width, got ' + win.getComputedStyle(g).flexBasis);
+        }
+      });
       // No PICKER label owns a line any more. Headings that ask a real
       // question over their own row of controls -- "Which way is Neville
       // kicking?" -- are not picker labels and correctly keep theirs; the
