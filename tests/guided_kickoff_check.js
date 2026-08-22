@@ -156,6 +156,64 @@ async function run() {
     h.close();
   }
 
+  // BACK STEPS THE GUIDED FLOW BACKWARDS, one press at a time. The flow
+  // disables the whole ladder -- correctly, a kickoff is owed -- so a
+  // wrong pick could previously only be escaped by finishing the sequence
+  // and undoing it. Reported directly.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    const back = () => doc.querySelector('#guidedPanel .guided-back');
+    const step = () => JSON.parse(h.evalIn('JSON.stringify(guided.step)'));
+
+    click(win, doc.getElementById('startGameBtn'));
+    await new Promise(r => setTimeout(r, 80));
+    if (!back()) fail('back:pick', 'the team-pick step needs a way out');
+    click(win, doc.getElementById('pickA'));
+    await new Promise(r => setTimeout(r, 80));
+    if (!back()) fail('back:kickoff', 'the kickoff panel needs a Back');
+    click(win, doc.querySelector('.gk_kicker_pick'));
+    const dir = doc.querySelector('.gk_dir_btn');
+    if (dir) click(win, dir);
+    click(win, doc.getElementById('guidedKickoffSave'));
+    await new Promise(r => setTimeout(r, 250));
+    const atReturn = h.evalIn('plays.length');
+    if (step() !== 'return') fail('back:setup', 'expected the return step, got ' + step());
+    // The label says what it does: two stored rows go away.
+    if (!/undo/i.test(back().textContent)) {
+      fail('back:wording', 'Back on the return step removes saved plays and should say so: ' + back().textContent);
+    }
+
+    // ONE STEP BACK: the kickoff and its direction marker go, the flow
+    // stays alive, and the step is the kickoff panel again.
+    click(win, back());
+    await new Promise(r => setTimeout(r, 500));
+    if (step() !== 'kickoff') fail('back:step', 'expected the kickoff panel, got ' + step());
+    if (h.evalIn('guided.active') !== true) {
+      fail('back:killed', 'Back must not drop out of the flow -- the undo handler used to clear it mid-step');
+    }
+    if (h.evalIn('plays.length') !== atReturn - 2) {
+      fail('back:rows', 'expected the kickoff and direction rows removed, got ' + h.evalIn('plays.length'));
+    }
+
+    // And forward again: the kickoff must still be enterable after a Back.
+    click(win, doc.querySelector('.gk_kicker_pick'));
+    const dir2 = doc.querySelector('.gk_dir_btn');
+    if (dir2) click(win, dir2);
+    click(win, doc.getElementById('guidedKickoffSave'));
+    await new Promise(r => setTimeout(r, 300));
+    if (step() !== 'return') fail('back:forward', 'the kickoff should still save after a Back, got ' + step());
+
+    // Back twice more: kickoff panel, then the team pick.
+    click(win, back());
+    await new Promise(r => setTimeout(r, 500));
+    click(win, back());
+    await new Promise(r => setTimeout(r, 200));
+    if (step() !== 'pickKicker') fail('back:pickstep', 'expected the team pick, got ' + step());
+    if (h.evalIn('guided.active') !== true) fail('back:pickactive', 'still inside the flow at the team pick');
+    h.close();
+  }
+
   return failures;
 }
 
