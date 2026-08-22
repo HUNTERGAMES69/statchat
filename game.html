@@ -7771,7 +7771,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           blockedToggleHtml('pp_punt_fake', 'Fake') +
         '</div>' +
         fakeBlockHtml('pp_puntfake', 'punt') +
-        '<div id="pp_punt_normal">' + retBlock('Returned by (optional)') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div>' +
+        // THE WHOLE RETURN GROUP COLLAPSES, not just the returner picker.
+        // ------------------------------------------------------------
+        // "+ Returned by" used to hide only the PICKER, while the three
+        // fields that actually describe a return -- return yards, the
+        // returned-to calculator and the fumble toggle -- stayed open
+        // whatever happened. On a punt that was fair-caught, downed or
+        // touchbacked none of them apply, and that is most punts.
+        //
+        // Opening it reveals all four together, so a real return still
+        // costs one tap and then reads as one group rather than four.
+        '<div id="pp_punt_normal" class="opt-block">' +
+          '<button type="button" class="opt-toggle">+ Returned</button>' +
+          '<div class="opt-body">' +
+          retBlock('Returned by') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div>' +
           // SPOT TO SPOT, not a third number to type.
           // ------------------------------------------------------------
           // Return yards and the takeover spot both fall out of two
@@ -7783,7 +7796,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // fair-catch checkbox. Blank IS "not returned."
           '<div id="pp_retto_wrap" style="margin-top:6px; margin-left:22px; ' +
             'padding-left:22px; border-left:1px solid #d8d8d8;">' +
-            fieldLabel('Or enter returned to') +
+            // The hint that used to sit UNDER this block as a full-width
+            // green bar ("Enter where it was fielded first.") is folded
+            // into the label. It explained the field above it and cost a
+            // row on every punt to prevent a mistake made occasionally.
+            fieldLabel('Or enter returned to \u2014 fielded spot first') +
             '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
               '<button type="button" class="ptoggle rettoSide" data-side="own" ' +
                 'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
@@ -7820,7 +7837,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             // same as pp_muffspot -- no flip happens, so no conversion.
             '<div id="pp_retfumspot_wrap" style="display:none;">' + startingSpotFieldsHtml('pp_retfumspot', 'Spot where the kicking team took over (required)', off) + '</div>' +
           '</div>' +
-        '</div>' +
+          // closes .opt-body and #pp_punt_normal
+          '</div>' + '</div>' +
         '<div id="pp_punt_muffed" style="display:none;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_punt_muffrec" value="k" checked> Recovered by the kicking team (they keep the ball)</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_punt_muffrec" value="r"> Recovered by the receiving team</label>' +
@@ -8406,10 +8424,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       function recompute(){
         const fielded = panel.__spotCalc && panel.__spotCalc.getFieldedPos && panel.__spotCalc.getFieldedPos();
         if (fielded === null){
-          readout.textContent = 'Enter where it was fielded first.';
+          // NOTHING SHOWN. The label above now reads "Or enter returned
+          // to — fielded spot first", so a green bar repeating it is a
+          // second copy of the same instruction taking a row of its own.
+          // Hidden rather than emptied: an empty readout still renders as
+          // a padded box with a border.
+          readout.textContent = '';
+          readout.style.display = 'none';
           releaseRetyds();
           return;
         }
+        readout.style.display = '';
         const raw = (ylEl.value || '').trim();
         if (!raw || !side){
           // BLANK IS "NOT RETURNED" -- fair catch, downed, out of bounds.
