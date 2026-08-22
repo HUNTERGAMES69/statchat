@@ -618,6 +618,50 @@ async function run() {
     h.close();
   }
 
+  // THE RECEIVER LIST TAKES THE FULL WIDTH, box at the end of it.
+  // Reserving a column beside it pushed the names into three rows where
+  // they fit in two -- a row of height spent on an alignment, on the
+  // longest list on the busiest tree.
+  {
+    const roster = defaultRoster().concat([
+      { team_side: 'teamA', unit: 'offense', jersey_number: '13', player_name: "Ze'Land Young", position: 'WR' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '3',  player_name: 'JaMarion Roberson', position: 'WR' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '47', player_name: 'Mason Hart', position: 'WR' },
+      { team_side: 'teamA', unit: 'offense', jersey_number: '19', player_name: 'Desi Byrd', position: 'WR' }
+    ]);
+    const h = await bootGamePage({ roster });
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    const rg = doc.getElementById('pp_receiver_grid');
+    if (!rg) { fail('receiver:grid', 'no receiver grid'); h.close(); return failures; }
+    if (!rg.classList.contains('grid-inline-manual')) {
+      fail('receiver:inline', 'the receiver box should sit at the end of the list, not in a column');
+    }
+    const inp = rg.querySelector('input');
+    if (!inp || inp.id !== 'pp_receiver_manual') fail('receiver:box', 'the manual box should be inside the grid');
+    // LAST, after the names -- not first, where it would be read as a
+    // control rather than the overflow it is.
+    const kids = [...rg.children];
+    if (kids.indexOf(inp) < kids.filter(k => k.tagName === 'BUTTON').length) {
+      fail('receiver:order', 'the box should follow the names');
+    }
+    // NOT collapsed. Which receiver caught it is the question being
+    // asked; hiding the list behind "+N more" would put a tap in front of
+    // the most-used control on the page.
+    if (rg.classList.contains('grid-lead') || rg.querySelector('.grid-more')) {
+      fail('receiver:collapse', 'the receiver list must stay open');
+    }
+    // The passer keeps its column -- its list is one or two names, so
+    // there is no row to win and a box that moves is worse than one that
+    // sits still.
+    const pg = doc.getElementById('pp_passer_grid');
+    if (pg && pg.classList.contains('grid-inline-manual')) {
+      fail('receiver:passer', 'the passer was not meant to change');
+    }
+    h.close();
+  }
+
   return failures;
 }
 
