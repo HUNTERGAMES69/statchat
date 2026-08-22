@@ -375,6 +375,27 @@
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   /* Air between one picker and the next. Requested: inlining the labels
      removed their margins too, which left passer and receiver touching. */
+  /* The kicker/punter manual box, inline at the end of its own list.
+     Sized to the text it takes -- a jersey number -- rather than the
+     96px column, since it is now sitting among the buttons and a wide
+     box would read as an empty one. */
+  #entryStage #playPanel .grid-inline-manual { display:flex; flex-wrap:wrap;
+                                               align-items:center; gap:4px; }
+  #entryStage #playPanel .grid-inline-manual > input {
+    flex-grow:0; flex-shrink:0; flex-basis:88px; width:88px; margin:0; }
+
+  /* An expanded optional block puts its manual box DIRECTLY BELOW the
+     button that opened it, left aligned. The shared rule pushes that box
+     to a right-hand column, which is right when it sits beside a grid --
+     but here the grid is often empty ("no returners on the roster"), so
+     the box floated alone against the far edge with nothing to align to
+     and no visible tie to the control above it. */
+  #entryStage #playPanel .opt-block .pick-row { flex-wrap:wrap; }
+  #entryStage #playPanel .opt-block .pick-row > input {
+    flex-grow:0; flex-shrink:0; flex-basis:96px; width:96px;
+    margin-left:0; order:9; }
+  #entryStage #playPanel .opt-block .pick-row > div { flex-basis:100%; }
+
   /* Outcome toggles two-up rather than a single wide strip. */
   #entryStage #playPanel .toggle-grid { display:grid; grid-template-columns:1fr 1fr;
                                         gap:6px; margin-top:10px; }
@@ -6571,10 +6592,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // LABEL INSIDE THE ROW. It used to own a line of its own -- 8px
       // above, 4px below, plus the line itself -- on every picker, and
       // the pass tree has three of them. Inline it costs nothing.
+      const manual = '<input autocomplete="off" type="text" id="pp_' + role +
+        '_manual" placeholder="or type #">';
+      // KICKERS AND PUNTERS: the box flows at the END OF THE LIST rather
+      // than in its own column. Those lists are short and rarely need
+      // typing into, so a reserved column beside them was buying an
+      // alignment nobody reads at the cost of width the buttons could
+      // use. Inside the grid it simply follows the last name and wraps
+      // with it.
+      //
+      // The skill positions keep the column: their lists run to two rows
+      // on a busy roster, and a box that moves every time a name is added
+      // is worse than one that sits still.
+      if (role === 'kicker' || role === 'punter'){
+        return '<div class="pick-row">' +
+            '<span class="pick-label">' + label + '</span>' +
+            '<div id="pp_' + role + '_grid" class="grid-inline-manual">' +
+              pickerHtml(list, 'pp_' + role + '_pick', statFn) + manual +
+            '</div>' +
+          '</div>';
+      }
       return '<div class="pick-row">' +
           '<span class="pick-label">' + label + '</span>' +
           '<div id="pp_' + role + '_grid">' + pickerHtml(list, 'pp_' + role + '_pick', statFn) + '</div>' +
-          '<input autocomplete="off" type="text" id="pp_' + role + '_manual" placeholder="or type #">' +
+          manual +
         '</div>';
     }
     function defBlock(label, suffix){
@@ -9107,8 +9148,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // Folds on a COMMITTED pick, never on the suggestion: the suggestion
     // is the app's guess and the grid is how it gets corrected, so hiding
     // it before the scorer has agreed would be hiding the correction.
-    (function foldPasser(){
-      const grid = document.getElementById('pp_passer_grid');
+    // Kicker and punter fold on the same reasoning as the passer, and
+    // more strongly: a team has one of each and they do not change from
+    // one attempt to the next, so after the first kick the whole grid is
+    // a row of names nobody is going to read again.
+    ['passer', 'kicker', 'punter'].forEach(function foldPicker(role){
+      const grid = document.getElementById('pp_' + role + '_grid');
       if (!grid) return;
       const row = grid.closest('.pick-row') || grid.parentElement;
       if (!row) return;
@@ -9126,6 +9171,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           return;
         }
         label.textContent = picked.textContent.trim() + '  \u00b7  change';
+        label.setAttribute('data-role', role);
         label.title = picked.getAttribute('title') || '';
         label.style.display = 'block';
         row.style.display = 'none';
@@ -9138,12 +9184,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (window.__syncDock) window.__syncDock();
         if (window.__syncRail) window.__syncRail();
       });
-      grid.addEventListener('click', () => {
+      grid.addEventListener('click', (e) => {
+        // Not the manual box, which now lives inside the kicker/punter
+        // grid -- folding while somebody is typing a number into it would
+        // take the field away mid-entry.
+        if (e.target && e.target.tagName === 'INPUT') return;
         // After the picker's own handler has run.
         setTimeout(() => { fold(); if (window.__syncDock) window.__syncDock(); }, 0);
       });
       fold();
-    })();
+    });
 
     (function panelShortcuts(){
       const panel = document.getElementById('playPanel');
