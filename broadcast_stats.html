@@ -53,16 +53,26 @@
 
   /* ---- head: visitor, title, home ---- */
   #head { display:flex; align-items:stretch; }
-  .hteam { flex:1 1 0; display:flex; align-items:center; gap:14px; padding:14px 22px;
-           min-width:0; }
+  /* CENTRED AS A GROUP, both sides the same way round.
+     The first version stretched the name to fill the bar and pushed the
+     score to the far edge, then mirrored the home side -- so the two
+     halves read in opposite directions, the scores ended up against the
+     title in the middle, and each name sat a different distance from its
+     own number depending on how long the name was. Reported as not
+     reading well, and that was why.
+     Now: logo, name, then the score a FIXED step to its right, and the
+     whole group centred in its half. Both sides identical, so the eye
+     finds the score in the same place on each. */
+  .hteam { flex:1 1 0; display:flex; align-items:center; justify-content:center;
+           gap:14px; padding:14px 22px; min-width:0; }
   .hteam img { width:44px; height:44px; object-fit:contain; flex:0 0 auto; }
-  .hname { flex:1 1 auto; font-size:26px; font-weight:800; letter-spacing:0.01em;
+  .hname { flex:0 1 auto; font-size:26px; font-weight:800; letter-spacing:0.01em;
            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .hpts { flex:0 0 auto; font-size:34px; font-weight:800;
+  /* The fixed step. margin-left rather than the flex gap so it is wider
+     than the logo-to-name spacing, which keeps the number reading as a
+     score and not as part of the name. */
+  .hpts { flex:0 0 auto; margin-left:14px; font-size:34px; font-weight:800;
           font-variant-numeric:tabular-nums; }
-  /* The home side mirrors, so each team's mark sits on its own outer edge
-     and the two scores meet the title in the middle. */
-  #head .hteam:last-child { flex-direction:row-reverse; }
   .hmid { flex:0 0 auto; display:flex; align-items:center; padding:0 30px;
           background:#12151a; color:#fff; font-size:17px; font-weight:800;
           letter-spacing:0.16em; }
@@ -774,32 +784,29 @@ function extractNameTag(rawName){
   const sumStat = (obj, key) =>
     Object.keys(obj || {}).reduce((a, n) => a + ((obj[n] || {})[key] || 0), 0);
 
-  function statRowsFor(teamKey, box, finalState, turnovers, possessions){
+  function statRowsFor(teamKey, box, finalState, turnovers){
     const s = box[teamKey];
-    const rushYds = sumStat(s.rushing, 'yds'), rushAtt = sumStat(s.rushing, 'att');
-    const rushTd  = sumStat(s.rushing, 'td');
-    const passYds = sumStat(s.passing, 'yds'), passTd = sumStat(s.passing, 'td');
-    const sacked  = sumStat(s.passing, 'sacked');
+    const rushYds = sumStat(s.rushing, 'yds');
+    const passYds = sumStat(s.passing, 'yds');
+    // This team's own offensive conversion rate lives on the OPPONENT's
+    // oppDowns, which is where the downs they faced were counted.
     const own = box[otherTeam(teamKey)].oppDowns;
-    const pen = finalState.penalties[teamKey];
     const top = (finalState.possessionTime || {})[teamKey];
     return [
+      // SIX ROWS. Cut from fourteen on 22 Aug: Pass TD, Yards Per Rush,
+      // Rush TD, Possessions, Sacks Allowed, Penalties, Penalty Yards and
+      // 4th Down all went. They belong on the recap, where a reader has
+      // time; on a graphic held for a few seconds every extra row is
+      // something the eye has to pass over to reach the ones a
+      // commentator actually says out loud.
       ['Total Yards', rushYds + passYds],
       ['Pass Yards', passYds],
-      ['Pass TD', passTd],
       ['Rush Yards', rushYds],
-      ['Yards Per Rush', rushAtt ? (rushYds / rushAtt).toFixed(1) : '0.0'],
-      ['Rush TD', rushTd],
-      ['Possessions', possessions[teamKey] || 0],
       // An em dash, not 0:00, when no clock was entered: a zero reads as
       // "they never had the ball" rather than "nobody recorded it".
       ['Time of Possession', top ? formatDuration(top) : '\u2014'],
       ['Turnovers', turnovers[teamKey] || 0],
-      ['Sacks Allowed', sacked],
-      ['Penalties', pen.count],
-      ['Penalty Yards', pen.yds],
-      ['3rd Down', own.d3Pct !== null ? own.d3conv + '/' + own.d3att + ' (' + own.d3Pct + '%)' : '\u2014'],
-      ['4th Down', own.d4Pct !== null ? own.d4conv + '/' + own.d4att + ' (' + own.d4Pct + '%)' : '\u2014']
+      ['3rd Down', own.d3Pct !== null ? own.d3conv + '/' + own.d3att + ' (' + own.d3Pct + '%)' : '\u2014']
     ];
   }
 
@@ -847,7 +854,6 @@ function extractNameTag(rawName){
     const state = computeState(plays);
     const box = computeBoxScore(plays);
     const turnovers = countTurnovers(plays);
-    const possessions = countPossessions(plays);
 
     // VISITOR ON THE LEFT, home on the right -- the order every scoreboard
     // and every report in this app already uses.
@@ -865,8 +871,8 @@ function extractNameTag(rawName){
     document.getElementById('head').innerHTML =
       headSide(visitorKey) + '<div class="hmid">TEAM STATS</div>' + headSide(homeKey);
 
-    const vRows = statRowsFor(visitorKey, box, state, turnovers, possessions);
-    const hRows = statRowsFor(homeKey, box, state, turnovers, possessions);
+    const vRows = statRowsFor(visitorKey, box, state, turnovers);
+    const hRows = statRowsFor(homeKey, box, state, turnovers);
     document.getElementById('rows').innerHTML = vRows.map((r, i) =>
       '<div class="srow"><span class="sv">' + r[1] + '</span>' +
       '<span class="slab">' + r[0] + '</span>' +
