@@ -139,18 +139,36 @@ async function run() {
     const h = await bootGamePage();
     const doc = h.window.document, win = h.window;
     h.evalIn("document.getElementById('broadcastFab').style.display='inline-block';");
-    const ref = win.getComputedStyle(doc.querySelector('.hdr-btn'));
+    // Measured against ON AIR, not against the small header pill. All five
+    // blocks across the top of the page -- ON AIR, the banner, and these
+    // three -- are the same height because they are all sized from the
+    // banner; matching the pill left the links floating inside a row that
+    // was already the right height.
+    h.evalIn("document.getElementById('onAirBanner').style.display='flex';");
+    const ref = win.getComputedStyle(doc.getElementById('onAirBanner'));
     ['broadcastFab', 'helpFab', 'launchViewLink'].forEach(id => {
       const c = win.getComputedStyle(doc.getElementById(id));
-      if (c.fontSize !== ref.fontSize || c.padding !== ref.padding || c.lineHeight !== ref.lineHeight) {
-        fail('toprow:uniform', id + ' does not match the header buttons: ' +
-          c.fontSize + '/' + c.padding + '/' + c.lineHeight + ' vs ' +
-          ref.fontSize + '/' + ref.padding + '/' + ref.lineHeight);
+      if (c.fontSize !== ref.fontSize || c.fontWeight !== ref.fontWeight ||
+          c.letterSpacing !== ref.letterSpacing) {
+        fail('toprow:uniform', id + ' does not match ON AIR: ' +
+          c.fontSize + '/' + c.fontWeight + '/' + c.letterSpacing + ' vs ' +
+          ref.fontSize + '/' + ref.fontWeight + '/' + ref.letterSpacing);
       }
       if (!doc.getElementById('topActions').contains(doc.getElementById(id))) {
         fail('toprow:placement', id + ' is not in the top row');
       }
     });
+    // Stretched, so they fill the row's height rather than sitting in it.
+    if (win.getComputedStyle(doc.getElementById('topActions')).alignItems !== 'stretch') {
+      fail('toprow:stretch', 'the links should fill the row height, not be centred inside it');
+    }
+    // And the row rides the banner's own line, like ON AIR.
+    h.evalIn('Object.defineProperty(window,"innerWidth",{value:1600,configurable:true}); document.querySelector(".banner").getBoundingClientRect=()=>({top:24,height:64,bottom:88}); window.__syncAir && window.__syncAir();');
+    const ta = doc.getElementById('topActions'), oa = doc.getElementById('onAirBanner');
+    if (ta.style.top !== oa.style.top || ta.style.height !== oa.style.height) {
+      fail('toprow:level', 'the top row and ON AIR should sit on the same line at the same height: ' +
+        ta.style.top + '/' + ta.style.height + ' vs ' + oa.style.top + '/' + oa.style.height);
+    }
     h.close();
   }
 
@@ -267,7 +285,13 @@ async function run() {
     h.evalIn("TEAMS.teamA.logo='https://example.test/a.png'; TEAMS.teamB.logo='https://example.test/b.png'; renderAll();");
     await new Promise(r => setTimeout(r, 700));
     const wraps = [...doc.querySelectorAll('#liveBoxBody .lb-teamwrap')];
-    if (wraps.length < 2) fail('logo:wrappers', 'expected a wrapper per team heading, got ' + wraps.length);
+    if (wraps.length !== 2) fail('logo:wrappers', 'expected exactly two logo headings -- the totals only -- got ' + wraps.length);
+    // NOT in the leaders block. The crest is already at the top of the
+    // panel; repeating it a few rows down labels the same two teams twice
+    // and costs space in the section with the most to say.
+    if (doc.querySelectorAll('#liveBoxBody .ld-block .lb-logo').length) {
+      fail('logo:leaders', 'the leaders headings should carry the name only, not a second copy of the crest');
+    }
     wraps.forEach(w => {
       const img = w.querySelector('.lb-logo');
       if (!img) { fail('logo:missing', 'a team heading has no logo when one is set'); return; }
