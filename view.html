@@ -997,6 +997,33 @@ function extractNameTag(rawName){
       : (halftimeIdx !== -1 && !secondHalfStarted) ? 'HALFTIME'
       : !plays.some(p => p.roles || (p.effect && p.effect.isStat)) ? 'NOT STARTED'
       : null;
+    // THE HALF HAS BEEN STARTED BUT NOTHING HAS BEEN ENTERED IN IT.
+    // Hoisted up here because the BANNER needs it as well as the drive
+    // tiles below: computeState() still carries the down, distance and
+    // spot the first half ended on, so between "Start 2nd half" and the
+    // kickoff the banner read "3rd & 16 at own 12" -- a situation that
+    // ended at the interval and cannot be resumed.
+    const secondHalfPending = halftimeIdx !== -1 &&
+      plays.some((p, i) => i > halftimeIdx && p.effect && p.effect.setQuarter >= 3) &&
+      !plays.some((p, i) => i > halftimeIdx && !isAdminMarker(p));
+    // HAS THIS HALF PRODUCED A DRIVE YET. Read by the banner AND by the
+    // Current Drive tile, which builds its own copy of the down line --
+    // fixing only the banner left the same stale "3rd & 16 at own 12"
+    // sitting under the kickoff in the tile.
+    //
+    // A drive marker OR any scrimmage play. Keying on the marker alone
+    // was too narrow: it is written by the guided kickoff, and any path
+    // that puts a snap on the board without one -- a spot entered by
+    // hand, an unusual recovery -- would leave the line blank with a play
+    // visibly on screen. The kick itself is excluded because it sets no
+    // down; that is the whole window being closed.
+    const driveThisHalf = halftimeIdx === -1 ||
+      plays.some((p, i) => {
+        if (i <= halftimeIdx) return false;
+        if (p.effect && p.effect.isReset) return true;
+        const pt = p.roles && p.roles.playType;
+        return !!pt && pt !== 'kickoff' && pt !== 'kickoff_return';
+      });
     const qEl = document.getElementById('quarterText');
     if (phase){
       document.getElementById('downText').textContent = '';
@@ -1030,7 +1057,25 @@ function extractNameTag(rawName){
       // rendered as "1st & 10 at " with a dangling "at" -- rare, but it
       // is the state right after a possession change before the spot is
       // entered, which is exactly when someone is looking.
-      const hasDrive = !!state.down &&
+      // NO DOWN AND DISTANCE UNTIL THIS HALF HAS A DRIVE. computeState()
+      // keeps the down, distance and spot the first half ended on, so
+      // everything from "Start 2nd half" through the kickoff showed the
+      // situation the interval interrupted -- "3rd & 16 at own 12" while
+      // the teams were lining up for a kick.
+      //
+      // The test is a drive marker after the divider, not merely a play:
+      // the kickoff itself is a real play but sets no down, so keying off
+      // plays would have cleared the marker state and left the same stale
+      // line up during the kick. Blank is the honest rendering of nothing
+      // to report, which is the rule the middle slot already follows
+      // between drives.
+      // A drive marker OR any scrimmage play. Keying on the marker alone
+      // was too narrow: it is written by the guided kickoff, and any path
+      // that puts a snap on the board without one -- a spot entered by
+      // hand, an unusual recovery -- would have left the banner blank
+      // with a play visibly on screen. The kick itself is excluded
+      // because it sets no down; that is the whole window being closed.
+      const hasDrive = driveThisHalf && !!state.down &&
         state.fieldPos !== null && state.fieldPos !== undefined;
       document.getElementById('downText').textContent = hasDrive
         ? (ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabel(state.fieldPos))
@@ -1251,12 +1296,9 @@ function extractNameTag(rawName){
       //
       // The half boundary is the honest reset point, so the card says
       // where the game is and nothing else until the kickoff lands.
-      const halfIdx = plays.findIndex(p => p.isDivider &&
-        /end of (1st|first) half/i.test((p.text || '').trim()));
-      const secondHalfPending = halfIdx !== -1 &&
-        plays.some((p, i) => i > halfIdx && p.effect && p.effect.setQuarter >= 3) &&
-        !plays.some((p, i) => i > halfIdx && !isAdminMarker(p));
-
+      // secondHalfPending is defined up with the banner -- one definition,
+      // so the banner and these cards can never disagree about whether
+      // the half has actually begun.
       // Declared outside the branch: paintDrive() colours both cards from
       // these further down, and scoping them to the else left it reading
       // an undefined name the moment the start-of-half state was hit.
@@ -1272,7 +1314,7 @@ function extractNameTag(rawName){
       } else {
 
       document.getElementById('driveLogScroll').innerHTML =
-        renderCurrentDriveLastPlay(currentDriveDisplayList, state, distDisplay);
+        renderCurrentDriveLastPlay(currentDriveDisplayList, state, distDisplay, driveThisHalf);
 
       // Same floor as the log above, for the same reason: the numbers and
       // the play they sit over have to describe the same stretch of game.
@@ -1512,7 +1554,7 @@ function extractNameTag(rawName){
   // both through one function would have meant threading an unrelated
   // "and also render this extra line" parameter through code that every
   // other caller (allPlaysScroll) has no use for.
-  function renderCurrentDriveLastPlay(list, state, distDisplay){
+  function renderCurrentDriveLastPlay(list, state, distDisplay, driveThisHalf){
     if (!list.length) return '<div style="color:#999;">no active drive yet</div>';
     // Requested directly: a timeout must be ADDITIVE to the last play,
     // never replace it as the headline -- the same principle as the
@@ -1607,7 +1649,18 @@ function extractNameTag(rawName){
     // ordinal/markerLabel calls, same state and distDisplay passed in
     // from the one place renderAll() already computed them. Anything
     // else risks the two silently disagreeing about the same drive.
-    const hasDrive = !!state.down && state.fieldPos !== null && state.fieldPos !== undefined;
+    // driveThisHalf gates it, exactly as the banner does. computeState()
+    // keeps the down, distance and spot the first half ended on, so this
+    // line sat under the second-half KICKOFF reading "3rd & 16 at own 12"
+    // -- a situation that ended at the interval. Fixing the banner alone
+    // left it here, because this tile builds its own copy of the line
+    // rather than reading the banner's.
+    //
+    // Defaults to true when the caller passes nothing, so the argument is
+    // additive and no other call site changes behaviour.
+    const inThisHalf = driveThisHalf === undefined ? true : !!driveThisHalf;
+    const hasDrive = inThisHalf && !!state.down &&
+      state.fieldPos !== null && state.fieldPos !== undefined;
     const downLine = hasDrive
       ? '<div style="font-size:24px; font-weight:600; color:#555; margin-top:8px;">' +
         ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabel(state.fieldPos) + '</div>'
