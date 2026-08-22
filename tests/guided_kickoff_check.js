@@ -230,9 +230,13 @@ async function run() {
     const doc = h.window.document, win = h.window;
     Object.defineProperty(win, 'innerWidth', { value: 1600, configurable: true });
     const card = doc.getElementById('entryCard');
+    // The banner is the fixed reference the margins are pinned to.
+    const banner = doc.querySelector('.banner');
+    Object.defineProperty(banner, 'offsetTop', { value: 100, configurable: true });
+    Object.defineProperty(banner, 'offsetHeight', { value: 64, configurable: true });
     // entryCard's top tracks whatever the guided panel above it measures.
     let guidedH = 700;
-    card.getBoundingClientRect = () => ({ top: 120 + guidedH, height: 500, bottom: 0 });
+    card.getBoundingClientRect = () => ({ top: 120 + guidedH, height: 500, bottom: 620 + guidedH });
     const tops = () => ['driveDock', 'rightRail']
       .map(id => { const e = doc.getElementById(id); return e ? e.style.top : null; });
 
@@ -247,9 +251,14 @@ async function run() {
     await new Promise(r => setTimeout(r, 300));
     // Anchored to the TOP OF THE COLUMN -- the guided panel while one is
     // open -- not to the entry card, which the guided panel displaces.
+    // PINNED TO THE BANNER, not measured from anything in the column.
+    // Two earlier attempts measured the entry card, then whichever card
+    // sat on top of it -- both still moved, because everything in that
+    // column is displaced by whatever is above it, and the guided panel
+    // is exactly that.
     const before = tops()[0];
-    if (!before || tops().some(t => t !== before)) {
-      fail('margins:before', 'both margins should start level, got ' + tops().join(' , '));
+    if (before !== '210px' || tops().some(t => t !== before)) {
+      fail('margins:before', 'both margins should be pinned at 210px, got ' + tops().join(' , '));
     }
 
     // Back shortens the panel. The margins must NOT move: they belong at
