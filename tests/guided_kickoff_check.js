@@ -245,18 +245,23 @@ async function run() {
     if (dir) click(win, dir);
     click(win, doc.getElementById('guidedKickoffSave'));
     await new Promise(r => setTimeout(r, 300));
-    if (!tops().every(t => t === '820px')) {
-      fail('margins:before', 'expected both margins at 820px, got ' + tops().join(' , '));
+    // Anchored to the TOP OF THE COLUMN -- the guided panel while one is
+    // open -- not to the entry card, which the guided panel displaces.
+    const before = tops()[0];
+    if (!before || tops().some(t => t !== before)) {
+      fail('margins:before', 'both margins should start level, got ' + tops().join(' , '));
     }
 
-    // Back shortens the panel, so the card rides up and the margins must
-    // come with it.
+    // Back shortens the panel. The margins must NOT move: they belong at
+    // the top of the column, and only the centre section grows and
+    // shrinks with the guided panel.
     guidedH = 300;
     click(win, doc.querySelector('#guidedPanel .guided-back'));
     await new Promise(r => setTimeout(r, 500));
     const after = tops();
-    if (!after.every(t => t === '420px')) {
-      fail('margins:follow', 'the margins did not follow the card after Back: ' + after.join(' , '));
+    if (!after.every(t => t === before)) {
+      fail('margins:moved', 'the side tiles should stay put while the guided panel resizes: ' +
+        before + ' -> ' + after.join(' , '));
     }
     h.close();
   }
