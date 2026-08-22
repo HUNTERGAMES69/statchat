@@ -353,6 +353,13 @@
   /* 3. The optional tackler picker, collapsed behind a button. */
   #entryStage #playPanel .opt-block > .opt-body { display:none; }
   #entryStage #playPanel .opt-block.open > .opt-body { display:block; }
+  /* The folded passer. Shaped like the picker button it replaces, so the
+     line it occupies reads as the same field rather than a new control. */
+  .passer-chip { display:block; width:100%; text-align:left; padding:7px 11px;
+                 font-size:13px; font-weight:700; border:1px solid #cfd4da;
+                 border-radius:6px; background:#f4f6f9; color:#1a1a2e;
+                 cursor:pointer; margin:0 0 2px; }
+  .passer-chip:hover { background:#e9edf3; }
   #entryStage #playPanel .opt-toggle { padding:5px 10px; font-size:12px; font-weight:700;
                                        border:1px dashed #b8b8b8; border-radius:6px;
                                        background:#fff; color:#555; cursor:pointer; margin-top:6px; }
@@ -6542,11 +6549,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     function retBlock(label, suffix){
       suffix = suffix || '';
       const list = returnerEligible(def);
-      return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
-        '<div class="pick-row">' +
+      const inner = '<div class="pick-row">' +
           '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, (num, p) => (p && p.pos) || '', 'no returners on the roster — type a number below') + '</div>' +
           '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px;">' +
         '</div>';
+      // Collapses on the same rule as defBlock's optional credits: a full
+      // picker grid plus a manual box, on every punt and every kickoff,
+      // for a field the label itself calls optional. It was the single
+      // largest block on the punt tree's ordinary path.
+      //
+      // Same guard, too -- only a label that SAYS optional collapses, so
+      // a returner a play actually requires is never hidden behind a
+      // button somebody has to know to press.
+      if (!/optional/i.test(label)) {
+        return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' + inner;
+      }
+      return '<div class="opt-block">' +
+        '<button type="button" class="opt-toggle">+ ' + label.replace(/\s*\(optional\)\s*/i, '') + '</button>' +
+        '<div class="opt-body">' + inner + '</div>' +
+      '</div>';
     }
     // Field labels carry the choice being offered, so they were too quiet
     // at 13px #888 -- the same grey as every hint on the page.
@@ -9007,6 +9028,58 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // ===================================================================
     // PANEL SHORTCUTS. Promoted from gametest3.html, 22 Aug 2026.
     // ===================================================================
+    // THE PASSER GRID SHRINKS TO A CHIP ONCE ONE IS CHOSEN.
+    // -------------------------------------------------------------------
+    // On the overwhelming majority of passes the quarterback is already
+    // right -- the app suggests the last man to throw -- yet his whole
+    // grid sat open underneath, costing the pass tree a block of height
+    // on every ordinary play. Once a passer is committed the grid folds
+    // to a single line naming him, with the grid one tap away.
+    //
+    // Only the PASSER. The receiver list is long and changes constantly,
+    // so the same trick there would hide the field most often being read.
+    //
+    // Folds on a COMMITTED pick, never on the suggestion: the suggestion
+    // is the app's guess and the grid is how it gets corrected, so hiding
+    // it before the scorer has agreed would be hiding the correction.
+    (function foldPasser(){
+      const grid = document.getElementById('pp_passer_grid');
+      if (!grid) return;
+      const row = grid.closest('.pick-row') || grid.parentElement;
+      if (!row) return;
+      const label = document.createElement('button');
+      label.type = 'button';
+      label.className = 'passer-chip';
+      label.style.display = 'none';
+      row.parentNode.insertBefore(label, row);
+
+      const fold = () => {
+        const picked = grid.querySelector('button.picked');
+        if (!picked){
+          label.style.display = 'none';
+          row.style.display = '';
+          return;
+        }
+        label.textContent = picked.textContent.trim() + '  \u00b7  change';
+        label.title = picked.getAttribute('title') || '';
+        label.style.display = 'block';
+        row.style.display = 'none';
+      };
+      // Tapping the chip puts the grid back and leaves the pick alone, so
+      // it is a way IN to the list rather than a way to lose the choice.
+      label.addEventListener('click', () => {
+        label.style.display = 'none';
+        row.style.display = '';
+        if (window.__syncDock) window.__syncDock();
+        if (window.__syncRail) window.__syncRail();
+      });
+      grid.addEventListener('click', () => {
+        // After the picker's own handler has run.
+        setTimeout(() => { fold(); if (window.__syncDock) window.__syncDock(); }, 0);
+      });
+      fold();
+    })();
+
     (function panelShortcuts(){
       const panel = document.getElementById('playPanel');
       if (!panel) return;
