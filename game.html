@@ -4977,6 +4977,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   function renderGuided(){
     const out = renderGuidedInner.apply(this, arguments);
     try { wireGuidedBack(); } catch (e) {}
+    // RE-SYNC BOTH MARGINS. The guided panel sits ABOVE entryCard, and
+    // both margins take their top from that card -- so a guided repaint
+    // that changes height displaces the card and leaves the dock and the
+    // rail behind at the old offset. Pressing Back swaps a tall panel for
+    // a short one, which is the visible case.
+    //
+    // Called here as well as observed: the ResizeObserver added for this
+    // covers a browser, but the observers do not exist everywhere and a
+    // repaint is the exact moment we already know the height changed.
+    // Deferred a tick so the new markup has been laid out first.
+    setTimeout(() => {
+      try { if (window.__syncDock) window.__syncDock(); } catch (e) {}
+      try { if (window.__syncRail) window.__syncRail(); } catch (e) {}
+      try { if (window.__syncAir) window.__syncAir(); } catch (e) {}
+    }, 0);
     return out;
   }
 
@@ -6082,6 +6097,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (window.ResizeObserver){
         const card = document.getElementById('entryCard');
         if (card) new ResizeObserver(syncDock).observe(card);
+        // AND THE GUIDED PANEL. Both margins take their top from
+        // entryCard, but the guided panel sits ABOVE it -- so when it
+        // changes height, entryCard moves and the margins do not follow.
+        // Pressing Back in the guided kickoff swaps a tall panel for a
+        // short one and both sides of the screen were left behind at the
+        // old offset. Reported from real use.
+        //
+        // entryCard's own observer cannot see this: the card is not
+        // resizing, it is being displaced.
+        const gp = document.getElementById('guidedPanel');
+        if (gp) new ResizeObserver(syncDock).observe(gp);
       } else if (window.MutationObserver){
         const card = document.getElementById('entryCard') || rail;
         new MutationObserver(syncDock).observe(card, { childList: true, subtree: true });
@@ -6109,6 +6135,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (window.ResizeObserver){
         const card = document.getElementById('entryCard');
         if (card) new ResizeObserver(syncRail).observe(card);
+        // The guided panel displaces this one too -- see the dock above.
+        const gp = document.getElementById('guidedPanel');
+        if (gp) new ResizeObserver(syncRail).observe(gp);
       }
     }
     window.__syncRail = syncRail;
