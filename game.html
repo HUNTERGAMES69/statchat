@@ -454,6 +454,11 @@
   #entryStage #playPanel .spot-row > button, #guidedPanel .spot-row > button { flex:0 1 auto; margin:0; }
   #entryStage #playPanel .spot-row > input, #guidedPanel .spot-row > input { flex:0 0 96px; width:96px; margin-left:auto; }
   #entryStage #playPanel .spot-label, #guidedPanel .spot-label { flex:0 0 auto; line-height:normal; }
+  /* The row that is missing something, and the words saying what. */
+  #playPanel .row-gap, #guidedPanel .row-gap {
+    outline:2px solid #e0b400; outline-offset:3px; border-radius:6px; }
+  #playPanel .row-gap-msg, #guidedPanel .row-gap-msg {
+    font-size:12.5px; font-weight:600; color:#7a5c00; margin:6px 0 2px; }
   #entryStage #playPanel .spot-heading, #guidedPanel .spot-heading {
     font-size:12.5px; color:#6b7280; margin:9px 0 3px; }
   /* With the label on its own line the row above it is already spaced. */
@@ -5618,6 +5623,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             : (isShown(document.getElementById('gr_spot_kick'), content) ? 'gr_kickspot' : 'gr_spot');
           const grGaps = spotGaps(grPrefix, content);
           if (grGaps){
+            // In the row too. An alert says what is missing but not
+            // where, and the guided panel has three spot fields that
+            // look alike -- the message is only useful beside the one
+            // being asked about.
+            markRowGap(grPrefix + '_wrap', 'Still needed: ' + grGaps.join(' and '));
             alert('This kickoff sets up the next drive, so the spot is required.\n\n' +
                   'Still needed: ' + grGaps.join(' and ') + '.\n\nNothing has been saved.');
             return;
@@ -6180,6 +6190,70 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // without threading a getter through all of them. The 'picked' class is
   // set by wireStartingSpot itself, so it is a faithful proxy for the
   // side it recorded.
+  // A REQUIRED PLAYER IS MISSING, AND SAYING SO IS THE WHOLE POINT.
+  // ---------------------------------------------------------------------
+  // Every tree guarded its required player with a bare `return` -- eleven
+  // of them. Review simply did nothing: no message, no confirm box, no
+  // clue which field was wanted. Reported as "it fails silently", and it
+  // was the most common way to meet it, since the ball carrier and the
+  // punter are the first thing you skip when you are moving fast.
+  //
+  // Returns TRUE when the play should stop, so the call sites read
+  // `if (missingPlayer(...)) return;` -- the same shape as the bare guard
+  // they replace, which is what makes the change safe to apply eleven
+  // times.
+  const ROLE_FIELD = { carrier: 'pp_carrier_grid', passer: 'pp_passer_grid',
+                       receiver: 'pp_receiver_grid', punter: 'pp_punter_grid',
+                       kicker: 'pp_kicker_grid' };
+  const ROLE_LABEL = { carrier: 'the ball carrier', passer: 'the passer',
+                       receiver: 'the receiver', punter: 'the punter',
+                       kicker: 'the kicker' };
+  function missingPlayer(role, value){
+    if (value) return false;
+    const what = ROLE_LABEL[role] || 'a player';
+    showMsg('gameMsg', 'Nothing has been saved — still needed: ' + what + '.', 'error');
+    // Against the field itself, not only at the top of the page.
+    const grid = document.getElementById(ROLE_FIELD[role]);
+    const row = grid && (grid.closest('.pick-row') || grid.parentElement);
+    if (row){
+      if (!row.id) row.id = 'rowgap_' + role;
+      markRowGap(row.id, 'Still needed: ' + what);
+      row.scrollIntoView({ block: 'nearest' });
+    }
+    const cc = document.getElementById('confirmCard');
+    if (cc) cc.style.display = 'none';
+    return true;
+  }
+
+  // Put a gap message inside the row that is missing something, and take
+  // every other one down. Only one row is ever reported at a time, so a
+  // stale message from a previous Review must not survive alongside it.
+  function markRowGap(wrapId, text){
+    document.querySelectorAll('#playPanel .row-gap-msg, #guidedPanel .row-gap-msg')
+      .forEach(el => el.remove());
+    document.querySelectorAll('#playPanel .row-gap, #guidedPanel .row-gap')
+      .forEach(el => el.classList.remove('row-gap'));
+    const wrap = document.getElementById(wrapId);
+    if (!wrap) return;
+    wrap.classList.add('row-gap');
+    const msg = document.createElement('div');
+    msg.className = 'row-gap-msg';
+    msg.textContent = text;
+    // After the row, not inside it: the row is a flex line and an extra
+    // child would be laid out as another control on it.
+    wrap.parentNode.insertBefore(msg, wrap.nextSibling);
+    // Clear as soon as the scorer starts answering it -- a warning that
+    // outlives the problem teaches people to ignore warnings.
+    const clear = () => {
+      msg.remove();
+      wrap.classList.remove('row-gap');
+    };
+    wrap.querySelectorAll('button, input').forEach(el => {
+      el.addEventListener('click', clear, { once: true });
+      el.addEventListener('input', clear, { once: true });
+    });
+  }
+
   function spotGaps(idPrefix, container){
     const root = container || document;
     const gaps = [];
@@ -9697,7 +9771,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const off = state.possession, def = otherTeam(state.possession);
 
     if (type === 'rush'){
-      if (!sel.carrier) return;
+      if (missingPlayer('carrier', sel.carrier)) return;
       const yds = signedYards('pp_yards') || '0';
       const fumbled = document.getElementById('pp_rush_fumbled').checked;
       if (fumbled){
@@ -9733,7 +9807,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       }
     } else if (type === 'pass'){
-      if (!sel.passer) return;
+      if (missingPlayer('passer', sel.passer)) return;
       // Receiver optional, same reasoning as the kick returner. '?' keeps
       // the completion and its yardage on the books; no receiver role is
       // created, so nobody gets phantom receiving stats.
@@ -9784,7 +9858,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
       }
     } else if (type === 'sack'){
-      if (!sel.passer) return;
+      if (missingPlayer('passer', sel.passer)) return;
       const yds = yards('pp_yards') || '0';
       const fumbled = document.getElementById('pp_sack_fumbled').checked;
       if (fumbled){
@@ -9823,7 +9897,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       }
     } else if (type === 'int'){
-      if (!sel.passer) return;
+      if (missingPlayer('passer', sel.passer)) return;
       const yds = yards('pp_yards');
       const intTbOn = document.getElementById('pp_int_tb') && document.getElementById('pp_int_tb').checked;
       // Who intercepted it is optional -- the interception itself, and
@@ -9840,7 +9914,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (sel.receiver) roles.receiver = { team: off, num: sel.receiver, yards: 0, name: sel.receiverName || undefined };
       
     } else if (type === 'fumble'){
-      if (!sel.carrier) return;
+      if (missingPlayer('carrier', sel.carrier)) return;
       const rec = document.querySelector('input[name=pp_fumrec]:checked').value;
         if (rec === 'tb'){
           // Lost, but to nobody -- the defence gets it at their own 20.
@@ -9866,7 +9940,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       code = 'sf' + (sel.credit ? ' ' + sel.credit : '');
       roles = sel.credit ? { defense: { team: def, num: sel.credit, name: sel.creditName || undefined }, playType: 'safety' } : null;
     } else if (type === 'kickoff'){
-      if (!sel.kicker) return;
+      if (missingPlayer('kicker', sel.kicker)) return;
       const yds = yards('pp_yards') || '0';
       const isTouchback = document.getElementById('pp_ko_touchback').checked;
       const koMuffed = document.getElementById('pp_ko_muffed') && document.getElementById('pp_ko_muffed').checked;
@@ -9980,7 +10054,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       return;
     } else if (type === 'punt'){
       const blocked = document.getElementById('pp_blocked').checked;
-      if (!sel.punter) return;
+      if (missingPlayer('punter', sel.punter)) return;
       if (blocked){
         const blockRec = document.querySelector('input[name=pp_punt_blockrec]:checked').value;
         if (blockRec === 'own'){
@@ -10096,7 +10170,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
       }
     } else if (type === 'fg'){
-      if (!sel.kicker) return;
+      if (missingPlayer('kicker', sel.kicker)) return;
       if (document.getElementById('pp_fg_muffhold').checked){
         // No kicker role: the attempt never happened, so nothing should
         // reach his FG Att / FG Made line. roles stays at its outer
@@ -10155,7 +10229,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       }
     } else if (type === 'pat'){
-      if (!sel.kicker) return;
+      if (missingPlayer('kicker', sel.kicker)) return;
       if (document.getElementById('pp_pat_muffhold').checked){
         // No spot needed: a try ends the drive and a kickoff follows.
         document.getElementById('code').value = sel.kicker + 'pa m';
@@ -10176,7 +10250,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     } else if (type === 'twopt'){
       const sub = document.getElementById('playPanel').dataset.twoptSub || 'rush';
       if (sub === 'rush'){
-        if (!sel.carrier) return;
+        if (missingPlayer('carrier', sel.carrier)) return;
         const res = document.querySelector('input[name=pp_2pt_rush_res]:checked').value;
         if (res === 'b'){
           code = sel.carrier + 'tpr b' + (sel.credit ? ' ' + sel.credit : '');
@@ -10186,7 +10260,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         roles = { carrier: { team: off, num: sel.carrier, result: res } };
         if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       } else {
-        if (!sel.passer) return;
+        if (missingPlayer('passer', sel.passer)) return;
         const recTok2 = sel.receiver || '?';
         const res = document.querySelector('input[name=pp_2pt_pass_res]:checked').value;
         if (res === 'b'){
@@ -10239,6 +10313,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // well above where the coach is looking when they press Review, so
         // on its own the refusal reads as the button not working.
         if (w){ w.textContent = '⚠️ ' + msg; w.style.display = 'block'; }
+        // AND IN THE ROW ITSELF. Both messages above say what is missing
+        // somewhere OTHER than where it is missing -- one at the top of
+        // the page, one at the top of the panel -- so the coach still has
+        // to find the field. This puts the same words against the field
+        // that needs them.
+        markRowGap(prefix + '_wrap', 'Still needed: ' + gaps.join(' and '));
         document.getElementById('confirmCard').style.display = 'none';
         return;
       }
