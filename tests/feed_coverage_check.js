@@ -248,6 +248,38 @@ async function run() {
     }
   }
 
+  // OFF AIR MEANS OFF AIR. Both endpoints used to fall back to the most
+  // recent in-progress game when nothing was flagged, so with no game on
+  // air the overlays kept showing data -- taking a game down had no
+  // observable effect a viewer could see. Reported from real use and
+  // removed 22 Aug 2026.
+  //
+  // Checked against the SOURCE: these are serverless handlers needing a
+  // database and a service key, so the suite cannot execute them.
+  {
+    const fs = require('fs');
+    ['gamedata', 'feed'].forEach(name => {
+      const path = __dirname + '/../api/' + name + '.js';
+      if (!fs.existsSync(path)) { failures.push({ area: 'api:missing', detail: name + '.js not found' }); return; }
+      const src = fs.readFileSync(path, 'utf8');
+      // The QUERY, not the word -- the explanatory comments mention
+      // in_progress and must not trip this.
+      if (/\.eq\(\s*['"]status['"]\s*,\s*['"]in_progress['"]\s*\)/.test(src)) {
+        failures.push({ area: 'api:' + name + ':fallback',
+          detail: name + '.js still falls back to the most recent in-progress game' });
+      }
+      if (!/No game is on air/.test(src)) {
+        failures.push({ area: 'api:' + name + ':refuse',
+          detail: name + '.js should report that no game is on air' });
+      }
+      // Removing the fallback must not remove what it fell back FROM.
+      if (!/is_broadcast/.test(src)) {
+        failures.push({ area: 'api:' + name + ':flag',
+          detail: name + '.js no longer resolves by the broadcast flag' });
+      }
+    });
+  }
+
   return { failures, fields: [...fields].sort(), byView };
 }
 
