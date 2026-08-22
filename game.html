@@ -1266,8 +1266,15 @@ function parseInput(raw, state){
         // loss for the offense, but the ball changes hands, so this has
         // to end the drive and flip rather than just advance the down.
         const recName = bsRec === '?' ? TEAMS[def].name : D(bsRec);
+        // "fumble" said out loud. Reported directly, 22 Aug 2026: the log
+        // read "bad snap for no gain, recovered by Neville" -- which
+        // never states that the ball was on the ground, so a line that is
+        // in fact a lost fumble reads like a snap the other team simply
+        // ended up with. Every other loose-ball play in the app says
+        // "fumble --", and this one is no different in kind: the phrasing
+        // now matches them.
         return { text: TEAMS[off].name + ' — bad snap ' + gainPhrase(netYards) +
-            ', recovered by ' + recName,
+            ', fumble — recovered by ' + recName,
           // NOT isStat. The flip in computeState is deliberately skipped
           // for stat plays -- a rush that gains yardage must not also
           // change hands -- so marking this as a stat play silently
@@ -3640,8 +3647,33 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (clockPrompt.mode === 'start') label = 'Clock at start of ' + TEAMS[clockPrompt.team].name + ' possession';
     if (clockPrompt.mode === 'end') label = 'Clock at end of ' + TEAMS[clockPrompt.team].name + ' possession';
     document.getElementById('clockPromptLabel').textContent = label;
-    document.getElementById('clockPromptInput').value = '';
+    const cpi = document.getElementById('clockPromptInput');
+    cpi.value = '';
     renderLastClockHint('clockPromptLastHint');
+    // THE PAD OPENS ITSELF HERE. Requested directly: the app brings this
+    // card up on its own at a change of possession, so the scorer did not
+    // choose to come here and there is nothing to decide -- a clock value
+    // is the only thing this card wants. Making them tap the box first is
+    // a tap that carries no information, at the one moment they are also
+    // watching the field.
+    //
+    // Deliberately NOT done by the generic tap handler: that one opens on
+    // CLICK precisely so a pad never appears while tabbing between fields
+    // (see TAP_OPENS_KEYPAD). This is the opposite case -- the card
+    // appearing IS the signal -- so it is opened explicitly, here, rather
+    // than by loosening the rule for every field on the page.
+    //
+    // Deferred a frame: attachPickers() runs from a MutationObserver and
+    // may not have classified this field yet on the very first prompt,
+    // and openPad needs the kind it assigns.
+    if (cpi && typeof openPad === 'function'){
+      const raise = () => {
+        if (!clockPrompt) return;                      // skipped/resolved already
+        if (cpi.dataset.pickerKind) openPad(cpi, cpi, cpi.dataset.pickerKind);
+      };
+      if (window.requestAnimationFrame) window.requestAnimationFrame(() => window.requestAnimationFrame(raise));
+      else setTimeout(raise, 0);
+    }
   }
   function resolveClockPrompt(skip){
     const val = document.getElementById('clockPromptInput').value.trim();
