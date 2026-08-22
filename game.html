@@ -209,6 +209,42 @@
     #launchViewLink { position:static; display:inline-block; margin:0 0 8px; }
   }
 
+  /* RIGHT MARGIN RAIL -- validation and live totals.
+     Positioned against the DOCUMENT, exactly like #driveDock, so it
+     scrolls with the page and needs no scroll listener. Mirrored
+     horizontally: left is 50% + half the card + a gutter, right is the
+     16px inset .floating-actions already uses.
+     bottom:96px clears the Broadcast/Help buttons; the rail is not
+     allowed to run under them. */
+  #rightRail { position:absolute; right:16px; left:calc(50% + 380px + 18px);
+               z-index:80; display:flex; flex-direction:column; gap:10px; }
+  #rightRail .card { margin-bottom:0; padding:12px 14px; box-sizing:border-box;
+                     display:flex; flex-direction:column; min-height:0; }
+  #validationCard { flex:0 1 auto; max-height:46%; }
+  #liveBoxCard { flex:1 1 auto; }
+  #validationBody, #liveBoxBody { overflow-y:auto; flex:1 1 auto; min-height:0; }
+  #validationCount { font-size:12px; font-weight:700; padding:1px 7px; border-radius:9px;
+                     vertical-align:middle; margin-left:4px; }
+  .vc-ok { background:#e6f4ea; color:#1a7a4c; }
+  .vc-bad { background:#fdecea; color:#a32d2d; }
+  .v-issue { font-size:12.5px; line-height:1.4; padding:6px 0;
+             border-bottom:1px solid #f2f2f2; color:#7a2d2d; }
+  .v-issue:last-child { border-bottom:none; }
+  .lb-row { display:flex; align-items:baseline; gap:8px; font-size:13px; padding:4px 0;
+            border-bottom:1px solid #f4f4f4; }
+  .lb-row:last-child { border-bottom:none; }
+  .lb-label { flex:1 1 auto; color:#666; }
+  .lb-val { flex:0 0 58px; text-align:right; font-weight:700; font-variant-numeric:tabular-nums; }
+  .lb-team { font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em;
+             padding:3px 8px; border-radius:5px; display:inline-block; margin:8px 0 4px; }
+  /* Below the dock breakpoint the margins are gone, so it comes back into
+     the flow underneath everything else rather than overlapping the card. */
+  @media (max-width:1219px) {
+    #rightRail { position:static; left:auto; right:auto; height:auto !important;
+                 top:auto !important; margin:16px auto 0; max-width:760px; }
+    #validationCard { max-height:none; }
+  }
+
   /* DRIVE LOG DOCKED IN THE LEFT MARGIN (prototype).
      Positioned the way .floating-actions already is -- fixed to the
      VIEWPORT, not to the card -- so it uses the margin the page has
@@ -360,6 +396,22 @@
          margin alongside the banner rather than costing a row inside
          the card. -->
     <div id="onAirBanner" style="display:none;">&#9679; ON AIR</div>
+
+    <!-- RIGHT MARGIN RAIL. The mirror of #driveDock on the left, in the
+         viewport space outside the 760px card that .floating-actions has
+         always used. Two things a scorer would otherwise have to leave
+         the entry screen to see, and one of them (validation) is not
+         available anywhere during a game at all. -->
+    <div id="rightRail">
+      <div class="card compact" id="validationCard">
+        <h2 style="margin:0 0 6px; font-size:15px;">Checks <span id="validationCount"></span></h2>
+        <div id="validationBody"></div>
+      </div>
+      <div class="card compact" id="liveBoxCard">
+        <h2 style="margin:0 0 6px; font-size:15px;">Live totals</h2>
+        <div id="liveBoxBody"></div>
+      </div>
+    </div>
     <div class="card" id="entryCard">
       <div id="entryHeaderRow" style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
         <!-- Removed from the layout, not from the DOM: renderAll() still
@@ -682,6 +734,7 @@
     // its own text against a height measured from the score banner, and an
     // inline display value here would beat the stylesheet and break that.
     if (airEl) airEl.style.display = game.is_broadcast ? 'flex' : 'none';
+    if (airEl && game.is_broadcast) renderAirHealth();
 
     const { data: rosterRows, error: rosterError } = await supabaseClient
       .from('game_rosters').select('*').eq('game_id', currentGameId);
@@ -3105,6 +3158,32 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     return '';
   });
 
+  // BROADCAST HEALTH, inside the ON AIR tile rather than beside it.
+  // What matters for a feed is not that the game is flagged for
+  // broadcast -- the red block already says that -- but whether what the
+  // overlay is reading is CURRENT. That is exactly the pending queue:
+  // plays sitting on this device have not reached the server, so the
+  // feed is serving a game that is behind the field.
+  //
+  // Small and quiet when it is fine, because a health line that shouts
+  // when nothing is wrong stops being read.
+  function renderAirHealth(){
+    const el = document.getElementById('onAirBanner');
+    if (!el) return;
+    const n = pendingQueue.length;
+    const online = (typeof navigator === 'undefined') || navigator.onLine !== false;
+    const detail = !online
+      ? 'offline — feed is stale'
+      : (n ? n + ' play' + (n === 1 ? '' : 's') + ' unsent' : 'feed current');
+    el.innerHTML = '&#9679; ON AIR' +
+      '<span style="display:block; font-size:9.5px; font-weight:600; letter-spacing:0.02em; ' +
+      'opacity:' + (online && !n ? '0.75' : '1') + '; margin-top:1px;">' + detail + '</span>';
+    // Flex column so the two lines stack inside the tile rather than
+    // running on; the tile's own height is measured from the banner.
+    el.style.flexDirection = 'column';
+    el.style.lineHeight = '1.15';
+  }
+
   function renderSyncStatus(){
     const el = document.getElementById('syncStatus');
     if (!el) return;
@@ -3121,6 +3200,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     pendingQueue.push(row);
     savePendingQueue();
     renderSyncStatus();
+    renderAirHealth();
     scheduleSync();
   }
   function scheduleSync(){
@@ -3288,7 +3368,79 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     return persistPlay(playObj);
   }
 
+  // LIVE TOTALS -- both teams, the figures worth checking against the
+  // stadium scoreboard while there is still time to fix a disagreement.
+  // Deliberately NOT a second copy of the banner: score, quarter and
+  // down are already up there, and repeating them would cost the space
+  // without adding anything.
+  function renderLiveBox(){
+    const el = document.getElementById('liveBoxBody');
+    if (!el) return;
+    const st = computeState();
+    const box = computeBoxScore(plays);
+    const poss = countPossessions(plays);
+    const sum = (o, k) => Object.keys(o || {}).reduce((a, n) => a + (o[n][k] || 0), 0);
+    const row = (label, a, b) =>
+      '<div class="lb-row"><span class="lb-val">' + a + '</span>' +
+      '<span class="lb-label" style="text-align:center;">' + label + '</span>' +
+      '<span class="lb-val">' + b + '</span></div>';
+    const yds = t => sum(box[t].rushing, 'yds') + sum(box[t].passing, 'yds');
+    const chip = t => '<span class="lb-team" style="background:' + TEAMS[t].bg + '; color:' +
+      safeTextColor(TEAMS[t].bg, TEAMS[t].text) + ';">' + TEAMS[t].name + '</span>';
+    el.innerHTML =
+      '<div style="display:flex; justify-content:space-between;">' + chip('teamA') + chip('teamB') + '</div>' +
+      row('score', st.scores.teamA, st.scores.teamB) +
+      row('total yds', yds('teamA'), yds('teamB')) +
+      row('rush yds', sum(box.teamA.rushing, 'yds'), sum(box.teamB.rushing, 'yds')) +
+      row('pass yds', sum(box.teamA.passing, 'yds'), sum(box.teamB.passing, 'yds')) +
+      row('possessions', poss.teamA, poss.teamB) +
+      row('TOP', formatDuration(st.possessionTime.teamA), formatDuration(st.possessionTime.teamB)) +
+      row('timeouts', st.timeouts.teamA, st.timeouts.teamB);
+  }
+
+  // CHECKS -- validateGame(), which until now only ran at finalize time.
+  // An error found in the second quarter is a ten-second fix; the same
+  // error found after the whistle is an unlock and a re-entry.
+  //
+  // THROTTLED, and that is not optional. validateGame() calls
+  // computeState() once per play over a slice of the log, so it is
+  // quadratic in the number of plays -- running it inside renderAll on
+  // every keystroke would put a growing pause into play entry, which is
+  // the one thing this page cannot afford. It runs after the page has
+  // gone quiet instead.
+  let validationTimer = null;
+  function scheduleValidation(){
+    if (validationTimer) clearTimeout(validationTimer);
+    validationTimer = setTimeout(() => {
+      validationTimer = null;
+      const body = document.getElementById('validationBody');
+      const count = document.getElementById('validationCount');
+      if (!body || !count) return;
+      let issues = [];
+      // Never let a check crash the entry page. A validator that throws
+      // on some unusual log would otherwise take the whole render with it.
+      try { issues = validateGame() || []; }
+      catch (e){
+        count.textContent = '—'; count.className = '';
+        body.innerHTML = '<div class="v-issue">checks could not run: ' +
+          String(e.message || e).slice(0, 80) + '</div>';
+        return;
+      }
+      count.textContent = issues.length ? issues.length : 'clear';
+      count.className = issues.length ? 'vc-bad' : 'vc-ok';
+      body.innerHTML = issues.length
+        ? issues.map(t => '<div class="v-issue">' + String(t) + '</div>').join('')
+        : '<div style="font-size:12.5px; color:#1a7a4c; padding:6px 0;">' +
+          'Nothing to flag. Downs, spots, yardage and clock all reconcile.</div>';
+    }, 400);
+  }
+
   function renderAll(){
+    // The right rail. renderLiveBox is cheap -- one computeBoxScore over
+    // the log, the same call the box score itself makes. scheduleValidation
+    // is NOT, so it debounces rather than running here.
+    try { renderLiveBox(); } catch (e) {}
+    scheduleValidation();
     const state = computeState();
     const isGoalToGo = state.down && state.fieldPos !== null && (state.fieldPos + state.distance >= 100);
     const distDisplay = isGoalToGo ? 'Goal' : state.distance;
@@ -5356,6 +5508,32 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         new MutationObserver(syncDock).observe(card, { childList: true, subtree: true });
       }
     }
+    // RIGHT RAIL: geometry, mirroring the dock.
+    const rail2 = document.getElementById('rightRail');
+    const syncRail = () => {
+      if (typeof document === 'undefined' || !document || !rail2) return;
+      if (window.innerWidth < 1220){
+        if (rail2.style.top || rail2.style.height){ rail2.style.top = ''; rail2.style.height = ''; }
+        return;
+      }
+      const card = document.getElementById('entryCard');
+      if (!card) return;
+      const r = card.getBoundingClientRect();
+      const top = Math.round(r.top + (window.pageYOffset || 0)) + 'px';
+      const height = Math.round(r.height) + 'px';
+      if (rail2.style.top !== top) rail2.style.top = top;
+      if (rail2.style.height !== height) rail2.style.height = height;
+    };
+    if (rail2){
+      syncRail();
+      window.addEventListener('resize', syncRail);
+      if (window.ResizeObserver){
+        const card = document.getElementById('entryCard');
+        if (card) new ResizeObserver(syncRail).observe(card);
+      }
+    }
+    window.__syncRail = syncRail;
+
     window.__syncDock = syncDock;
     // The calculator readout starts hidden so an empty box is not a bare
     // green sliver, but it is written from about ten different branches
@@ -8593,6 +8771,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             if (first && first.focus) try { first.focus(); } catch(e){}
           }
           if (window.__syncDock) window.__syncDock();
+    if (window.__syncRail) window.__syncRail();
         });
         if (seeded && btn) btn.textContent = '− ' + label;
       });
