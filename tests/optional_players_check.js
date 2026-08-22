@@ -270,13 +270,22 @@ async function run() {
     click(win, doc.querySelector('.ptypeBtn[data-type="punt"]'));
     const rb = [...doc.querySelectorAll('#playPanel .opt-block')]
       .find(b => /Returned/.test(b.textContent));
-    if (!rb) fail('returner:collapse', 'the optional returner should collapse behind a button');
-    else {
-      if (win.getComputedStyle(rb.querySelector('.opt-body')).display !== 'none') {
+    // NOTE: since 22 Aug this matches the OUTER return group rather than a
+    // returner-only block -- the whole group now collapses as one. The
+    // assertion still holds: something labelled "Returned" collapses, is
+    // closed by default, and opens on a tap.
+    const rbBody = rb && rb.querySelector('.opt-body');
+    const rbToggle = rb && rb.querySelector('.opt-toggle');
+    if (!rb || !rbBody || !rbToggle) {
+      // Guarded rather than clicked blind: the driver THROWS on a missing
+      // element, which stops the suite and reports nothing useful.
+      fail('returner:collapse', 'the optional returner should collapse behind a button');
+    } else {
+      if (win.getComputedStyle(rbBody).display !== 'none') {
         fail('returner:closed', 'it should start closed');
       }
-      click(win, rb.querySelector('.opt-toggle'));
-      if (win.getComputedStyle(rb.querySelector('.opt-body')).display === 'none') {
+      click(win, rbToggle);
+      if (win.getComputedStyle(rbBody).display === 'none') {
         fail('returner:opens', 'tapping the button should reveal the picker');
       }
     }
@@ -307,6 +316,66 @@ async function run() {
     click(win, chip);
     if (win.getComputedStyle(row).display === 'none') fail('passer:reopen', 'tapping the chip should bring the grid back');
     if (!grid.querySelector('button.picked')) fail('passer:keeps-pick', 'reopening must not clear the pick');
+    h.close();
+  }
+
+  // THE WHOLE PUNT RETURN GROUP COLLAPSES, not just the returner picker.
+  // "+ Returned by" used to hide only the picker, while return yards, the
+  // returned-to calculator and the fumble toggle stayed open whatever
+  // happened -- and on a punt that was fair-caught, downed or touchbacked
+  // none of them apply, which is most punts.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="punt"]'));
+    const grp = doc.getElementById('pp_punt_normal');
+    if (!grp) { fail('punt:group', 'no return group'); h.close(); return failures; }
+    if (!grp.classList.contains('opt-block')) {
+      fail('punt:collapsible', 'the return group should collapse as one');
+    }
+    const body = grp.querySelector('.opt-body');
+    if (!body || win.getComputedStyle(body).display !== 'none') {
+      fail('punt:closed', 'the return group should start closed');
+    }
+    // ALL THREE fields live inside it -- a collapse that hides only the
+    // picker is the thing this replaced.
+    ['pp_ret_yds_wrap2', 'pp_retto_wrap', 'pp_ret_fumbled_toggle'].forEach(id => {
+      const el = doc.getElementById(id);
+      if (!el) { fail('punt:missing:' + id, id + ' not found'); return; }
+      if (!grp.contains(el)) fail('punt:outside:' + id, id + ' should be inside the collapsed group');
+    });
+    // Opening reveals them together.
+    // GUARDED: clicking a missing toggle THROWS in the driver, which stops
+    // the suite and reports nothing. A test that crashes is worse than one
+    // that fails -- the same fault was found and fixed in
+    // entry_integrity_check the same day.
+    const toggle = grp.querySelector('.opt-toggle');
+    if (!toggle) fail('punt:toggle', 'the return group has no toggle to open it');
+    else {
+      click(win, toggle);
+      await new Promise(r => setTimeout(r, 80));
+      if (body && win.getComputedStyle(body).display === 'none') fail('punt:opens', 'the group did not open');
+    }
+
+    // THE GREEN HINT BAR IS GONE until it has something to say. The label
+    // above now carries the instruction, so a bar repeating it was a
+    // second copy of the same sentence taking a row.
+    const ro = doc.getElementById('pp_retto_readout');
+    if (!toggle) { h.close(); return failures; }
+    if (ro && win.getComputedStyle(ro).display !== 'none') {
+      fail('punt:hint', 'the readout should stay hidden until a spot is entered: ' + JSON.stringify(ro.textContent));
+    }
+    // But it must still report once the calculator can compute.
+    click(win, doc.querySelector('.calcSide[data-side="opp"]'));
+    typeInto(win, doc.getElementById('pp_calc_yardline'), '40');
+    await new Promise(r => setTimeout(r, 120));
+    click(win, doc.querySelector('.rettoSide[data-side="opp"]'));
+    typeInto(win, doc.getElementById('pp_retto_yardline'), '30');
+    await new Promise(r => setTimeout(r, 150));
+    if (ro && win.getComputedStyle(ro).display === 'none') {
+      fail('punt:hint-back', 'the readout should speak once both spots are known');
+    }
     h.close();
   }
 
