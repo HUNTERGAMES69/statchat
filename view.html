@@ -402,6 +402,12 @@ function isDriveTileNoise(p){
   const e = p.effect || {};
   if (e.clockEvent) return true;
   if (e.setDirection) return true;
+  // A quarter marker is an administrative row, not a play. It is kept in
+  // the FULL log (it is how the quarter is derived) but it has no place in
+  // a drive tile -- at the start of the second half it was the newest row
+  // in the log and duly rendered as the headline, so the tile read
+  // "Quarter marker — start of Q3" as though someone had run it.
+  if (e.setQuarter) return true;
   const t = (p.text || '').trim();
   if (t.indexOf('Down & distance adjusted') === 0) return true;
   if (t.indexOf('New drive') === 0) return true;
@@ -1054,7 +1060,23 @@ function extractNameTag(rawName){
     // the new drive starts at the next play instead.
     if (!isResultsMode){
       const resetIdxs = findDriveStarts(plays);
-      const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
+      const halfDivIdx = plays.findIndex(p => p.isDivider &&
+        /end of (1st|first) half/i.test((p.text || '').trim()));
+      const lastReset = resetIdxs.length ? resetIdxs[resetIdxs.length - 1] : -1;
+      // NO HALF CLAMP HERE, deliberately. One was written -- floor the
+      // slice at the interval so a first-half drive cannot bleed into a
+      // second-half card -- and then measured: findDriveStarts already
+      // opens a drive at the first thing after the break (the kickoff, or
+      // a penalty before it), so the newest reset index is ALWAYS past the
+      // divider by the time anything renders from it. The clamp changed
+      // no output in any reachable state and was removed rather than
+      // shipped as protection that never fires.
+      //
+      // The one state where the index IS still pre-break -- Start 2nd half
+      // pressed and nothing entered -- is handled by secondHalfPending
+      // below, which does not read this slice at all.
+      const driveFloor = lastReset;
+      const currentDrivePlays = driveFloor >= 0 ? plays.slice(driveFloor) : [];
       // FILTERED BY TEAM, matching the exact filter computeDriveSummary
       // already applies to the numeric tiles just below -- this log
       // never had it. Reported from a real game, 19 Aug 2026: a
@@ -1178,9 +1200,29 @@ function extractNameTag(rawName){
         // Still display only: nothing here is written back, and a return
         // touchdown remains NOT a possession, which is the ruling and is
         // what countPossessions already reports.
-        const start = resetIdxs.length ? resetIdxs[resetIdxs.length - 1] : plays.length;
+        // FIRST look inside the segment, ignoring the team filter. At the
+        // start of a half the only thing in it is the kickoff, which
+        // belongs to the KICKING team and so was filtered out of the list
+        // above -- leaving "no active drive yet" on screen while the
+        // kickoff sat in the log. The team filter is right for a drive in
+        // progress and wrong for a segment that is nothing but a kick.
+        // A TIMEOUT DOES NOT COUNT as something to show. It is additive to
+        // a play, never a headline in its own right, and treating any
+        // non-noise row as good enough made a timeout called during the
+        // kickoff window replace the kickoff it was supposed to sit under.
+        const inSegment = (driveFloor >= 0 ? plays.slice(driveFloor) : [])
+          .filter(x => x && !x.isDivider && !isDriveTileNoise(x));
+        const segmentHasPlay = inSegment.some(x => !(x.effect && x.effect.timeout));
+        if (segmentHasPlay) currentDriveDisplayList = inSegment;
+        const start = driveFloor >= 0 ? driveFloor : plays.length;
+        // Never back across the interval. This walk exists to find the
+        // kickoff that opened the CURRENT segment; with no floor it kept
+        // going until it found any play at all, which after halftime meant
+        // reaching into the first half and putting a play from before the
+        // break on a second-half card.
+        const floor = (halfDivIdx !== -1 && start > halfDivIdx) ? halfDivIdx + 1 : 0;
         const picked = [];
-        for (let i = start - 1; i >= 0; i--){
+        for (let i = (segmentHasPlay ? floor - 1 : start - 1); i >= floor; i--){
           const cand = plays[i];
           if (!cand || cand.isDivider || isDriveTileNoise(cand)) continue;
           picked.unshift(cand);
@@ -1198,11 +1240,44 @@ function extractNameTag(rawName){
         }
         if (picked.length) currentDriveDisplayList = picked.concat(currentDriveDisplayList);
       }
+      // THE SECOND HALF HAS BEEN STARTED BUT NOTHING HAS HAPPENED IN IT.
+      // ----------------------------------------------------------------
+      // Between "Start 2nd half" and the kickoff there is no drive and no
+      // play, but every figure on this card still described the FIRST
+      // half: the tiles carried the last first-half drive's rushes and
+      // yards, the down line read the spot the half ended on, and
+      // Previous Drive showed a punt from minutes earlier. All of it true
+      // once and none of it true now.
+      //
+      // The half boundary is the honest reset point, so the card says
+      // where the game is and nothing else until the kickoff lands.
+      const halfIdx = plays.findIndex(p => p.isDivider &&
+        /end of (1st|first) half/i.test((p.text || '').trim()));
+      const secondHalfPending = halfIdx !== -1 &&
+        plays.some((p, i) => i > halfIdx && p.effect && p.effect.setQuarter >= 3) &&
+        !plays.some((p, i) => i > halfIdx && !isAdminMarker(p));
+
+      // Declared outside the branch: paintDrive() colours both cards from
+      // these further down, and scoping them to the else left it reading
+      // an undefined name the moment the start-of-half state was hit.
+      let currentSummary = null, prevSummary = null;
+      if (secondHalfPending){
+        const q = (state.quarter && state.quarter >= 3) ? state.quarter : 3;
+        document.getElementById('driveLogScroll').innerHTML =
+          '<div style="font-size:36px; font-weight:700; color:#111; line-height:1.2; ' +
+          'margin-top:16px;">Start of Q' + q + '</div>';
+        document.getElementById('currentDriveTiles').innerHTML = '';
+        document.getElementById('prevDriveLogScroll').innerHTML =
+          '<div style="color:#999;">no previous drive yet</div>';
+      } else {
+
       document.getElementById('driveLogScroll').innerHTML =
         renderCurrentDriveLastPlay(currentDriveDisplayList, state, distDisplay);
 
-      const currentSummary = resetIdxs.length
-        ? computeDriveSummary(resetIdxs[resetIdxs.length - 1], plays.length)
+      // Same floor as the log above, for the same reason: the numbers and
+      // the play they sit over have to describe the same stretch of game.
+      currentSummary = driveFloor >= 0
+        ? computeDriveSummary(driveFloor, plays.length)
         : null;
       document.getElementById('currentDriveTiles').innerHTML = currentSummary
         ? '<div class="inline-stat-line">' + [
@@ -1237,10 +1312,20 @@ function extractNameTag(rawName){
               '<span class="stat-label"' + (sop ? ' style="color:#7a5c00;"' : '') + '>' + label + '</span></span>').join('') + '</div>'
         : '';
 
-      const prevSummary = resetIdxs.length >= 2
-        ? computeDriveSummary(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1])
+      // Null once the interval is the floor: the drive before it belongs
+      // to the first half, and showing it beside a second-half card
+      // invites reading it as the possession that just ended.
+      // Null unless the PREVIOUS drive also belongs to this half. Testing
+      // the current one was not enough: once the second half's own New
+      // drive registers, the one before it is still the last drive of the
+      // first half, and it rendered beside a second-half card as though
+      // it were the possession that just ended.
+      const prevStart = resetIdxs.length >= 2 ? resetIdxs[resetIdxs.length - 2] : -1;
+      prevSummary = (prevStart >= 0 && (halfDivIdx === -1 || prevStart > halfDivIdx))
+        ? computeDriveSummary(prevStart, resetIdxs[resetIdxs.length - 1])
         : null;
       document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary);
+      }
 
       // AT HALFTIME AND FINAL, THE SCORING SUMMARY TAKES THE QUAD.
       // ----------------------------------------------------------------
