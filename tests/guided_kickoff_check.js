@@ -230,13 +230,15 @@ async function run() {
     const doc = h.window.document, win = h.window;
     Object.defineProperty(win, 'innerWidth', { value: 1600, configurable: true });
     const card = doc.getElementById('entryCard');
-    // The banner is the fixed reference the margins are pinned to.
-    const banner = doc.querySelector('.banner');
-    Object.defineProperty(banner, 'offsetTop', { value: 100, configurable: true });
-    Object.defineProperty(banner, 'offsetHeight', { value: 64, configurable: true });
-    // entryCard's top tracks whatever the guided panel above it measures.
+    // THE GUIDED PANEL LIVES INSIDE THE ENTRY CARD, so the card GROWS
+    // with it rather than being pushed down by it. Its top is therefore
+    // fixed and the margins have nothing to chase.
+    //
+    // This is what the earlier versions of this test got wrong: they
+    // modelled the card MOVING, which was the bug, and then asserted the
+    // margins kept up with it. The fix was to stop the card moving.
     let guidedH = 700;
-    card.getBoundingClientRect = () => ({ top: 120 + guidedH, height: 500, bottom: 620 + guidedH });
+    card.getBoundingClientRect = () => ({ top: 210, height: 400 + guidedH, bottom: 610 + guidedH });
     const tops = () => ['driveDock', 'rightRail']
       .map(id => { const e = doc.getElementById(id); return e ? e.style.top : null; });
 
@@ -258,7 +260,12 @@ async function run() {
     // is exactly that.
     const before = tops()[0];
     if (before !== '210px' || tops().some(t => t !== before)) {
-      fail('margins:before', 'both margins should be pinned at 210px, got ' + tops().join(' , '));
+      fail('margins:before', 'both margins should sit at the card top, 210px, got ' + tops().join(' , '));
+    }
+    // The guided panel must be INSIDE the card. A sibling above it is the
+    // structure that caused this, and no amount of measuring fixed it.
+    if (!card.contains(doc.getElementById('guidedPanel'))) {
+      fail('margins:structure', 'the guided panel should live inside the entry card, not above it');
     }
 
     // Back shortens the panel. The margins must NOT move: they belong at
