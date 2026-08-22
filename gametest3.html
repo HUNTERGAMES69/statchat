@@ -254,6 +254,18 @@
   #entryStage #playPanel .pick-row { display:flex; align-items:flex-start; gap:8px; }
   #entryStage #playPanel .pick-row > div { flex:1 1 auto; min-width:0; }
   #entryStage #playPanel .pick-row > input { flex:0 0 100px; }
+  /* The name-confirm box is inserted as a sibling of the manual input,
+     so inside .pick-row it would otherwise be a third flex child fighting
+     the grid for width. Full-width line of its own, always last. */
+  #entryStage #playPanel .pick-row { flex-wrap:wrap; }
+  #entryStage #playPanel .pick-row > .name-confirm { flex:0 0 100%; order:9; }
+  /* 3. The optional tackler picker, collapsed behind a button. */
+  #entryStage #playPanel .opt-block > .opt-body { display:none; }
+  #entryStage #playPanel .opt-block.open > .opt-body { display:block; }
+  #entryStage #playPanel .opt-toggle { padding:5px 10px; font-size:12px; font-weight:700;
+                                       border:1px dashed #b8b8b8; border-radius:6px;
+                                       background:#fff; color:#555; cursor:pointer; margin-top:6px; }
+  #entryStage #playPanel .opt-block.open > .opt-toggle { border-style:solid; background:#f0f0f0; }
   /* The field-position card: its own padding and margins are inline. */
   #fieldStrip { padding:6px 10px !important; margin:5px 0 !important; }
   #fieldStrip > div:first-child { margin-bottom:3px !important; }
@@ -2630,6 +2642,21 @@ function returnerEligible(team){
   list.sort(byRecency(recency, () => 0));
   return list;
 }
+// Surname only on picker buttons. Full names wrapped the receiver list
+// to four rows in the narrower stage; the number is what a scorer scans
+// for and the surname is enough to confirm it. The full name is kept in
+// the button's title. Suffixes stay attached to the surname so "Robinson
+// Jr." does not become "Jr.".
+function shortPickerName(name){
+  const t = String(name || '').trim();
+  if (!t) return '';
+  const parts = t.split(/\s+/);
+  if (parts.length < 2) return t;
+  const SUFFIX = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i;
+  let last = parts[parts.length - 1];
+  if (SUFFIX.test(last) && parts.length >= 3) last = parts[parts.length - 2] + ' ' + last;
+  return last;
+}
 function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
   if (list.length === 0) return '<span style="font-size:13px; color:var(--text-muted, #999);">' + (emptyMsg || 'no one credited yet — type a number below') + '</span>';
   // THE NUMBER IS WHAT A SCORER SCANS FOR, so it is what the button
@@ -2652,12 +2679,15 @@ function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
   return list.map(p => {
     const label = statLabelFn && statLabelFn(p.num, p);
     return '<button type="button" class="' + groupClass + '" data-num="' + p.num + '"' +
+      // Full name on hover: the button shows only the surname now, and a
+      // roster with two Robinsons has to stay distinguishable somewhere.
+      (p.name ? ' title="' + String(p.name).replace(/"/g,'') + '"' : '') +
       (p.resolvedName ? ' data-resolved="' + p.resolvedName.replace(/"/g,'') + '"' : '') +
       (p.unit ? ' data-unit="' + p.unit + '"' : '') +
       ' style="margin:0 6px 6px 0; display:inline-flex; align-items:baseline; gap:9px;">' +
       '<b style="font-size:18px; font-weight:500; font-variant-numeric:tabular-nums; ' +
         'letter-spacing:0.01em;">' + p.num + '</b>' +
-      '<span style="font-size:13px; opacity:0.88;">' + (p.name||'') + '</span>' +
+      '<span style="font-size:13px; opacity:0.88;">' + shortPickerName(p.name) + '</span>' +
       (label ? '<span style="font-size:11px; opacity:0.62;">' + label + '</span>' : '') +
       '</button>';
   }).join('');
@@ -2727,6 +2757,13 @@ function attachNameConfirm(inputId, getTeam, getOrder, onResolve){
   if (!input || input.dataset.nameConfirm) return;
   input.dataset.nameConfirm = '1';
   const box = document.createElement('div');
+  // PROTOTYPE: the class matters. This box is inserted as a SIBLING of
+  // the manual input, and in gametest3 that input now sits inside a
+  // .pick-row flex container beside the picker grid -- so without a rule
+  // of its own the box became a third flex child, squeezed to the right
+  // of the input, stretching the row and shoving the grid around. The
+  // rule gives it a full-width line of its own beneath the row.
+  box.className = 'name-confirm';
   box.style.cssText = 'margin-top:5px; font-size:13px; line-height:1.7;';
   input.parentNode.insertBefore(box, input.nextSibling);
 
@@ -5827,11 +5864,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     function defBlock(label, suffix){
       suffix = suffix || '';
       const list = defenseEligible(def);
-      return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
-        '<div class="pick-row">' +
+      const inner = '<div class="pick-row">' +
           '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix) + '</div>' +
           '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px;">' +
         '</div>';
+      // Optional credits collapse. "Tackled by (optional)" is a full
+      // picker plus a manual box on every rush and pass, and it is
+      // optional by design -- a whole block of height for a field that is
+      // often skipped. The REQUIRED credits (a recovery, a returner) are
+      // untouched: only the ones whose own label says optional collapse,
+      // so this can never hide something the play needs.
+      if (!/optional/i.test(label)) {
+        return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' + inner;
+      }
+      return '<div class="opt-block">' +
+        '<button type="button" class="opt-toggle">+ ' + label.replace(/\s*\(optional\)\s*/i, '') + '</button>' +
+        '<div class="opt-body">' + inner + '</div>' +
+      '</div>';
     }
     // Dedicated returner picker for kickoffs and punts. It deliberately
     // reuses the credit field's ids and classes (pp_credit_grid /
@@ -5917,7 +5966,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // LOSS), which is narrow. Kept explicit anyway rather than relying
       // on inheriting that narrowness, so this stays compact even if the
       // column's own width ever changes for an unrelated reason.
-      '<div style="display:grid; grid-template-columns:repeat(5,36px); gap:4px; width:fit-content;">' +
+      '<div style="display:grid; grid-template-columns:repeat(10,30px); gap:3px; width:fit-content;">' +
         Array.from({ length: 10 }, (_, i) => i).map(n =>
           '<button type="button" class="quickYardsBtn" data-for="' + (id||'pp_yards') + '" data-yds="' + n + '" ' +
           'style="background:#fff; color:#1a1a2e; border:1px solid #ccc; border-radius:5px; padding:4px 0; font-size:13px; font-weight:700; cursor:pointer;">' + n + '</button>'
@@ -5984,7 +6033,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<button type="button" class="ptoggle calcSide" data-side="opp" ' +
             'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
             TEAMS[opp].name + '</button>' +
-          '<input autocomplete="off" type="text" id="pp_calc_yardline" placeholder="yard line" style="width:90px;">' +
+          '<input autocomplete="off" type="text" id="pp_calc_yardline" placeholder="yard line to work gain from" style="width:190px;">' +
 
         '</span>' +
         spotCalcReadoutHtml() +
@@ -6729,7 +6778,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           return;
         }
         if (!raw || !side){
-          readout.textContent = 'Enter a yard line to work the gain out from the spot.';
+          // Was a three-line paragraph in a narrow column saying what the
+        // placeholder now says inside the box the coach is already
+        // looking at. Blank until there is a real figure to report.
+        readout.textContent = '';
           releaseYards(); return;
         }
         const n = parseInt(raw, 10);
@@ -8295,6 +8347,85 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     document.getElementById('pp_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('pp_review').addEventListener('click', () => buildAndReview(type, sel));
+
+    // ===================================================================
+    // PROTOTYPE ONLY -- gametest3.html. Not in game.html.
+    // ===================================================================
+    (function panelShortcuts(){
+      const panel = document.getElementById('playPanel');
+      if (!panel) return;
+
+      // 3. Optional credit blocks expand on demand. Auto-opened if
+      //    something is already selected in there -- re-entering a play,
+      //    or any path that seeds a credit, must not appear to have lost
+      //    it behind a collapsed button.
+      panel.querySelectorAll('.opt-block').forEach(block => {
+        const btn = block.querySelector('.opt-toggle');
+        const label = btn ? btn.textContent.replace(/^\+\s*/, '') : '';
+        const seeded = block.querySelector('button.picked, button.suggested') ||
+                       (block.querySelector('input') || {}).value;
+        if (seeded) block.classList.add('open');
+        if (btn) btn.addEventListener('click', () => {
+          block.classList.toggle('open');
+          btn.textContent = (block.classList.contains('open') ? '− ' : '+ ') + label;
+          if (block.classList.contains('open')){
+            const first = block.querySelector('.opt-body button');
+            if (first && first.focus) try { first.focus(); } catch(e){}
+          }
+          if (window.__syncDock) window.__syncDock();
+        });
+        if (seeded && btn) btn.textContent = '− ' + label;
+      });
+
+      // 6. NOT DONE -- single-candidate pre-selection was built, caught
+      //    breaking things, and removed rather than shipped.
+      //
+      //    The picker clears the field when the player who is ALREADY
+      //    selected is clicked (see the handler: "the one thing a coach
+      //    needs when the pre-selection is wrong"). Pre-selecting the
+      //    only candidate therefore turns the very next click on that
+      //    player -- the obvious thing to do when his button is the only
+      //    one there -- into wiping the field. It cost nothing to type
+      //    and would have cost a real play to discover.
+      //
+      //    The app already auto-selects the quarterback deliberately,
+      //    and every one of those call sites guards with
+      //    `!btn.classList.contains('picked')`. Extending it to carrier,
+      //    receiver, kicker and punter is not worth the trap for one
+      //    saved click.
+
+      // 7. Enter in a text field reviews the play, the same as pressing
+      //    Review. Excludes the manual "#" boxes, where Enter already
+      //    means "resolve this number", and any field inside a still
+      //    collapsed block.
+      panel.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        const t = e.target;
+        if (!t || t.tagName !== 'INPUT' || t.type !== 'text') return;
+        if (/_manual$|_manual_/.test(t.id || '')) return;
+        if (t.id === 'pp_calc_yardline') return;
+        e.preventDefault();
+        const rv = document.getElementById('pp_review');
+        if (rv) rv.click();
+      });
+
+      // 8. Focus moves forward as the play is filled in: picking the
+      //    passer lands the cursor on the receiver list, picking the
+      //    receiver lands it in the yards box. Only ever moves focus
+      //    FORWARD to an empty field, so it cannot yank the cursor away
+      //    from something being corrected.
+      const advance = (fromClass, toSel) => {
+        panel.querySelectorAll('button.' + fromClass).forEach(b => {
+          b.addEventListener('click', () => {
+            const to = panel.querySelector(toSel);
+            if (to && to.focus && !to.value) try { to.focus(); } catch(e){}
+          });
+        });
+      };
+      advance('pp_passer_pick', '#pp_receiver_grid button, #pp_yards');
+      advance('pp_receiver_pick', '#pp_yards');
+      advance('pp_carrier_pick', '#pp_yards');
+    })();
   }
 
   function buildAndReview(type, sel){
