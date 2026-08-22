@@ -4989,10 +4989,35 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (!btn || !rail.contains(btn)) return;
       clearActive();
       btn.classList.add('rail-active');
-      // Measured against the rail, so it is unaffected by page scroll.
-      const offset = btn.getBoundingClientRect().top - rail.getBoundingClientRect().top;
-      const cap = rail.offsetHeight / 3;
-      stage.style.marginTop = Math.max(0, Math.min(offset, cap)) + 'px';
+      // EVERY PLAY TYPE LOCKS TO THE TOP OF THE FRAME. Requested
+      // directly: the buttons ABOVE Penalty -- Scrimmage and Special
+      // teams -- open their tree at the top, the way Rush and Pass
+      // already did.
+      //
+      // Rush and Pass only behaved that way by accident of position:
+      // they sit at the very top of the rail, so their offset was
+      // already zero. Kickoff, Punt, Field goal, PAT and 2PT sit lower
+      // and were being indented by however far down the rail they are,
+      // and the height rule in fitPanel() only caught the ones that
+      // happened to be tall.
+      //
+      // Split on the Penalty button's own DOM position rather than a
+      // hardcoded list of types, so a play type added to either group
+      // later inherits the right behaviour without anyone remembering
+      // to update this.
+      const pen = document.getElementById('penUtilBtn');
+      const abovePenalty = !!pen && !!(btn.compareDocumentPosition(pen) &
+                                       (window.Node ? window.Node.DOCUMENT_POSITION_FOLLOWING : 4));
+      if (abovePenalty){
+        stage.style.marginTop = '0px';
+      } else {
+        // The utilities keep opening level with the button pressed:
+        // they are small panels where that saves a real reach, and
+        // fitPanel() still overrides it for any that turn out tall.
+        const offset = btn.getBoundingClientRect().top - rail.getBoundingClientRect().top;
+        const cap = rail.offsetHeight / 3;
+        stage.style.marginTop = Math.max(0, Math.min(offset, cap)) + 'px';
+      }
       // renderPlayPanel and the utility openers run on the BUTTON (target
       // phase) and several of them call scrollIntoView themselves; this
       // listener is on the rail and runs after, on the bubble. Scrolling
@@ -5986,7 +6011,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // LOSS), which is narrow. Kept explicit anyway rather than relying
       // on inheriting that narrowness, so this stays compact even if the
       // column's own width ever changes for an unrelated reason.
-      '<div style="display:grid; grid-template-columns:repeat(10,30px); gap:3px; width:fit-content;">' +
+      '<div style="display:grid; grid-template-columns:repeat(5,36px); gap:4px; width:fit-content;">' +
         Array.from({ length: 10 }, (_, i) => i).map(n =>
           '<button type="button" class="quickYardsBtn" data-for="' + (id||'pp_yards') + '" data-yds="' + n + '" ' +
           'style="background:#fff; color:#1a1a2e; border:1px solid #ccc; border-radius:5px; padding:4px 0; font-size:13px; font-weight:700; cursor:pointer;">' + n + '</button>'
