@@ -70,24 +70,25 @@ async function run() {
     const doc = w.document;
     if (doc.getElementById('panel').style.display !== 'block') fail('panel', 'the overlay did not show');
     const map = rowMap(doc);
-    ['Total Yards', 'Pass Yards', 'Pass TD', 'Rush Yards', 'Yards Per Rush', 'Rush TD',
-     'Possessions', 'Time of Possession', 'Turnovers', 'Sacks Allowed',
-     'Penalties', 'Penalty Yards', '3rd Down', '4th Down'].forEach(k => {
+    // SIX ROWS, deliberately. Every extra one is something the eye has to
+    // pass over to reach what a commentator actually says out loud.
+    ['Total Yards', 'Pass Yards', 'Rush Yards',
+     'Time of Possession', 'Turnovers', '3rd Down'].forEach(k => {
       if (!(k in map)) fail('rows:missing', k + ' is missing from the comparison');
     });
-    ['Total Plays', 'Yards Per Play', 'Yards Per Pass', '20yd+ Plays'].forEach(k => {
+    ['Total Plays', 'Yards Per Play', 'Yards Per Pass', '20yd+ Plays',
+     'Pass TD', 'Yards Per Rush', 'Rush TD', 'Possessions',
+     'Sacks Allowed', 'Penalties', 'Penalty Yards', '4th Down'].forEach(k => {
       if (k in map) fail('rows:cut', k + ' was cut for the overlay and should not appear');
     });
-    // Real figures, not placeholders: the sack is charged to team rushing
-    // by NFHS, so it shows as a LOSS there and as one Sack Allowed.
-    if (map['Sacks Allowed'] && map['Sacks Allowed'].visitor !== '1') {
-      fail('rows:sack', 'expected one sack allowed, got ' + map['Sacks Allowed'].visitor);
+    if (Object.keys(map).length !== 6) {
+      fail('rows:count', 'expected six rows, got ' + Object.keys(map).length + ': ' + Object.keys(map).join(', '));
     }
-    if (map['Penalties'] && map['Penalties'].visitor !== '1') {
-      fail('rows:penalty', 'expected one penalty, got ' + map['Penalties'].visitor);
-    }
-    if (map['Penalty Yards'] && map['Penalty Yards'].visitor !== '5') {
-      fail('rows:penyds', 'expected five penalty yards, got ' + map['Penalty Yards'].visitor);
+    // Real figures, not placeholders. The sack is charged to team rushing
+    // by NFHS, so it shows as a LOSS in Rush Yards -- the row that used to
+    // report it directly is gone, but the yardage still has to land.
+    if (map['Rush Yards'] && !/^-?\d+$/.test(map['Rush Yards'].visitor)) {
+      fail('rows:rush', 'rush yards should be a number, got ' + map['Rush Yards'].visitor);
     }
     // No clock was entered, so an em dash rather than 0:00 -- a zero reads
     // as "they never had the ball" instead of "nobody recorded it".
@@ -128,6 +129,38 @@ async function run() {
     w.evalIn('try { showFatal("boom"); } catch(e){}');
     const body = w.document.body.textContent;
     if (/boom/.test(body)) fail('silent', 'an error is being painted onto the broadcast without ?debug=1');
+    w.close();
+  }
+
+  // --- 4. THE HEADER READS THE SAME WAY ON BOTH SIDES. The first version
+  //     stretched the name to fill the bar, pushed the score to the far
+  //     edge and mirrored the home half -- so the two sides ran in
+  //     opposite directions and each name sat a different distance from
+  //     its own number depending on how long the name was.
+  {
+    const w = await bootOverlay();
+    await paint(w, rows);
+    const doc = w.document, win = w.window;
+    const sides = [...doc.querySelectorAll('#head .hteam')];
+    if (sides.length !== 2) fail('head:sides', 'expected two header sides, got ' + sides.length);
+    const shapes = sides.map(sd => [...sd.children].map(c => c.className || c.tagName).join('>'));
+    if (shapes[0] !== shapes[1]) {
+      fail('head:mirrored', 'the two header sides read in different orders: ' + shapes.join('  vs  '));
+    }
+    sides.forEach((sd, i) => {
+      const c = win.getComputedStyle(sd);
+      if (c.justifyContent !== 'center') fail('head:centred', 'side ' + i + ' is not centred: ' + c.justifyContent);
+      if (c.flexDirection !== 'row') fail('head:direction', 'side ' + i + ' is reversed: ' + c.flexDirection);
+    });
+    // The score sits a FIXED step from the name, not wherever a long name
+    // leaves it.
+    const nm = doc.querySelector('.hname'), pts = doc.querySelector('.hpts');
+    if (win.getComputedStyle(nm).flexGrow !== '0') {
+      fail('head:name-grow', 'the name should not stretch to fill the bar');
+    }
+    if (win.getComputedStyle(pts).marginLeft === '0px') {
+      fail('head:gap', 'the score should sit a fixed step right of the name');
+    }
     w.close();
   }
 
