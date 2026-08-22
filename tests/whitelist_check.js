@@ -589,6 +589,35 @@ async function run() {
     h.close();
   }
 
+  // KICKOFF ORDER: which way they are kicking sits ABOVE the returner.
+  // It is a fact about the kick itself and belongs beside the kicker; the
+  // return is about what happened after the ball came down, and having it
+  // in between split the two halves of one question apart.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="kickoff"]'));
+    const html = doc.getElementById('playPanel').innerHTML;
+    const dir = html.indexOf('koDirBtn'), ret = html.indexOf('pp_ko_ret_wrap');
+    if (dir === -1 || ret === -1) fail('kickoff:order', 'direction or returner block missing');
+    else if (dir > ret) fail('kickoff:order', 'the direction buttons should come before the returner block');
+
+    // The muff toggle is short enough not to clip. The long wording only
+    // ever fitted on the widest panel.
+    for (const type of ['kickoff', 'punt']) {
+      click(win, doc.querySelector('.ptypeBtn[data-type="' + type + '"]'));
+      const muff = [...doc.querySelectorAll('#playPanel button')]
+        .filter(b => /muff/i.test(b.textContent));
+      if (!muff.length) { fail('muff:' + type, 'no muff toggle found'); continue; }
+      muff.forEach(b => {
+        const t = b.textContent.replace(/^\u2713\s*/, '').trim();
+        if (t.length > 16) fail('muff:' + type + ':length', 'the muff label is long enough to clip: ' + JSON.stringify(t));
+      });
+    }
+    h.close();
+  }
+
   return failures;
 }
 
