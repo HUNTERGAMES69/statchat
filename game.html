@@ -3666,7 +3666,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (rowId){
         const row = document.getElementById(rowId);
         if (!row || row.style.display === 'none') return;
-      } else if (!clockPrompt) return;
+      } else if (fieldId === 'clockPromptInput' && !clockPrompt){
+        // Only the standalone prompt card is governed by clockPrompt.
+        // The guided return's field and Set clock's field are not, and an
+        // unqualified `!clockPrompt` check here made this return early
+        // for both of them -- so the pad opened on the scrimmage trees
+        // and silently did nothing on the kicking ones.
+        return;
+      }
       // Already open on this field -- leave the entry alone.
       if (padEl && padEl.style.display !== 'none' && padTargetId === fieldId) return;
       openPad(fld, fld, fld.dataset.pickerKind || 'clock');
@@ -4487,6 +4494,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         grMuffBtn.style.borderColor = on ? '#a05a00' : '#ccc';
       };
       renderLastClockHint('guidedReturnLastHint');
+      // The guided return has its OWN clock field -- a third one, after
+      // the confirm card's row and the standalone prompt card. Wiring
+      // only the first two is why the pad came up on the scrimmage trees
+      // and not on the kicking ones: the guided kickoff never touches
+      // either of them.
+      raiseClockPad('guidedReturnClock');
       const grClock = document.getElementById('guidedReturnClock');
       if (grClock) grClock.addEventListener('input', e => {
         const w = document.getElementById('grClockWarn');
@@ -9234,6 +9247,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('setclock_clear').addEventListener('click', collapsePlayPanel);
     renderLastClockHint('setclockLastHint');
     document.getElementById('setclock_val').focus();
+    // The fourth clock field. This panel already focuses it, which says
+    // plainly that the value is the only thing wanted here -- the pad
+    // belongs for the same reason.
+    raiseClockPad('setclock_val');
     document.getElementById('setclock_save').addEventListener('click', () => {
       const q = computeState().quarter;
       const val = (document.getElementById('setclock_val').value || '').trim();
