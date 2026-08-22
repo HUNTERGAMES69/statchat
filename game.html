@@ -5569,9 +5569,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // long tree's Review button closer to the bottom edge.
       if (panel.getBoundingClientRect().height > room * 0.5) stageEl.style.marginTop = '0px';
       const r = panel.getBoundingClientRect();
-      // Already fully visible and not tucked under the banner: leave the
-      // page where it is rather than scrolling for no reason.
-      if (r.top >= top && r.bottom <= window.innerHeight) return;
+      // ONLY THE TOP HAS TO BE VISIBLE. Requiring the whole panel to fit
+      // (r.bottom <= innerHeight) meant a tall tree -- Pass, or any
+      // fumble path -- could never satisfy it, so every open scrolled the
+      // page even when the first field was already sitting right there.
+      // Reported as lots of movement on the pass tree, and that was it.
+      //
+      // Scrolling cannot make a tree taller than the frame fit anyway; all
+      // it can do is put the top where the eye already is. If the top is
+      // on screen and clear of the banner, there is nothing to fix.
+      if (r.top >= top && r.top <= window.innerHeight * 0.5) return;
       const target = window.pageYOffset + r.top - top;
       try { window.scrollTo({ top: Math.max(0, target), behavior: 'smooth' }); }
       catch (e) { try { window.scrollTo(0, Math.max(0, target)); } catch (e2) {} }
@@ -8949,7 +8956,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           btn.textContent = (block.classList.contains('open') ? '− ' : '+ ') + label;
           if (block.classList.contains('open')){
             const first = block.querySelector('.opt-body button');
-            if (first && first.focus) try { first.focus(); } catch(e){}
+            // preventScroll: focusing an element the browser thinks is
+            // off-screen scrolls to it, and these advances fire in the
+            // middle of entering a play. The pad and the panel are
+            // already positioned; the page does not need to move too.
+            if (first && first.focus) try { first.focus({ preventScroll: true }); } catch(e){ try { first.focus(); } catch(e2){} }
           }
           if (window.__syncDock) window.__syncDock();
     if (window.__syncRail) window.__syncRail();
@@ -8998,7 +9009,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         panel.querySelectorAll('button.' + fromClass).forEach(b => {
           b.addEventListener('click', () => {
             const to = panel.querySelector(toSel);
-            if (to && to.focus && !to.value) try { to.focus(); } catch(e){}
+            if (to && to.focus && !to.value) try { to.focus({ preventScroll: true }); } catch(e){ try { to.focus(); } catch(e2){} }
           });
         });
       };
@@ -10357,7 +10368,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
     document.getElementById('setclock_clear').addEventListener('click', collapsePlayPanel);
     renderLastClockHint('setclockLastHint');
-    document.getElementById('setclock_val').focus();
+    try { document.getElementById('setclock_val').focus({ preventScroll: true }); }
+    catch(e){ document.getElementById('setclock_val').focus(); }
     // The fourth clock field. This panel already focuses it, which says
     // plainly that the value is the only thing wanted here -- the pad
     // belongs for the same reason.
