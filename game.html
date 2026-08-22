@@ -4866,7 +4866,73 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   }
   document.getElementById('endGameBtn').addEventListener('click', finalizeGame);
 
+  // BACK, ONE STEP AT A TIME.
+  // ---------------------------------------------------------------------
+  // The guided flow disables the whole ladder -- correctly, a kickoff is
+  // owed -- so until now a wrong pick could only be escaped by finishing
+  // the sequence and undoing it. Every other panel in the app has a
+  // Cancel; this was the one that did not.
+  //
+  // What each step has to give back differs, which is why this is not a
+  // single "cancel":
+  //   return      two rows are already stored (the kickoff and the
+  //               direction marker), so going back has to REMOVE them.
+  //   kickoff     nothing has been written since the team was picked.
+  //   pickKicker  nothing of its own; leaving drops out of the flow.
+  //
+  // The quarter marker written by Start game is deliberately LEFT. It
+  // records that the game started, which is still true, and Undo removes
+  // it separately if that is really what was meant.
+  let guidedBackInProgress = false;
+  async function guidedBack(){
+    guidedBackInProgress = true;
+    try { await guidedBackStep(); } finally { guidedBackInProgress = false; }
+  }
+  async function guidedBackStep(){
+    if (guided.step === 'return'){
+      // Through the real undo, twice -- it already handles the server
+      // delete, the redo stack and the row bookkeeping. Reimplementing
+      // any of that here would be a second, quieter version of it.
+      const btn = document.getElementById('undoBtn');
+      for (let i = 0; i < 2 && plays.length; i++){
+        btn.click();
+        await new Promise(r => setTimeout(r, 0));
+      }
+      guided.step = 'kickoff';
+    } else if (guided.step === 'kickoff'){
+      guided.kickingTeam = null;
+      guided.receivingTeam = null;
+      guided.step = 'pickKicker';
+    } else {
+      // First step: out of the flow altogether.
+      guided = { active: false, quarter: null, kickingTeam: null,
+                 receivingTeam: null, step: null, targetPhase: null };
+    }
+    await persistUiState();
+    renderAll();
+    renderGuided();
+  }
+
+  // Every guided panel gets the same Back, wired the same way, so a new
+  // step cannot ship without one.
+  function wireGuidedBack(){
+    document.querySelectorAll('#guidedPanel .guided-back').forEach(b => {
+      b.addEventListener('click', guidedBack);
+    });
+  }
+  const guidedBackBtn = (label) =>
+    '<button type="button" class="secondary guided-back">' + (label || '\u2190 Back') + '</button>';
+
+  // Wrapped rather than called from each branch: renderGuided returns
+  // early from several of them, and a Back wired per branch is one that
+  // gets forgotten on the next step somebody adds.
   function renderGuided(){
+    const out = renderGuidedInner.apply(this, arguments);
+    try { wireGuidedBack(); } catch (e) {}
+    return out;
+  }
+
+  function renderGuidedInner(){
     const panel = document.getElementById('guidedPanel');
     const content = document.getElementById('guidedContent');
     if (!guided.active){ panel.style.display = 'none'; return; }
@@ -4982,7 +5048,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       content.innerHTML =
         '<div style="font-size:16px; margin-bottom:8px;">Q' + guided.quarter + ' kickoff — who kicks off?</div>' +
         '<div class="row"><button class="primary" id="pickA">' + TEAMS.teamA.name + ' kicks</button>' +
-        '<button class="primary" id="pickB">' + TEAMS.teamB.name + ' kicks</button></div>';
+        '<button class="primary" id="pickB">' + TEAMS.teamB.name + ' kicks</button>' +
+        // At the first step there is nothing to step back TO, so this
+        // leaves the guided flow and hands the ladder back.
+        guidedBackBtn('\u2190 Leave kickoff') + '</div>';
       document.getElementById('pickA').addEventListener('click', () => { guided.kickingTeam = 'teamA'; guided.receivingTeam = 'teamB'; guided.step = 'kickoff'; persistUiState(); renderGuided(); });
       document.getElementById('pickB').addEventListener('click', () => { guided.kickingTeam = 'teamB'; guided.receivingTeam = 'teamA'; guided.step = 'kickoff'; persistUiState(); renderGuided(); });
       return;
@@ -5004,7 +5073,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           TEAMS[guided.kickingTeam].name + ' kicking?</p>' +
         '<button type="button" class="gk_dir_btn" data-dir="left">&#8592; left</button> ' +
         '<button type="button" class="gk_dir_btn" data-dir="right">right &#8594;</button>' +
-        '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedKickoffSave">Save kickoff</button></div>';
+        '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedKickoffSave">Save kickoff</button>' +
+        guidedBackBtn() + '</div>';
       let kickerNum = null;
       let kickDir = null;
       content.querySelectorAll('.gk_dir_btn').forEach(b => b.addEventListener('click', () => {
@@ -5195,7 +5265,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<span id="guidedReturnLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:#f2f4f7; border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>' +
         '<div id="grClockWarn" style="font-size:12px; color:#a05a00; margin-top:4px;">' +
           'Optional — but with no clock this possession\'s time won\'t be counted.</div>' +
-        '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedReturnSave">Save return</button></div>';
+        // Named for what it actually does here: two stored rows go away.
+        '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedReturnSave">Save return</button>' +
+        guidedBackBtn('\u2190 Back \u2014 undo the kickoff') + '</div>';
       let returnerNum = null;
       const getReturnReset = wireStartingSpot(content, 'gr_spot');
       content.querySelectorAll('.gr_returner_pick').forEach(b => b.addEventListener('click', () => {
@@ -10755,7 +10827,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // control. The idle SHAPE, not null -- updatePhaseUI reads
     // guided.active unguarded and nulling it takes the page down.
     const phaseNow = derivePhase();
-    if (guided.active && phaseNow !== 'halftime' && phaseNow !== 'notStarted'){
+    // NOT DURING A GUIDED BACK. This reset exists so that undoing your way
+    // out of a guided sequence by hand does not leave the flow half-alive
+    // -- but Back undoes the kickoff ON PURPOSE and puts the step back
+    // itself, and this fired between its two undos and killed the flow
+    // it was stepping through.
+    if (guidedBackInProgress){
+      // fall through: guidedBack owns the state until it finishes.
+    } else if (guided.active && phaseNow !== 'halftime' && phaseNow !== 'notStarted'){
       guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
       await persistUiState();
     }
