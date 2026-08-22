@@ -22,7 +22,7 @@
 //    that raw value back into a displayable clock reading.
 
 const { bootGamePage, bootPage } = require('./harness');
-const { enterPlay, setDrive, enterTimeout } = require('./ui_driver');
+const { enterPlay, setDrive, enterTimeout, click, typeInto } = require('./ui_driver');
 
 async function run() {
   const failures = [];
@@ -496,6 +496,44 @@ async function run() {
     const short = 'JaMarion Roberson rush for 7';
     if (t(short) !== short) fail('break:short', 'a short play should be untouched, got ' + t(short));
     h.close();
+  }
+
+  // A PENALTY SHOWS IN THE TILE whoever it was called on. The row is
+  // stamped with the PENALISED team, not the team whose drive it happened
+  // in, so a flag on the defence during our drive carried the other
+  // team's side and the drive-team filter dropped it -- the flag simply
+  // vanished from the tile. Reported from a real game.
+  {
+    const build = async (side) => {
+      const g = await bootGamePage();
+      const doc = g.window.document, win = g.window;
+      setDrive(g, { down: 1, distance: 10, side: 'own', yardline: 25 });
+      enterPlay(g, { type: 'rush', carrier: '22', yards: '8' });
+      click(win, doc.getElementById('penUtilBtn'));
+      click(win, doc.querySelector('.penTeamBtn[data-team="' + side + '"]'));
+      typeInto(win, doc.getElementById('pen_yds'), '5');
+      click(win, doc.getElementById('pen_review'));
+      await new Promise(r => setTimeout(r, 120));
+      click(win, doc.getElementById('saveBtn'));
+      await new Promise(r => setTimeout(r, 200));
+      const rows = g.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+      g.close();
+      return rows;
+    };
+    // BOTH DIRECTIONS. A flag on the offence carries the drive team's own
+    // side and was never affected, so testing only that one would pass
+    // with the fix removed.
+    for (const side of ['def', 'off']) {
+      const w = await bootPage('view.html', { existingPlays: await build(side),
+        readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML !== undefined });
+      await new Promise(r => setTimeout(r, 250));
+      const txt = w.document.getElementById('driveLogScroll').textContent;
+      if (!/PENALTY/.test(txt)) {
+        fail('penalty:' + side, 'a penalty on the ' + (side === 'def' ? 'defence' : 'offence') +
+          ' is missing from the Current Drive tile: ' + JSON.stringify(txt.trim()));
+      }
+      w.close();
+    }
   }
 
   return failures;
