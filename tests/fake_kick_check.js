@@ -193,6 +193,11 @@ async function run() {
   const ALLOWED = {
     punt: [
       '.pp_punter_pick', 'pp_punter_manual',        // who is on the field
+      // The kicker/punter list collapses to one name plus a "+N more"
+      // expander. The picker itself is allowed above, so its expander is
+      // too -- hiding only the expander would leave a live picker whose
+      // other names could not be reached.
+      '.grid-more',
       'pp_punt_touchback_toggle', 'pp_blocked_toggle', 'pp_muffed_toggle',
       'pp_punt_fake_toggle',                        // the outcome row itself
       'pp_puntfake_rush_btn', 'pp_puntfake_pass_btn',
@@ -218,7 +223,7 @@ async function run() {
       'pp_review', 'pp_clear'
     ],
     fg: [
-      '.pp_kicker_pick', 'pp_kicker_manual',
+      '.pp_kicker_pick', 'pp_kicker_manual', '.grid-more',
       'pp_fg_blocked_cb_toggle', 'pp_fg_muffhold_toggle', 'pp_fg_fake_toggle',
       'pp_fgfake_rush_btn', 'pp_fgfake_pass_btn',
       '.pp_carrier_pick', 'pp_carrier_manual',

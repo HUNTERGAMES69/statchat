@@ -19,7 +19,7 @@
 // So the ALLOWED lists below were built by reading what each control
 // actually is on that specific panel, not by inferring from its id.
 
-const { bootGamePage } = require('./harness');
+const { bootGamePage, defaultRoster } = require('./harness');
 const { setDrive, click } = require('./ui_driver');
 
 // Everything live inside an element, ignoring anything hidden by an
@@ -545,6 +545,47 @@ async function run() {
         fail('layout:spot-title', 'the shortened spot label must keep its full wording in the tooltip');
       }
     }
+    h.close();
+  }
+
+  // KICKER AND PUNTER COLLAPSE TO ONE ROW: the likeliest man, a "+N more"
+  // expander, and the manual box on a single line. A team has one of each
+  // and they do not change between attempts, so the full grid is a row of
+  // names read once a season.
+  {
+    const roster = defaultRoster().concat([
+      { team_side: 'teamA', unit: 'special', jersey_number: '39', player_name: 'Rivers Sorrell', position: 'P' },
+      { team_side: 'teamA', unit: 'special', jersey_number: '1',  player_name: 'Brooks Yerger', position: 'K' },
+      { team_side: 'teamA', unit: 'special', jersey_number: '7',  player_name: 'Cole Sandifer', position: 'K' },
+      { team_side: 'teamA', unit: 'special', jersey_number: '8',  player_name: 'Bryant Alvernia', position: 'P' }
+    ]);
+    const h = await bootGamePage({ roster });
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+    for (const type of ['punt', 'fg', 'pat', 'kickoff']) {
+      click(win, doc.querySelector('.ptypeBtn[data-type="' + type + '"]'));
+      const grid = doc.querySelector('#playPanel .grid-lead');
+      if (!grid) { fail('lead:' + type, 'the kicker list should collapse to one row'); continue; }
+      const picks = [...grid.querySelectorAll('button[class*="_pick"]')];
+      const shown = picks.filter(b => win.getComputedStyle(b).display !== 'none');
+      if (shown.length !== 1) {
+        fail('lead:' + type + ':visible', 'exactly one name should show, got ' + shown.length);
+      }
+      if (!grid.querySelector('.grid-more')) fail('lead:' + type + ':more', 'no expander offered');
+      // All three controls on the SAME row -- that is the saving.
+      if (!grid.querySelector('input')) fail('lead:' + type + ':manual', 'the manual box should sit on the row too');
+      // Hidden, not removed: expanding is a class flip, and anything that
+      // reads the grid still sees every name.
+      if (picks.length < 2) fail('lead:' + type + ':dom', 'the other names should stay in the DOM');
+    }
+    // Expanding reveals the rest and retires the button.
+    click(win, doc.querySelector('.ptypeBtn[data-type="punt"]'));
+    const g = doc.querySelector('#playPanel .grid-lead');
+    click(win, g.querySelector('.grid-more'));
+    const after = [...g.querySelectorAll('button[class*="_pick"]')]
+      .filter(b => win.getComputedStyle(b).display !== 'none').length;
+    if (after < 2) fail('lead:expand', 'expanding should reveal the rest, visible ' + after);
+    if (g.querySelector('.grid-more')) fail('lead:expand-btn', 'the expander should go once used');
     h.close();
   }
 
