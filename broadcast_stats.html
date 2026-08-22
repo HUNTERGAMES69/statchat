@@ -111,6 +111,26 @@
   .lsub { font-size:13.5px; font-weight:600; color:#4a5058; }
   .lcard.empty .lnone { font-size:30px; font-weight:800; color:#b9bec6; }
 
+  /* ---- presented by ----
+     A light bar, because the logo's byline is black on transparent: over
+     the dark programme feed the words would disappear, and over the
+     team's own colour it would be a third palette in one graphic. Same
+     white and same radius as the cards, so it reads as part of the panel
+     rather than something stuck to it. */
+  .sponsor { display:flex; align-items:center; justify-content:center; gap:16px;
+             background:rgba(255,255,255,0.97); border-radius:14px;
+             box-shadow:0 10px 40px rgba(0,0,0,0.45);
+             padding:10px 22px; }
+  #sponsorTop { margin-bottom:12px; }
+  #sponsorBottom { margin-top:12px; }
+  .sptxt { font-size:12px; font-weight:800; letter-spacing:0.18em; color:#6b7280; }
+  /* Height-driven, width auto: the mark is 2.52:1 and fixing the width
+     would squash it the moment a different sponsor is dropped in. */
+  .sponsor img { height:34px; width:auto; display:block; }
+  body.sponsor-top #sponsorBottom,
+  body.sponsor-bottom #sponsorTop,
+  body.sponsor-none .sponsor { display:none; }
+
   /* ================= PORTRAIT =================
      /broadcast_stats.html?layout=portrait
 
@@ -148,14 +168,30 @@
   body.layout-portrait .lunit { font-size:11px; margin-left:3px; }
   body.layout-portrait .lsub { font-size:11.5px; }
   body.layout-portrait .lcard.empty .lnone { font-size:22px; }
+  body.layout-portrait .sponsor { padding:8px 16px; gap:12px; }
+  body.layout-portrait .sptxt { font-size:10.5px; letter-spacing:0.14em; }
+  body.layout-portrait .sponsor img { height:26px; }
+  body.layout-portrait #sponsorTop { margin-bottom:10px; }
+  body.layout-portrait #sponsorBottom { margin-top:10px; }
 </style>
 
 <div id="panel">
+  <!-- PRESENTED BY, top and bottom. Both render by default so the two can
+       be compared on one screen; ?sponsor=top, =bottom or =none picks one
+       once the choice is made. -->
+  <div class="sponsor" id="sponsorTop">
+    <span class="sptxt">PRESENTED BY</span>
+    <img src="sponsor_nettech.png" alt="">
+  </div>
   <div class="card">
     <div id="head"></div>
     <div id="rows"></div>
   </div>
   <div id="leaders"></div>
+  <div class="sponsor" id="sponsorBottom">
+    <span class="sptxt">PRESENTED BY</span>
+    <img src="sponsor_nettech.png" alt="">
+  </div>
 </div>
 
 <script>
@@ -947,6 +983,13 @@ function extractNameTag(rawName){
     document.getElementById('panel').style.display = 'block';
     const p = new URLSearchParams(window.location.search);
     document.body.classList.toggle('layout-portrait', portrait);
+    // Default is BOTH, which is a comparison view rather than a finished
+    // graphic -- it exists so the two positions can be judged side by
+    // side. Once one is chosen the address gains ?sponsor=top or =bottom.
+    const sp = (p.get('sponsor') || '').toLowerCase();
+    document.body.classList.toggle('sponsor-top', sp === 'top');
+    document.body.classList.toggle('sponsor-bottom', sp === 'bottom');
+    document.body.classList.toggle('sponsor-none', sp === 'none');
     document.body.classList.toggle('debug', p.get('debug') === '1');
   }
 
