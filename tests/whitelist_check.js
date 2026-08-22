@@ -459,6 +459,68 @@ async function run() {
     h.close();
   }
 
+  // LAYOUT: labels inline, and one right-hand edge for every manual box.
+  // The "type #" box was a fixed 100px but positioned by whatever the
+  // grid beside it measured, so passer, receiver and returner each landed
+  // at a different x -- three ragged edges down one tree. The column is
+  // now the constant and the grid takes the remainder.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    for (const type of ['pass', 'punt', 'kickoff']) {
+      click(win, doc.querySelector('.ptypeBtn[data-type="' + type + '"]'));
+      const inputs = [...doc.querySelectorAll('#playPanel .pick-row > input')];
+      if (!inputs.length) { fail('layout:' + type, 'no manual boxes found'); continue; }
+      // FLEX-BASIS, not the rendered width. jsdom gives every input the
+      // same default width whether or not the column is fixed, so a
+      // width comparison passed even with the rule removed -- it could
+      // not see the thing it was checking.
+      const bases = new Set(inputs.map(i => win.getComputedStyle(i).flexBasis));
+      if (bases.size !== 1 || [...bases][0] === 'auto') {
+        fail('layout:' + type + ':column', 'the manual boxes need one fixed column, got ' + [...bases].join(', '));
+      }
+      // No PICKER label owns a line any more. Headings that ask a real
+      // question over their own row of controls -- "Which way is Neville
+      // kicking?" -- are not picker labels and correctly keep theirs; the
+      // check is that no <p> is left sitting directly above a pick-row.
+      [...doc.querySelectorAll('#playPanel > p')].forEach(pEl => {
+        const next = pEl.nextElementSibling;
+        if (next && next.classList && next.classList.contains('pick-row')) {
+          fail('layout:' + type + ':label',
+            'a picker label still owns its own line: ' + JSON.stringify(pEl.textContent.trim()));
+        }
+      });
+    }
+    // Air between consecutive pickers -- inlining the labels removed their
+    // margins too, which left passer and receiver touching.
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    const rows = [...doc.querySelectorAll('#playPanel .pick-row')];
+    const second = rows[1];
+    if (second && win.getComputedStyle(second).marginTop === '0px') {
+      fail('layout:gap', 'consecutive pickers need vertical air between them');
+    }
+    // Punt: toggles paired, spot on one line.
+    click(win, doc.querySelector('.ptypeBtn[data-type="punt"]'));
+    const grid = doc.querySelector('#playPanel .toggle-grid');
+    if (!grid || grid.querySelectorAll('button').length !== 4) {
+      fail('layout:toggles', 'the four punt outcome toggles should sit in one two-up grid');
+    }
+    const spot = doc.querySelector('#playPanel .spot-row');
+    if (!spot) fail('layout:spot', 'the spot block should be a single row');
+    else {
+      if (!spot.querySelector('input')) fail('layout:spot-input', 'the spot row lost its yard box');
+      if (spot.querySelectorAll('button').length !== 2) fail('layout:spot-sides', 'the spot row should keep both side buttons');
+      // Shortened, but the full wording survives in the tooltip -- it is a
+      // REQUIRED field and "Spot" alone leans on already knowing that.
+      const lab = spot.querySelector('.spot-label');
+      if (!lab || !/required/i.test(lab.getAttribute('title') || '')) {
+        fail('layout:spot-title', 'the shortened spot label must keep its full wording in the tooltip');
+      }
+    }
+    h.close();
+  }
+
   return failures;
 }
 
