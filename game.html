@@ -381,6 +381,19 @@
      box would read as an empty one. */
   #entryStage #playPanel .grid-inline-manual { display:flex; flex-wrap:wrap;
                                                align-items:center; gap:4px; }
+  /* Collapsed: only the leading name shows. The rest stay in the DOM --
+     hidden, not removed -- so revealing them is a class flip rather than
+     a re-render, and nothing that reads the grid loses sight of them.
+     A PLAIN CLASS, applied in script, rather than
+     ":not(:first-of-type)". The pseudo-selector version was correct CSS
+     and worked in a browser, but is not resolved by the test
+     environment's cascade -- so the assertion could not see whether the
+     rule applied, which is the same as having no assertion. */
+  #entryStage #playPanel .pick-hidden { display:none !important; }
+  #entryStage #playPanel .grid-more {
+    padding:5px 9px !important; font-size:11.5px !important; font-weight:700 !important;
+    border:1px dashed #b8b8b8 !important; background:#fff !important;
+    color:#555 !important; border-radius:6px !important; margin:0 !important; }
   #entryStage #playPanel .grid-inline-manual > input {
     flex-grow:0; flex-shrink:0; flex-basis:88px; width:88px; margin:0; }
 
@@ -6604,11 +6617,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // The skill positions keep the column: their lists run to two rows
       // on a busy roster, and a box that moves every time a name is added
       // is worse than one that sits still.
+      // KICKER AND PUNTER COLLAPSE TO ONE ROW: the likeliest man, a button
+      // to see the rest, and the manual box -- all on a single line.
+      //
+      // A team has one kicker and one punter and they do not change from
+      // one attempt to the next, so the full grid is a row of names that
+      // is read once a season. The list is already ordered by recency, so
+      // the first entry IS the likeliest; the rest stay in the DOM and
+      // are one tap away.
+      //
+      // He is shown as an ORDINARY pickable button, not pre-selected.
+      // The picker clears the field when the already-selected player is
+      // tapped ("the one thing a coach needs when the pre-selection is
+      // wrong"), so pre-selecting the only visible name would make the
+      // obvious tap wipe it.
       if (role === 'kicker' || role === 'punter'){
         return '<div class="pick-row">' +
             '<span class="pick-label">' + label + '</span>' +
-            '<div id="pp_' + role + '_grid" class="grid-inline-manual">' +
-              pickerHtml(list, 'pp_' + role + '_pick', statFn) + manual +
+            '<div id="pp_' + role + '_grid" class="grid-inline-manual grid-lead">' +
+              pickerHtml(list, 'pp_' + role + '_pick', statFn) +
+              (list.length > 1
+                ? '<button type="button" class="grid-more" data-role="' + role + '">' +
+                  '+' + (list.length - 1) + ' more</button>'
+                : '') +
+              manual +
             '</div>' +
           '</div>';
       }
@@ -9152,7 +9184,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // more strongly: a team has one of each and they do not change from
     // one attempt to the next, so after the first kick the whole grid is
     // a row of names nobody is going to read again.
-    ['passer', 'kicker', 'punter'].forEach(function foldPicker(role){
+    // PASSER ONLY. Kicker and punter used to fold to a chip after a pick;
+    // they now collapse to a one-row picker BEFORE one, which is the same
+    // saving a step earlier. Running both would leave two controls on one
+    // row competing to represent the same field.
+    ['passer'].forEach(function foldPicker(role){
       const grid = document.getElementById('pp_' + role + '_grid');
       if (!grid) return;
       const row = grid.closest('.pick-row') || grid.parentElement;
@@ -9194,6 +9230,34 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       });
       fold();
     });
+
+    // Reveal the rest of a collapsed kicker/punter list.
+    (function wireGridMore(){
+      const panel = document.getElementById('playPanel');
+      if (!panel) return;
+      panel.querySelectorAll('.grid-more').forEach(btn => {
+        const grid = btn.closest('.grid-lead');
+        if (!grid) return;
+        btn.addEventListener('click', () => {
+          grid.classList.remove('grid-lead');
+          grid.querySelectorAll('.pick-hidden').forEach(b => b.classList.remove('pick-hidden'));
+          btn.remove();
+          if (window.__syncDock) window.__syncDock();
+          if (window.__syncRail) window.__syncRail();
+        });
+      });
+      // Hide all but the lead. The list is already ordered by recency, so
+      // the first entry is the likeliest -- but if something is already
+      // chosen further down (re-entering a play, a seeded starter), that
+      // man is the lead instead. Hiding the chosen player behind
+      // "+4 more" would look like the choice had been lost.
+      panel.querySelectorAll('.grid-lead').forEach(grid => {
+        const picks = [...grid.querySelectorAll('button[class*="_pick"]')];
+        if (!picks.length) return;
+        const lead = grid.querySelector('button.picked, button.suggested') || picks[0];
+        picks.forEach(b => b.classList.toggle('pick-hidden', b !== lead));
+      });
+    })();
 
     (function panelShortcuts(){
       const panel = document.getElementById('playPanel');
