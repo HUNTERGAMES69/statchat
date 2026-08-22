@@ -343,7 +343,18 @@
   /* A seeded picker and its "or type #" box on one line: the grid takes
      the room it needs, the box keeps its fixed width at the right. */
   #entryStage #playPanel .pick-row { display:flex; align-items:flex-start; gap:8px; }
-  #entryStage #playPanel .pick-row > div { flex:1 1 auto; min-width:0; }
+  /* FLEX-BASIS 0, not auto. The row wraps (it has to -- the name-confirm
+     box below needs a full-width line of its own), and a WRAPPING flex
+     container wraps its items rather than shrinking them: with basis
+     auto the grid demanded the full width of its buttons, so on any
+     picker with more than two or three names the label and the "type #"
+     box were pushed onto lines of their own. That is why the punt tree
+     still looked untouched while the pass tree, whose passer list is one
+     or two buttons, looked right.
+     With basis 0 the grid claims no intrinsic width, stays on the line,
+     and wraps its own buttons internally instead. */
+  #entryStage #playPanel .pick-row > div {
+    flex-grow:1; flex-shrink:1; flex-basis:0; min-width:0; }
   /* A FIXED RIGHT COLUMN for the "type #" box. It used to be 100px wide
      but positioned by whatever the grid beside it happened to measure, so
      the boxes on passer, receiver and returner each landed at a different
