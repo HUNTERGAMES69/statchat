@@ -219,55 +219,69 @@ async function run() {
     w.close();
   }
 
-  // --- 6. PRESENTED BY. Both positions render by default so the two can
-  //     be judged on one screen; ?sponsor= picks one once chosen.
+  // --- 6. SPONSOR BAR: one black bar at the top, white artwork, with the
+  //     web address left and the phone number right. No caption -- at
+  //     this size the mark reads as a sponsor's without one.
   {
-    const paintAt = async (q) => {
-      const w = await bootPage('broadcast_stats.html',
-        { query: q, readyWhen: win => !!win.document.getElementById('panel') });
-      await paint(w, rows);
-      return w;
-    };
-    const vis = (w, id) => w.window.getComputedStyle(w.document.getElementById(id)).display !== 'none';
+    const w = await bootPage('broadcast_stats.html',
+      { query: '?id=test-game-1', readyWhen: win => !!win.document.getElementById('panel') });
+    await paint(w, rows);
+    const d = w.document, win = w.window;
 
-    let w = await paintAt('?id=test-game-1');
-    if (!vis(w, 'sponsorTop') || !vis(w, 'sponsorBottom')) {
-      fail('sponsor:both', 'the default should show both banners so they can be compared');
+    if (d.getElementById('sponsorBottom')) fail('sponsor:bottom-gone', 'the bottom banner was a comparison aid and should be gone');
+    const b = d.getElementById('sponsorTop');
+    if (!b) { fail('sponsor:missing', 'no sponsor banner'); w.close(); return failures; }
+    // Black, with the WHITE mark. The colour logo's byline is black on
+    // transparent and would vanish here.
+    if (win.getComputedStyle(b).backgroundColor !== 'rgb(0, 0, 0)') {
+      fail('sponsor:bg', 'the banner should be black, got ' + win.getComputedStyle(b).backgroundColor);
     }
-    // The banner sits OUTSIDE the cards, first and last in the panel, so
-    // choosing one does not reflow the graphic between them.
-    const order = [...w.document.getElementById('panel').children].map(c => c.id || c.className);
-    if (order[0] !== 'sponsorTop' || order[order.length - 1] !== 'sponsorBottom') {
-      fail('sponsor:position', 'the banners should bracket the panel, got ' + order.join(' > '));
+    const img = d.querySelector('.sponsor img');
+    if (!/white\.png$/.test(img.getAttribute('src'))) {
+      fail('sponsor:logo', 'the black bar needs the white artwork, got ' + img.getAttribute('src'));
     }
-    // Height-driven so the 2.52:1 mark is never squashed.
-    const img = w.document.querySelector('.sponsor img');
-    if (!/sponsor_nettech\.png$/.test(img.getAttribute('src'))) {
-      fail('sponsor:src', 'unexpected logo path: ' + img.getAttribute('src'));
+    if (win.getComputedStyle(img).width !== 'auto') fail('sponsor:aspect', 'the logo width should follow its height');
+    // The caption is gone, and the bar and mark grew to fill its place.
+    if (/presented\s*by/i.test(b.textContent)) {
+      fail('sponsor:caption', 'the "presented by" wording should be gone: ' + b.textContent.replace(/\s+/g, ' ').trim());
     }
-    if (w.window.getComputedStyle(img).width !== 'auto') {
-      fail('sponsor:aspect', 'the logo width should follow its height, not be fixed');
+    if (parseInt(win.getComputedStyle(img).height, 10) < 50) {
+      fail('sponsor:size', 'the logo should be scaled up with the bar, got ' + win.getComputedStyle(img).height);
     }
+
+    const L = d.querySelector('.spleft'), R = d.querySelector('.spright');
+    if (L.textContent.trim() !== 'nettech.net') fail('sponsor:web', 'expected nettech.net on the left, got ' + L.textContent);
+    if (R.textContent.trim() !== '318.387.0001') fail('sponsor:phone', 'expected the phone number on the right, got ' + R.textContent);
+    if (win.getComputedStyle(L).textAlign !== 'left') fail('sponsor:left-align', 'the web address should be left justified');
+    if (win.getComputedStyle(R).textAlign !== 'right') fail('sponsor:right-align', 'the phone number should be right justified');
+    // EQUAL outer zones, so the mark sits on the panel's centre line and
+    // not on the midpoint between two strings of different length.
+    if (win.getComputedStyle(L).flexGrow !== win.getComputedStyle(R).flexGrow ||
+        win.getComputedStyle(L).flexGrow !== '1') {
+      fail('sponsor:balance', 'the two outer zones must balance for the logo to be centred: ' +
+        win.getComputedStyle(L).flexGrow + ' vs ' + win.getComputedStyle(R).flexGrow);
+    }
+    // Top of the panel, above the cards.
+    const order = [...d.getElementById('panel').children].map(c => c.id || c.className);
+    if (order[0] !== 'sponsorTop') fail('sponsor:position', 'the banner should head the panel, got ' + order.join(' > '));
     w.close();
 
-    w = await paintAt('?id=test-game-1&sponsor=top');
-    if (!vis(w, 'sponsorTop') || vis(w, 'sponsorBottom')) fail('sponsor:top', 'sponsor=top should show only the top banner');
-    w.close();
+    // Portrait carries it at its own scale.
+    const p2 = await bootPage('broadcast_stats.html',
+      { query: '?id=test-game-1&layout=portrait', readyWhen: win2 => !!win2.document.getElementById('panel') });
+    await paint(p2, rows);
+    const ph = parseInt(p2.window.getComputedStyle(p2.document.querySelector('.sponsor img')).height, 10);
+    if (!(ph > 0 && ph < 62)) fail('sponsor:portrait-scale', 'the portrait logo should be smaller than the landscape one, got ' + ph);
+    p2.close();
 
-    w = await paintAt('?id=test-game-1&sponsor=bottom');
-    if (vis(w, 'sponsorTop') || !vis(w, 'sponsorBottom')) fail('sponsor:bottom', 'sponsor=bottom should show only the bottom banner');
-    w.close();
-
-    w = await paintAt('?id=test-game-1&sponsor=none');
-    if (vis(w, 'sponsorTop') || vis(w, 'sponsorBottom')) fail('sponsor:none', 'sponsor=none should show neither banner');
-    w.close();
-
-    // Portrait carries them too, at its own scale.
-    w = await paintAt('?id=test-game-1&layout=portrait');
-    if (!vis(w, 'sponsorTop') || !vis(w, 'sponsorBottom')) fail('sponsor:portrait', 'portrait should carry the banners as well');
-    const ph = w.window.getComputedStyle(w.document.querySelector('.sponsor img')).height;
-    if (ph === '34px') fail('sponsor:portrait-scale', 'the portrait logo should be scaled down, got ' + ph);
-    w.close();
+    // And can be dropped for a game with no sponsor to name.
+    const n = await bootPage('broadcast_stats.html',
+      { query: '?id=test-game-1&sponsor=none', readyWhen: win3 => !!win3.document.getElementById('panel') });
+    await paint(n, rows);
+    if (n.window.getComputedStyle(n.document.getElementById('sponsorTop')).display !== 'none') {
+      fail('sponsor:none', 'sponsor=none should hide the banner');
+    }
+    n.close();
   }
 
   return failures;
