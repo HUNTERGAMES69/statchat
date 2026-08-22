@@ -54,21 +54,29 @@ module.exports = async (req, res) => {
   });
 
   try {
-    // Resolve the game first: explicit id, else the flagged game, else
-    // the most recent one in progress.
+    // Resolve the game: an explicit id, else the FLAGGED game. Nothing
+    // else.
+    //
+    // THE in-progress FALLBACK WAS REMOVED, 22 Aug 2026. It served the
+    // most recent in-progress game when no game was flagged, so that a
+    // forgotten flag degraded to "probably right" rather than to
+    // nothing. Reported from real use: with no game on air the overlays
+    // were still showing data, which meant taking a game OFF air had no
+    // observable effect -- the control did not do what it said.
+    //
+    // It also contradicted the warning the dashboard gives when you take
+    // a game down ("if no other game is live they may show nothing at
+    // all"), and it silently followed the wrong game whenever two were
+    // open, or when one was left at in_progress from a previous week.
+    //
+    // A blank overlay is a better failure than a confident wrong one: it
+    // is obvious from the gallery, and the wrong game is not.
     let resolvedId = gameId, resolvedBy = 'id';
     if (!resolvedId) {
       const { data: flagged } = await db.from('games')
         .select('id').eq('is_broadcast', true).limit(1);
       if ((flagged || [])[0]) {
         resolvedId = flagged[0].id; resolvedBy = 'broadcast flag';
-      } else {
-        const { data: live } = await db.from('games')
-          .select('id').eq('status', 'in_progress')
-          .order('game_date', { ascending: false }).limit(1);
-        if ((live || [])[0]) {
-          resolvedId = live[0].id; resolvedBy = 'most recent in-progress game';
-        }
       }
     }
     if (!resolvedId) {

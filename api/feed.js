@@ -259,20 +259,16 @@ module.exports = async (req, res) => {
   });
 
   try {
-    // Which game? The flag first; failing that, the most recent game in
-    // progress. The fallback exists so a forgotten flag degrades to
-    // "probably right" rather than to nothing at all.
+    // Which game? THE FLAG, and only the flag.
     let { data: flagged } = await db.from('games')
       .select('*').eq('is_broadcast', true).limit(1);
     let game = (flagged || [])[0];
     let resolvedBy = 'broadcast flag';
-    if (!game) {
-      const { data: live } = await db.from('games')
-        .select('*').eq('status', 'in_progress')
-        .order('game_date', { ascending: false }).limit(1);
-      game = (live || [])[0];
-      resolvedBy = 'most recent in-progress game';
-    }
+    // THE in-progress FALLBACK WAS REMOVED, 22 Aug 2026 -- see the note in
+    // api/gamedata.js, which carried the identical block. With no game
+    // flagged the feed served the most recent in-progress game instead,
+    // so "off air" changed nothing a viewer could see.
+    
     if (!game) {
       const empty = { error: 'No game is on air' };
       if (format === 'json') { res.status(200).json(empty); return; }
