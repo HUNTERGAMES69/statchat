@@ -109,11 +109,24 @@ async function run() {
     if (!/HALFTIME/.test(w.document.getElementById('quarterText').textContent)) {
       fail('halftime:banner', 'expected the HALFTIME banner at the interval');
     }
-    // The second-half kicker, beside the word. Whoever kicked off to start
-    // the GAME receives now, so it is the other team.
+    // The header carries the phase and nothing else.
     const head = w.document.getElementById('quarterText').textContent;
-    if (!/kicks off/.test(head)) {
-      fail('halftime:kicker', 'expected the second-half kicker beside HALFTIME, got: ' + JSON.stringify(head));
+    if (/kicks off/.test(head)) {
+      fail('halftime:header-clean', 'the kicker belongs under the scoring summary, not in the banner: ' + JSON.stringify(head));
+    }
+    // WHO KICKS OFF NEXT lives at the foot of the scoring card, bold, and
+    // LAST -- after the scoring rows, not among them. Whoever kicked off
+    // to start the GAME receives now, so it is the other team.
+    const body = w.document.getElementById('scoringBody');
+    if (!/kicks off/.test(body.textContent)) {
+      fail('halftime:kicker', 'expected the second-half kicker under the scoring summary, got: ' + JSON.stringify(body.textContent));
+    }
+    if (!/kicks off\s*$/.test(body.textContent)) {
+      fail('halftime:kicker-last', 'the kicker line should come after the scoring rows, got: ' + JSON.stringify(body.textContent));
+    }
+    const kickEl = [...body.children].pop();
+    if (!kickEl || !/font-weight:8/.test(kickEl.getAttribute('style') || '')) {
+      fail('halftime:kicker-bold', 'the kicker line should be bold, got: ' + (kickEl && kickEl.getAttribute('style')));
     }
     w.close();
 
@@ -126,6 +139,16 @@ async function run() {
     // And the drive cards come back with it.
     if (shown(w, '#scoringCard')) fail('halftime:scoring-cleared', 'the scoring card should hand the quad back once the half has started');
     if (!shown(w, '.drive-current')) fail('halftime:drive-back', 'the Current Drive card should return once the half has started');
+    w.close();
+  }
+
+  // --- 6. No next kickoff at FINAL, so no line. The card is a record of
+  //     the game at that point, not a cue for something about to happen.
+  {
+    const w = await view(rows, { id: 'test-game-1', status: 'final', season_year: 2026 });
+    if (/kicks off/.test(w.document.getElementById('scoringBody').textContent)) {
+      fail('final:no-kicker', 'there is no next kickoff at final -- the line should not appear');
+    }
     w.close();
   }
 
