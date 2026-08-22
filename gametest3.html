@@ -137,9 +137,47 @@
   #entryStage #playPanel button[id$="_toggle"] { padding:8px !important; font-size:13px !important; }
   #entryStage #playPanel .ptoggle { padding:8px 10px; font-size:13px; }
   #entryStage #playPanel p { margin-top:6px; margin-bottom:3px; }
+  /* Kicker trees (FG, PAT, kickoff, punt) are the tallest in the app --
+     a kicker picker, a result choice, a returner picker, return yards,
+     a spot, and a handful of toggles. Everything here is spacing, not
+     size: the targets stay clickable, the air between them goes. */
+  #entryStage #playPanel > p { margin:5px 0 2px; }
+  #entryStage #playPanel label.inline { padding:1px 0; }
+  #entryStage #playPanel input[type="text"] { padding:5px 7px; }
+  #entryStage #playPanel > div { margin-top:6px; }
   /* Redundant with the banner directly above it, which already carries
      both team names and the score. */
-  #gameTitle { font-size:15px; font-weight:600; color:#777; margin:0 0 6px; }
+  /* HEADER, compacted for vertical space (prototype).
+     The block cost three stacked lines: the header row has THREE flex
+     children (title, ON AIR, the button group) and carries
+     flex-wrap:wrap, so with the banner showing, the title filled line
+     one, the banner took line two and the buttons line three -- before
+     the field-position card had even started. Held on ONE line instead,
+     with the title truncating rather than pushing anything down: it is
+     the least load-bearing thing up there, since the banner directly
+     above already names both teams.
+
+     !important on several of these because the values being replaced
+     are INLINE style attributes, which a stylesheet rule cannot
+     otherwise outrank. Kept to this prototype's own block so the
+     override is visible in one place rather than scattered through the
+     markup. */
+  #gameTitle { font-size:14px; font-weight:600; color:#777; margin:0; white-space:nowrap;
+               overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto; }
+  #entryHeaderRow { flex-wrap:nowrap !important; align-items:center !important; gap:10px !important; margin-bottom:6px; }
+  #onAirBanner { padding:3px 9px !important; font-size:10.5px !important; margin:0 !important;
+                 letter-spacing:0.04em !important; white-space:nowrap; flex:0 0 auto; }
+  #entryHeaderRow a { padding:5px 11px !important; font-size:12px !important; }
+  /* The field-position card: its own padding and margins are inline. */
+  #fieldStrip { padding:6px 10px !important; margin:5px 0 !important; }
+  #fieldStrip > div:first-child { margin-bottom:3px !important; }
+  #fieldStripShow { margin:5px 0 !important; }
+  @media (max-width: 899px) {
+    /* Back to wrapping, and the title stops truncating -- the phone
+       layout has the width to spare and not the vertical pressure. */
+    #entryHeaderRow { flex-wrap:wrap !important; }
+    #gameTitle { white-space:normal; overflow:visible; }
+  }
   @media (max-width: 899px) {
     #entryLayout { display:block; }
     #typeRail { position:static; }
@@ -197,7 +235,7 @@
     </div>
 
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+      <div id="entryHeaderRow" style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
         <h1 id="gameTitle">Game</h1>
         <!-- Shown only when this game is the one the broadcast feed is
              reading. The
@@ -4802,6 +4840,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const offset = btn.getBoundingClientRect().top - rail.getBoundingClientRect().top;
       const cap = rail.offsetHeight / 3;
       stage.style.marginTop = Math.max(0, Math.min(offset, cap)) + 'px';
+      // renderPlayPanel and the utility openers run on the BUTTON (target
+      // phase) and several of them call scrollIntoView themselves; this
+      // listener is on the rail and runs after, on the bubble. Scrolling
+      // before the offset is applied leaves the panel in the wrong place,
+      // so the final word on both has to happen here, once the panel is
+      // built and positioned. Deferred a frame so layout has settled.
+      const settle = window.requestAnimationFrame || (fn => setTimeout(fn, 0));
+      settle(() => settle(fitPanel));
     });
 
     // 3. THE YARDS ROW STAYS ON ONE LINE. The yards box and its spot
@@ -4844,11 +4890,43 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         row = row.parentElement;
       }
     };
+    // 4. THE TREE IS ALWAYS REACHABLE, AND TALL ONES START AT THE TOP.
+    //    Opening a tree from a button low on the ladder could leave the
+    //    first field below the fold with nothing scrolling to it -- only
+    //    some of the openers call scrollIntoView, and the ones that do
+    //    ran before the offset above was applied.
+    //
+    //    A tree taller than the frame gives up its offset entirely and
+    //    locks to the top: the offset exists to save a short reach, and
+    //    it is not worth trading the bottom of a long tree (a kicker
+    //    tree especially, where Review sits at the very end) for it.
+    const fitPanel = () => {
+      if (typeof document === 'undefined' || !document) return;
+      const stageEl = document.getElementById('entryStage');
+      const panel = document.getElementById('playPanel');
+      if (!stageEl || !panel || panel.style.display === 'none') return;
+      // Clear of the sticky banner, which would otherwise cover the top
+      // of whatever we scroll to.
+      const banner = document.querySelector('.banner');
+      const top = (banner ? banner.getBoundingClientRect().height : 0) + 10;
+      const room = window.innerHeight - top;
+      // Taller than the frame -> lock to the top of it.
+      if (panel.getBoundingClientRect().height > room) stageEl.style.marginTop = '0px';
+      const r = panel.getBoundingClientRect();
+      // Already fully visible and not tucked under the banner: leave the
+      // page where it is rather than scrolling for no reason.
+      if (r.top >= top && r.bottom <= window.innerHeight) return;
+      const target = window.pageYOffset + r.top - top;
+      try { window.scrollTo({ top: Math.max(0, target), behavior: 'smooth' }); }
+      catch (e) { try { window.scrollTo(0, Math.max(0, target)); } catch (e2) {} }
+    };
+
     const panelEl = document.getElementById('playPanel');
     if (panelEl && window.MutationObserver){
       new MutationObserver(unwrapYardsRow).observe(panelEl, { childList: true });
     }
     window.__railUnwrap = unwrapYardsRow;
+    window.__railFit = fitPanel;
   })();
   let currentSpotGetter = null, rushFumSpotGetter = null, passFumSpotGetter = null, sackFumSpotGetter = null;
 
@@ -8919,6 +8997,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('code').value = '';
     pending = null;
     if (insertMode){ insertMode = null; renderInsertBanner(); }
+    // Prototype: the scroll-to-top below is original, but it left the
+    // rail's selected button lit and the stage still offset, so the next
+    // play opened against a stale indent.
+    if (window.__railClear) window.__railClear();
     if (window.scrollTo) try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch(e){}
   });
 
