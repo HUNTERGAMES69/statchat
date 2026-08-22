@@ -484,8 +484,20 @@
      No top margin at all: the strip is the first thing in the card, so
      the card's own 18px padding is the only gap wanted above it, and the
      5px was adding to it rather than replacing it. */
-  #fieldStrip { padding:4px 10px 7px !important; margin:0 0 6px !important; }
-  #fieldStrip > div:first-child { margin-bottom:2px !important; }
+  #fieldStrip { padding:4px 10px 5px !important; margin:0 0 6px !important; }
+  /* The footer sits ON the direction line rather than under it. The line
+     is centred text with dead space at both ends, so the label takes the
+     left and Hide the right without moving anything. min-height reserves
+     the line's height for the states that have no possession to show,
+     so the strip does not change height as the game starts. */
+  #fieldStripFooter { position:relative; min-height:18px; margin-top:-18px;
+                      display:flex; align-items:center; pointer-events:none; }
+  #fieldStripFooter > * { pointer-events:auto; }
+  #fieldStripFooter .fs-label { font-size:12px; color:#999; }
+  #fieldStripFooter #fieldStripToggle { margin-left:auto; padding:2px 9px; font-size:12px; }
+  /* Was the old header row's spacing. The first child is now the field
+     itself, which needs none. */
+  #fieldStrip > #fieldStripBody { margin-bottom:0 !important; }
   #fieldStripShow { margin:0 0 6px !important; }
   @media (max-width: 899px) {
     /* Back to wrapping, and the title stops truncating -- the phone
@@ -620,13 +632,23 @@
            notice above it now gone there is nothing left to separate
            from. Internal padding trimmed at the top for the same reason,
            kept at the bottom where the yard numbers sit under the field. -->
-      <div id="fieldStrip" style="display:none; background:var(--surface-2,#fff); border:1px solid #ddd; border-radius:12px; padding:7px 12px 10px; margin:0 0 8px;">
-        <div style="display:flex; align-items:center; margin-bottom:6px;">
-          <span style="font-size:13px; color:#888;">Field position</span>
-          <span id="fieldStripWarn" style="display:none; font-size:12px; color:#a05a00; margin-left:10px;"></span>
-          <button type="button" id="fieldStripToggle" style="margin-left:auto; padding:3px 10px; font-size:12px;">Hide</button>
-        </div>
+      <!-- THE LABEL AND HIDE MOVED BELOW THE FIELD, onto the line that
+           already carries the direction arrow and the team with the ball.
+           That line was there anyway and had empty space either side of
+           its centred text, so the two controls cost nothing there -- and
+           the row they used to occupy above the field is gone, along with
+           the padding that separated it from the strip.
+           The direction line is painted into #fieldStripBody, so the
+           label and Hide are positioned over it rather than stacked
+           after it: absolute against the footer, which reserves the
+           line's height whether or not there is a possession to show. -->
+      <div id="fieldStrip" style="display:none; background:var(--surface-2,#fff); border:1px solid #ddd; border-radius:12px; padding:5px 12px 6px; margin:0 0 8px;">
         <div id="fieldStripBody"></div>
+        <div id="fieldStripFooter">
+          <span class="fs-label">Field position</span>
+          <span id="fieldStripWarn" style="display:none; font-size:12px; color:#a05a00; margin-left:10px;"></span>
+          <button type="button" id="fieldStripToggle">Hide</button>
+        </div>
       </div>
       <button type="button" id="fieldStripShow" style="display:none; margin:8px 0; padding:3px 10px; font-size:12px;">Show field position</button>
       <div id="insertModeBanner" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:#e6f1fb; border:1px solid #6ba3d6; font-size:13px;"></div>
