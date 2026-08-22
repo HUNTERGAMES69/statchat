@@ -115,7 +115,58 @@ async function run() {
       h.close();
     }
 
-    // --- 3c. The standalone clock prompt card raises its keypad too.
+    // --- 3b2. EVERY clock field, not just the two I wired first.
+    //     Reported directly: the pad came up on the scrimmage trees and
+    //     not on the kicking ones. There are FOUR clock inputs in this
+    //     app -- the confirm card's row, the standalone prompt card, the
+    //     guided kickoff return's own field, and Set clock -- and only
+    //     the first two were wired. Asserted by NAME so a fifth field
+    //     added later fails here rather than in a game.
+    {
+      // Checked against the FILE, not the DOM: these calls sit inside
+      // handlers that only fire on paths a single test run cannot visit
+      // all of, so the DOM would show nothing either way.
+      const file = require('fs').readFileSync(__dirname + '/../' + page, 'utf8');
+      ['clockPromptInput', 'confirmClockInput', 'guidedReturnClock', 'setclock_val'].forEach(id => {
+        if (file.indexOf("raiseClockPad('" + id + "'") === -1) {
+          fail(page + ':unwired-clock-field', id + ' has no raiseClockPad call -- its keypad will not open by itself');
+        }
+      });
+    }
+
+    // --- 3c. Set clock and the guided return raise their pads too.
+    {
+      const h = await bootPage(page, {});
+      h.evalIn('window.__log = []; const _op = openPad; openPad = function(t,a,k){ window.__log.push((t && t.id) + ":" + k); return _op.apply(this, arguments); };');
+      click(h.window, h.window.document.getElementById('setClockUtilBtn'));
+      await new Promise(r => setTimeout(r, 400));
+      const pads = JSON.parse(h.evalIn('JSON.stringify(window.__log)'));
+      if (!pads.some(x => /^setclock_val:/.test(x))) {
+        fail(page + ':setclock-keypad', 'Set clock should raise its own keypad, got: ' + JSON.stringify(pads));
+      }
+      h.close();
+    }
+    {
+      const h = await bootPage(page, {});
+      const doc = h.window.document, win = h.window;
+      click(win, doc.getElementById('startGameBtn'));
+      await new Promise(r => setTimeout(r, 60));
+      click(win, doc.getElementById('pickA'));
+      await new Promise(r => setTimeout(r, 60));
+      click(win, doc.querySelector('.gk_kicker_pick'));
+      const dir = doc.querySelector('.gk_dir_btn');
+      if (dir) click(win, dir);
+      h.evalIn('window.__log = []; const _op = openPad; openPad = function(t,a,k){ window.__log.push((t && t.id) + ":" + k); return _op.apply(this, arguments); };');
+      click(win, doc.getElementById('guidedKickoffSave'));
+      await new Promise(r => setTimeout(r, 400));
+      const pads = JSON.parse(h.evalIn('JSON.stringify(window.__log)'));
+      if (!pads.some(x => /^guidedReturnClock:/.test(x))) {
+        fail(page + ':guided-return-keypad', 'the guided kickoff return should raise its own keypad, got: ' + JSON.stringify(pads));
+      }
+      h.close();
+    }
+
+    // --- 3d. The standalone clock prompt card raises its keypad too.
     {
       const h = await bootPage(page, {});
       const doc = h.window.document;
