@@ -180,6 +180,11 @@ async function run() {
       await new Promise(r => setTimeout(r, 250));
     };
     const names = d => [...d.querySelectorAll('#leaders .ltname')].map(e => e.textContent);
+    // A two-word OPPONENT, because a one-word one fits either way and
+    // would not have caught the truncation. In this fixture our team is
+    // at home, so home_team_name is Neville's slot -- the away name is
+    // the opponent's.
+    homeGame.away_team_name = 'West Monroe';
 
     // NEVILLE AT HOME is the case that separates the two orders. With
     // Neville away both layouts agree, so a test using only that fixture
@@ -187,7 +192,11 @@ async function run() {
     let w = await bootPage('broadcast_stats.html',
       { query: '?id=test-game-1', readyWhen: win => !!win.document.getElementById('panel') });
     await paintWith(w, homeGame);
-    if (names(w.document)[0] !== 'TEST OPP') {
+    // Tested as the RULE, not a literal name: our team is at home in this
+    // fixture, so the visitor is whoever is NOT Neville. Hardcoding the
+    // opponent's name meant renaming the fixture broke an assertion that
+    // had nothing to do with the rename.
+    if (names(w.document)[0] === 'Neville') {
       fail('portrait:landscape-order', 'landscape should stay visitor-first, got ' + names(w.document).join(' then '));
     }
     if (w.window.getComputedStyle(w.document.getElementById('leaders')).flexDirection !== 'row') {
@@ -209,6 +218,16 @@ async function run() {
     // Narrower, and the same data -- only the shape changes.
     if (win.getComputedStyle(d.getElementById('panel')).right !== 'auto') {
       fail('portrait:width', 'the portrait panel should be a fixed-width column, not full bleed');
+    }
+    // WIDE ENOUGH FOR A REAL SCHOOL NAME. The header gives each side half
+    // of what the TEAM STATS block leaves, and at 640px that carried
+    // eleven characters -- "West Monroe" is exactly eleven and came out
+    // as "West Mo...". Asserted as a number rather than by measuring
+    // text, which jsdom cannot do: the budget is
+    // (width - 120) / 2 - 119 per name.
+    const pw = parseInt(win.getComputedStyle(d.getElementById('panel')).width, 10);
+    if (!(pw >= 800)) {
+      fail('portrait:name-room', 'the portrait panel is too narrow for a two-word school name, got ' + pw + 'px');
     }
     if (d.querySelectorAll('#rows .srow').length !== 6) {
       fail('portrait:rows', 'portrait should carry the same six rows');
