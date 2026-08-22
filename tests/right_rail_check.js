@@ -32,6 +32,60 @@ async function run() {
     h.close();
   }
 
+  // --- 1b. LEADERS, per team, ranked on YARDS rather than attempts.
+  //     The totals say how the game is going; these say who is doing it,
+  //     which is the question asked from the booth and the one that
+  //     otherwise means opening a report mid-game.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '8' });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '12' });
+    // More carries, fewer yards -- must NOT lead.
+    enterPlay(h, { type: 'rush', carrier: '30', yards: '1' });
+    enterPlay(h, { type: 'rush', carrier: '30', yards: '1' });
+    enterPlay(h, { type: 'rush', carrier: '30', yards: '1' });
+    enterPlay(h, { type: 'pass', passer: '7', receiver: '80', yards: '22' });
+    enterPlay(h, { type: 'pass', passer: '7', receiver: '84', yards: '5' });
+    await new Promise(r => setTimeout(r, 700));
+    const rows = [...doc.querySelectorAll('#liveBoxBody .ld-row')]
+      .map(e => e.textContent.replace(/\s+/g, ' ').trim());
+    const rush = rows.find(r => /^RUSH/.test(r));
+    const pass = rows.find(r => /^PASS/.test(r));
+    const rec = rows.find(r => /^REC/.test(r));
+    if (!rush || !/20 yds/.test(rush)) fail('leaders:rush', 'expected the 20-yard rusher to lead, got: ' + rush);
+    if (rush && /3 att/.test(rush)) fail('leaders:rush-attempts', 'leaders rank on yards, not carries: ' + rush);
+    if (!pass || !/2\/2, 27 yds/.test(pass)) fail('leaders:pass', 'expected 2/2 for 27, got: ' + pass);
+    if (!rec || !/22 yds/.test(rec)) fail('leaders:rec', 'expected the 22-yard receiver to lead, got: ' + rec);
+    // A team with nothing yet has no leaders block -- a name against
+    // 0 yds reads as a stat when it is not one.
+    const blocks = doc.querySelectorAll('#liveBoxBody .ld-block');
+    if (blocks.length !== 1) fail('leaders:empty-team', 'only the team with stats should show leaders, blocks: ' + blocks.length);
+    h.close();
+  }
+
+  // --- 1c. The top row is ONE set of controls, not three sizes. All
+  //     three links take the header button's own metrics.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    h.evalIn("document.getElementById('broadcastFab').style.display='inline-block';");
+    const ref = win.getComputedStyle(doc.querySelector('.hdr-btn'));
+    ['broadcastFab', 'helpFab', 'launchViewLink'].forEach(id => {
+      const c = win.getComputedStyle(doc.getElementById(id));
+      if (c.fontSize !== ref.fontSize || c.padding !== ref.padding || c.lineHeight !== ref.lineHeight) {
+        fail('toprow:uniform', id + ' does not match the header buttons: ' +
+          c.fontSize + '/' + c.padding + '/' + c.lineHeight + ' vs ' +
+          ref.fontSize + '/' + ref.padding + '/' + ref.lineHeight);
+      }
+      if (!doc.getElementById('topActions').contains(doc.getElementById(id))) {
+        fail('toprow:placement', id + ' is not in the top row');
+      }
+    });
+    h.close();
+  }
+
   // --- 2. A clean game reads clear, and says so rather than sitting empty.
   {
     const h = await bootGamePage();
@@ -99,6 +153,39 @@ async function run() {
     const t = doc.getElementById('onAirBanner').textContent;
     if (!/1 play unsent/.test(t)) fail('air:unsent', 'unsent plays mean the feed is behind the field and should say so, got: ' + t);
     if (!/ON AIR/.test(t)) fail('air:label', 'the ON AIR label must survive, got: ' + t);
+    h.close();
+  }
+
+  // --- 6. THE TOP ROW. BROADCAST and HELP were pinned bottom-right and
+  //     CREW VIEW top-right: three links away from the entry screen, in
+  //     two corners, at two sizes. They now share one row, one gap and
+  //     one shape, on the banner's own line.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    const ta = doc.getElementById('topActions');
+    if (!ta) { fail('toprow:missing', 'the top action row is gone'); h.close(); return failures; }
+    const ids = [...ta.children].map(c => c.id);
+    ['broadcastFab', 'helpFab', 'launchViewLink'].forEach(id => {
+      if (ids.indexOf(id) === -1) fail('toprow:member', id + ' is not in the top row');
+    });
+    // Uniform: one rule for all three, so a later inline style on any one
+    // of them shows up here rather than as a row that looks slightly off.
+    const boxes = [...ta.children].map(c => {
+      const cs = win.getComputedStyle(c);
+      return cs.padding + '|' + cs.fontSize + '|' + cs.borderRadius;
+    });
+    if (new Set(boxes).size !== 1) {
+      fail('topow:uniform', 'the three links should be identically sized: ' + boxes.join(' , '));
+    }
+    // Level with the ON AIR tile, both measured from the banner rather
+    // than pinned at a fixed inset that only matches by luck.
+    h.evalIn("Object.defineProperty(window,'innerWidth',{value:1500,configurable:true}); window.pageYOffset=0; document.querySelector('.banner').getBoundingClientRect=()=>({top:30,height:56,bottom:86}); window.__syncAir();");
+    const air = doc.getElementById('onAirBanner');
+    if (ta.style.top !== air.style.top || ta.style.height !== air.style.height) {
+      fail('topow:aligned', 'the top row and the ON AIR tile should sit on the same line: ' +
+        ta.style.top + '/' + ta.style.height + ' vs ' + air.style.top + '/' + air.style.height);
+    }
     h.close();
   }
 
