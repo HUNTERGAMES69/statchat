@@ -202,8 +202,14 @@
   /* THE TOP ROW: BROADCAST, HELP, CREW VIEW. One rule, so the three are
      the same height and the gaps between them are equal -- they used to
      be two different sizes in two different corners. */
+  /* align-items:stretch, not center. The row is already given the
+     banner's own height by script; centring left the three links as
+     small pills floating in it, so they read as a different order of
+     thing from ON AIR on the opposite side. Stretched, all five blocks
+     across the top -- ON AIR, the banner, and these three -- are the
+     same height because they are all measured from the same element. */
   #topActions { position:absolute; right:16px; z-index:95;
-                display:flex; align-items:center; gap:8px; }
+                display:flex; align-items:stretch; gap:8px; }
   /* THE SAME METRICS AS .hdr-btn, not merely similar ones. These three
      were 14px on 10x18 padding while Dashboard and ON AIR were 12px on
      5x11, so a row that was meant to read as one set of controls came out
@@ -212,18 +218,25 @@
      recognisable as the thing it was in its old corner.
      The shadow goes with the size: at header scale it read as a smudge
      rather than lift. */
+  /* ON AIR's own type and shape: 13px/800 at 0.06em on a 10px radius.
+     Padding is horizontal only -- the height comes from the row, so a
+     vertical padding would fight it. */
   #topActions a { text-decoration:none; color:#fff; font-weight:800;
-                  letter-spacing:0.03em; white-space:nowrap;
-                  box-sizing:border-box; font-size:12px; line-height:18px;
-                  padding:5px 11px; border-radius:6px;
-                  border:1px solid transparent; }
+                  letter-spacing:0.06em; white-space:nowrap;
+                  box-sizing:border-box; font-size:13px;
+                  padding:0 16px; border-radius:10px; border:none;
+                  display:flex; align-items:center; justify-content:center; }
   /* Colours unchanged, so each stays recognisable where it was. */
   #broadcastFab { background:#1a1a2e; border-color:#1a1a2e; }
   #helpFab { background:#1a7a4c; border-color:#1a7a4c; }
   #launchViewLink { background:#b00020; border-color:#b00020; }
   @media (max-width:1219px) {
     /* Back into the flow: at this width the row would sit over the card. */
-    #topActions { position:static; justify-content:flex-end; margin:0 0 10px; }
+    /* No banner to measure below the breakpoint, so the row sizes itself
+       and the links need their own vertical padding back. */
+    #topActions { position:static; justify-content:flex-end; margin:0 0 10px;
+                  align-items:center; }
+    #topActions a { padding:8px 14px; }
   }
   /* Under the dock breakpoint the margins vanish, so both come back into
      the flow rather than overlapping the card. */
@@ -3568,13 +3581,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<span class="ld-stat">' + detail(best.d) + '</span></div>'
         : '';
       return '<div class="ld-block">' +
-        '<span class="lb-teamwrap">' +
-          (TEAMS[t].logo
-            ? '<img class="lb-logo" src="' + String(TEAMS[t].logo).replace(/"/g, '&quot;') + '" alt="">'
-            : '') +
-          '<span class="lb-team" style="background:' + TEAMS[t].bg + '; color:' +
-            safeTextColor(TEAMS[t].bg, TEAMS[t].text) + ';">' + TEAMS[t].name + ' leaders</span>' +
-        '</span>' +
+        // NO LOGO HERE, deliberately. The crest is already at the top of
+        // the panel against the totals; repeating it a few rows down
+        // labels the same two teams twice and costs vertical space in the
+        // section that has the most to say.
+        '<span class="lb-team" style="background:' + TEAMS[t].bg + '; color:' +
+          safeTextColor(TEAMS[t].bg, TEAMS[t].text) + ';">' + TEAMS[t].name + ' leaders</span>' +
         // TDs appended only when there are any. A trailing ", 0 TD" on
         // every line would double the width of the busiest column to say
         // nothing, and in a rail this narrow the name is what gets
