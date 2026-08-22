@@ -89,7 +89,215 @@
   .floating-actions button { box-shadow:0 2px 8px rgba(0,0,0,0.2); }
   #playPanel, #utilPanel { background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:10px; scroll-margin-top:70px; }
   #confirmCard { background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:8px; }
+
+  /* ===================================================================
+     RAIL LAYOUT. Promoted from gametest3.html on 22 Aug 2026; the old
+     entry page is preserved verbatim as game_legacy.html.
+     ===================================================================
+     REBUILT FROM CURRENT game.html, 21 Aug 2026. The previous prototype
+     was a fork that had drifted 694 lines behind renderPlayPanel and no
+     longer had quickYardageHtml/wireQuickYardage at all -- which is why
+     the kickoff and punt calculators looked "lost". They were never
+     removed by the layout work; that fork predated them. Rebuilding
+     from game.html restores every tree at its current state for free
+     and keeps the two comparable, which back-porting one feature at a
+     time would not.
+
+     Play types as a fixed left RAIL, panel opening BESIDE it. The
+     problem is documented in this file's own collapse handler:
+     "Opening a tree scrolls down to it, so collapsing has to scroll
+     back -- otherwise Clear leaves the coach staring at empty space
+     where the panel used to be, with the play-type buttons off-screen
+     above." */
+  #entryLayout { display:flex; gap:14px; align-items:flex-start; }
+  #typeRail { flex:0 0 158px; position:sticky; top:72px; }
+  /* Compacted so the whole ladder clears the fold. */
+  #typeRail .hint { margin:7px 0 3px; font-size:11px; }
+  #typeRail .row { gap:4px; }
+  #typeRail .row > button { flex:1 1 calc(50% - 2px); padding:7px 5px; font-size:12.5px; }
+  #typeRail .rail-scrimmage > button { flex:1 1 100%; padding:11px 5px; font-size:15px; font-weight:700; }
+  #typeRail .rail-wide > button { flex:1 1 100%; padding:7px 5px; font-size:12.5px; }
+  /* Selected state. A separate class from .picked, which the trees
+     already use for their own toggles -- reusing it would have made a
+     rail selection and an in-panel toggle indistinguishable to the
+     existing handlers. */
+  #typeRail button.rail-active { box-shadow:inset 0 0 0 3px #1a7a4c, 0 0 0 2px #1a7a4c; }
+  #entryStage { flex:1 1 auto; min-width:0; }
+  #entryStage #playPanel, #entryStage #manualPanel, #entryStage #utilPanel { margin-top:0; }
+  #entryStage #confirmCard { position:sticky; bottom:12px; box-shadow:0 -2px 10px rgba(0,0,0,0.10); }
+  /* The yards row and its calculator: one line, never wrapped. In the
+     full-width layout these sat side by side and only wrapped on a
+     phone; in a narrower stage they wrapped on the desktop too, which
+     is what pushed the calculator under the box. The sack row already
+     read correctly because its own markup never had the wrap. */
+  #entryStage #pp_yards_wrap { flex:0 0 auto; }
+  #entryStage #pp_yards_wrap ~ div { min-width:0; }
+  /* Full-width toggles inside a tree were sized for the old full-width
+     column. In a narrower stage they are the main thing making a long
+     tree (interception especially) run off the screen. */
+  #entryStage #playPanel button[id$="_toggle"] { padding:8px !important; font-size:13px !important; }
+  #entryStage #playPanel .ptoggle { padding:8px 10px; font-size:13px; }
+  #entryStage #playPanel p { margin-top:6px; margin-bottom:3px; }
+  /* Kicker trees (FG, PAT, kickoff, punt) are the tallest in the app --
+     a kicker picker, a result choice, a returner picker, return yards,
+     a spot, and a handful of toggles. Everything here is spacing, not
+     size: the targets stay clickable, the air between them goes. */
+  #entryStage #playPanel > p { margin:5px 0 2px; }
+  #entryStage #playPanel label.inline { padding:1px 0; }
+  #entryStage #playPanel input[type="text"] { padding:5px 7px; }
+  #entryStage #playPanel > div { margin-top:6px; }
+  /* Redundant with the banner directly above it, which already carries
+     both team names and the score. */
+  /* HEADER, compacted for vertical space (prototype).
+     The block cost three stacked lines: the header row has THREE flex
+     children (title, ON AIR, the button group) and carries
+     flex-wrap:wrap, so with the banner showing, the title filled line
+     one, the banner took line two and the buttons line three -- before
+     the field-position card had even started. Held on ONE line instead,
+     with the title truncating rather than pushing anything down: it is
+     the least load-bearing thing up there, since the banner directly
+     above already names both teams.
+
+     !important on several of these because the values being replaced
+     are INLINE style attributes, which a stylesheet rule cannot
+     otherwise outrank. Kept to this prototype's own block so the
+     override is visible in one place rather than scattered through the
+     markup. */
+  /* Header: one right-justified row, Dashboard -> ON AIR -> CREW VIEW.
+     The title is gone from the layout entirely (it was redundant with
+     the banner above), which is what frees the width for all three to
+     share a line. All three are sized from the SAME box: identical
+     font, padding, line-height and border-width, so they come out the
+     same height rather than nearly the same. CREW VIEW and ON AIR carry
+     a border in their own background colour purely so the 1px on
+     Dashboard does not make it a hair taller than the other two. */
+  #entryHeaderRow { flex-wrap:nowrap !important; align-items:center !important;
+                    justify-content:flex-end !important; gap:8px !important; margin-bottom:8px; }
+  /* Dashboard shares the TOP / timeouts line. */
+  /* Everything that lived here has moved out -- Dashboard to the meta
+     row, ON AIR to the left margin, CREW VIEW to the top-right border --
+     so the row itself is now empty and would only contribute margin. */
+  #entryHeaderRow { display:none !important; }
+  #metaRow { display:flex; align-items:center; gap:12px; margin:6px 0; }
+  #metaRow #topText { flex:1 1 auto; min-width:0; }
+
+  /* ON AIR in the LEFT margin, level with the banner and the same height
+     as it. Height is set by script from the banner rather than written
+     here: the banner's height depends on its own content and font, and a
+     hardcoded value would drift. */
+  #onAirBanner { position:absolute; left:16px; right:calc(50% + 380px + 18px);
+                 background:#b00020; color:#fff; border-radius:10px;
+                 font-size:13px; font-weight:800; letter-spacing:0.06em;
+                 display:flex; align-items:center; justify-content:center;
+                 box-sizing:border-box; padding:0 10px; margin:0; z-index:70;
+                 animation:none; }
+
+  /* CREW VIEW in the top-right border, mirroring .floating-actions at the
+     bottom-right. Slightly larger than it was in the header row -- out
+     here it is not competing with anything for space. */
+  #launchViewLink { position:fixed; top:16px; right:16px; z-index:95;
+                    text-decoration:none; background:#b00020; color:#fff;
+                    font-size:14px; font-weight:800; letter-spacing:0.03em;
+                    padding:10px 18px; border-radius:8px; white-space:nowrap;
+                    box-shadow:0 2px 8px rgba(0,0,0,0.2); }
+  /* Under the dock breakpoint the margins vanish, so both come back into
+     the flow rather than overlapping the card. */
+  @media (max-width:1219px) {
+    #onAirBanner { position:static !important; left:auto; right:auto;
+                   height:auto !important; top:auto !important;
+                   padding:6px 12px; margin:0 0 8px; }
+    #launchViewLink { position:static; display:inline-block; margin:0 0 8px; }
+  }
+
+  /* DRIVE LOG DOCKED IN THE LEFT MARGIN (prototype).
+     Positioned the way .floating-actions already is -- fixed to the
+     VIEWPORT, not to the card -- so it uses the margin the page has
+     always had and the 760px card is untouched. right: 50% + half the
+     card + a gutter; left:16px matches the floating buttons' own inset
+     on the other side. top and height come from the ladder, set by
+     script: the ladder's height is whatever its buttons add up to, and
+     a hardcoded value would drift the moment a label wraps. */
+  #driveDock { position:absolute; left:16px; right:calc(50% + 380px + 18px);
+               z-index:80; margin-bottom:0; padding:14px;
+               box-sizing:border-box; display:flex; flex-direction:column; }
+  /* Only the plays scroll; heading and buttons stay put. */
+  #driveDock #driveLogScroll { overflow-y:auto; flex:1 1 auto; min-height:0; }
+  /* Undo/Redo built from the ladder's own two-up button rule: same dark
+     fill, same weight, same size, same radius, each taking half the
+     width. They were small grey outline pills, which read as incidental
+     next to the ladder. */
+  #driveDock .dock-undo { display:flex; gap:4px; margin:8px 0 10px; }
+  #driveDock .dock-undo button { flex:1 1 calc(50% - 2px); padding:7px 5px;
+                                 font-size:12.5px; font-weight:700; border:none;
+                                 border-radius:6px; background:#1a1a2e; color:#fff; }
+  /* Redo is dead except immediately after an Undo, so it reads as
+     disabled rather than as a second live action. */
+  #driveDock .dock-undo button:disabled { background:#e6e6e6; color:#9a9a9a; }
+  /* Below this the margin is too thin to hold it, so it drops back to a
+     normal card in the flow -- exactly where it sits today. */
+  @media (max-width:1219px) {
+    #driveDock { position:static !important; left:auto; right:auto;
+                 height:auto !important; top:auto !important;
+                 margin-bottom:16px; padding:18px; display:block; }
+    #driveDock #driveLogScroll { overflow-y:visible; }
+  }
+  .hdr-btn {
+    box-sizing:border-box; font-size:12px !important; line-height:18px !important;
+    padding:5px 11px !important; border-radius:6px !important;
+    border-width:1px !important; border-style:solid !important;
+    margin:0 !important; white-space:nowrap; flex:0 0 auto;
+    text-align:center; }
+  #onAirBanner.hdr-btn { border-color:#b00020 !important; letter-spacing:0.04em !important;
+                         animation:none !important; }
+  a#launchViewLink.hdr-btn { border-color:#b00020 !important; }
+  /* A seeded picker and its "or type #" box on one line: the grid takes
+     the room it needs, the box keeps its fixed width at the right. */
+  #entryStage #playPanel .pick-row { display:flex; align-items:flex-start; gap:8px; }
+  #entryStage #playPanel .pick-row > div { flex:1 1 auto; min-width:0; }
+  #entryStage #playPanel .pick-row > input { flex:0 0 100px; }
+  /* The name-confirm box is inserted as a sibling of the manual input,
+     so inside .pick-row it would otherwise be a third flex child fighting
+     the grid for width. Full-width line of its own, always last. */
+  #entryStage #playPanel .pick-row { flex-wrap:wrap; }
+  #entryStage #playPanel .pick-row > .name-confirm { flex:0 0 100%; order:9; }
+  /* 3. The optional tackler picker, collapsed behind a button. */
+  #entryStage #playPanel .opt-block > .opt-body { display:none; }
+  #entryStage #playPanel .opt-block.open > .opt-body { display:block; }
+  #entryStage #playPanel .opt-toggle { padding:5px 10px; font-size:12px; font-weight:700;
+                                       border:1px dashed #b8b8b8; border-radius:6px;
+                                       background:#fff; color:#555; cursor:pointer; margin-top:6px; }
+  #entryStage #playPanel .opt-block.open > .opt-toggle { border-style:solid; background:#f0f0f0; }
+  /* The field-position card: its own padding and margins are inline. */
+  #fieldStrip { padding:6px 10px !important; margin:5px 0 !important; }
+  #fieldStrip > div:first-child { margin-bottom:3px !important; }
+  #fieldStripShow { margin:5px 0 !important; }
+  @media (max-width: 899px) {
+    /* Back to wrapping, and the title stops truncating -- the phone
+       layout has the width to spare and not the vertical pressure. */
+    #entryHeaderRow { flex-wrap:wrap !important; }
+    /* Stacked again on a phone: three fixed-width controls on one line
+       is what pushes the ON AIR banner off the edge there. */
+    #entryStage #playPanel .pick-row { display:block; }
+    #entryStage #playPanel .pick-row > input { margin-top:4px; }
+  }
+  @media (max-width: 899px) {
+    #entryLayout { display:block; }
+    #typeRail { position:static; }
+    #typeRail .row > button, #typeRail .rail-scrimmage > button, #typeRail .rail-wide > button { flex:0 1 auto; padding:8px 14px; font-size:14px; }
+    #entryStage { margin-top:10px !important; }
+    #entryStage #playPanel, #entryStage #manualPanel, #entryStage #utilPanel { margin-top:10px; }
+    #entryStage #confirmCard { position:static; box-shadow:none; }
+  }
   .logline { font-size:14px; padding:6px 0; border-bottom:1px solid #f2f2f2; }
+  /* The description gets a LINE OF ITS OWN, under the #id and quarter
+     tags -- see renderLogLines.
+     inline-block was the first attempt and it read inconsistently:
+     shrink-to-fit means the box sits beside the tags when it happens to
+     fit and drops to its own line when it does not, so short plays and
+     long plays laid out differently down the same list. As a block it is
+     always on its own line at full width, so every entry looks the same
+     and a wrapped line starts where the description starts. */
+  .logline .logtext { display:block; margin-top:1px; }
   .badge { font-size:10px; padding:2px 6px; border-radius:8px; margin-left:6px; font-weight:600; }
   .badge.unresolved { background:#fff3cd; color:#7a6a2a; }
   .conflict-block { background:#fff3cd; border-radius:8px; padding:10px; margin-top:8px; }
@@ -101,6 +309,9 @@
 </style>
 </head>
 <body>
+<!-- Top-right border area, the mirror of .floating-actions at the
+     bottom-right. Outside the wrap, so it costs the card nothing. -->
+<a id="launchViewLink" href="#" target="_blank">CREW VIEW &#8599;</a>
 <div class="wrap">
 
   <div id="loading" class="card"><div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:14px;"><img src="logo.png" alt="StatChat" style="width:48px; height:auto; border-radius:8px;"><img id="splashTeamIcon" style="display:none; width:48px; height:48px; border-radius:8px; object-fit:cover;"></div><h1>Loading…</h1></div>
@@ -122,7 +333,13 @@
       <span class="finalTag" id="notStartedTag" style="display:none;">NOT STARTED</span>
       <span class="finalTag" id="halftimeTag" style="display:none;">HALFTIME</span>
     </div>
-    <div id="topText" style="text-align:right; font-size:14px; font-weight:600; color:#333; margin:6px 0;"></div>
+    <!-- topText and the Dashboard link share one line: the strip was
+         right-aligned text with empty space to its left, and Dashboard
+         had a row of its own. -->
+    <div id="metaRow">
+      <a class="hdr-btn" href="dashboard.html">&larr; Dashboard</a>
+      <div id="topText" style="text-align:right; font-size:14px; font-weight:600; color:#333; margin:0;"></div>
+    </div>
 
     <div id="clockPromptCard" style="display:none; background:#fff3cd; border-radius:8px; padding:12px 14px; margin-bottom:10px;">
       <div id="clockPromptLabel" style="font-size:15px; font-weight:600; margin-bottom:8px;"></div>
@@ -137,34 +354,25 @@
       <div id="guidedContent"></div>
     </div>
 
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
-        <h1 id="gameTitle">Game</h1>
-        <!-- Shown only when this game is the one the broadcast feed is
-             reading. The
-             scorer needs to know that what they type is going out live,
-             not merely being recorded. -->
-        <div id="onAirBanner" style="display:none;">&#9679; ON AIR &mdash; this game is feeding the broadcast</div>
-        <!-- margin-left:auto, NOT relying on the outer row's
-             justify-content:space-between. This row has THREE flex
-             children (title, ON AIR banner, this group) and wraps -- with
-             the banner showing, the title alone fills line one and this
-             group drops to a line of its own. space-between has nothing
-             to distribute between when a wrapped line holds only one
-             item, so it sat at the LEFT edge instead of the right.
-             Reported from a real device; jsdom has no real layout engine
-             and could not have caught this. margin-left:auto is immune to
-             the wrap: it claims the leftover space on WHATEVER line this
-             group ends up sharing, alone or not. -->
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;">
-          <a href="dashboard.html" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600; white-space:nowrap;">← Dashboard</a>
+    <!-- Shown only when this game is the one the broadcast feed is
+         reading. The scorer needs to know that what they type is going
+         out live, not merely being recorded. Sits in the empty left
+         margin alongside the banner rather than costing a row inside
+         the card. -->
+    <div id="onAirBanner" style="display:none;">&#9679; ON AIR</div>
+    <div class="card" id="entryCard">
+      <div id="entryHeaderRow" style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+        <!-- Removed from the layout, not from the DOM: renderAll() still
+             writes this and guarding every caller is not worth it in a
+             prototype. It is redundant with the banner above, which
+             already carries both team names and the score. -->
+        <h1 id="gameTitle" style="display:none;">Game</h1>
+
           <!-- Solid red/white, matching #onAirBanner's own colour -- both
                are about the same thing, watching this game live, right
                now. CREW VIEW is last in this row on purpose: the rightmost
                position in a right-justified flex row is the edge of the
                page, the single most prominent spot on it. -->
-          <a id="launchViewLink" href="#" target="_blank" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:none; background:#b00020; color:#fff; font-size:13px; font-weight:600; white-space:nowrap;">CREW VIEW ↗</a>
-        </div>
       </div>
       <div id="gameMsg"></div>
       <div id="finalLockBanner" class="hidden" style="background:#fff3cd; border:1px solid #e0b400; border-radius:8px; padding:12px 14px; margin-bottom:16px;">
@@ -205,8 +413,13 @@
         <a id="recapLink" href="#" style="display:none; padding:8px 12px; border-radius:6px; background:#1a7a4c; color:#fff; font-size:13px; font-weight:600; text-decoration:none;">View game recap &rarr;</a>
       </div>
 
+      <!-- RAIL LAYOUT. #entryLayout, #typeRail and
+           #entryStage are the only new elements; every button, id, class
+           and handler is byte-identical to game.html. -->
+      <div id="entryLayout">
+        <div id="typeRail">
       <p class="hint" style="margin:10px 0 6px;">Scrimmage</p>
-      <div class="row">
+      <div class="row rail-scrimmage">
         <button class="ptypeBtn" data-type="rush">Rush</button>
         <button class="ptypeBtn" data-type="pass">Pass</button>
       </div>
@@ -229,13 +442,15 @@
         <button id="kneelUtilBtn">QB kneel</button>
         <button id="timeoutUtilBtn">Timeout</button>
       </div>
-      <div class="row" style="margin-top:6px;">
+      <div class="row rail-wide" style="margin-top:6px;">
         <button id="driveUtilBtn">Adjust Down/Distance</button>
         <button id="flipBtn">Flip possession</button>
         <button id="setClockUtilBtn" title="Opens the clock for the possession now in progress. Only use this at the START of a possession.">Set clock</button>
         <button id="manualBtn" class="lastresort" title="Free text only — the play is flagged unresolved and contributes no stats, no yardage and no down change">⚠ Manual entry</button>
       </div>
+        </div>
 
+        <div id="entryStage">
       <div id="playPanel" style="display:none;"></div>
 
       <div id="manualPanel" style="display:none; background:#f7f6f2; border-radius:8px; padding:12px 14px; margin-top:10px;">
@@ -260,17 +475,28 @@
         <div class="row" style="margin-top:8px;">
           <button class="primary" id="saveBtn">Save</button>
           <button class="secondary" id="editBtn">Edit</button>
+          <!-- Now that the tree collapses at Review, its own Clear is off
+               screen -- so abandoning a play would have meant Edit, then
+               Clear, then finding the button. This is the same action the
+               tree's Clear performs. -->
+          <button class="secondary" id="confirmClearBtn">Clear</button>
+        </div>
+      </div>
         </div>
       </div>
     </div>
 
-    <div class="card">
+    <!-- This card docks into the LEFT margin
+         -- the same viewport-fixed space .floating-actions already uses,
+         outside the 760px wrap. The card itself is otherwise unchanged,
+         and every id here is the one the existing code already writes to. -->
+    <div class="card" id="driveDock">
       <div style="display:flex; justify-content:space-between; align-items:baseline;">
         <h2 style="margin:0;">Current drive</h2>
-        <div style="display:flex; gap:6px;">
-          <button class="secondary" id="undoBtn" style="padding:6px 12px; font-size:12px;">Undo last</button>
-          <button class="secondary" id="redoBtn" style="padding:6px 12px; font-size:12px;" disabled>Redo last</button>
-        </div>
+      </div>
+      <div class="dock-undo">
+        <button class="secondary" id="undoBtn">Undo last</button>
+        <button class="secondary" id="redoBtn" disabled>Redo last</button>
       </div>
       <div id="driveLogScroll"></div>
     </div>
@@ -452,7 +678,10 @@
     // merely being recorded. Read once at load: the flag is changed from
     // the dashboard, not from here.
     const airEl = document.getElementById('onAirBanner');
-    if (airEl) airEl.style.display = game.is_broadcast ? 'inline-block' : 'none';
+    // 'flex', not 'inline-block': the banner is now a flex box that centres
+    // its own text against a height measured from the score banner, and an
+    // inline display value here would beat the stylesheet and break that.
+    if (airEl) airEl.style.display = game.is_broadcast ? 'flex' : 'none';
 
     const { data: rosterRows, error: rosterError } = await supabaseClient
       .from('game_rosters').select('*').eq('game_id', currentGameId);
@@ -2441,6 +2670,34 @@ function returnerEligible(team){
   list.sort(byRecency(recency, () => 0));
   return list;
 }
+// Surname only on picker buttons. Full names wrapped the receiver list
+// to four rows in the narrower stage; the number is what a scorer scans
+// for and the surname is enough to confirm it. The full name is kept in
+// the button's title. Suffixes stay attached to the surname so "Robinson
+// Jr." does not become "Jr.".
+function shortPickerName(name){
+  const raw = String(name || '').trim();
+  if (!raw) return '';
+  // THE TRAILING '?' IS PART OF THE NAME STRING, not decoration added
+  // later, and it has to survive being shortened. A shared jersey number
+  // whose owner is not yet known arrives here as "Bravo Boone ?" -- so
+  // taking the last whitespace token returned the QUESTION MARK and
+  // discarded the name outright. Both players on a shared number then
+  // rendered as an identical "7 ?", which is precisely the case where the
+  // name is the only thing telling them apart. Caught by
+  // picker_behaviour_check and shared_number_check when the rail layout
+  // was promoted.
+  const amb = raw.match(/^(.*?)\s*\?$/);
+  const core = amb ? amb[1].trim() : raw;
+  const mark = amb ? ' ?' : '';
+  if (!core) return raw;
+  const parts = core.split(/\s+/);
+  if (parts.length < 2) return core + mark;
+  const SUFFIX = /^(jr\.?|sr\.?|ii|iii|iv|v)$/i;
+  let last = parts[parts.length - 1];
+  if (SUFFIX.test(last) && parts.length >= 3) last = parts[parts.length - 2] + ' ' + last;
+  return last + mark;
+}
 function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
   if (list.length === 0) return '<span style="font-size:13px; color:var(--text-muted, #999);">' + (emptyMsg || 'no one credited yet — type a number below') + '</span>';
   // THE NUMBER IS WHAT A SCORER SCANS FOR, so it is what the button
@@ -2463,12 +2720,15 @@ function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
   return list.map(p => {
     const label = statLabelFn && statLabelFn(p.num, p);
     return '<button type="button" class="' + groupClass + '" data-num="' + p.num + '"' +
+      // Full name on hover: the button shows only the surname now, and a
+      // roster with two Robinsons has to stay distinguishable somewhere.
+      (p.name ? ' title="' + String(p.name).replace(/"/g,'') + '"' : '') +
       (p.resolvedName ? ' data-resolved="' + p.resolvedName.replace(/"/g,'') + '"' : '') +
       (p.unit ? ' data-unit="' + p.unit + '"' : '') +
       ' style="margin:0 6px 6px 0; display:inline-flex; align-items:baseline; gap:9px;">' +
       '<b style="font-size:18px; font-weight:500; font-variant-numeric:tabular-nums; ' +
         'letter-spacing:0.01em;">' + p.num + '</b>' +
-      '<span style="font-size:13px; opacity:0.88;">' + (p.name||'') + '</span>' +
+      '<span style="font-size:13px; opacity:0.88;">' + shortPickerName(p.name) + '</span>' +
       (label ? '<span style="font-size:11px; opacity:0.62;">' + label + '</span>' : '') +
       '</button>';
   }).join('');
@@ -2538,6 +2798,13 @@ function attachNameConfirm(inputId, getTeam, getOrder, onResolve){
   if (!input || input.dataset.nameConfirm) return;
   input.dataset.nameConfirm = '1';
   const box = document.createElement('div');
+  // PROTOTYPE: the class matters. This box is inserted as a SIBLING of
+  // the manual input, and in gametest3 that input now sits inside a
+  // .pick-row flex container beside the picker grid -- so without a rule
+  // of its own the box became a third flex child, squeezed to the right
+  // of the input, stretching the row and shoving the grid around. The
+  // rule gives it a full-width line of its own beneath the row.
+  box.className = 'name-confirm';
   box.style.cssText = 'margin-top:5px; font-size:13px; line-height:1.7;';
   input.parentNode.insertBefore(box, input.nextSibling);
 
@@ -3133,7 +3400,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // stripTeamNames: the log is grouped by drive and each line
         // already sits under a possession header, so "(Neville)" after
         // every name is a word the reader supplies for themselves.
-        return '<div class="logline">' + ctrls + ntag + qtag + stripTeamNames(p.text) + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
+        // The description is wrapped in its own box so that a line too
+        // long to fit wraps to where the DESCRIPTION starts, not back to
+        // the left edge under the play number. An inline-block establishes
+        // its own left edge for every line it contains, which is exactly
+        // the hanging indent wanted -- and unlike a flex row it leaves the
+        // floated controls above untouched.
+        return '<div class="logline">' + ctrls + ntag + qtag +
+          '<span class="logtext">' + stripTeamNames(p.text) +
+          (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') +
+          '</span></div>';
       }).join('');
     }
     document.getElementById('logScroll').innerHTML = renderLogLines(plays.slice().reverse(), correctionMode) || '<div style="color:#999;">no plays logged yet</div>';
@@ -4826,6 +5102,286 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   });
 
   document.querySelectorAll('.ptypeBtn').forEach(b => b.addEventListener('click', () => renderPlayPanel(b.dataset.type)));
+
+  // ===================================================================
+  // RAIL BEHAVIOUR. Promoted from gametest3.html, 22 Aug 2026.
+  // ===================================================================
+  // Two things the rail needs that the stacked layout never did.
+  //
+  // 1. SELECTED STATE. In the old layout the open tree sat immediately
+  //    under the button that opened it, so which one was active was
+  //    obvious from position alone. Beside a rail of fifteen buttons it
+  //    is not. .rail-active rather than .picked: the trees already use
+  //    .picked for their own toggles, and reusing it would make a rail
+  //    selection and an in-panel toggle indistinguishable to the
+  //    handlers that clear it.
+  //
+  // 2. THE TREE OPENS LEVEL WITH ITS BUTTON. Anchored at the top of the
+  //    stage, clicking "Manual entry" at the bottom of the ladder threw
+  //    the panel to the top of the screen -- the pointer travelled the
+  //    height of the rail to reach a field. Offsetting the stage by the
+  //    button's own position keeps the first field where the hand
+  //    already is.
+  //
+  //    Clamped, because the offset is only worth having while it costs
+  //    nothing: past roughly a third of the rail the panel would start
+  //    so low that a long tree (interception, a fumble path) runs off
+  //    the bottom, and scrolling to reach Save is a worse trade than a
+  //    short reach up. Cleared whenever the stage empties.
+  (function railBehaviour(){
+    const rail = document.getElementById('typeRail');
+    const stage = document.getElementById('entryStage');
+    if (!rail || !stage) return;
+    const clearActive = () => rail.querySelectorAll('button.rail-active')
+      .forEach(b => b.classList.remove('rail-active'));
+    window.__railClear = () => { clearActive(); stage.style.marginTop = ''; };
+    rail.addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if (!btn || !rail.contains(btn)) return;
+      clearActive();
+      btn.classList.add('rail-active');
+      // EVERY PLAY TYPE LOCKS TO THE TOP OF THE FRAME. Requested
+      // directly: the buttons ABOVE Penalty -- Scrimmage and Special
+      // teams -- open their tree at the top, the way Rush and Pass
+      // already did.
+      //
+      // Rush and Pass only behaved that way by accident of position:
+      // they sit at the very top of the rail, so their offset was
+      // already zero. Kickoff, Punt, Field goal, PAT and 2PT sit lower
+      // and were being indented by however far down the rail they are,
+      // and the height rule in fitPanel() only caught the ones that
+      // happened to be tall.
+      //
+      // Split on the Penalty button's own DOM position rather than a
+      // hardcoded list of types, so a play type added to either group
+      // later inherits the right behaviour without anyone remembering
+      // to update this.
+      // EVERY tree opens at the top of the ladder area, with no
+      // exceptions. The offset was meant to save a short reach by
+      // opening level with the button just pressed, and the split --
+      // play types locked, utilities offset -- meant the panel started
+      // at a different height depending on which button was pressed.
+      // Reported directly as too much movement, and it is: a fixed
+      // starting point is worth more than the reach it saves, because
+      // the eye stops having to find the panel at all.
+      stage.style.marginTop = '0px';
+      // renderPlayPanel and the utility openers run on the BUTTON (target
+      // phase) and several of them call scrollIntoView themselves; this
+      // listener is on the rail and runs after, on the bubble. Scrolling
+      // before the offset is applied leaves the panel in the wrong place,
+      // so the final word on both has to happen here, once the panel is
+      // built and positioned. Deferred a frame so layout has settled.
+      const settle = window.requestAnimationFrame || (fn => setTimeout(fn, 0));
+      settle(() => settle(fitPanel));
+    });
+
+    // 3. THE YARDS ROW STAYS ON ONE LINE. The yards box and its spot
+    //    calculator are already siblings in one flex row -- rush, pass
+    //    and the sack path all build it that way, which is why the sack
+    //    tree looked right and the others did not. The row simply
+    //    carries flex-wrap:wrap for phones, and a stage narrower than
+    //    the old full-width column is enough to trigger it on a laptop
+    //    too, dropping the calculator underneath the box.
+    //
+    //    Done here rather than in CSS because the selector needed is
+    //    :has(), which is silently a no-op wherever it is unsupported --
+    //    and this is the fix that has now been asked for twice. An
+    //    observer catches every tree without editing any of them.
+    const unwrapYardsRow = () => {
+      // Guarded: the observer can still fire while the page is being
+      // torn down, when document is already gone.
+      if (typeof document === 'undefined' || !document) return;
+      const panel = document.getElementById('playPanel');
+      if (!panel || window.innerWidth < 900) return;
+      // Anchored on the yards INPUT, not on a wrapper id: only the pass
+      // tree wraps its yards block in #pp_yards_wrap -- the rush tree
+      // uses a bare <div>, so keying off that id fixed pass and silently
+      // missed rush, which is the one that was reported. Walking up from
+      // the input finds the row in every tree without editing any of
+      // them.
+      const yards = panel.querySelector('#pp_yards');
+      if (!yards) return;
+      let row = yards.parentElement;
+      while (row && row !== panel){
+        // The flex row carrying both the yards column and the
+        // calculator beside it -- the only ancestor that both wraps and
+        // holds more than the yards column itself.
+        const st = row.style || {};
+        if (st.display === 'flex' && st.flexWrap === 'wrap' && row.children.length > 1){
+          row.style.flexWrap = 'nowrap';
+          row.style.alignItems = 'flex-start';
+          return;
+        }
+        row = row.parentElement;
+      }
+    };
+    // 4. THE TREE IS ALWAYS REACHABLE, AND TALL ONES START AT THE TOP.
+    //    Opening a tree from a button low on the ladder could leave the
+    //    first field below the fold with nothing scrolling to it -- only
+    //    some of the openers call scrollIntoView, and the ones that do
+    //    ran before the offset above was applied.
+    //
+    //    A tree taller than the frame gives up its offset entirely and
+    //    locks to the top: the offset exists to save a short reach, and
+    //    it is not worth trading the bottom of a long tree (a kicker
+    //    tree especially, where Review sits at the very end) for it.
+    const fitPanel = () => {
+      if (typeof document === 'undefined' || !document) return;
+      const stageEl = document.getElementById('entryStage');
+      const panel = document.getElementById('playPanel');
+      if (!stageEl || !panel || panel.style.display === 'none') return;
+      // Clear of the sticky banner, which would otherwise cover the top
+      // of whatever we scroll to.
+      const banner = document.querySelector('.banner');
+      const top = (banner ? banner.getBoundingClientRect().height : 0) + 10;
+      const room = window.innerHeight - top;
+      // Lock to the top of the frame for anything that is a real play
+      // tree. Originally this only triggered when a tree was taller than
+      // the whole frame, which left the pass tree offset by the height
+      // of the Pass button -- tall enough to want every pixel, not tall
+      // enough to trip that test.
+      //
+      // Half the frame is the line: below it are the small utility
+      // panels (quarter marker, timeout, a spot prompt), where opening
+      // level with the button that was just pressed is the whole point
+      // and costs nothing. Above it the offset is only ever pushing a
+      // long tree's Review button closer to the bottom edge.
+      if (panel.getBoundingClientRect().height > room * 0.5) stageEl.style.marginTop = '0px';
+      const r = panel.getBoundingClientRect();
+      // Already fully visible and not tucked under the banner: leave the
+      // page where it is rather than scrolling for no reason.
+      if (r.top >= top && r.bottom <= window.innerHeight) return;
+      const target = window.pageYOffset + r.top - top;
+      try { window.scrollTo({ top: Math.max(0, target), behavior: 'smooth' }); }
+      catch (e) { try { window.scrollTo(0, Math.max(0, target)); } catch (e2) {} }
+    };
+
+    const panelEl = document.getElementById('playPanel');
+    // 5. ONE AUTHORITY ON SCROLLING. Roughly a dozen openers call
+    //    panel.scrollIntoView({block:'start'}) themselves -- correct
+    //    when the panel rendered far below four rows of buttons, wrong
+    //    now that it opens beside the rail already in view. Quarter
+    //    marker was the visible case: pressing it scrolled the page
+    //    down to a panel that had not moved.
+    //
+    //    Neutralised on the element rather than deleted at each call
+    //    site: every one of those calls goes through this same node, so
+    //    one override covers all of them and none of the original code
+    //    has to be touched. fitPanel() decides instead, and it already
+    //    declines to scroll when the panel is fully visible -- which for
+    //    a short utility panel it always is.
+    if (panelEl) panelEl.scrollIntoView = function(){};
+    if (panelEl && window.MutationObserver){
+      new MutationObserver(unwrapYardsRow).observe(panelEl, { childList: true });
+    }
+    // 6. THE DOCK TRACKS THE LADDER. Its top and height are copied from
+    //    the rail rather than written as CSS values: there is no CSS way
+    //    to say "as tall as that other element" when the two sit in
+    //    different positioning contexts, and a fixed pixel height would
+    //    drift the moment a button label wraps or a control is added.
+    //    Re-run on scroll and resize -- the rail is sticky, so its top
+    //    changes as the page moves until it locks.
+    const dock = document.getElementById('driveDock');
+    // DOCUMENT-positioned, not viewport-positioned. The first version of
+    // this was position:fixed and re-measured on every scroll event, with
+    // a subtree+attribute observer over the whole card on top of it --
+    // so every render forced a synchronous layout read and smooth
+    // scrolling stuttered against it. Reported as the ladder area moving
+    // and scrolling constantly, which is exactly what that thrash looks
+    // like.
+    //
+    // Absolute against the document instead: the dock scrolls with the
+    // page on its own, the way the card does, so there is NO scroll
+    // listener and nothing to keep in step frame by frame. It also
+    // removes the viewport clamp the fixed version needed -- the height
+    // can simply equal the card's, however tall the card gets.
+    const syncDock = () => {
+      if (typeof document === 'undefined' || !document || !dock) return;
+      // Under the breakpoint the dock is back in the normal flow and
+      // must not carry a fixed height.
+      if (window.innerWidth < 1220){
+        if (dock.style.top || dock.style.height){ dock.style.top = ''; dock.style.height = ''; }
+        return;
+      }
+      const card = document.getElementById('entryCard');
+      const r = (card || rail).getBoundingClientRect();
+      const top = Math.round(r.top + (window.pageYOffset || 0)) + 'px';
+      const height = Math.round(r.height) + 'px';
+      // Written only when the value actually changes: an unconditional
+      // write invalidates style on every call, which is the other half
+      // of what made this expensive.
+      if (dock.style.top !== top) dock.style.top = top;
+      if (dock.style.height !== height) dock.style.height = height;
+    };
+    // ON AIR sits level with the banner and matches its height. Same
+    // reasoning as the dock: measured, not hardcoded, because the
+    // banner's height follows its own content.
+    const air = document.getElementById('onAirBanner');
+    const syncAir = () => {
+      if (typeof document === 'undefined' || !document || !air) return;
+      const banner = document.querySelector('.banner');
+      if (!banner) return;
+      if (window.innerWidth < 1220){
+        if (air.style.top || air.style.height){ air.style.top = ''; air.style.height = ''; }
+        return;
+      }
+      const r = banner.getBoundingClientRect();
+      const top = Math.round(r.top + (window.pageYOffset || 0)) + 'px';
+      const height = Math.round(r.height) + 'px';
+      if (air.style.top !== top) air.style.top = top;
+      if (air.style.height !== height) air.style.height = height;
+    };
+    if (air){
+      syncAir();
+      window.addEventListener('resize', syncAir);
+      if (window.ResizeObserver){
+        const banner = document.querySelector('.banner');
+        if (banner) new ResizeObserver(syncAir).observe(banner);
+      }
+    }
+    window.__syncAir = syncAir;
+
+    if (dock){
+      syncDock();
+      window.addEventListener('resize', syncDock);
+      // ResizeObserver rather than a MutationObserver over the card:
+      // it fires when the card's SIZE changes and not when its contents
+      // merely re-render, which is the difference between a handful of
+      // calls per play and a continuous stream of them.
+      if (window.ResizeObserver){
+        const card = document.getElementById('entryCard');
+        if (card) new ResizeObserver(syncDock).observe(card);
+      } else if (window.MutationObserver){
+        const card = document.getElementById('entryCard') || rail;
+        new MutationObserver(syncDock).observe(card, { childList: true, subtree: true });
+      }
+    }
+    window.__syncDock = syncDock;
+    // The calculator readout starts hidden so an empty box is not a bare
+    // green sliver, but it is written from about ten different branches
+    // ("Return: 8 yds", "Yard line must be 0-50", and so on). Rather
+    // than touch every one of those call sites, its visibility is kept
+    // in step with its own text from here: shown when it has something,
+    // hidden when cleared.
+    const calcReadoutSync = () => {
+      if (typeof document === 'undefined' || !document) return;
+      const panel = document.getElementById('playPanel');
+      if (!panel) return;
+      panel.querySelectorAll('#pp_calc_readout, [id$="_calc_readout"]').forEach(el => {
+        const has = !!String(el.textContent || '').trim();
+        const want = has ? 'block' : 'none';
+        if (el.style.display !== want) el.style.display = want;
+      });
+    };
+    if (panelEl && window.MutationObserver){
+      // characterData for the text itself, childList for a panel rebuild.
+      new MutationObserver(calcReadoutSync)
+        .observe(panelEl, { childList: true, subtree: true, characterData: true });
+    }
+    window.__calcReadoutSync = calcReadoutSync;
+    window.__railUnwrap = unwrapYardsRow;
+    window.__railFit = fitPanel;
+  })();
   let currentSpotGetter = null, rushFumSpotGetter = null, passFumSpotGetter = null, sackFumSpotGetter = null;
 
   function startingSpotFieldsHtml(idPrefix, label, driveTeamKey){
@@ -4945,6 +5501,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (code) code.value = '';
     pending = null;
     document.querySelectorAll('.ptypeBtn').forEach(b => b.classList.remove('picked'));
+    // Prototype: drop the rail's selected state and its offset with it.
+    if (window.__railClear) window.__railClear();
     // Opening a tree scrolls down to it, so collapsing has to scroll back
     // -- otherwise Clear leaves the coach staring at empty space where
     // the panel used to be, with the play-type buttons off-screen above.
@@ -5506,16 +6064,37 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // earns its place in the ORDERING, which is why it is still built.
       void idStats; void numKey;
       const statFn = null;
+      // Requested directly: the "or type #" box sits BESIDE the seeded
+      // picker rather than under it. On the pass tree the quarterback
+      // list is usually one or two buttons, so the manual box was
+      // claiming a whole row to itself for a field that is mostly
+      // unused. Ids are untouched -- only the wrapper is new.
       return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
-        '<div id="pp_' + role + '_grid">' + pickerHtml(list, 'pp_' + role + '_pick', statFn) + '</div>' +
-        '<input autocomplete="off" type="text" id="pp_' + role + '_manual" placeholder="or type #" style="width:100px; margin-top:4px;">';
+        '<div class="pick-row">' +
+          '<div id="pp_' + role + '_grid">' + pickerHtml(list, 'pp_' + role + '_pick', statFn) + '</div>' +
+          '<input autocomplete="off" type="text" id="pp_' + role + '_manual" placeholder="or type #" style="width:100px;">' +
+        '</div>';
     }
     function defBlock(label, suffix){
       suffix = suffix || '';
       const list = defenseEligible(def);
-      return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
-        '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix) + '</div>' +
-        '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px; margin-top:4px;">';
+      const inner = '<div class="pick-row">' +
+          '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix) + '</div>' +
+          '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px;">' +
+        '</div>';
+      // Optional credits collapse. "Tackled by (optional)" is a full
+      // picker plus a manual box on every rush and pass, and it is
+      // optional by design -- a whole block of height for a field that is
+      // often skipped. The REQUIRED credits (a recovery, a returner) are
+      // untouched: only the ones whose own label says optional collapse,
+      // so this can never hide something the play needs.
+      if (!/optional/i.test(label)) {
+        return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' + inner;
+      }
+      return '<div class="opt-block">' +
+        '<button type="button" class="opt-toggle">+ ' + label.replace(/\s*\(optional\)\s*/i, '') + '</button>' +
+        '<div class="opt-body">' + inner + '</div>' +
+      '</div>';
     }
     // Dedicated returner picker for kickoffs and punts. It deliberately
     // reuses the credit field's ids and classes (pp_credit_grid /
@@ -5528,8 +6107,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       suffix = suffix || '';
       const list = returnerEligible(def);
       return '<p style="font-size:13px; color:#888; margin:8px 0 4px;">' + label + '</p>' +
-        '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, (num, p) => (p && p.pos) || '', 'no returners on the roster — type a number below') + '</div>' +
-        '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px; margin-top:4px;">';
+        '<div class="pick-row">' +
+          '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, (num, p) => (p && p.pos) || '', 'no returners on the roster — type a number below') + '</div>' +
+          '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #" style="width:100px;">' +
+        '</div>';
     }
     // Field labels carry the choice being offered, so they were too quiet
     // at 13px #888 -- the same grey as every hint on the page.
@@ -5659,14 +6240,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       return '<div id="pp_calc_wrap" style="margin-bottom:6px; margin-left:22px; ' +
         'padding-left:22px; border-left:1px solid #d8d8d8;">' +
         fieldLabel(label || 'Or enter tackled on') +
-        '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+        '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:nowrap;">' +
           '<button type="button" class="ptoggle calcSide" data-side="own" ' +
             'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
             TEAMS[off].name + '</button>' +
           '<button type="button" class="ptoggle calcSide" data-side="opp" ' +
             'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
             TEAMS[opp].name + '</button>' +
-          '<input autocomplete="off" type="text" id="pp_calc_yardline" placeholder="yard line" style="width:90px;">' +
+          '<input autocomplete="off" type="text" id="pp_calc_yardline" placeholder="yard line" style="width:96px; flex:0 0 96px;">' +
 
         '</span>' +
         spotCalcReadoutHtml() +
@@ -5684,8 +6265,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // at the dividing rule, whatever width the yards box happens to be.
     // Every attempt to line it up with a fixed indent was guessing at a
     // measurement the browser already knows.
+    // Hidden until it has something to say. The hint that used to live
+    // here moved into the yard-line placeholder, which left this
+    // rendering as an empty green sliver -- a coloured bar with no text,
+    // reported as wrapping and not displaying. calcReadoutSync() below
+    // shows it the moment there is real text and hides it again when it
+    // is cleared.
     const spotCalcReadoutHtml = () =>
-      '<div id="pp_calc_readout" style="font-size:14px; font-weight:600; color:#1a4d2e; ' +
+      '<div id="pp_calc_readout" style="display:none; font-size:14px; font-weight:600; color:#1a4d2e; ' +
       'background:#eef6f1; border-left:3px solid #1a7a4c; border-radius:4px; ' +
       'padding:7px 10px; margin-top:10px;"></div>';
 
@@ -6411,7 +6998,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           return;
         }
         if (!raw || !side){
-          readout.textContent = 'Enter a yard line to work the gain out from the spot.';
+          // Was a three-line paragraph in a narrow column saying what the
+        // placeholder now says inside the box the coach is already
+        // looking at. Blank until there is a real figure to report.
+        readout.textContent = '';
           releaseYards(); return;
         }
         const n = parseInt(raw, 10);
@@ -7977,6 +8567,85 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     document.getElementById('pp_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('pp_review').addEventListener('click', () => buildAndReview(type, sel));
+
+    // ===================================================================
+    // PANEL SHORTCUTS. Promoted from gametest3.html, 22 Aug 2026.
+    // ===================================================================
+    (function panelShortcuts(){
+      const panel = document.getElementById('playPanel');
+      if (!panel) return;
+
+      // 3. Optional credit blocks expand on demand. Auto-opened if
+      //    something is already selected in there -- re-entering a play,
+      //    or any path that seeds a credit, must not appear to have lost
+      //    it behind a collapsed button.
+      panel.querySelectorAll('.opt-block').forEach(block => {
+        const btn = block.querySelector('.opt-toggle');
+        const label = btn ? btn.textContent.replace(/^\+\s*/, '') : '';
+        const seeded = block.querySelector('button.picked, button.suggested') ||
+                       (block.querySelector('input') || {}).value;
+        if (seeded) block.classList.add('open');
+        if (btn) btn.addEventListener('click', () => {
+          block.classList.toggle('open');
+          btn.textContent = (block.classList.contains('open') ? '− ' : '+ ') + label;
+          if (block.classList.contains('open')){
+            const first = block.querySelector('.opt-body button');
+            if (first && first.focus) try { first.focus(); } catch(e){}
+          }
+          if (window.__syncDock) window.__syncDock();
+        });
+        if (seeded && btn) btn.textContent = '− ' + label;
+      });
+
+      // 6. NOT DONE -- single-candidate pre-selection was built, caught
+      //    breaking things, and removed rather than shipped.
+      //
+      //    The picker clears the field when the player who is ALREADY
+      //    selected is clicked (see the handler: "the one thing a coach
+      //    needs when the pre-selection is wrong"). Pre-selecting the
+      //    only candidate therefore turns the very next click on that
+      //    player -- the obvious thing to do when his button is the only
+      //    one there -- into wiping the field. It cost nothing to type
+      //    and would have cost a real play to discover.
+      //
+      //    The app already auto-selects the quarterback deliberately,
+      //    and every one of those call sites guards with
+      //    `!btn.classList.contains('picked')`. Extending it to carrier,
+      //    receiver, kicker and punter is not worth the trap for one
+      //    saved click.
+
+      // 7. Enter in a text field reviews the play, the same as pressing
+      //    Review. Excludes the manual "#" boxes, where Enter already
+      //    means "resolve this number", and any field inside a still
+      //    collapsed block.
+      panel.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        const t = e.target;
+        if (!t || t.tagName !== 'INPUT' || t.type !== 'text') return;
+        if (/_manual$|_manual_/.test(t.id || '')) return;
+        if (t.id === 'pp_calc_yardline') return;
+        e.preventDefault();
+        const rv = document.getElementById('pp_review');
+        if (rv) rv.click();
+      });
+
+      // 8. Focus moves forward as the play is filled in: picking the
+      //    passer lands the cursor on the receiver list, picking the
+      //    receiver lands it in the yards box. Only ever moves focus
+      //    FORWARD to an empty field, so it cannot yank the cursor away
+      //    from something being corrected.
+      const advance = (fromClass, toSel) => {
+        panel.querySelectorAll('button.' + fromClass).forEach(b => {
+          b.addEventListener('click', () => {
+            const to = panel.querySelector(toSel);
+            if (to && to.focus && !to.value) try { to.focus(); } catch(e){}
+          });
+        });
+      };
+      advance('pp_passer_pick', '#pp_receiver_grid button, #pp_yards');
+      advance('pp_receiver_pick', '#pp_yards');
+      advance('pp_carrier_pick', '#pp_yards');
+    })();
   }
 
   function buildAndReview(type, sel){
@@ -8754,11 +9423,41 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
     document.getElementById('confirmCard').style.display = 'block';
     const cc = document.getElementById('confirmCard');
-    if (cc.scrollIntoView) try { cc.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(e){}
+    // The tree COLLAPSES at Review, leaving
+    // just this card. It used to stay expanded with the card rendered
+    // underneath it, so confirming a play meant scrolling past the whole
+    // tree to reach Save -- on a long tree, past a screenful of controls
+    // whose job was already done.
+    //
+    // Hidden, NOT emptied. Every field keeps its value while display:none,
+    // which is what makes Edit a real return rather than a re-entry: it
+    // simply shows the panel again, with every selection still in it.
+    // collapsePlayPanel() is the one that empties, and it is only reached
+    // by Clear and by Save.
+    const cpTree = document.getElementById('playPanel');
+    if (cpTree) cpTree.style.display = 'none';
+    // Scrolling to it is pointless now that it is the only thing there,
+    // and it fights the rail layout: fitPanel() and the top-lock already
+    // put the stage where it should be.
+    void cc;
   }
+
+  document.getElementById('confirmClearBtn').addEventListener('click', () => {
+    // Exactly what the tree's own Clear does: discard the play, empty the
+    // panel, drop the staged code and the pending parse, and unlight the
+    // ladder. Routed through the same function rather than repeating it,
+    // so the two can never drift.
+    collapsePlayPanel();
+    if (window.__railClear) window.__railClear();
+  });
 
   document.getElementById('editBtn').addEventListener('click', () => {
     document.getElementById('confirmCard').style.display = 'none';
+    // Bring the tree back with its selections intact -- showConfirm only
+    // hid it. Guarded on there being something to show: Edit is also
+    // reachable on paths that never built a panel.
+    const et = document.getElementById('playPanel');
+    if (et && et.innerHTML.trim()) et.style.display = 'block';
   });
 
   document.getElementById('saveBtn').addEventListener('click', () => {
@@ -8902,6 +9601,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('code').value = '';
     pending = null;
     if (insertMode){ insertMode = null; renderInsertBanner(); }
+    // Prototype: the scroll-to-top below is original, but it left the
+    // rail's selected button lit and the stage still offset, so the next
+    // play opened against a stale indent.
+    if (window.__railClear) window.__railClear();
     if (window.scrollTo) try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch(e){}
   });
 

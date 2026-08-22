@@ -34,6 +34,15 @@ function typeInto(win, el, value) {
 // Pick a jersey number the way a coach does: click the player's picker
 // button if the app is showing one, otherwise type the number into the
 // "or type #" field next to it. Both are real UI paths.
+//
+// opts.name DISAMBIGUATES a shared number, added 19 Aug 2026 while
+// building a fuzzer for exactly this: two players can wear the same
+// number, and the picker offers a separate button for each (with a "?"
+// on both), distinguished only by name. Every caller before this simply
+// had one player per number, so the first matching button was always
+// the right one -- opts.name is optional and every existing call site
+// is unaffected, since without it this defaults to that exact prior
+// behaviour.
 function pickPlayer(win, doc, role, num, opts = {}) {
   const panel = doc.getElementById('playPanel');
   const suffix = opts.suffix || '';
@@ -41,7 +50,24 @@ function pickPlayer(win, doc, role, num, opts = {}) {
   const manualId = role === 'credit' ? 'pp_credit_manual' + suffix : 'pp_' + role + '_manual';
 
   if (opts.preferPicker !== false) {
-    const btn = panel.querySelector('.' + groupClass + '[data-num="' + num + '"]');
+    const candidates = [...panel.querySelectorAll('.' + groupClass + '[data-num="' + num + '"]')];
+    // TITLE AS WELL AS TEXT. A picker button shows the surname only; the
+    // full name is in its title. Matching text alone stopped finding
+    // anyone once the rail layout was promoted, and the `|| candidates[0]`
+    // below then quietly clicked the WRONG PLAYER on every shared number
+    // -- the roster fuzzer reported it as bad stat attribution, which is
+    // the one thing it is supposed to catch, and the app was innocent.
+    const labelOf = b => (b.getAttribute('title') || '') + ' ' + (b.textContent || '');
+    let btn = candidates[0];
+    if (opts.name){
+      const found = candidates.find(b => labelOf(b).includes(opts.name));
+      // Loud, not silent. Asking for a specific player and being handed
+      // whoever happens to be first is how a broken selector reads as a
+      // failing application. If the name cannot be found, say so here.
+      if (!found) throw new UnreachableByUI('no picker button for "' + opts.name + '" on #' + num +
+        ' -- candidates: ' + candidates.map(labelOf).map(t => t.trim()).join(' | '));
+      btn = found;
+    }
     if (btn) { click(win, btn); return 'picker'; }
   }
   typeInto(win, q(doc, manualId), num);
@@ -111,7 +137,7 @@ function enterPlay(h, spec) {
   const t = spec.type;
   openPanel(win, doc, t);
 
-  const P = (role, num, opts) => { if (num !== undefined && num !== null) pickPlayer(win, doc, role, num, Object.assign({ preferPicker: spec.preferPicker }, opts || {})); };
+  const P = (role, num, opts) => { if (num !== undefined && num !== null) pickPlayer(win, doc, role, num, Object.assign({ preferPicker: spec.preferPicker, name: spec[role + 'Name'] }, opts || {})); };
 
   if (t === 'penalty') {
     const panel = doc.getElementById('playPanel');
@@ -446,4 +472,17 @@ function setDrive(h, { down = 1, distance = 10, side = 'own', yardline = 25 }) {
   return finish(h, {});
 }
 
-module.exports = { enterPlay, openPanel, pickPlayer, typeInto, click, toggle, radio, setStartingSpot, setDrive, finish, UnreachableByUI };
+// Calls a timeout for the given team via timeoutUtilBtn -- the exact UI
+// path a coach actually uses. Added 19 Aug 2026 alongside the
+// isAdminMarker fix: no fuzzer generated a timeout at all before this,
+// which is exactly why a real-game report (a timeout called between a
+// defensive score and its own PAT) found the bug before any test did.
+function enterTimeout(h, team) {
+  const { window: win, document: doc } = h;
+  click(win, q(doc, 'timeoutUtilBtn'));
+  const btn = doc.querySelector('.toTeamBtn[data-team="' + team + '"]');
+  if (!btn) throw new UnreachableByUI('no timeout button for ' + team);
+  click(win, btn);
+}
+
+module.exports = { enterPlay, openPanel, pickPlayer, typeInto, click, toggle, radio, setStartingSpot, setDrive, enterTimeout, finish, UnreachableByUI };

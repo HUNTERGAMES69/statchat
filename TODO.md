@@ -2077,10 +2077,19 @@ entering numbers, to be compared over a full game. `game.html` is
 untouched by all three. See `HANDOFF.md` for what each one is and what to
 watch for.
 
-- [ ] **Decide which input method wins**, then promote it into
-  `game.html` and delete the other two test files. If the field strip
-  wins it should also replace the four spot calculators, since it answers
-  the same question.
+- [x] **Decide which input method wins**, then promote it into
+  `game.html` and delete the other two test files. DONE 22 Aug 2026: the
+  rail layout in `gametest3.html` won and is now `game.html`; the previous
+  page is the frozen fallback `game_legacy.html`. See PROJECT_NOTES.
+- [ ] **Delete `gametest3.html` from the repo** — it is now a byte-level
+  duplicate of `game.html` and will drift the moment either is edited.
+  `gametest.html` and `gametest2.html` stay, marked DEAD PROTOTYPE;
+  `gametest2` still holds the field strip.
+- [ ] **Duplicate SURNAMES on a roster** now collide on picker buttons,
+  which show the surname only. Two Robinsons read the same at a glance and
+  are told apart by jersey number and the hover title. Worth a look at the
+  real roster before the beta; if it bites, the fix is to add a first
+  initial when a surname is not unique.
 - [ ] `inputmode="none"` in `gametest3.html` may not suppress the soft
   keyboard in Safari. If it does not, that variant is untestable on an
   iPad and the attribute should become `numeric`.

@@ -2214,3 +2214,52 @@ snapshot, all five fuzzers — against the modified harness before
 trusting any of it, since a shared mock used by forty-odd other tests
 is exactly the kind of file where a well-intentioned addition can
 silently change behaviour nothing else was checking for.
+
+## The rail layout became game.html (22 August 2026)
+
+The second promotion, and it followed the first one's procedure
+deliberately: contents move, the address does not. `dashboard.html` still
+navigates to `game.html?id=`, so bookmarks, open tabs and deep links keep
+working, and the fallback is the file you have to ask for by name.
+
+**The fallback was replaced, not added to.** `game_legacy.html` already
+existed — the pre-keypad page frozen on 17 August — and it had none of the
+fixes made since: not the guided kickoff return-touchdown deadlock, not
+the half/game-end clock entry, not the clock keypad. A fallback that can
+itself deadlock is not a fallback, so it now holds the 22 August
+`game.html` instead, fully patched, with a banner at the top saying what
+it is and that it is frozen. The older file is in git history if it is
+ever wanted, which it should not be.
+
+**The same two safety checks as last time, and they earned their keep.**
+The function-level diff found zero functions in `game.html` missing from
+the prototype (113 → 114; `shortPickerName` was the addition), and the
+golden snapshot held all 50 paths byte-identical — the entry layout
+changed completely and nothing downstream moved at all.
+
+**Promotion surfaced a real bug that testing on the prototype had not.**
+Surname-only picker labels reduced an AMBIGUOUS shared number to nothing:
+those entries carry a trailing `?` inside the name string itself, so
+taking the last whitespace token returned the question mark and discarded
+the name. Both players on a shared number rendered as an identical
+`7 ?` — precisely the case where the name is the only thing telling them
+apart. `shortPickerName` now splits the marker off, shortens the name in
+front of it, and puts it back.
+
+**And a test-harness fault that had been reading as an application fault.**
+`ui_driver.pickPlayer` matched `textContent.includes(opts.name)` and fell
+back to `candidates[0]` when it found nothing. Once labels showed
+surnames the match stopped working, the fallback quietly clicked the WRONG
+player, and the roster fuzzer duly reported bad stat attribution — the one
+thing it exists to catch — while the app was innocent. It now matches
+title as well as text, and THROWS rather than falling back: asking for a
+specific player and being handed whoever happens to be first is how a
+broken selector disguises itself as a broken engine.
+
+`picker_behaviour_check` was updated the same way, reading identity from
+title-plus-text rather than the visible label. The two tests that pointed
+at `gametest3.html` now point at `game_legacy.html`, so the fallback is
+exercised as a first-class page rather than drifting unwatched.
+
+`gametest3.html` is now a duplicate of `game.html` and should be deleted
+from the repo.
