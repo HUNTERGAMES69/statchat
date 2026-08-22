@@ -488,6 +488,33 @@ function absSecToClockStr(absSec){
 // (and in view.html, and in broadcast.html) as three identical copies;
 // "own 50" had to be fixed in one place, not three. Removed 13 Aug 2026.
 
+// THE SPECTATOR VERSION: team names instead of own/opp.
+// ---------------------------------------------------------------------
+// "2nd & 10 at opp 45" asks the reader to work out whose 45 that is, and
+// on a screen watched from across a room by people who did not enter the
+// play there is nothing to work it out from. "2nd & 10 at Ouachita 45"
+// says it outright.
+//
+// Deliberately NOT a change to markerLabel() in engine.js. That function
+// is shared with the entry page and the reports, where own/opp is the
+// right register -- the scorer knows whose ball it is, and "own" is
+// shorter than a school name in a column that has to stay narrow. This
+// wording is a property of the audience, not of the yard line.
+//
+// The 50 keeps its own name: it belongs to neither side, and "Neville 50"
+// would be wrong however the possession reads.
+function markerLabelNamed(fp, possession){
+  if (fp === null || fp === undefined) return '';
+  if (fp === 50) return 'the 50';
+  const ownTeam = possession || 'teamA';
+  const side = fp < 50 ? ownTeam : otherTeam(ownTeam);
+  const name = (TEAMS[side] || {}).name;
+  // Falls back to the shared wording if a team has no name yet -- better
+  // "opp 45" than "undefined 45".
+  if (!name) return markerLabel(fp);
+  return name + ' ' + (fp < 50 ? fp : (100 - fp));
+}
+
 function readFileAsDataURL(file){
   return new Promise(resolve => {
     const r = new FileReader();
@@ -1082,7 +1109,7 @@ function extractNameTag(rawName){
       const hasDrive = driveThisHalf && !!state.down &&
         state.fieldPos !== null && state.fieldPos !== undefined;
       document.getElementById('downText').textContent = hasDrive
-        ? (ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabel(state.fieldPos))
+        ? (ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabelNamed(state.fieldPos, state.possession))
         : '';
       // Just the quarter, matching game.html. Which half it belongs to is
       // obvious from the number and only crowded the banner.
@@ -1691,7 +1718,7 @@ function extractNameTag(rawName){
       state.fieldPos !== null && state.fieldPos !== undefined;
     const downLine = hasDrive
       ? '<div style="font-size:24px; font-weight:600; color:#555; margin-top:8px;">' +
-        ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabel(state.fieldPos) + '</div>'
+        ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabelNamed(state.fieldPos, state.possession) + '</div>'
       : '';
     return playHtml + tryLine + downLine + timeoutLines;
   }
