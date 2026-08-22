@@ -22,7 +22,7 @@
 //   - a fumble relabels it, because the spot is where the ball came
 //     loose, not where anyone was tackled
 
-const { bootGamePage } = require('./harness');
+const { bootGamePage, DEFAULT_GAME } = require('./harness');
 const { setDrive, click, typeInto } = require('./ui_driver');
 
 async function openRush(startSide, startYardline) {
@@ -303,6 +303,42 @@ async function run() {
       }
       h.close();
     }
+  }
+
+  // TEAM-NAME BUTTONS MUST NOT WRAP. The calculator's two side buttons
+  // carry a school name, and a two-word one broke across two lines --
+  // that button became taller than the one beside it and knocked the row
+  // out of alignment. Reported with "West Monroe".
+  {
+    const game = Object.assign({}, DEFAULT_GAME, {
+      our_team_is_home: true, home_team_name: 'Neville', away_team_name: 'West Monroe' });
+    const h = await bootGamePage({ game });
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    for (const type of ['rush', 'pass']) {
+      click(win, doc.querySelector('.ptypeBtn[data-type="' + type + '"]'));
+      const sides = [...doc.querySelectorAll('#playPanel .calcSide')];
+      if (sides.length !== 2) { fail('calc:' + type, 'expected two side buttons, got ' + sides.length); continue; }
+      sides.forEach(b => {
+        const c = win.getComputedStyle(b);
+        if (c.whiteSpace !== 'nowrap') {
+          fail('calc:' + type + ':wrap', JSON.stringify(b.textContent.trim()) + ' can wrap onto two lines');
+        }
+      });
+      // Both buttons the same size as each other -- the wrap showed up as
+      // one being taller, so equal styling is the thing to hold.
+      const a = win.getComputedStyle(sides[0]), b2 = win.getComputedStyle(sides[1]);
+      if (a.fontSize !== b2.fontSize || a.padding !== b2.padding) {
+        fail('calc:' + type + ':uneven', 'the two side buttons should be styled alike');
+      }
+      // Sizing must come from the stylesheet: it was inline, which beats a
+      // rule, so the nowrap fix applied and the smaller text that makes
+      // room for it did not.
+      if (/font-size/.test(sides[0].getAttribute('style') || '')) {
+        fail('calc:' + type + ':inline', 'font-size should not be inline on the side buttons');
+      }
+    }
+    h.close();
   }
 
   return failures;
