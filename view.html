@@ -994,16 +994,11 @@ function extractNameTag(rawName){
     const qEl = document.getElementById('quarterText');
     if (phase){
       document.getElementById('downText').textContent = '';
-      // At halftime the header carries who kicks off next, smaller and to
-      // the left of the word itself -- the one thing a spectator wants
-      // during the interval that the scoreboard does not already say.
-      if (phase === 'HALFTIME' && secondHalfKicker && TEAMS[secondHalfKicker]){
-        qEl.innerHTML = '<span style="font-size:13px; font-weight:700; letter-spacing:0.02em; ' +
-          'opacity:0.75; margin-right:10px;">' + TEAMS[secondHalfKicker].name +
-          ' kicks off</span>' + phase;
-      } else {
-        qEl.textContent = phase;
-      }
+      // Just the phase. Who kicks off to start the second half is shown
+      // under the scoring summary instead -- it is a fact about what
+      // happens next, and it reads better beside the half's scoring than
+      // squeezed against the banner's own word.
+      qEl.textContent = phase;
       // Large and bold: this is the whole state of the game, and at 15px
       // regular it read as just another label beside the quarter.
       qEl.style.fontSize = '26px';
@@ -1267,7 +1262,15 @@ function extractNameTag(rawName){
         document.getElementById('scoringHeading').textContent =
           phase === 'HALFTIME' ? 'Scoring — first half' : 'Scoring — final';
         const rows = scoringSummary(plays);
-        document.getElementById('scoringBody').innerHTML = rows.length
+        // WHO KICKS OFF NEXT, under the scoring rows. Halftime only: at
+        // FINAL there is no next kickoff, and at NOT STARTED the opening
+        // kickoff has not been chosen yet.
+        const kickLine = (phase === 'HALFTIME' && secondHalfKicker && TEAMS[secondHalfKicker])
+          ? '<div style="margin-top:18px; padding-top:14px; border-top:1px solid #e8e8e8; ' +
+            'font-size:20px; font-weight:800;">' + TEAMS[secondHalfKicker].name +
+            ' kicks off</div>'
+          : '';
+        document.getElementById('scoringBody').innerHTML = (rows.length
           ? rows.map(r => {
               const t = TEAMS[r.team] || {};
               const bg = t.bg || '#1a1a2e';
@@ -1283,7 +1286,7 @@ function extractNameTag(rawName){
                 '<span class="score-tally">' + r.teamA + '&ndash;' + r.teamB + '</span>' +
                 '</div>';
             }).join('')
-          : '<div style="color:#999; padding:14px 0;">no scoring yet</div>';
+          : '<div style="color:#999; padding:14px 0;">no scoring yet</div>') + kickLine;
       }
 
       // COLOUR EACH DRIVE CARD FOR THE TEAM THAT HAD THE BALL.
