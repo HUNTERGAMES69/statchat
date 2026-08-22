@@ -152,6 +152,77 @@ async function run() {
     w.close();
   }
 
+  // --- 7. THE DRIVE CARDS DO NOT REACH BACK ACROSS THE INTERVAL.
+  //     Reported from a real game: at the start of Q3 the Current Drive
+  //     card headlined "Quarter marker — start of Q3" and carried the
+  //     last FIRST-HALF drive's rush/pass/total tiles and its down line,
+  //     with a first-half punt under Previous Drive. A drive does not
+  //     span halftime, so none of it described the game any more.
+  {
+    const { click, typeInto } = require('./ui_driver');
+    const build = async (stopAfter) => {
+      const h = await bootGamePage();
+      const doc = h.window.document, win = h.window;
+      h.evalIn('window.confirm = () => true;');
+      setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+      enterPlay(h, { type: 'rush', carrier: '22', yards: '6' });
+      enterPlay(h, { type: 'punt', punter: '3', puntyds: '40', credit: '21', retyds: '5', spot: { side: 'own', yardline: 35 } });
+      // A REAL PLAY in the last first-half drive. Without one the drive
+      // that the interval interrupts is empty, its tiles read 0/0, and
+      // the check below cannot tell a clamped card from an unclamped one
+      // -- the first version of this test passed with the clamp removed.
+      enterPlay(h, { type: 'rush', carrier: '30', yards: '9' });
+      click(win, doc.getElementById('quarterUtilBtn'));
+      click(win, doc.getElementById('endFirstHalfBtn'));
+      await new Promise(r => setTimeout(r, 200));
+      click(win, doc.getElementById('startHalfBtn'));
+      await new Promise(r => setTimeout(r, 200));
+      if (stopAfter !== 'marker'){
+        click(win, doc.getElementById('pickA'));
+        await new Promise(r => setTimeout(r, 150));
+        click(win, doc.querySelector('.gk_kicker_pick'));
+        const dir = doc.querySelector('.gk_dir_btn');
+        if (dir) click(win, dir);
+        click(win, doc.getElementById('guidedKickoffSave'));
+        await new Promise(r => setTimeout(r, 220));
+      }
+      const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+      h.close();
+      return rows;
+    };
+
+    // (a) Start 2nd half pressed, nothing entered: the card says where the
+    //     game is and nothing else.
+    let w = await view(await build('marker'));
+    let head = w.document.getElementById('driveLogScroll').textContent;
+    if (!/Start of Q3/.test(head)) fail('half-reset:headline', 'expected "Start of Q3", got: ' + JSON.stringify(head.trim()));
+    if (/Quarter marker/.test(head)) fail('half-reset:marker', 'a quarter marker is not a play and must not headline the drive tile');
+    if (w.document.getElementById('currentDriveTiles').textContent.trim()) {
+      fail('half-reset:tiles', 'the tiles still carry first-half figures: ' + w.document.getElementById('currentDriveTiles').textContent.trim());
+    }
+    if (!/no previous drive/i.test(w.document.getElementById('prevDriveLogScroll').textContent)) {
+      fail('half-reset:previous', 'Previous Drive should not show a first-half drive after the interval');
+    }
+    w.close();
+
+    // (b) Kickoff entered: it becomes the headline. It belongs to the
+    //     KICKING team, so the drive-team filter would otherwise hide it
+    //     and leave "no active drive yet" with the kick sitting in the log.
+    w = await view(await build('kickoff'));
+    head = w.document.getElementById('driveLogScroll').textContent;
+    if (!/kicks off/.test(head)) fail('half-reset:kickoff', 'expected the kickoff as the headline, got: ' + JSON.stringify(head.trim()));
+    if (/punts|rush for 9/.test(head)) fail('half-reset:stale', 'a first-half play is showing on a second-half card: ' + JSON.stringify(head.trim()));
+    // THE TILES ARE THE REAL TEST. The first half's last drive had a
+    // 9-yard rush in it; if the card still measures from before the
+    // interval those yards appear here, on a half in which nothing has
+    // been run yet.
+    const tiles = w.document.getElementById('currentDriveTiles').textContent;
+    if (/9/.test(tiles)) {
+      fail('half-reset:tiles-stale', 'the tiles are counting first-half yardage on a second-half card: ' + JSON.stringify(tiles.trim()));
+    }
+    w.close();
+  }
+
   return failures;
 }
 
