@@ -6264,19 +6264,32 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // guided panel when one is showing, the entry card otherwise. Only the
   // centre section moves.
   function columnTopRect(){
-    const gp = document.getElementById('guidedPanel');
     const card = document.getElementById('entryCard');
-    const gpShown = gp && gp.style.display !== 'none' && gp.offsetParent !== null;
-    // offsetParent is null under jsdom for everything, so fall back to
-    // the inline display -- which is what the guided flow actually sets.
-    const useGuided = gp && gp.style.display !== 'none';
-    const topEl = (gpShown || useGuided) ? gp : card;
-    if (!topEl || !card) return null;
-    const t = topEl.getBoundingClientRect();
+    if (!card) return null;
+    // MEASURED FROM THE BANNER, which does not move.
+    // -------------------------------------------------------------------
+    // Two earlier attempts measured something inside the column -- first
+    // the entry card, then whichever card was on top of it. Both still
+    // moved, because everything in that column is displaced by whatever
+    // is above it, and the guided kickoff panel is exactly that.
+    //
+    // The banner is the one fixed reference on the page: offsetTop is its
+    // position in the DOCUMENT, unaffected by scroll or by its own
+    // stickiness (see syncAir, which had the same problem). The column
+    // always begins a constant distance below it, so the margins can be
+    // pinned there and stop caring what the centre section is doing.
+    //
+    // COLUMN_GAP is the margin under the banner plus the status line
+    // beneath it; it is a layout constant, not a measurement, which is
+    // the point -- a measured value is what kept moving.
+    const banner = document.querySelector('.banner');
     const c = card.getBoundingClientRect();
-    // Height runs from the top of the column to the bottom of the entry
-    // card, so the margin still spans the whole of it.
-    return { top: t.top, height: Math.max(c.bottom - t.top, c.height) };
+    if (!banner) return { top: c.top, height: c.height };
+    const COLUMN_GAP = 46;
+    const bannerBottomDoc = banner.offsetTop + banner.offsetHeight;
+    // Back to viewport coordinates, since the caller adds pageYOffset.
+    const top = bannerBottomDoc + COLUMN_GAP - (window.pageYOffset || 0);
+    return { top: top, height: Math.max(c.bottom - top, c.height) };
   }
 
   // ON AIR IS A TOGGLE ON THIS PAGE TOO.
