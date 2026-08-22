@@ -51,9 +51,23 @@ function pickPlayer(win, doc, role, num, opts = {}) {
 
   if (opts.preferPicker !== false) {
     const candidates = [...panel.querySelectorAll('.' + groupClass + '[data-num="' + num + '"]')];
-    const btn = opts.name
-      ? (candidates.find(b => b.textContent.includes(opts.name)) || candidates[0])
-      : candidates[0];
+    // TITLE AS WELL AS TEXT. A picker button shows the surname only; the
+    // full name is in its title. Matching text alone stopped finding
+    // anyone once the rail layout was promoted, and the `|| candidates[0]`
+    // below then quietly clicked the WRONG PLAYER on every shared number
+    // -- the roster fuzzer reported it as bad stat attribution, which is
+    // the one thing it is supposed to catch, and the app was innocent.
+    const labelOf = b => (b.getAttribute('title') || '') + ' ' + (b.textContent || '');
+    let btn = candidates[0];
+    if (opts.name){
+      const found = candidates.find(b => labelOf(b).includes(opts.name));
+      // Loud, not silent. Asking for a specific player and being handed
+      // whoever happens to be first is how a broken selector reads as a
+      // failing application. If the name cannot be found, say so here.
+      if (!found) throw new UnreachableByUI('no picker button for "' + opts.name + '" on #' + num +
+        ' -- candidates: ' + candidates.map(labelOf).map(t => t.trim()).join(' | '));
+      btn = found;
+    }
     if (btn) { click(win, btn); return 'picker'; }
   }
   typeInto(win, q(doc, manualId), num);

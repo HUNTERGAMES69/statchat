@@ -18,6 +18,20 @@
 const { bootGamePage, defaultRoster } = require('./harness');
 const { enterPlay, setDrive, click, typeInto } = require('./ui_driver');
 
+// A picker button shows the SURNAME only; the full name lives in its
+// title. These checks are about WHICH PLAYER a button is, not about how
+// his name is abbreviated, so they read the title and fall back to the
+// visible text. Written after promoting the rail layout, where the
+// shortened labels made every full-name matcher here fail at once --
+// the labels were doing their job and the matchers were reading the
+// wrong half of the button.
+// BOTH halves, joined -- not title-or-text. The title is the full name on
+// most buttons, but on a seeded starter it is a tooltip instead ("Last
+// quarterback to throw -- tap to confirm..."), so preferring it hid the
+// player's name behind the hint. Matching the pair is right for what
+// these checks ask, which is only ever whether a given player is present.
+const pickLabel = b => b ? ((b.getAttribute('title') || '') + ' ' + (b.textContent || '')) : '';
+
 const OPP_ROSTER = [
   // Deliberately awkward, mirroring a real opponent upload:
   //  - #6 is seeded RB1 but filed under DEFENSE
@@ -200,7 +214,7 @@ async function run(){
 
     // (1) a seeded shared number reaches the passer picker
     click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
-    const passers = [...doc.querySelectorAll('.pp_passer_pick')].map(b => b.textContent);
+    const passers = [...doc.querySelectorAll('.pp_passer_pick')].map(pickLabel);
     if (!passers.length) {
       fail('seeded shared number', 'seeding QB to a shared number left the passer picker ' +
            'EMPTY — the seed never reached the ambiguous branch');
@@ -226,16 +240,16 @@ async function run(){
     }
 
     // ...and once the OTHER number carries, recency takes over
-    click(win, [...doc.querySelectorAll('.pp_carrier_pick')].find(b => /Bravo/.test(b.textContent)));
+    click(win, [...doc.querySelectorAll('.pp_carrier_pick')].find(b => /Bravo/.test(pickLabel(b))));
     typeInto(win, doc.getElementById('pp_yards'), '8');
     click(win, doc.getElementById('pp_review'));
     click(win, doc.getElementById('saveBtn'));
     click(win, doc.querySelector('.ptypeBtn[data-type="rush"]'));
     const after = [...doc.querySelectorAll('.pp_carrier_pick')];
-    if (!after.length || !/Bravo/.test(after[0].textContent)) {
+    if (!after.length || !/Bravo/.test(pickLabel(after[0]))) {
       fail('seeded shared number', 'after Bravo Boone carried he should lead the carrier picker — ' +
            'a carry is a fact and outranks the starters list. Got: ' +
-           after.map(b => b.textContent.trim()).join(' , '));
+           after.map(b => pickLabel(b).trim()).join(' , '));
     }
     h.close();
   }
@@ -263,7 +277,7 @@ async function run(){
     setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
 
     click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
-    const pre = [...doc.querySelectorAll('.pp_passer_pick')].map(b => b.textContent);
+    const pre = [...doc.querySelectorAll('.pp_passer_pick')].map(pickLabel);
     if (pre.some(t => /Alpha|Bravo/.test(t))) {
       fail('halfback pass', 'a recorded RB should not be pre-offered in the passer picker ' +
            'before he has thrown — that is what keeps the grid short. Got: ' + pre.join(' , '));
@@ -273,7 +287,7 @@ async function run(){
     // filters on position, which is what makes the play enterable at all.
     typeInto(win, doc.getElementById('pp_passer_manual'), '7');
     const alts = [...doc.querySelectorAll('.nameConfirmAlt')];
-    const alpha = alts.find(b => /Alpha/.test(b.textContent));
+    const alpha = alts.find(b => /Alpha/.test(pickLabel(b)));
     if (alpha) click(win, alpha);
     typeInto(win, doc.getElementById('pp_receiver_manual'), '80');
     typeInto(win, doc.getElementById('pp_yards'), '18');
@@ -287,12 +301,17 @@ async function run(){
     }
 
     click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
-    const post = [...doc.querySelectorAll('.pp_passer_pick')].map(b => b.textContent);
-    if (!post.some(t => /Alpha/.test(t))) {
+    const post = [...doc.querySelectorAll('.pp_passer_pick')].map(pickLabel);
+    // SURNAME, not first name. A seeded starter's title is a tooltip
+    // rather than his full name, so "Alpha" is nowhere in that button --
+    // only "Ates" is. The check is unchanged in substance: Ates and Boone
+    // share #7, so the surname still identifies exactly one of them, and
+    // it is what the scorer actually sees.
+    if (!post.some(t => /Ates/.test(t))) {
       fail('halfback pass', 'after throwing, the back should JOIN the passer picker — ' +
            'otherwise his number has to be typed on every halfback pass. Got: ' + post.join(' , '));
     }
-    if (post.some(t => /Bravo/.test(t))) {
+    if (post.some(t => /Boone/.test(t))) {
       fail('halfback pass', 'only the man who actually threw should be promoted. Bravo Boone ' +
            'shares the number but has thrown nothing, and appears anyway: ' + post.join(' , '));
     }
@@ -321,7 +340,7 @@ async function run(){
       const h = await bootGamePage({ roster, game: { seed_starters: { teamA: seeds } } });
       setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
       click(h.window, h.document.querySelector('.ptypeBtn[data-type="rush"]'));
-      const names = [...h.document.querySelectorAll('.pp_carrier_pick')].map(b => b.textContent);
+      const names = [...h.document.querySelectorAll('.pp_carrier_pick')].map(pickLabel);
       h.close();
       return names;
     };
@@ -406,7 +425,7 @@ async function run(){
     // goes in the way the backup always does: type the number, pick him.
     typeInto(h.window, h.document.getElementById('pp_carrier_manual'), '7');
     const bravoAlt = [...h.document.querySelectorAll('.nameConfirmAlt')]
-      .find(b => /Bravo/.test(b.textContent));
+      .find(b => /Bravo/.test(pickLabel(b)));
     if (!bravoAlt){
       fail('named seed', 'Alpha is the seeded starter, so typing #7 should default to him ' +
            'and offer Bravo as the alternative — Bravo was not offered');
@@ -417,7 +436,7 @@ async function run(){
     click(h.window, h.document.getElementById('pp_review'));
     click(h.window, h.document.getElementById('saveBtn'));
     click(h.window, h.document.querySelector('.ptypeBtn[data-type="rush"]'));
-    const after = [...h.document.querySelectorAll('.pp_carrier_pick')].map(b => b.textContent);
+    const after = [...h.document.querySelectorAll('.pp_carrier_pick')].map(pickLabel);
     if (!after.length || !/Bravo/.test(after[0])){
       fail('named seed', 'Bravo Boone carried, so he must lead the picker even though Alpha ' +
            'was the named starter — a carry is a fact and a seed is a guess. Got: ' +

@@ -53,7 +53,10 @@ async function run() {
   const failures = [];
   const fail = (area, detail) => failures.push({ area, detail });
 
-  for (const page of ['game.html', 'gametest3.html']) {
+  // The live page and the frozen fallback. The deadlock this test exists
+  // for is exactly the kind of thing that would make someone switch to the
+  // fallback, so the fallback must not contain it.
+  for (const page of ['game.html', 'game_legacy.html']) {
     const h = await guidedReturnTD(page);
     const doc = h.window.document;
 

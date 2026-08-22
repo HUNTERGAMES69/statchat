@@ -2,7 +2,8 @@
 // possession clock prompt opens its own keypad
 // -----------------------------------------------------------------------
 // Both reported directly, 22 Aug 2026, and both apply to game.html and
-// gametest3.html.
+// game_legacy.html, the frozen fallback -- a fallback that has silently
+// lost a fix is worse than none, so it is tested as a first-class page.
 //
 // 1. The log read "Neville — bad snap for no gain, recovered by Ruston".
 //    Nothing in that says the ball was on the ground, so a line that is
@@ -21,7 +22,10 @@
 const { bootPage } = require('./harness');
 const { click, setDrive, typeInto, radio, enterPlay } = require('./ui_driver');
 
-const PAGES = ['game.html', 'gametest3.html'];
+// game_legacy.html is the FROZEN FALLBACK. It is checked here on purpose:
+// it is a page a scorer may switch to mid-game, so it has to carry the same
+// fixes, and nothing else in the suite would notice if it drifted.
+const PAGES = ['game.html', 'game_legacy.html'];
 
 async function run() {
   const failures = [];
