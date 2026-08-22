@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StatChat broadcast — team stats</title>
+<!-- Without these every page load logs a 404 for /favicon.ico. Harmless,
+     but a red console error should MEAN something -- and in vMix the
+     console is the only place a problem shows up at all.
+     These were hand-added to broadcast.html and would have been silently
+     deleted the next time this script ran; they belong here instead. -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="team-icon.js"></script>
+<script src="engine.js"></script>
+<style>
+  /* TRANSPARENT. vMix's Web Browser input keys this out, so anything not
+     explicitly painted shows the programme feed through. Do not give
+     html or body a background colour. */
+  html, body { background:transparent !important; margin:0; padding:0; overflow:hidden;
+               font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+               -webkit-font-smoothing:antialiased; }
+
+  /* Sized for a 1920x1080 browser input, anchored bottom-left where a
+     score bug normally lives. */
+  #bug { position:absolute; left:60px; bottom:60px; display:none; align-items:stretch;
+         border-radius:8px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,0.55);
+         font-weight:800; }
+  .side { display:flex; align-items:center; gap:14px; padding:14px 22px; }
+  .side img { height:44px; width:auto; display:block; }
+  .name { font-size:34px; }
+  .pts  { font-size:44px; min-width:64px; text-align:right; font-variant-numeric:tabular-nums; }
+  .poss { font-size:26px; }
+  #situation { background:rgba(12,12,14,0.92); color:#fff; padding:14px 26px; font-size:30px;
+               display:flex; align-items:center; gap:22px; }
+  .dim { opacity:0.6; font-weight:600; font-size:24px; }
+
+  body.layout-bug #situation { display:none; }   /* ?layout=bug  */
+  body.debug { background:#123 !important; }     /* ?debug=1     */
+</style>
+</head>
+<body>
+<!-- TRANSPARENT BACKGROUND, like every other overlay here: vMix keys this
+     page over the programme feed, so anything opaque outside the panel
+     would black out the game. -->
+<style>
+  html, body { margin:0; padding:0; background:transparent; }
+  #panel { display:none; position:absolute; left:60px; right:60px; top:70px;
+           font-family:'Inter','Helvetica Neue',Arial,sans-serif;
+           color:#12151a; }
+  .card { background:rgba(255,255,255,0.97); border-radius:14px;
+          box-shadow:0 10px 40px rgba(0,0,0,0.45); overflow:hidden; }
+
+  /* ---- head: visitor, title, home ---- */
+  #head { display:flex; align-items:stretch; }
+  .hteam { flex:1 1 0; display:flex; align-items:center; gap:14px; padding:14px 22px;
+           min-width:0; }
+  .hteam img { width:44px; height:44px; object-fit:contain; flex:0 0 auto; }
+  .hname { flex:1 1 auto; font-size:26px; font-weight:800; letter-spacing:0.01em;
+           white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hpts { flex:0 0 auto; font-size:34px; font-weight:800;
+          font-variant-numeric:tabular-nums; }
+  /* The home side mirrors, so each team's mark sits on its own outer edge
+     and the two scores meet the title in the middle. */
+  #head .hteam:last-child { flex-direction:row-reverse; }
+  .hmid { flex:0 0 auto; display:flex; align-items:center; padding:0 30px;
+          background:#12151a; color:#fff; font-size:17px; font-weight:800;
+          letter-spacing:0.16em; }
+
+  /* ---- comparison rows ---- */
+  #rows { padding:6px 22px 14px; }
+  .srow { display:flex; align-items:baseline; padding:7px 0;
+          border-bottom:1px solid #ececec; }
+  .srow:last-child { border-bottom:none; }
+  .sv { flex:0 0 26%; font-size:25px; font-weight:800;
+        font-variant-numeric:tabular-nums; }
+  /* Visitor's figure hugs the centre label from the left, home's from the
+     right, so both columns are read against the label between them. */
+  .srow .sv:first-child { text-align:left; }
+  .srow .sv:last-child { text-align:right; }
+  .slab { flex:1 1 auto; text-align:center; font-size:14px; font-weight:700;
+          letter-spacing:0.1em; text-transform:uppercase; color:#5a616b; }
+
+  /* ---- leaders ---- */
+  #leaders { display:flex; gap:16px; margin-top:16px; }
+  .lside { flex:1 1 0; min-width:0; display:flex; align-items:center; gap:18px;
+           background:rgba(255,255,255,0.97); border-radius:14px;
+           box-shadow:0 10px 40px rgba(0,0,0,0.45); padding:16px 20px; }
+  .lteam { flex:0 0 108px; text-align:center; }
+  .lteam img { width:62px; height:62px; object-fit:contain; display:block; margin:0 auto 6px; }
+  .ltname { font-size:19px; font-weight:800; white-space:nowrap;
+            overflow:hidden; text-overflow:ellipsis; }
+  .lcards { flex:1 1 auto; display:flex; gap:10px; min-width:0; }
+  .lcard { flex:1 1 0; min-width:0; background:#f4f6f9; border-radius:10px; padding:10px 12px; }
+  .lcat { font-size:12.5px; font-weight:700; color:#6b7280; margin-bottom:2px; }
+  .lname { font-size:17px; font-weight:800; white-space:nowrap;
+           overflow:hidden; text-overflow:ellipsis; }
+  .lval { font-size:30px; font-weight:800; line-height:1.1;
+          font-variant-numeric:tabular-nums; }
+  .lunit { font-size:14px; font-weight:700; color:#6b7280; margin-left:5px; }
+  .lsub { font-size:13.5px; font-weight:600; color:#4a5058; }
+  .lcard.empty .lnone { font-size:30px; font-weight:800; color:#b9bec6; }
+</style>
+
+<div id="panel">
+  <div class="card">
+    <div id="head"></div>
+    <div id="rows"></div>
+  </div>
+  <div id="leaders"></div>
+</div>
+
+<script>
+// ===================================================================
+// BROADCAST OVERLAY -- GENERATED FILE, do not hand-edit.
+//   regenerate: python3 tools/make_broadcast.py
+//
+// TEMPORARY BY DESIGN. The engine below is copied from view.html,
+// making this the SIXTH copy in the repo -- the duplication TODO 8a
+// exists to remove. Taken this way so an overlay could be in vMix
+// today rather than after the extraction. Fold it into engine.js when
+// 8a is done; do not let it drift.
+//
+// VMIX SETUP
+//   Add Input -> Web Browser
+//   URL   https://nevillestatchat.vercel.app/broadcast.html?id=<gameId>
+//   Size  1920 x 1080
+//   The background is transparent, so it keys straight over video.
+//
+//   ?layout=bug   score only, no down and distance
+//   ?debug=1      solid background, to see the edges while positioning
+// ===================================================================
+
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  // A passive viewer (as opposed to whoever's actively typing plays) is
+  // far more likely to lock their screen or background the tab between
+  // checks -- and browsers, especially iOS, aggressively throttle JS
+  // timers in that state. That silently breaks the realtime connection's
+  // heartbeat with no visible error and no automatic recovery, which is
+  // exactly what was reported: it looked like an admin-vs-viewer
+  // permissions issue, but was actually just who happens to keep their
+  // device active. Both mitigations below are Supabase's own documented
+  // fix for this exact failure mode -- see
+  // https://supabase.com/docs/guides/troubleshooting/realtime-handling-silent-disconnections-in-backgrounded-applications-592794
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    realtime: {
+      worker: true,
+      heartbeatCallback: (status) => {
+        if (status === 'disconnected'){
+          supabaseClient.realtime.connect();
+        }
+      }
+    }
+  });
+
+  // The display is designed against a fixed 1920x1080 canvas so every font
+  // size and tile dimension throughout stays correct relative to every
+  // other -- rather than rewriting all of that in relative units, the
+  // whole canvas is scaled up or down as a single unit to fit whatever
+  // viewport is actually available, so nothing is ever clipped or forced
+  // to scroll regardless of the real screen/browser size. Skipped
+  // entirely below the mobile breakpoint, where the layout is already
+  // its own natural, responsive, scrolling design.
+  function applyDisplayScale(){
+    if (window.innerWidth <= 700){
+      document.querySelector('.wrap').style.transform = '';
+      return;
+    }
+    // Scale X and Y independently -- rather than one uniform scale
+    // (which forces the fixed 1920x1080 (16:9) aspect ratio and always
+    // leaves wasted space on whichever axis doesn't match the actual
+    // screen), this stretches the whole canvas to exactly fill
+    // whatever viewport is actually available, since every real screen
+    // has a different ratio. The very slight non-uniform distortion
+    // this can introduce is far less noticeable than the wasted-space
+    // gaps it replaces, since almost everything on this page is text,
+    // tables, and tiles rather than shapes where aspect ratio matters.
+    const scaleX = window.innerWidth / 1920;
+    const scaleY = window.innerHeight / 1080;
+    document.querySelector('.wrap').style.transform = 'scale(' + scaleX + ', ' + scaleY + ')';
+  }
+  // resize handler removed: fixed canvas.
+  // Logos and webfonts land after first paint and change measured
+  // heights, so the first fit is made on stale numbers. Re-fit once
+  // everything has actually loaded.
+  window.addEventListener('load', () => { if (plays.length) renderBoxScore(); });
+  // applyDisplayScale() removed: no .wrap on the overlay, and vMix
+  // renders at a fixed size.
+
+  function showView(name){
+    ['loading','errorView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+  }
+  function showMsg(elId, text, type){
+    document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+  }
+
+  let currentGameId = null;
+  let isResultsMode = false;
+  let currentGameStatus = null;
+  let TEAMS = { teamA: {}, teamB: {} };
+  let plays = [], startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
+
+  // auth gate removed: an overlay cannot sign in. See TODO 8d.
+
+
+  // A logo's two detected colors can both be dark and saturated (navy
+  // and red, for instance) -- using one directly as banner text on the
+  // other as background then reads as low-contrast, hard to read text,
+  // even though each color individually looks fine. Checks the actual
+  // luminance gap between this specific background/text pairing, and
+  // only overrides to black/white when that gap is too small to read
+  // comfortably -- a light background with intentionally dark text
+  // stays untouched, since that's already good contrast.
+
+
+  function buildTeams(game, rosterRows, ourBranding){
+    const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
+    const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, rosterUnassigned:{}, posOffense:{}, logo: ourBranding.logo_url || null };
+    const oppPrimary = game.opponent_primary_color || '#8B0000', oppSecondary = game.opponent_secondary_color || '#ffffff';
+    TEAMS.teamB = { name: oppName, bg: oppPrimary, text: oppSecondary,
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, rosterUnassigned:{}, posOffense:{}, logo: game.opponent_logo_url || null };
+    // Each team's color is set independently -- nothing checks that
+    // they're actually distinguishable from each other, and two
+    // different schools can genuinely share a similar accent color.
+    // Only the opponent's displayed color adjusts here, never our own,
+    // since our identity should stay put -- first try swapping to their
+    // own secondary color, since that's still genuinely their color, and
+    // only fall back to a neutral tone if even that's too close.
+    if (colorDistance(TEAMS.teamA.bg, TEAMS.teamB.bg) < 60){
+      if (colorDistance(TEAMS.teamA.bg, oppSecondary) >= 60){
+        TEAMS.teamB.bg = oppSecondary;
+        TEAMS.teamB.text = oppPrimary;
+      } else {
+        TEAMS.teamB.bg = luminance(TEAMS.teamA.bg) > 0.5 ? '#3a3a3a' : '#c8c8c8';
+        TEAMS.teamB.text = luminance(TEAMS.teamB.bg) > 0.55 ? '#1a1a1a' : '#ffffff';
+      }
+    }
+    rosterRows.forEach(r => {
+      const team = TEAMS[r.team_side];
+      if (!team) return;
+      if (r.unit === 'offense'){ team.rosterOffense[r.jersey_number] = r.player_name; team.posOffense[r.jersey_number] = r.position; }
+      else if (r.unit === 'defense'){ team.rosterDefense[r.jersey_number] = r.player_name; }
+      else if (r.unit === 'special'){ team.rosterSpecialTeams[r.jersey_number] = r.player_name; }
+      // Requested directly: resolving every unrecognized-position player
+      // to a unit is impractical on a large, position-less roster.
+      // Still absent from the three unit-specific picker lists above --
+      // there is nothing to file him under -- but named here so
+      // rosterName/playerName (engine.js) can resolve him once he is
+      // actually credited on a play, instead of reading as a call-up.
+      else if (r.player_name){ team.rosterUnassigned[r.jersey_number] = r.player_name; }
+    });
+  }
+
+  // --- Proven read-only engine core, extracted verbatim from game.html ---
+function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+const TIMEOUTS_PER_HALF = 3;
+const TIMEOUTS_PER_OT = 1;
+// Administrative entries -- clock markers, quarter/half dividers, manual
+// possession flips -- are announcements, not football plays. They carry
+// no roles and no yardage, so anything reasoning about "what actually
+// happened on this drive" has to skip them.
+//
+// isReset markers are deliberately NOT administrative: they are explicit
+// "new drive" announcements and are valid drive starts.
+//
+// Lives in the engine core (top level) rather than inside
+// findDriveStarts because computeDriveSummary needs it too, from a
+// different scope.
+// Bookkeeping the drive tiles do not need. These are entries the app
+// writes to keep its own state straight -- clock events, chain
+// corrections, the direction arrow -- rather than things that happened on
+// the field. The tiles are for reading at a glance, so they are dropped
+// there; the ALL PLAYS list is the audit trail and keeps everything.
+//
+// Deliberately KEPT: penalties and timeouts (real events), quarter
+// markers, overtime markers, dividers, and "New series" -- which looks
+// like "New drive" but means something different: a muffed kick
+// recovered by the kicking team, a fresh set of downs with no change of
+// possession. Manual entry NOTEs are kept too; a coach typed those on
+// purpose. Only the two "Manual ..." state overrides are dropped.
+function isDriveTileNoise(p){
+  if (!p || p.isDivider) return false;
+  const e = p.effect || {};
+  if (e.clockEvent) return true;
+  if (e.setDirection) return true;
+  const t = (p.text || '').trim();
+  if (t.indexOf('Down & distance adjusted') === 0) return true;
+  if (t.indexOf('New drive') === 0) return true;
+  if (t.indexOf('Manual flip') === 0) return true;
+  if (t.indexOf('Manual score adjust') === 0) return true;
+  return false;
+}
+function isAdminMarker(p){
+  if (!p) return true;
+  const e = p.effect || {};
+  if (e.isReset) return false;
+  // e.timeout added 19 Aug 2026: a timeout call has no bearing on
+  // possession or drive state at all, but was never in this list --
+  // so findDriveStarts treated it as a real play, and a timeout called
+  // between a defensive score and its own PAT became the target a
+  // phantom drive boundary landed on, registering an unearned
+  // possession for the scoring team. Reported from a real game.
+  return !!(e.clockEvent || e.setQuarter || e.forcePossession || e.timeout || p.isDivider);
+}
+
+// Jersey numbers resolve across ALL THREE roster units, not just the one
+// the play type implies. High-school rosters routinely list a player
+// under a single unit even though they play several, and a dedicated
+// kick/punt returner is normally rostered on special teams only -- which
+// is why returners used to render in the log as a bare "#25".
+//
+// A fallback can only ever turn "#25" into a name; it can never change a
+// name that already resolved, because the expected unit is always
+// searched first. This mirrors playerName() in the report pages.
+
+
+
+
+function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':n===4?'4th':(n+'th'); }
+function clockToAbsSeconds(quarter, clockStr){
+  let m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
+  let mins, secs;
+  if (m){
+    mins = parseInt(m[1]); secs = parseInt(m[2]);
+  } else {
+    // Colon-less entry: last two digits are seconds, everything
+    // before that is minutes -- e.g. "1156" reads the same as
+    // "11:56" would, "56" alone reads as "0:56". Requires at least
+    // two digits so this split is never ambiguous.
+    m = clockStr.match(/^(\d*)(\d{2})$/);
+    if (!m) return null;
+    mins = m[1] ? parseInt(m[1]) : 0; secs = parseInt(m[2]);
+  }
+  if (secs > 59) return null;
+  const remaining = mins * 60 + secs;
+  // A clock value can never show more time than the quarter itself
+  // holds -- e.g. "15:00" is meaningless in a 12-minute quarter.
+  if (remaining > quarterLengthSec) return null;
+  return (quarter - 1) * quarterLengthSec + (quarterLengthSec - remaining);
+}
+function formatDuration(sec){
+  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+// markerLabel() lives in engine.js, loaded above. It was duplicated here
+// (and in view.html, and in broadcast.html) as three identical copies;
+// "own 50" had to be fixed in one place, not three. Removed 13 Aug 2026.
+
+function readFileAsDataURL(file){
+  return new Promise(resolve => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.readAsDataURL(file);
+  });
+}
+
+const OFFENSE_POS = new Set(['QB','RB','FB','HB','TB','WR','SE','FL','SLOT','SB','TE','OL','OT','OG','G','T','C','ATHLETE','ATH']);
+const DEFENSE_POS = new Set(['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE','DL']);
+const SPECIAL_POS = new Set(['K','P','LS','DS','H','KR','PR','RET']);
+function posToUnit(pos){
+  if (!pos) return null;
+  const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
+  if (SPECIAL_POS.has(first)) return 'st';
+  if (OFFENSE_POS.has(first)) return 'o';
+  if (DEFENSE_POS.has(first)) return 'd';
+  return null;
+}
+function extractNameTag(rawName){
+  const m = String(rawName).match(/\(\s*(O|D|ST)\s*\)\s*$/i);
+  if (!m) return { cleanName: String(rawName).trim(), explicitUnit: null };
+  const tag = m[1].toUpperCase();
+  const cleanName = String(rawName).slice(0, m.index).trim();
+  return { cleanName, explicitUnit: tag.toLowerCase() };
+}
+
+
+  // --- End engine core ---
+
+  const RUSH_POS = new Set(['QB','RB','FB','HB','TB']);
+  const RECEIVE_POS = new Set(['WR','TE','SE','FL','SLOT','SB']);
+
+
+
+
+
+  function statRow(cells){
+    return '<tr>' + cells.map(c => '<td>' + c + '</td>').join('') + '</tr>';
+  }
+
+  function renderTeamBoxScore(teamKey, box){
+      const team = TEAMS[teamKey];
+      const s = box[teamKey];
+      // Built into named holders rather than appended straight to the
+      // columns, because the display order is not the order the sections
+      // are computed in -- rushing is calculated before receiving but
+      // has to appear after it. Assembling at the end keeps the layout
+      // decision in one readable place instead of depending on which
+      // block happens to run first.
+      let passHtml = '', recHtml = '', rushHtml = '', defHtml = '', stHtml = '';
+      let leftHtml = '', rightHtml = '';
+
+      const sum = (nums, obj, key) => nums.reduce((t, n) => t + ((obj[n] && obj[n][key]) || 0), 0);
+      // CATEGORY TOTAL beside the header, deliberately plain.
+      // ----------------------------------------------------------------
+      // It exists as a CHECK against the team tiles in the top-left quad:
+      // passing here should equal Comp/Pass Yds there, rushing should
+      // equal Att/Rush Yds, and receiving should equal passing now that
+      // an unnamed catch buckets to Unknown. Two numbers that must agree,
+      // computed by different paths, on one screen.
+      //
+      // Summed from the WHOLE bucket, not from the rows on screen: these
+      // tables show the top five (plus anyone with a touchdown), so a
+      // total added up from the visible rows would quietly disagree with
+      // the tile it is meant to check -- and would look like the bug it
+      // was put there to catch.
+      //
+      // Same font size as the label and no highlight, on purpose. It is a
+      // reference figure a scorer glances at, not a headline; anything
+      // louder competes with the players' own numbers.
+      const sumBucket = (bucket, key) =>
+        Object.keys(bucket).reduce((t, n) => t + ((bucket[n] || {})[key] || 0), 0);
+      const tile = (label, inner, total) =>
+        '<div class="stat-category-tile"><div class="stat-category-head">' +
+        '<div class="stat-category-label">' + label + '</div>' +
+        (total === undefined || total === null ? ''
+          : '<span class="stat-category-total">' + total + '</span>') +
+        '</div>' + inner + '</div>';
+      // Sorts jersey numbers by a yardage-like field, descending, so the
+      // category leader always sorts first.
+      // TEAM is a bucket, not a player -- kneels, bad snaps and sack
+      // yardage. Its total is usually negative, so ranking by yards put a
+      // bookkeeping row above the actual runners. Pinned last.
+      // TEAM and Unknown both sort last. They are different things --
+      // TEAM is "credited to nobody by rule" (a sack, a kneel), Unknown is
+      // "we did not record who" -- but neither is a player, and either
+      // one topping a leaders list would be wrong.
+      const bookkeeping = n => (n === 'TEAM' || n === 'Unknown') ? 1 : 0;
+      const teamLast = (a, b) => bookkeeping(a) - bookkeeping(b);
+      const sortByYds = (nums, obj, key) => nums.slice().sort((a, b) =>
+        teamLast(a, b) || (((obj[b] && obj[b][key]) || 0) - ((obj[a] && obj[a][key]) || 0)));
+      // Caps a sorted list at 5 entries -- except anyone with a touchdown
+      // stays in regardless of rank, since a scorer never just vanishes
+      // even if their overall yardage was modest.
+      // The touchdown exception exists so a scorer is never dropped just
+      // for having low yardage, but it was unbounded: EVERY remaining
+      // player with a TD got a row, so five scoring receivers meant ten
+      // rows in one tile. The page cannot scroll (body and .quad are both
+      // overflow:hidden) and the auto-fit stops shrinking at 0.5, so past
+      // that the extra rows are silently clipped -- present in the data,
+      // invisible on screen. Capped so the tile height is bounded.
+      // HOW MANY PLAYERS A CATEGORY TILE LISTS.
+      // ----------------------------------------------------------------
+      // Four, down from five on 14 Aug 2026. This panel auto-shrinks its
+      // type to fit whatever it is given, so every extra row is paid for
+      // in font size across ALL the tiles -- and a fifth name nobody can
+      // read from the sideline is worth less than four they can. The
+      // category total beside each header still covers everyone, so the
+      // rows that are cut are not lost, just not listed.
+      //
+      // Named rather than repeated: it was written as a literal 5 in two
+      // places inside this one helper, and the two had to agree or the
+      // cut list and the extras list would overlap or leave a gap.
+      const MAX_ROWS = 4;
+      const MAX_TD_EXTRAS = 3;
+      const capWithTdException = (sortedNums, obj, tdKey) => {
+        const top = sortedNums.slice(0, MAX_ROWS);
+        // Anyone below the cut who SCORED still appears. A touchdown is
+        // the one thing a coach will look for by name and not find in a
+        // yardage ranking -- a 2-yard plunge to win it ranks last.
+        const extras = sortedNums.slice(MAX_ROWS)
+          .filter(n => (obj[n] && obj[n][tdKey]) > 0)
+          .slice(0, MAX_TD_EXTRAS);
+        return top.concat(extras);
+      };
+      // A row whose every displayed value is zero says nothing, and this
+      // panel auto-shrinks to fit -- an empty row costs font size on the
+      // rows that matter. They arise legitimately: a sack-fumble creates
+      // a rushing bucket holding only { fum: 1 }, and the live rushing
+      // table has no Fum column, so the quarterback appeared as 0/0/0.
+      // Filtering on the DISPLAYED values rather than the bucket keeps
+      // the rule general -- the same player still shows up in recap,
+      // which does have a Fum column and therefore a reason to list him.
+      const rowHasValue = r => (r.values || []).some(v => {
+        if (v === null || v === undefined) return false;
+        const t = String(v).trim();
+        if (t === '' || t === '—' || t === '-') return false;
+        const n = parseFloat(t);
+        return isNaN(n) ? true : n !== 0;
+      });
+      const table = (headers, rows) => {
+        let h = '<table class="player-stat-table"><tr><th></th>' + headers.map(x => '<th>' + x + '</th>').join('') + '</tr>';
+        rows.forEach(r => {
+          // No leader highlight. The rows are already sorted with the
+          // leader first, so the colour was saying something the order
+          // already said -- and a tinted row on a panel that is also
+          // colour-coded by team read as if it meant something else.
+          h += '<tr><td>' + r.name + '</td>' + r.values.map(v => '<td>' + v + '</td>').join('') + '</tr>';
+        });
+        return h + '</table>';
+      };
+
+      const passSorted = sortByYds(Object.keys(s.passing), s.passing, 'yds');
+      const passNums = capWithTdException(passSorted, s.passing, 'td');
+      if (passNums.length){
+        // Sacks belong on the passing line -- recap and stat_package both
+        // show them and view did not, so the live page was the only one
+        // where you could not see a quarterback being got at.
+        passHtml += tile('Passing', table(['Comp','Att','%','Yds','TD','Int','Sack'], passNums.map((n, i) => {
+          const d = s.passing[n];
+          const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
+          return { name: n, values: [d.comp||0, d.att||0, compPct, d.yds||0, d.td||0, d.intThrown||0, d.sacked||0] };
+        }).filter(rowHasValue)), sumBucket(s.passing, 'yds'));
+      }
+      const rushSorted = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
+      const rushNums = capWithTdException(rushSorted, s.rushing, 'td');
+      if (rushNums.length){
+        rushHtml += tile('Rushing', table(['Att','Yds','TD'], rushNums.map((n, i) => {
+          const d = s.rushing[n];
+          return { name: n, values: [d.att||0, d.yds||0, d.td||0] };
+        }).filter(rowHasValue)), sumBucket(s.rushing, 'yds'));
+      }
+      // A target alone does not earn a row on the live view. Adding targets
+      // meant anyone thrown at once appeared with 0 catches and 0 yards,
+      // padding the tile with players who have not caught anything -- and
+      // this panel auto-shrinks to fit, so every wasted row costs size on
+      // the rows that matter. The full-detail reports still list them.
+      const recSorted = sortByYds(
+        Object.keys(s.receiving).filter(n => (s.receiving[n].rec || 0) > 0),
+        s.receiving, 'yds');
+      const recNums = capWithTdException(recSorted, s.receiving, 'td');
+      if (recNums.length){
+        // Tgt before Rec: the throw comes before the catch, and reading
+        // "3 targets, 1 catch" left to right is how it is said out loud.
+        recHtml += tile('Receiving', table(['Rec','Tgt','Yds','TD'], recNums.map((n, i) => {
+          const d = s.receiving[n];
+          return { name: n, values: [d.rec||0, d.tgt||0, d.yds||0, d.td||0] };
+        }).filter(rowHasValue)), sumBucket(s.receiving, 'yds'));
+      }
+      // kickoffs belongs in this gate too -- without it a pure kickoff
+      // specialist never entered the loop at all, so the kickoff table
+      // could never be built no matter what the box score held.
+      const stNums = Object.keys(s.specialTeams).filter(n => {
+        const d = s.specialTeams[n];
+        return d.fgAtt || d.patAtt || d.punts || d.kickoffs;
+      });
+      const stKicking = [], stPunting = [], stKickoffs = [];
+      stNums.forEach(n => {
+        const d = s.specialTeams[n];
+        const name = n;
+        if (d.fgAtt || d.patAtt){
+          // A dash, not a zero, for a category the kicker never attempted.
+          // "0 for 0" reads as a failure; on a PAT-only kicker it looked
+          // like he had missed field goals he was never asked to take.
+          // Long is also dashed on an 0-for-N day -- a missed 45 is not
+          // a "long" of 45, and nor is it a long of 0.
+          const fg = d.fgAtt
+            ? [d.fgAtt, d.fgMade || 0, d.fgMade ? (d.fgLong || 0) : '—']
+            : ['—', '—', '—'];
+          const xp = d.patAtt ? [d.patAtt, d.patMade || 0] : ['—', '—'];
+          stKicking.push({ yds: d.fgLong || 0, name, values: fg.concat(xp) });
+        }
+        if (d.kickoffs){
+          const tbPct = Math.round(100 * (d.touchbacks || 0) / d.kickoffs);
+          stKickoffs.push({ name, values: [d.kickoffs, tbPct + '%'] });
+        }
+        if (d.punts){
+          const avg = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
+          // Total punt yardage is not a stat anyone reads -- it is just
+          // punts x average. Longest is the one that gets talked about,
+          // and computeBoxScore already tracks it.
+          stPunting.push({ yds: d.puntYds||0, name, values: [d.punts||0, avg, d.puntLong||0] });
+        }
+      });
+      stKicking.sort((a, b) => b.yds - a.yds);
+      stPunting.sort((a, b) => b.yds - a.yds);
+      const stTotalEntries = stKicking.length + stPunting.length + stKickoffs.length;
+      if (stTotalEntries){
+        // Three separate tables share this tile, and concatenated flush
+        // they read as one run-on block: a header row lands directly
+        // under the previous table's data row, so "Punts Avg Long" looks
+        // like more numbers for the kicker above it. A rule and a gap
+        // between sections makes each one legible on its own.
+        const stSections = [];
+        const pushIfRows = (hdrs, rows) => { if (rows.length) stSections.push(table(hdrs, rows)); };
+        pushIfRows(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, MAX_ROWS).filter(rowHasValue));
+        pushIfRows(['Punts','Avg','Long'], stPunting.slice(0, MAX_ROWS).filter(rowHasValue));
+        // Kickoffs: just the count and how many stayed in the end zone.
+        // Individual kickoff distance is not reported anywhere and the
+        // panel does not even ask for it, so a per-kicker yardage table
+        // would be all zeroes.
+        pushIfRows(['Kickoffs','TB %'], stKickoffs.filter(rowHasValue));
+        const stInner = stSections.map((sec, i) => i === 0 ? sec :
+          '<div style="border-top:1px solid #dde3ea; margin-top:calc(9px * var(--stat-scale, 1)); ' +
+          'padding-top:calc(7px * var(--stat-scale, 1));">' + sec + '</div>').join('');
+        stHtml += tile('Special Teams', stInner);
+      }
+      // Counted from the play log, not from named defenders. Naming the
+      // tackler, interceptor or recoverer is optional, and summing
+      // s.defense meant a sack with nobody credited recorded no sack at
+      // all -- the Defense tile simply did not render. The event
+      // happened whether or not anyone was identified.
+      const opp = otherTeam(teamKey);
+      const defTotals = plays.reduce((acc, p) => {
+        const r = p.roles; if (!r) return acc;
+        const e = p.effect || {};
+        // A fumble that ended a SACK is still a sack -- reported
+        // directly, 20 Aug 2026, from a game where this exact team
+        // total dropped one. This accumulator predates that report and
+        // never carried the exception engine.js's own sack credit
+        // already had, since it counts straight from the play log
+        // rather than through computeBoxScore.
+        if ((r.playType === 'sack' || (r.playType === 'fumble' && r.attempt === 'sack')) && r.passer && r.passer.team === opp) acc.sacks++;
+        if (r.playType === 'int' && r.passer && r.passer.team === opp) acc.int++;
+        if (r.playType === 'fumble' && r.carrier && r.carrier.team === opp && (r.lost || r.defense)) acc.fumRec++;
+        // Tackles for loss, counted from the PLAY rather than from a named
+        // tackler. Naming the tackler is optional and often skipped at
+        // speed, so requiring one would undercount a team stat that the
+        // play log already knows for certain: a scrimmage snap by the
+        // other team that lost yardage was a tackle for loss, whoever
+        // made it. Sacks are included -- NFHS and NCAA both treat a sack
+        // as a tackle behind the line -- and shown alongside the sack
+        // count so the two can be read separately.
+        const TFL_TYPES = ['rush', 'pass', 'sack'];
+        const byOpp = (r.carrier && r.carrier.team === opp) ||
+                      (r.passer && r.passer.team === opp);
+        if (byOpp && TFL_TYPES.indexOf(r.playType) !== -1 &&
+            typeof e.statYds === 'number' && e.statYds < 0) acc.tfl++;
+        return acc;
+      }, { int: 0, fumRec: 0, sacks: 0, tfl: 0 });
+      const hasDef = defTotals.int || defTotals.fumRec || defTotals.sacks || defTotals.tfl;
+      if (hasDef){
+        defHtml += tile('Defense', table(['Int','Fum Rec','Sacks','TFL'],
+          [{ name: 'Team', values: [defTotals.int, defTotals.fumRec, defTotals.sacks, defTotals.tfl] }]));
+      }
+      // Per-player tackles, ADDED 12 Aug 2026. Separate from the team
+      // row above, deliberately: the two answer different questions and
+      // will not agree.
+      //
+      // Team TFL counts from the play log and needs no named tackler, so
+      // it is a CEILING. Per-player tackles come from the optional
+      // "tackled by" field, so they are a FLOOR. Showing them in one
+      // table would make the app look like it was contradicting itself.
+      // NO PER-PLAYER TACKLES TILE HERE. Removed 13 Aug 2026 at Andy's
+      // request: the view page is the live spectator and broadcast
+      // screen, where the useful defensive figure is the TEAM one above
+      // (interceptions, fumble recoveries, sacks, team TFL). A per-player
+      // list is a post-game reading, and it is the one table on the page
+      // that is knowingly incomplete -- it counts only plays where a
+      // tackler happened to be named, which is a floor, not a total.
+      //
+      // The data is unaffected. Per-player tackles are still computed by
+      // computeBoxScore, still recorded, and still shown on recap.html,
+      // stat_package.html and season_report.html, each of which carries
+      // the "only named tackles" caveat. Only this tile is gone.
+
+      const defNums = hasDef ? ['team'] : [];
+      if (!rushNums.length && !passNums.length && !recNums.length && !stTotalEntries && !defNums.length){
+        passHtml += '<p class="hint">No stats yet for ' + team.name + '.</p>';
+      }
+      const totalRows = passNums.length + rushNums.length + recNums.length + Math.min(stKicking.length, 5) + Math.min(stPunting.length, 5) + (defNums.length ? 1 : 0);
+      // Left: the passing game top to bottom, then rushing.
+      // Right: defense, then special teams.
+      leftHtml = passHtml + recHtml + rushHtml;
+      rightHtml = defHtml + stHtml;
+      // Early in a game a team can easily have defensive or special-teams
+      // stats and no offensive ones -- the opening play being a punt or a
+      // sack does it. That left the first column empty and the content
+      // stranded in the right half with a gap beside it. Reading order is
+      // left to right, so a lone column belongs on the left.
+      if (!leftHtml && rightHtml){
+        leftHtml = rightHtml;
+        rightHtml = '';
+      }
+      return { html: '<div class="stat-category-grid"><div class="stat-category-col">' + leftHtml + '</div><div class="stat-category-col">' + rightHtml + '</div></div>', totalRows };
+  }
+
+  function renderBoxScore(){
+    const box = computeBoxScore(plays);
+    const a = renderTeamBoxScore('teamA', box);
+    const b = renderTeamBoxScore('teamB', box);
+    const quadBL = document.getElementById('quadBL'), quadBR = document.getElementById('quadBR');
+    quadBL.style.setProperty('--stat-scale', 1);
+    quadBR.style.setProperty('--stat-scale', 1);
+    document.getElementById('boxScoreTeamA').innerHTML = a.html;
+    document.getElementById('boxScoreTeamB').innerHTML = b.html;
+
+    // Measure real rendered height at scale 1, then compute the scale
+    // that actually fills the available space -- growing when there's
+    // room to spare (a team with modest stats shouldn't render small
+    // and leave the rest of the quadrant empty), shrinking when there's
+    // more content than fits. Both sides use the same scale so neither
+    // panel looks visually denser or sparser than its sibling.
+    // offsetHeight, NOT getBoundingClientRect(). The whole page sits
+    // inside a `transform: scale()` wrapper, and getBoundingClientRect
+    // returns the VISUAL box -- already multiplied by that transform --
+    // while clientHeight and scrollHeight return the unscaled layout
+    // box. Mixing the two made availableHeight too generous by exactly
+    // the display scale factor, so --stat-scale came out too large and
+    // the content overflowed its quadrant. At 1920x1080 the transform
+    // is 1:1 and the bug is invisible, which is why it looked like it
+    // "sometimes worked".
+    const availableHeight = (quad) => {
+      const header = quad.querySelector('h2');
+      const headerH = header ? header.offsetHeight + 10 : 0;
+      return quad.clientHeight - headerH - 16;
+    };
+    const contentHeight = (id) => document.getElementById(id).scrollHeight;
+    // A 4% safety margin. The fit is computed from measurements taken
+    // before the browser has finished reflowing at the new scale, so
+    // landing exactly on the available height reliably overshoots by a
+    // pixel or two -- which is all it takes to get a scrollbar.
+    const FIT_MARGIN = 0.96;
+    // Growth is allowed but capped well below the old 2.2. Enlarging a
+    // table does not increase its height proportionally -- columns
+    // re-wrap and rows gain padding -- so a scale derived from
+    // measurements taken at 1.0 overshoots, and the error compounds the
+    // further it grows. At 2.2 that overshoot produced scrollbars and
+    // clipped rows; a modest ceiling keeps the prediction close enough
+    // for the refinement loop below to correct the remainder.
+    const MAX_GROW = 1.5;
+    const scaleFor = (avail, content) => {
+      if (content <= 0) return 1;
+      return Math.min(MAX_GROW, Math.max(0.5, (avail / content) * FIT_MARGIN));
+    };
+    const availA = availableHeight(quadBL), availB = availableHeight(quadBR);
+    let scale = Math.min(scaleFor(availA, contentHeight('boxScoreTeamA')),
+                         scaleFor(availB, contentHeight('boxScoreTeamB')));
+    quadBL.style.setProperty('--stat-scale', scale);
+    quadBR.style.setProperty('--stat-scale', scale);
+
+    // Scaling text does not change height linearly -- lines re-wrap and
+    // line heights round to whole pixels -- so one pass can still
+    // overshoot. Re-measure and back off until it genuinely fits.
+    for (let i = 0; i < 8; i++){
+      // Measure against the margin, not the raw height, so the loop
+      // stops slightly short of the edge rather than flush against it.
+      const targetA = availA * FIT_MARGIN, targetB = availB * FIT_MARGIN;
+      const overA = contentHeight('boxScoreTeamA') - targetA;
+      const overB = contentHeight('boxScoreTeamB') - targetB;
+      if (overA <= 0 && overB <= 0) break;
+      const worst = Math.max(overA / targetA, overB / targetB);
+      scale = Math.max(0.5, scale * (1 - Math.min(0.2, worst)));
+      quadBL.style.setProperty('--stat-scale', scale);
+      quadBR.style.setProperty('--stat-scale', scale);
+    }
+  }
+
+  // ---- overlay rendering: TEAM STATS + LEADERS ----------------------
+  //
+  //     /broadcast_stats.html            the game currently ON AIR
+  //     /broadcast_stats.html?id=<uuid>  a specific game
+  //     /broadcast_stats.html?debug=1    say why nothing is showing
+  //
+  // Two sections, matching what a producer asks for between drives: the
+  // team-versus-team comparison on top, each side's leaders underneath.
+  //
+  // The comparison is the recap page's Team Stats list MINUS four rows
+  // Andy cut for the overlay: Total Plays, Yards Per Play, Yards Per Pass
+  // and 20yd+ Plays. On a report those add depth; on a graphic held for a
+  // few seconds they are four more rows for the eye to skip past to reach
+  // the ones a commentator will actually read out.
+  function safeText(bg, fallback){
+    try { return safeTextColor(bg, fallback); } catch (e) { return fallback || '#fff'; }
+  }
+  function showView(){}
+  function showMsg(){}
+  function renderTeamSummary(){}
+  function renderBoxScore(){}
+  function applyDisplayScale(){}
+
+  const sumStat = (obj, key) =>
+    Object.keys(obj || {}).reduce((a, n) => a + ((obj[n] || {})[key] || 0), 0);
+
+  function statRowsFor(teamKey, box, finalState, turnovers, possessions){
+    const s = box[teamKey];
+    const rushYds = sumStat(s.rushing, 'yds'), rushAtt = sumStat(s.rushing, 'att');
+    const rushTd  = sumStat(s.rushing, 'td');
+    const passYds = sumStat(s.passing, 'yds'), passTd = sumStat(s.passing, 'td');
+    const sacked  = sumStat(s.passing, 'sacked');
+    const own = box[otherTeam(teamKey)].oppDowns;
+    const pen = finalState.penalties[teamKey];
+    const top = (finalState.possessionTime || {})[teamKey];
+    return [
+      ['Total Yards', rushYds + passYds],
+      ['Pass Yards', passYds],
+      ['Pass TD', passTd],
+      ['Rush Yards', rushYds],
+      ['Yards Per Rush', rushAtt ? (rushYds / rushAtt).toFixed(1) : '0.0'],
+      ['Rush TD', rushTd],
+      ['Possessions', possessions[teamKey] || 0],
+      // An em dash, not 0:00, when no clock was entered: a zero reads as
+      // "they never had the ball" rather than "nobody recorded it".
+      ['Time of Possession', top ? formatDuration(top) : '\u2014'],
+      ['Turnovers', turnovers[teamKey] || 0],
+      ['Sacks Allowed', sacked],
+      ['Penalties', pen.count],
+      ['Penalty Yards', pen.yds],
+      ['3rd Down', own.d3Pct !== null ? own.d3conv + '/' + own.d3att + ' (' + own.d3Pct + '%)' : '\u2014'],
+      ['4th Down', own.d4Pct !== null ? own.d4conv + '/' + own.d4att + ' (' + own.d4Pct + '%)' : '\u2014']
+    ];
+  }
+
+  // Same three categories and the same sub-lines as the recap card, so a
+  // viewer who sees both does not meet two different answers.
+  const LEADER_CATS = [
+    { key: 'passing',   label: 'Passing leader',
+      sub: d => (d.comp || 0) + '/' + (d.att || 0) + ', ' + (d.td || 0) + ' TD' },
+    { key: 'rushing',   label: 'Rushing leader',
+      sub: d => (d.att || 0) + ' att, ' + (d.td || 0) + ' TD' },
+    { key: 'receiving', label: 'Receiving leader',
+      sub: d => (d.rec || 0) + ' rec, ' + (d.td || 0) + ' TD' }
+  ];
+
+  function leaderCards(teamKey, box){
+    return LEADER_CATS.map(cat => {
+      const bucket = box[teamKey][cat.key] || {};
+      // A LEADER MUST BE A PLAYER. TEAM is a bookkeeping bucket (sack
+      // yardage, kneels) and Unknown is a completion whose receiver was
+      // never recorded -- neither is somebody a commentator can name, and
+      // Unknown would take the card on exactly the play nobody
+      // identified. Excluded rather than sorted last: picking a single
+      // winner from a list of one still leaves it on top.
+      const nums = Object.keys(bucket).filter(n => n !== 'TEAM' && n !== 'Unknown');
+      if (!nums.length){
+        return '<div class="lcard empty"><div class="lcat">' + cat.label + '</div>' +
+               '<div class="lnone">\u2014</div></div>';
+      }
+      const key = nums.slice().sort((a, b) => (bucket[b].yds || 0) - (bucket[a].yds || 0))[0];
+      const d = bucket[key];
+      // Keyed by DISPLAY NAME already -- computeBoxScore resolves each
+      // bucket key to the player's name, or '#44' where nobody was
+      // recorded. Passing it through a number lookup is what once put a
+      // hash in front of every man's name on the recap.
+      return '<div class="lcard">' +
+        '<div class="lcat">' + cat.label + '</div>' +
+        '<div class="lname">' + key + '</div>' +
+        '<div class="lval">' + (d.yds || 0) + '<span class="lunit">yds</span></div>' +
+        '<div class="lsub">' + cat.sub(d) + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderAll(){
+    const state = computeState(plays);
+    const box = computeBoxScore(plays);
+    const turnovers = countTurnovers(plays);
+    const possessions = countPossessions(plays);
+
+    // VISITOR ON THE LEFT, home on the right -- the order every scoreboard
+    // and every report in this app already uses.
+    const visitorKey = TEAMS.teamA.isHome ? 'teamB' : 'teamA';
+    const homeKey    = TEAMS.teamA.isHome ? 'teamA' : 'teamB';
+
+    const headSide = (k) => {
+      const t = TEAMS[k];
+      return '<div class="hteam" style="background:' + (t.bg || '#1a1a2e') + '; color:' +
+        safeText(t.bg, t.text) + ';">' +
+        (t.logo ? '<img src="' + String(t.logo).replace(/"/g, '&quot;') + '" alt="">' : '') +
+        '<span class="hname">' + t.name + '</span>' +
+        '<span class="hpts">' + (state.scores[k] || 0) + '</span></div>';
+    };
+    document.getElementById('head').innerHTML =
+      headSide(visitorKey) + '<div class="hmid">TEAM STATS</div>' + headSide(homeKey);
+
+    const vRows = statRowsFor(visitorKey, box, state, turnovers, possessions);
+    const hRows = statRowsFor(homeKey, box, state, turnovers, possessions);
+    document.getElementById('rows').innerHTML = vRows.map((r, i) =>
+      '<div class="srow"><span class="sv">' + r[1] + '</span>' +
+      '<span class="slab">' + r[0] + '</span>' +
+      '<span class="sv">' + hRows[i][1] + '</span></div>').join('');
+
+    const ldSide = (k) => {
+      const t = TEAMS[k];
+      return '<div class="lside">' +
+        '<div class="lteam">' +
+          (t.logo ? '<img src="' + String(t.logo).replace(/"/g, '&quot;') + '" alt="">' : '') +
+          '<div class="ltname">' + t.name + '</div>' +
+        '</div>' +
+        '<div class="lcards">' + leaderCards(k, box) + '</div>' +
+      '</div>';
+    };
+    document.getElementById('leaders').innerHTML = ldSide(visitorKey) + ldSide(homeKey);
+
+    document.getElementById('panel').style.display = 'block';
+    const p = new URLSearchParams(window.location.search);
+    document.body.classList.toggle('debug', p.get('debug') === '1');
+  }
+
+  // ---- boot ---------------------------------------------------------
+  // Everything comes from /api/gamedata, which reads server-side with the
+  // service key. The overlay cannot query Supabase directly: it has no
+  // session, and every RLS policy requires one.
+  //
+  // POLLING, not realtime. Supabase realtime also needs a session, so the
+  // overlay re-fetches on an interval instead. Two seconds is well inside
+  // what a scoreboard needs and is trivial load for one game.
+  const POLL_MS = 2000;
+
+  // SILENT ON AIR by design: an overlay that prints an error puts that
+  // error on the broadcast. ?debug=1 says what happened -- vMix never has
+  // that parameter, a person testing the address in a browser does.
+  function showFatal(msg){
+    const p = document.getElementById('panel');
+    if (p) p.style.display = 'none';
+    if (new URLSearchParams(window.location.search).get('debug') !== '1') return;
+    document.body.innerHTML =
+      '<p style="position:absolute;left:40px;bottom:40px;margin:0;color:#fff;' +
+      'background:#8a1414;padding:14px 20px;border-radius:6px;' +
+      'font:500 20px sans-serif;">' + msg + '</p>';
+  }
+
+  async function fetchAndRender(){
+    const r = await fetch('/api/gamedata' +
+      (currentGameId ? '?id=' + encodeURIComponent(currentGameId) : ''),
+      { cache: 'no-store' });
+    if (!r.ok){
+      const body = await r.json().catch(() => ({}));
+      throw new Error(body.error || ('HTTP ' + r.status));
+    }
+    const d = await r.json();
+    startingPossession = d.game.starting_possession || 'teamA';
+    quarterLengthSec   = d.game.quarter_length_seconds || 720;
+    buildTeams(d.game, d.roster || [], d.ourBranding || {});
+    plays = (d.plays || []).map(p => ({
+      id: p.id, seq: p.sequence_number, text: p.text,
+      effect: p.effect || {}, roles: p.roles || null,
+      team: p.team_side, quarter: p.quarter,
+      isDivider: !!p.is_divider, unresolved: !!p.unresolved
+    }));
+    renderAll();
+  }
+
+  async function initOverlay(){
+    const params = new URLSearchParams(window.location.search);
+    // An id is OPTIONAL now. Without one, /api/gamedata resolves the game
+    // set ON AIR -- which is the whole point of the flag, and means the
+    // overlay address never needs editing. The old behaviour was a
+    // leftover from before the flag existed, and produced
+    // "No game id" for anyone who used the address as given.
+    currentGameId = params.get('id') || '';
+    try {
+      await fetchAndRender();
+    } catch (e){
+      showFatal('Could not load the game: ' + e.message);
+      return;
+    }
+    // A later failure must not blank a working scoreboard -- keep showing
+    // the last good state and try again on the next tick.
+    setInterval(() => { fetchAndRender().catch(() => {}); }, POLL_MS);
+  }
+  initOverlay();
+
+</script>
+</body>
+</html>
