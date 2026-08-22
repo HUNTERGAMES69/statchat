@@ -271,6 +271,11 @@
   .ld-name { flex:1 1 auto; font-weight:700; min-width:0; overflow:hidden;
              text-overflow:ellipsis; white-space:nowrap; }
   .ld-stat { flex:0 0 auto; color:#2b2f36; font-variant-numeric:tabular-nums; }
+  /* Stacked: mark on top, label under it, both centred on the same axis. */
+  .lb-teamwrap { display:inline-flex; flex-direction:column; align-items:center; gap:3px; }
+  /* object-fit:contain so a wide or tall crest is letterboxed rather than
+     squashed -- these come from whatever the school supplied. */
+  .lb-logo { width:26px; height:26px; object-fit:contain; display:block; }
   .lb-team { font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em;
              padding:3px 8px; border-radius:5px; display:inline-block; margin:8px 0 4px; }
   /* Below the dock breakpoint the margins are gone, so it comes back into
@@ -3447,8 +3452,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<span class="lb-label" style="text-align:center;">' + label + '</span>' +
       '<span class="lb-val">' + b + '</span></div>';
     const yds = t => sum(box[t].rushing, 'yds') + sum(box[t].passing, 'yds');
-    const chip = t => '<span class="lb-team" style="background:' + TEAMS[t].bg + '; color:' +
-      safeTextColor(TEAMS[t].bg, TEAMS[t].text) + ';">' + TEAMS[t].name + '</span>';
+    // Logo ABOVE the name, not beside it. Beside it the mark competed
+    // with the text for a column already narrow enough to truncate
+    // school names; stacked, the mark is what the eye lands on and the
+    // name confirms it.
+    //
+    // TEAMS[t].logo is null for a team that has never uploaded one -- the
+    // opponent usually, early in a season -- so the name alone has to be
+    // a complete answer, not a caption missing its picture.
+    const chip = t => '<span class="lb-teamwrap">' +
+      (TEAMS[t].logo
+        ? '<img class="lb-logo" src="' + String(TEAMS[t].logo).replace(/"/g, '&quot;') +
+          '" alt="">'
+        : '') +
+      '<span class="lb-team" style="background:' + TEAMS[t].bg + '; color:' +
+      safeTextColor(TEAMS[t].bg, TEAMS[t].text) + ';">' + TEAMS[t].name + '</span></span>';
     el.innerHTML =
       '<div style="display:flex; justify-content:space-between;">' + chip('teamA') + chip('teamB') + '</div>' +
       row('score', st.scores.teamA, st.scores.teamB) +
@@ -3550,8 +3568,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<span class="ld-stat">' + detail(best.d) + '</span></div>'
         : '';
       return '<div class="ld-block">' +
-        '<span class="lb-team" style="background:' + TEAMS[t].bg + '; color:' +
-          safeTextColor(TEAMS[t].bg, TEAMS[t].text) + ';">' + TEAMS[t].name + ' leaders</span>' +
+        '<span class="lb-teamwrap">' +
+          (TEAMS[t].logo
+            ? '<img class="lb-logo" src="' + String(TEAMS[t].logo).replace(/"/g, '&quot;') + '" alt="">'
+            : '') +
+          '<span class="lb-team" style="background:' + TEAMS[t].bg + '; color:' +
+            safeTextColor(TEAMS[t].bg, TEAMS[t].text) + ';">' + TEAMS[t].name + ' leaders</span>' +
+        '</span>' +
         // TDs appended only when there are any. A trailing ", 0 TD" on
         // every line would double the width of the busiest column to say
         // nothing, and in a rail this narrow the name is what gets
