@@ -366,6 +366,54 @@ async function run() {
     h.close();
   }
 
+  // A KICK RETURNER IS NOT A TACKLER.
+  // ---------------------------------------------------------------------
+  // r.defense carries more than the tackler: the returning side is the
+  // defence at the moment of a kick, so a returner is stored under the
+  // same key, as are the interceptor and the fumble recoverer. The
+  // "Tackled by" picker read that list unfiltered, so a man who had only
+  // returned a kickoff was offered as a tackler for the rest of the game
+  // -- and if he wore a shared number, every player on that number came
+  // with him. Reported from a real game.
+  //
+  // The STATS were never wrong: computeBoxScore gates its credit on the
+  // play type. This checks the picker now uses the same gate, so the two
+  // cannot disagree.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    h.evalIn('window.confirm = () => true;');
+    D.setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    // teamB #21 returns a kickoff and never tackles anybody.
+    D.enterPlay(h, { type: 'kickoff', kicker: '3', credit: '21', retyds: '20', spot: { side: 'own', yardline: 30 } });
+    D.click(win, doc.getElementById('flipBtn'));
+    await new Promise(r => setTimeout(r, 200));
+    D.setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 40 });
+    D.enterPlay(h, { type: 'rush', carrier: '22', yards: '4', credit: '45' });
+    D.enterPlay(h, { type: 'sack', passer: '7', yards: '6', credit: '52' });
+
+    D.click(win, doc.querySelector('.ptypeBtn[data-type="rush"]'));
+    const blk = [...doc.querySelectorAll('#playPanel .opt-block')].find(b => /Tackled/.test(b.textContent));
+    if (blk) D.click(win, blk.querySelector('.opt-toggle'));
+    const offered = [...doc.querySelectorAll('#playPanel .pp_credit_pick')].map(b => b.textContent.trim());
+
+    if (offered.some(n => /21/.test(n))) {
+      fail('returner:offered', 'a kick returner is being offered as a tackler: ' + offered.join(' | '));
+    }
+    // The real defenders must survive the filter -- a gate that excluded
+    // everybody would pass the check above while breaking the picker.
+    if (!offered.some(n => /45/.test(n))) fail('tackler:lost', 'the rush tackler is missing: ' + offered.join(' | '));
+    if (!offered.some(n => /52/.test(n))) fail('sacker:lost', 'the sacker is missing: ' + offered.join(' | '));
+
+    // And the box score is exactly what it was: the returner has no
+    // defensive line at all, the two real defenders do.
+    const def = JSON.parse(h.evalIn('JSON.stringify(computeBoxScore(plays).teamB.defense)'));
+    if (def['#21']) fail('returner:credited', 'the returner should have no defensive credit');
+    if (!def['#45'] || def['#45'].tackles !== 1) fail('tackler:credit', 'the rush tackler lost his tackle');
+    if (!def['#52'] || def['#52'].sacks !== 1) fail('sacker:credit', 'the sacker lost his sack');
+    h.close();
+  }
+
   return failures;
 }
 
