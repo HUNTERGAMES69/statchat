@@ -1166,6 +1166,17 @@ function extractNameTag(rawName){
         : null;
       const currentDriveOwnTeamPlays = currentDrivePlays.filter(p => {
         if (p.isDivider || !p.team || p.team === driveTeam) return true;
+        // A PENALTY, whoever it was called on. The row is stamped with the
+        // PENALISED team, not the team whose drive it happened in -- so a
+        // flag on the defence during our drive carries the other team's
+        // side and this filter dropped it, and the flag simply vanished
+        // from the tile. Reported from a real game.
+        //
+        // Penalties belong to the drive they occurred in by definition:
+        // they move that drive's chains. There is no case where a flag
+        // during a possession belongs to somebody else's possession, so
+        // this is unconditional rather than another team-matching rule.
+        if (p.effect && p.effect.penaltyTeam) return true;
         const pt = p.roles && p.roles.playType;
         // A try (PAT/2PT) that follows a defensive score's own
         // touchdown, captured REGARDLESS OF TEAM. Reported directly
