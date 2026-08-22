@@ -4921,8 +4921,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const banner = document.querySelector('.banner');
       const top = (banner ? banner.getBoundingClientRect().height : 0) + 10;
       const room = window.innerHeight - top;
-      // Taller than the frame -> lock to the top of it.
-      if (panel.getBoundingClientRect().height > room) stageEl.style.marginTop = '0px';
+      // Lock to the top of the frame for anything that is a real play
+      // tree. Originally this only triggered when a tree was taller than
+      // the whole frame, which left the pass tree offset by the height
+      // of the Pass button -- tall enough to want every pixel, not tall
+      // enough to trip that test.
+      //
+      // Half the frame is the line: below it are the small utility
+      // panels (quarter marker, timeout, a spot prompt), where opening
+      // level with the button that was just pressed is the whole point
+      // and costs nothing. Above it the offset is only ever pushing a
+      // long tree's Review button closer to the bottom edge.
+      if (panel.getBoundingClientRect().height > room * 0.5) stageEl.style.marginTop = '0px';
       const r = panel.getBoundingClientRect();
       // Already fully visible and not tucked under the banner: leave the
       // page where it is rather than scrolling for no reason.
@@ -4933,6 +4943,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     };
 
     const panelEl = document.getElementById('playPanel');
+    // 5. ONE AUTHORITY ON SCROLLING. Roughly a dozen openers call
+    //    panel.scrollIntoView({block:'start'}) themselves -- correct
+    //    when the panel rendered far below four rows of buttons, wrong
+    //    now that it opens beside the rail already in view. Quarter
+    //    marker was the visible case: pressing it scrolled the page
+    //    down to a panel that had not moved.
+    //
+    //    Neutralised on the element rather than deleted at each call
+    //    site: every one of those calls goes through this same node, so
+    //    one override covers all of them and none of the original code
+    //    has to be touched. fitPanel() decides instead, and it already
+    //    declines to scroll when the panel is fully visible -- which for
+    //    a short utility panel it always is.
+    if (panelEl) panelEl.scrollIntoView = function(){};
     if (panelEl && window.MutationObserver){
       new MutationObserver(unwrapYardsRow).observe(panelEl, { childList: true });
     }
