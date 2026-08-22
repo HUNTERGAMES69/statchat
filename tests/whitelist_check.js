@@ -662,6 +662,47 @@ async function run() {
     h.close();
   }
 
+  // THE EMPTY STAGE. With nothing open the area beside the ladder reads
+  // "Make a selection to begin" over the mark; it was simply blank, which
+  // looks like something failing to load rather than waiting for you.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    const shown = async () => {
+      await new Promise(r => setTimeout(r, 120));
+      return win.getComputedStyle(doc.getElementById('stageEmpty')).display !== 'none';
+    };
+    const el = doc.getElementById('stageEmpty');
+    if (!el) { fail('stage:missing', 'no empty-stage element'); h.close(); return failures; }
+    if (!/Make a selection to begin/.test(el.textContent)) {
+      fail('stage:text', 'wrong wording: ' + JSON.stringify(el.textContent.trim()));
+    }
+    // Text above the mark, both centred on one axis.
+    if (el.firstElementChild.tagName === 'IMG') fail('stage:order', 'the text should sit above the logo');
+    if (win.getComputedStyle(el).flexDirection !== 'column') fail('stage:stack', 'it should stack');
+    if (win.getComputedStyle(el).alignItems !== 'center') fail('stage:centre', 'it should be centred');
+    if (!await shown()) fail('stage:initial', 'it should show when nothing is open');
+
+    // EVERY opener hides it -- including the utility trees, which build
+    // their markup straight into #playPanel without going through
+    // renderPlayPanel. Hooking openers one at a time is what left the
+    // placeholder behind an open tree; a MutationObserver on the panel is
+    // what makes this list exhaustive rather than a list somebody has to
+    // remember to extend.
+    for (const id of ['penUtilBtn', 'timeoutUtilBtn', 'badSnapUtilBtn', 'driveUtilBtn',
+                      'setClockUtilBtn', 'manualBtn']) {
+      click(win, doc.getElementById(id));
+      if (await shown()) fail('stage:open:' + id, 'the placeholder is still showing behind an open panel');
+      click(win, doc.getElementById('phaseClearBtn'));
+      if (!await shown()) fail('stage:clear:' + id, 'it should return after Clear');
+    }
+    // And a play tree.
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    if (await shown()) fail('stage:tree', 'the placeholder is still showing behind the pass tree');
+    h.close();
+  }
+
   return failures;
 }
 
