@@ -3346,7 +3346,29 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (p.effect && p.effect.penaltyTeam) continue;
       lastReal = p; break;
     }
-    const awaitingKickoff = st0.down === null && st0.quarter < 5 &&
+    // A TRY ALWAYS COMES BEFORE THE KICKOFF, so these two can never both
+    // be true -- and when they were, every button on the page went dead.
+    // ------------------------------------------------------------------
+    // awaitingKickoff greys everything except Kickoff; awaitingTry greys
+    // everything except PAT and 2PT. Fire them together and the two
+    // whitelists have nothing in common: no play type is enterable at
+    // all, the guided panel has already closed, and the game cannot be
+    // advanced by any means short of Undo.
+    //
+    // That is reachable. The GUIDED kickoff's return-touchdown branch
+    // sets endsDrive alongside the six points (it has to: when the
+    // kicking team recovers there is no flip, and without endsDrive the
+    // old down and distance survive the score). The play-panel kickoff
+    // does not set it, which is the only reason the same touchdown
+    // entered the other way still let the try through -- so this looked
+    // like a guided-only fault when it was really a collision between
+    // two flags.
+    //
+    // Resolved in favour of the try, which is what football does next.
+    // The kickoff gate then fires on its own once the try is entered.
+    const scoredSix = !!(lastReal && lastReal.effect && lastReal.effect.score &&
+                         lastReal.effect.score.points === 6);
+    const awaitingKickoff = st0.down === null && st0.quarter < 5 && !scoredSix &&
       !!(lastReal && lastReal.effect && lastReal.effect.endsDrive) &&
       (gamePhase === 'firstHalf' || gamePhase === 'secondHalf');
     // AFTER A TOUCHDOWN, THE ONLY LEGAL PLAY IS THE TRY.
@@ -3369,9 +3391,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     //
     // Not restricted by quarter: tries happen in overtime too, which is
     // why this does not borrow awaitingKickoff's `quarter < 5`.
-    const awaitingTry = st0.down === null &&
-      !!(lastReal && lastReal.effect && lastReal.effect.score &&
-         lastReal.effect.score.points === 6) &&
+    const awaitingTry = st0.down === null && scoredSix &&
       (gamePhase === 'firstHalf' || gamePhase === 'secondHalf');
     // AN OVERTIME SERIES THAT HAS ENDED RAISES THE NEXT ONE.
     // ------------------------------------------------------------------
