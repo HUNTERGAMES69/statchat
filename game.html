@@ -488,7 +488,13 @@
         <button type="button" id="recheckBtn" class="secondary" style="background:#fff;">Run checks again</button>
         <button type="button" id="unlockFinalBtn" class="secondary" style="background:#fff;">Unlock to edit</button>
       </div>
-      <div id="fieldStrip" style="display:none; background:var(--surface-2,#fff); border:1px solid #ddd; border-radius:12px; padding:10px 12px; margin:8px 0;">
+      <!-- No top margin: the strip is the first thing in the card, so the
+           card's own padding is the only gap wanted above it. The 8px
+           that used to sit here was doubling that, and with the phase
+           notice above it now gone there is nothing left to separate
+           from. Internal padding trimmed at the top for the same reason,
+           kept at the bottom where the yard numbers sit under the field. -->
+      <div id="fieldStrip" style="display:none; background:var(--surface-2,#fff); border:1px solid #ddd; border-radius:12px; padding:7px 12px 10px; margin:0 0 8px;">
         <div style="display:flex; align-items:center; margin-bottom:6px;">
           <span style="font-size:13px; color:#888;">Field position</span>
           <span id="fieldStripWarn" style="display:none; font-size:12px; color:#a05a00; margin-left:10px;"></span>
@@ -10275,9 +10281,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
       await persistUiState();
     }
-    if (!halfEnded && afterHalf === false && phaseNow === 'firstHalf'){
-      showMsg('gameMsg', 'Back in the first half.', 'info');
-    } else if (halfEnded && !afterHalf){
+    // "Back in the first half." REMOVED. It was meant for undoing back
+    // ACROSS the interval, but its condition could not tell that apart
+    // from an ordinary undo: with no divider in the log yet, halfEnded is
+    // false and afterHalf is false too (its own guard returns false when
+    // findIndex gives -1), so every one of the three tests passed on
+    // every undo in the first half. A notice that appears on a routine
+    // action tells the reader nothing and trains them to ignore the one
+    // below it, which does carry news.
+    if (halfEnded && !afterHalf){
       showMsg('gameMsg', 'Back to halftime. Use "Start 2nd half" to run the kickoff again.', 'info');
     }
     updatePhaseUI();
