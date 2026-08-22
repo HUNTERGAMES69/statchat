@@ -180,7 +180,7 @@
      on the other side. top and height come from the ladder, set by
      script: the ladder's height is whatever its buttons add up to, and
      a hardcoded value would drift the moment a label wraps. */
-  #driveDock { position:fixed; left:16px; right:calc(50% + 380px + 18px);
+  #driveDock { position:absolute; left:16px; right:calc(50% + 380px + 18px);
                z-index:80; margin-bottom:0; padding:14px;
                box-sizing:border-box; display:flex; flex-direction:column; }
   /* Only the plays scroll; heading and buttons stay put. */
@@ -199,7 +199,7 @@
   /* Below this the margin is too thin to hold it, so it drops back to a
      normal card in the flow -- exactly where it sits today. */
   @media (max-width:1219px) {
-    #driveDock { position:static; left:auto; right:auto;
+    #driveDock { position:static !important; left:auto; right:auto;
                  height:auto !important; top:auto !important;
                  margin-bottom:16px; padding:18px; display:block; }
     #driveDock #driveLogScroll { overflow-y:visible; }
@@ -5004,41 +5004,50 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     //    Re-run on scroll and resize -- the rail is sticky, so its top
     //    changes as the page moves until it locks.
     const dock = document.getElementById('driveDock');
+    // DOCUMENT-positioned, not viewport-positioned. The first version of
+    // this was position:fixed and re-measured on every scroll event, with
+    // a subtree+attribute observer over the whole card on top of it --
+    // so every render forced a synchronous layout read and smooth
+    // scrolling stuttered against it. Reported as the ladder area moving
+    // and scrolling constantly, which is exactly what that thrash looks
+    // like.
+    //
+    // Absolute against the document instead: the dock scrolls with the
+    // page on its own, the way the card does, so there is NO scroll
+    // listener and nothing to keep in step frame by frame. It also
+    // removes the viewport clamp the fixed version needed -- the height
+    // can simply equal the card's, however tall the card gets.
     const syncDock = () => {
       if (typeof document === 'undefined' || !document || !dock) return;
       // Under the breakpoint the dock is back in the normal flow and
       // must not carry a fixed height.
-      if (window.innerWidth < 1220){ dock.style.top = ''; dock.style.height = ''; return; }
-      // Matched to the whole entry CARD -- the white area holding the
-      // ladder and whatever tree is open -- not just the ladder. The two
-      // panels then start and finish on the same lines, and the dock
-      // grows with a tall tree instead of ending partway down it.
+      if (window.innerWidth < 1220){
+        if (dock.style.top || dock.style.height){ dock.style.top = ''; dock.style.height = ''; }
+        return;
+      }
       const card = document.getElementById('entryCard');
       const r = (card || rail).getBoundingClientRect();
-      // Clamped to the viewport at both ends. The dock is position:fixed,
-      // so a card taller than the screen would otherwise run off the
-      // bottom and take the end of the play list with it, unreachable --
-      // it cannot scroll away with the page the way the card does. Top
-      // still tracks the card as it scrolls (this runs on scroll), so
-      // the two stay aligned whenever the card is fully on screen, which
-      // is the case this is really about.
-      const top = Math.max(8, r.top);
-      const bottom = Math.min(window.innerHeight - 8, r.bottom);
-      dock.style.top = top + 'px';
-      dock.style.height = Math.max(120, bottom - top) + 'px';
+      const top = Math.round(r.top + (window.pageYOffset || 0)) + 'px';
+      const height = Math.round(r.height) + 'px';
+      // Written only when the value actually changes: an unconditional
+      // write invalidates style on every call, which is the other half
+      // of what made this expensive.
+      if (dock.style.top !== top) dock.style.top = top;
+      if (dock.style.height !== height) dock.style.height = height;
     };
     if (dock){
       syncDock();
       window.addEventListener('resize', syncDock);
-      window.addEventListener('scroll', syncDock, { passive: true });
-      // The ladder's height changes when phase buttons show or hide
-      // (Start game -> Quarter marker -> End game), so watch it rather
-      // than measuring once at load.
-      if (window.MutationObserver){
-        // The card's height changes on every tree open and close, not
-        // just when the ladder itself changes.
-        const watch = document.getElementById('entryCard') || rail;
-        new MutationObserver(syncDock).observe(watch, { childList: true, subtree: true, attributes: true });
+      // ResizeObserver rather than a MutationObserver over the card:
+      // it fires when the card's SIZE changes and not when its contents
+      // merely re-render, which is the difference between a handful of
+      // calls per play and a continuous stream of them.
+      if (window.ResizeObserver){
+        const card = document.getElementById('entryCard');
+        if (card) new ResizeObserver(syncDock).observe(card);
+      } else if (window.MutationObserver){
+        const card = document.getElementById('entryCard') || rail;
+        new MutationObserver(syncDock).observe(card, { childList: true, subtree: true });
       }
     }
     window.__syncDock = syncDock;
