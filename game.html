@@ -258,14 +258,19 @@
   .lb-row { display:flex; align-items:baseline; gap:8px; font-size:13px; padding:4px 0;
             border-bottom:1px solid #f4f4f4; }
   .lb-row:last-child { border-bottom:none; }
-  .lb-label { flex:1 1 auto; color:#666; }
+  .lb-label { flex:1 1 auto; color:#3d4249; }
   .lb-val { flex:0 0 58px; text-align:right; font-weight:700; font-variant-numeric:tabular-nums; }
   .ld-block { margin-top:10px; padding-top:8px; border-top:1px solid #eee; }
   .ld-row { display:flex; align-items:baseline; gap:6px; font-size:12.5px; padding:2px 0; }
-  .ld-tag { flex:0 0 34px; font-size:10px; font-weight:800; color:#8a8f98; letter-spacing:0.04em; }
+  /* Darkened from #8a8f98 / #555 / #666. Reported directly as hard to
+     read: these sit at 10-13px on white in a room where the screen is not
+     the thing being looked at, and grey-on-white at that size is the first
+     thing to go. Still lighter than the names they label, so the hierarchy
+     survives -- it is contrast that was missing, not weight. */
+  .ld-tag { flex:0 0 34px; font-size:10px; font-weight:800; color:#4a5058; letter-spacing:0.04em; }
   .ld-name { flex:1 1 auto; font-weight:700; min-width:0; overflow:hidden;
              text-overflow:ellipsis; white-space:nowrap; }
-  .ld-stat { flex:0 0 auto; color:#555; font-variant-numeric:tabular-nums; }
+  .ld-stat { flex:0 0 auto; color:#2b2f36; font-variant-numeric:tabular-nums; }
   .lb-team { font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em;
              padding:3px 8px; border-radius:5px; display:inline-block; margin:8px 0 4px; }
   /* Below the dock breakpoint the margins are gone, so it comes back into
@@ -3462,6 +3467,44 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // Ranked on YARDS, not attempts: a back with four carries for sixty is
     // the leading rusher and a back with twelve for thirty is not. Ties go
     // to whoever the box score lists first, which is stable within a game.
+    // TEAM DEFENCE, counted from the play log rather than by summing the
+    // per-player defence bucket. Naming a tackler is optional and often
+    // skipped at speed, so a sack or a TFL with nobody credited exists in
+    // the log but not in anyone's line -- summing the bucket would report
+    // a team total lower than the game actually had. Same reduction
+    // view.html's own Defense tile uses, including its two exceptions: a
+    // fumble that ended a sack is still a sack, and a sack counts as a
+    // tackle for loss.
+    function teamDefense(t){
+      const opp = t === 'teamA' ? 'teamB' : 'teamA';
+      return plays.reduce((acc, p) => {
+        const r = p.roles; if (!r) return acc;
+        const e = p.effect || {};
+        if ((r.playType === 'sack' || (r.playType === 'fumble' && r.attempt === 'sack')) &&
+            r.passer && r.passer.team === opp) acc.sacks++;
+        if (r.playType === 'int' && r.passer && r.passer.team === opp) acc.int++;
+        if (r.playType === 'fumble' && r.carrier && r.carrier.team === opp &&
+            (r.lost || r.defense)) acc.fumRec++;
+        const byOpp = (r.carrier && r.carrier.team === opp) ||
+                      (r.passer && r.passer.team === opp);
+        if (byOpp && ['rush', 'pass', 'sack'].indexOf(r.playType) !== -1 &&
+            typeof e.statYds === 'number' && e.statYds < 0) acc.tfl++;
+        return acc;
+      }, { int: 0, fumRec: 0, sacks: 0, tfl: 0 });
+    }
+    function defLine(t){
+      const d = teamDefense(t);
+      if (!(d.int || d.fumRec || d.sacks || d.tfl)) return '';
+      const bits = [];
+      if (d.sacks) bits.push(d.sacks + ' sack' + (d.sacks === 1 ? '' : 's'));
+      if (d.tfl) bits.push(d.tfl + ' TFL');
+      if (d.int) bits.push(d.int + ' INT');
+      if (d.fumRec) bits.push(d.fumRec + ' FR');
+      return '<div class="ld-row"><span class="ld-tag">DEF</span>' +
+        '<span class="ld-stat" style="flex:1 1 auto; text-align:left;">' +
+        bits.join(' · ') + '</span></div>';
+    }
+
     function leaders(t){
       const b = box[t];
       const top = (bucket, key) => {
@@ -3483,10 +3526,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const n = d.td || 0;
         return n ? ' · ' + n + ' TD' : '';
       };
+      // Interceptions THROWN, and only when there are any -- same reason
+      // as the touchdowns: a "0 INT" on every passing line costs the width
+      // the name needs and reports nothing.
+      const ints = d => {
+        const n = d.intThrown || 0;
+        return n ? ' · ' + n + ' INT' : '';
+      };
       const rush = top(b.rushing, 'yds');
       const pass = top(b.passing, 'yds');
       const rec  = top(b.receiving, 'yds');
-      if (!rush && !pass && !rec) return '';
+      // A defence can have done something before anyone on offence has --
+      // a three-and-out with a sack in it. Bail only when BOTH are empty.
+      if (!rush && !pass && !rec && !defLine(t)) return '';
       const line = (tag, best, detail) => best
         ? '<div class="ld-row"><span class="ld-tag">' + tag + '</span>' +
           '<span class="ld-name">' + shortPickerName(best.n) + '</span>' +
@@ -3499,9 +3551,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // every line would double the width of the busiest column to say
         // nothing, and in a rail this narrow the name is what gets
         // squeezed for it.
+        // Passing first: it is the line most often asked for, and on a
+        // narrow rail the top row is the one read without hunting.
+        line('PASS', pass, d => (d.comp || 0) + '/' + (d.att || 0) + ', ' + (d.yds || 0) + ' yds' +
+          tds(d) + ints(d)) +
         line('RUSH', rush, d => (d.att || 0) + ' att, ' + (d.yds || 0) + ' yds' + tds(d)) +
-        line('PASS', pass, d => (d.comp || 0) + '/' + (d.att || 0) + ', ' + (d.yds || 0) + ' yds' + tds(d)) +
         line('REC',  rec,  d => (d.rec || 0) + ' rec, ' + (d.yds || 0) + ' yds' + tds(d)) +
+        defLine(t) +
         '</div>';
     }
   }
