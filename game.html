@@ -77,6 +77,10 @@
   .msg.success { background:#e8f5e9; color:#1a7a4c; }
   .banner { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border-radius:10px; padding:12px 16px; margin-bottom:6px; transition:background 0.2s; position:sticky; top:8px; z-index:50; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
   .banner .score { font-size:20px; font-weight:700; }
+  /* Off air: light grey, so the red means exactly one thing -- live. */
+  #onAirBanner.air-off { background:#e8e8e6 !important; color:#5f5e5a !important;
+                         border:1px solid #d3d1c7; }
+  #onAirBanner { cursor:pointer; }
 #onAirBanner { background:#b00020; color:#fff; padding:7px 14px; border-radius:6px;
                  font-size:13px; font-weight:800; letter-spacing:0.06em;
                  margin:6px 0 10px; display:inline-block;
@@ -603,7 +607,11 @@
          out live, not merely being recorded. Sits in the empty left
          margin alongside the banner rather than costing a row inside
          the card. -->
-    <div id="onAirBanner" style="display:none;">&#9679; ON AIR</div>
+    <!-- A BUTTON, not a read-only badge. It now toggles the game on and
+         off air with the same warnings the dashboard asks, so a scorer
+         who forgot to set it does not have to leave the game to fix it.
+         Always rendered: off air it is the light-grey "SET AS ON AIR". -->
+    <button type="button" id="onAirBanner" style="display:none;">&#9679; ON AIR</button>
 
     <!-- RIGHT MARGIN RAIL. The mirror of #driveDock on the left, in the
          viewport space outside the 760px card that .floating-actions has
@@ -1002,12 +1010,11 @@
     // The scorer must know their typing is going out live rather than
     // merely being recorded. Read once at load: the flag is changed from
     // the dashboard, not from here.
-    const airEl = document.getElementById('onAirBanner');
-    // 'flex', not 'inline-block': the banner is now a flex box that centres
+    // 'flex', not 'inline-block': the banner is a flex box that centres
     // its own text against a height measured from the score banner, and an
     // inline display value here would beat the stylesheet and break that.
-    if (airEl) airEl.style.display = game.is_broadcast ? 'flex' : 'none';
-    if (airEl && game.is_broadcast) renderAirHealth();
+    isOnAir = !!game.is_broadcast;
+    paintAirButton();
 
     const { data: rosterRows, error: rosterError } = await supabaseClient
       .from('game_rosters').select('*').eq('game_id', currentGameId);
@@ -6202,6 +6209,81 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // without threading a getter through all of them. The 'picked' class is
   // set by wireStartingSpot itself, so it is a faithful proxy for the
   // side it recorded.
+  // ON AIR IS A TOGGLE ON THIS PAGE TOO.
+  // ---------------------------------------------------------------------
+  // It used to be a read-only badge -- "the flag is changed from the
+  // dashboard, not from here" -- which meant a scorer who noticed at
+  // kickoff that the game was not on air had to leave the game to fix it.
+  //
+  // The WARNINGS ARE THE DASHBOARD'S, deliberately word for word: a named
+  // confirm either way, a second confirm when the game is in progress,
+  // and a typed "OFF AIR" to pull a live game down. Softening them here
+  // would mean the same action carried different protection depending on
+  // which page you happened to be on, and this is the page you are on
+  // while people are watching.
+  let isOnAir = false;
+  function paintAirButton(){
+    const el = document.getElementById('onAirBanner');
+    if (!el) return;
+    el.style.display = 'flex';
+    el.classList.toggle('air-off', !isOnAir);
+    if (isOnAir){
+      el.innerHTML = '\u25CF ON AIR';
+      renderAirHealth();
+    } else {
+      el.textContent = 'SET AS ON AIR';
+    }
+  }
+
+  async function toggleOnAir(){
+    const el = document.getElementById('onAirBanner');
+    const label = gameLabel || 'this game';
+    const started = derivePhase() !== 'notStarted';
+    if (!isOnAir){
+      // Named, never a bare "are you sure": the whole risk is the wrong
+      // game, and a generic prompt does nothing to prevent that.
+      if (!window.confirm('Put this game ON AIR?\n\n    ' + label + '\n\n' +
+            'The broadcast graphics will show this game. Any game ' +
+            'currently on air will be taken off.')) return;
+      if (started && !window.confirm('This game is IN PROGRESS.\n\n' +
+            'Switching now changes what is on screen immediately, ' +
+            'while people are watching.\n\nGo ahead?')) return;
+    } else {
+      if (!window.confirm('Take this game OFF AIR?\n\n    ' + label + '\n\n' +
+            'The broadcast graphics will stop showing it. If no other ' +
+            'game is live they may show nothing at all.')) return;
+      if (started){
+        // Typed, not clicked. During a live game this must not be
+        // possible to do by reflex.
+        const typed = window.prompt('This game is IN PROGRESS and ON AIR right now.\n\n' +
+          'Taking it off air will change what viewers see immediately.\n\n' +
+          'Type  OFF AIR  to confirm:');
+        if (String(typed || '').trim().toUpperCase() !== 'OFF AIR'){
+          showMsg('gameMsg', 'Left on air \u2014 not confirmed.', 'info');
+          return;
+        }
+      }
+    }
+    if (el) el.disabled = true;
+    try {
+      // Through the same database functions the dashboard calls. Exactly
+      // one game may be flagged, and "clear all then set mine" from two
+      // laptops can interleave and leave two flagged, or none.
+      const { error } = await supabaseClient.rpc(
+        isOnAir ? 'clear_broadcast_game' : 'set_broadcast_game',
+        { p_game_id: currentGameId });
+      if (error) throw error;
+      isOnAir = !isOnAir;
+      showMsg('gameMsg', isOnAir ? ('Now ON AIR: ' + label)
+                                 : ('Taken off air: ' + label), 'success');
+    } catch (err){
+      showMsg('gameMsg', 'Could not change the broadcast flag: ' + err.message, 'error');
+    } finally {
+      if (el) el.disabled = false;
+      paintAirButton();
+    }
+  }
+
   // Say it where Review was pressed. The top-of-page copy stays as a
   // backstop for the reverse case -- somebody scrolled UP after pressing
   // -- but this is the one that will actually be read.
@@ -11592,6 +11674,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     collapsePlayPanel();
     if (window.__railClear) window.__railClear();
   });
+
+  document.getElementById('onAirBanner').addEventListener('click', toggleOnAir);
 
   document.getElementById('flipBtn').addEventListener('click', () => {
     const state = computeState();
