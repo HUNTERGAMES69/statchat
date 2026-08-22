@@ -192,14 +192,32 @@
                  box-sizing:border-box; padding:0 10px; margin:0; z-index:70;
                  animation:none; }
 
-  /* CREW VIEW in the top-right border, mirroring .floating-actions at the
-     bottom-right. Slightly larger than it was in the header row -- out
-     here it is not competing with anything for space. */
-  #launchViewLink { position:fixed; top:16px; right:16px; z-index:95;
-                    text-decoration:none; background:#b00020; color:#fff;
-                    font-size:14px; font-weight:800; letter-spacing:0.03em;
-                    padding:10px 18px; border-radius:8px; white-space:nowrap;
-                    box-shadow:0 2px 8px rgba(0,0,0,0.2); }
+  /* THE TOP ROW: BROADCAST, HELP, CREW VIEW. One rule, so the three are
+     the same height and the gaps between them are equal -- they used to
+     be two different sizes in two different corners. */
+  #topActions { position:absolute; right:16px; z-index:95;
+                display:flex; align-items:center; gap:8px; }
+  /* THE SAME METRICS AS .hdr-btn, not merely similar ones. These three
+     were 14px on 10x18 padding while Dashboard and ON AIR were 12px on
+     5x11, so a row that was meant to read as one set of controls came out
+     in two sizes. Font, line-height, padding, radius and border width all
+     come from the same numbers now; only the colours differ, so each stays
+     recognisable as the thing it was in its old corner.
+     The shadow goes with the size: at header scale it read as a smudge
+     rather than lift. */
+  #topActions a { text-decoration:none; color:#fff; font-weight:800;
+                  letter-spacing:0.03em; white-space:nowrap;
+                  box-sizing:border-box; font-size:12px; line-height:18px;
+                  padding:5px 11px; border-radius:6px;
+                  border:1px solid transparent; }
+  /* Colours unchanged, so each stays recognisable where it was. */
+  #broadcastFab { background:#1a1a2e; border-color:#1a1a2e; }
+  #helpFab { background:#1a7a4c; border-color:#1a7a4c; }
+  #launchViewLink { background:#b00020; border-color:#b00020; }
+  @media (max-width:1219px) {
+    /* Back into the flow: at this width the row would sit over the card. */
+    #topActions { position:static; justify-content:flex-end; margin:0 0 10px; }
+  }
   /* Under the dock breakpoint the margins vanish, so both come back into
      the flow rather than overlapping the card. */
   @media (max-width:1219px) {
@@ -235,6 +253,12 @@
   .lb-row:last-child { border-bottom:none; }
   .lb-label { flex:1 1 auto; color:#666; }
   .lb-val { flex:0 0 58px; text-align:right; font-weight:700; font-variant-numeric:tabular-nums; }
+  .ld-block { margin-top:10px; padding-top:8px; border-top:1px solid #eee; }
+  .ld-row { display:flex; align-items:baseline; gap:6px; font-size:12.5px; padding:2px 0; }
+  .ld-tag { flex:0 0 34px; font-size:10px; font-weight:800; color:#8a8f98; letter-spacing:0.04em; }
+  .ld-name { flex:1 1 auto; font-weight:700; min-width:0; overflow:hidden;
+             text-overflow:ellipsis; white-space:nowrap; }
+  .ld-stat { flex:0 0 auto; color:#555; font-variant-numeric:tabular-nums; }
   .lb-team { font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em;
              padding:3px 8px; border-radius:5px; display:inline-block; margin:8px 0 4px; }
   /* Below the dock breakpoint the margins are gone, so it comes back into
@@ -347,7 +371,8 @@
 <body>
 <!-- Top-right border area, the mirror of .floating-actions at the
      bottom-right. Outside the wrap, so it costs the card nothing. -->
-<a id="launchViewLink" href="#" target="_blank">CREW VIEW &#8599;</a>
+<!-- CREW VIEW now lives in #topActions at the foot of the file, beside
+     BROADCAST and HELP, so the three share one row and one gap value. -->
 <div class="wrap">
 
   <div id="loading" class="card"><div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:14px;"><img src="logo.png" alt="StatChat" style="width:48px; height:auto; border-radius:8px;"><img id="splashTeamIcon" style="display:none; width:48px; height:48px; border-radius:8px; object-fit:cover;"></div><h1>Loading…</h1></div>
@@ -3395,7 +3420,47 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       row('pass yds', sum(box.teamA.passing, 'yds'), sum(box.teamB.passing, 'yds')) +
       row('possessions', poss.teamA, poss.teamB) +
       row('TOP', formatDuration(st.possessionTime.teamA), formatDuration(st.possessionTime.teamB)) +
-      row('timeouts', st.timeouts.teamA, st.timeouts.teamB);
+      row('timeouts', st.timeouts.teamA, st.timeouts.teamB) +
+      leaders('teamA') + leaders('teamB');
+
+    // LEADERS, per team. The totals above say how the game is going; these
+    // say who is doing it, which is the question actually asked from the
+    // booth mid-game and the one that otherwise means opening a report.
+    //
+    // Ranked on YARDS, not attempts: a back with four carries for sixty is
+    // the leading rusher and a back with twelve for thirty is not. Ties go
+    // to whoever the box score lists first, which is stable within a game.
+    function leaders(t){
+      const b = box[t];
+      const top = (bucket, key) => {
+        const names = Object.keys(bucket || {});
+        if (!names.length) return null;
+        let best = null;
+        names.forEach(n => {
+          const v = (bucket[n] || {})[key] || 0;
+          if (best === null || v > best.v) best = { n: n, v: v, d: bucket[n] };
+        });
+        // Nobody with a yard yet is not a leader, it is an empty column --
+        // showing a name against 0 yds reads as a stat when it is not one.
+        return best && best.v > 0 ? best : null;
+      };
+      const rush = top(b.rushing, 'yds');
+      const pass = top(b.passing, 'yds');
+      const rec  = top(b.receiving, 'yds');
+      if (!rush && !pass && !rec) return '';
+      const line = (tag, best, detail) => best
+        ? '<div class="ld-row"><span class="ld-tag">' + tag + '</span>' +
+          '<span class="ld-name">' + shortPickerName(best.n) + '</span>' +
+          '<span class="ld-stat">' + detail(best.d) + '</span></div>'
+        : '';
+      return '<div class="ld-block">' +
+        '<span class="lb-team" style="background:' + TEAMS[t].bg + '; color:' +
+          safeTextColor(TEAMS[t].bg, TEAMS[t].text) + ';">' + TEAMS[t].name + ' leaders</span>' +
+        line('RUSH', rush, d => (d.att || 0) + ' att, ' + (d.yds || 0) + ' yds') +
+        line('PASS', pass, d => (d.comp || 0) + '/' + (d.att || 0) + ', ' + (d.yds || 0) + ' yds') +
+        line('REC',  rec,  d => (d.rec || 0) + ' rec, ' + (d.yds || 0) + ' yds') +
+        '</div>';
+    }
   }
 
   // CHECKS -- validateGame(), which until now only ran at finalize time.
@@ -5475,6 +5540,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (!banner) return;
       if (window.innerWidth < 1220){
         if (air.style.top || air.style.height){ air.style.top = ''; air.style.height = ''; }
+        const taN = document.getElementById('topActions');
+        if (taN && (taN.style.top || taN.style.height)){ taN.style.top = ''; taN.style.height = ''; }
         return;
       }
       const r = banner.getBoundingClientRect();
@@ -5482,6 +5549,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const height = Math.round(r.height) + 'px';
       if (air.style.top !== top) air.style.top = top;
       if (air.style.height !== height) air.style.height = height;
+      // The top row rides the same line. Measured from the banner rather
+      // than pinned at a fixed 16px so ON AIR on the left and the three
+      // links on the right are level with each other and with the banner
+      // between them -- a hardcoded inset only matches by luck, and stops
+      // matching the moment the banner's height changes.
+      const ta = document.getElementById('topActions');
+      if (ta){
+        if (ta.style.top !== top) ta.style.top = top;
+        if (ta.style.height !== height) ta.style.height = height;
+      }
     };
     if (air){
       syncAir();
@@ -10676,17 +10753,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
      losing a half-entered play to check a feed address would be its own
      small disaster. Hidden for view accounts, since the page shows the
      feed key. -->
-<a href="broadcast_setup.html" target="_blank" rel="noopener" id="broadcastFab"
-   title="Broadcast setup — feed addresses for the production team"
-   style="display:none; position:fixed; right:104px; bottom:16px; z-index:95;
-          background:#1a1a2e; color:#fff; border-radius:999px; padding:11px 18px;
-          font-size:15px; font-weight:700; text-decoration:none;
-          box-shadow:0 3px 10px rgba(0,0,0,0.25);">BROADCAST</a>
-
-<a href="help.html" target="_blank" rel="noopener" id="helpFab"
-   title="How to use StatChat"
-   style="position:fixed; right:16px; bottom:16px; z-index:95; background:#1a7a4c; color:#fff;
-          border-radius:999px; padding:11px 18px; font-size:15px; font-weight:700;
-          text-decoration:none; box-shadow:0 3px 10px rgba(0,0,0,0.25);">HELP!</a>
+<!-- THE TOP ROW. BROADCAST and HELP were pinned bottom-right and CREW
+     VIEW top-right, three destinations in two corners at two sizes. They
+     are one kind of thing -- links away from the entry screen -- so they
+     now share one row, one gap and one shape, lined up with the ON AIR
+     tile and the banner across the top of the page.
+     Positioned by script from the banner, like #onAirBanner, so all three
+     sit on the banner's own line whatever its height turns out to be. -->
+<div id="topActions">
+  <a href="broadcast_setup.html" target="_blank" rel="noopener" id="broadcastFab"
+     title="Broadcast setup — feed addresses for the production team"
+     style="display:none;">BROADCAST</a>
+  <a href="help.html" target="_blank" rel="noopener" id="helpFab"
+     title="How to use StatChat">HELP!</a>
+  <a id="launchViewLink" href="#" target="_blank">CREW VIEW &#8599;</a>
+</div>
 </body>
 </html>
