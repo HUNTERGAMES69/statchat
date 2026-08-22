@@ -256,8 +256,18 @@ async function run() {
       fail('sponsor:bg', 'the banner should be black, got ' + win.getComputedStyle(b).backgroundColor);
     }
     const img = d.querySelector('.sponsor img');
-    if (!/white\.png$/.test(img.getAttribute('src'))) {
-      fail('sponsor:logo', 'the black bar needs the white artwork, got ' + img.getAttribute('src'));
+    // The KNOCKOUT file from nettech.net's own header: green mark, white
+    // byline, transparent ground. The earlier white-everything version
+    // greyed the wordmark too, losing the brand colour for no reason once
+    // a knockout existed. Either would read on black -- what must not
+    // appear here is the COLOUR file, whose byline is black artwork and
+    // vanishes entirely.
+    const src = img.getAttribute('src');
+    if (!/knockout\.png$/.test(src)) {
+      fail('sponsor:logo', 'the black bar needs the knockout artwork, got ' + src);
+    }
+    if (/sponsor_nettech\.png$/.test(src)) {
+      fail('sponsor:colour-on-black', 'the colour file has a black byline and would disappear on this bar');
     }
     if (win.getComputedStyle(img).width !== 'auto') fail('sponsor:aspect', 'the logo width should follow its height');
     // The caption is gone, and the bar and mark grew to fill its place.
