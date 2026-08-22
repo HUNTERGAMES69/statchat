@@ -355,6 +355,65 @@ async function run() {
     w.close();
   }
 
+  // THE LEADER CARDS LINE UP ACROSS BOTH PANELS, AND NO NAME IS CUT.
+  // ---------------------------------------------------------------------
+  // The team column had a fixed flex basis but no min-width:0, and flex
+  // items default to min-width:auto -- so a nowrap name wider than the
+  // basis simply pushed past it and shunted that panel's cards right.
+  // "Neville" fitted and "West Monroe" did not, so the two rows started
+  // at different x. Reported from a real graphic.
+  //
+  // The care needed here is the other half: a shared column must not be
+  // bought by truncating anybody. The player name is the reason the card
+  // exists, so it wraps rather than clips.
+  {
+    const longName = Object.assign({}, DEFAULT_GAME, { our_team_is_home: true,
+      home_team_name: 'Neville', away_team_name: 'West Monroe' });
+    const check = async (query, label) => {
+      const w = await bootPage('broadcast_stats.html',
+        { query: query, readyWhen: win => !!win.document.getElementById('panel') });
+      w.window.__payload = { game: longName, roster: defaultRoster(),
+        ourBranding: DEFAULT_BRANDING, plays: rows };
+      w.evalIn('window.fetch = () => Promise.resolve({ ok:true, json: () => Promise.resolve(window.__payload) });');
+      await w.evalIn('fetchAndRender()');
+      await new Promise(r => setTimeout(r, 220));
+      const d = w.document, win = w.window;
+      const cols = [...d.querySelectorAll('#leaders .lteam')].map(e => e.style.width);
+      if (cols.length !== 2) fail('leaders:' + label + ':panels', 'expected two panels, got ' + cols.length);
+      else if (!cols[0] || cols[0] !== cols[1]) {
+        fail('leaders:' + label + ':align', 'the two team columns must match: ' + cols.join(' vs '));
+      }
+      // NOTHING TRUNCATED -- not the player name, not the team name.
+      ['.lname', '.ltname'].forEach(sel => {
+        const el = d.querySelector(sel);
+        if (!el) return;
+        const c = win.getComputedStyle(el);
+        if (c.whiteSpace === 'nowrap' && c.textOverflow === 'ellipsis') {
+          fail('leaders:' + label + ':clip', sel + ' can be cut off; it must wrap instead');
+        }
+      });
+      w.close();
+      return cols[0];
+    };
+    const wide = await check('?id=test-game-1', 'landscape');
+    await check('?id=test-game-1&layout=portrait', 'portrait');
+
+    // And the column GROWS for a longer name rather than clipping it.
+    const longer = Object.assign({}, longName, { away_team_name: 'Ouachita Christian' });
+    const w = await bootPage('broadcast_stats.html',
+      { query: '?id=test-game-1', readyWhen: win => !!win.document.getElementById('panel') });
+    w.window.__payload = { game: longer, roster: defaultRoster(),
+      ourBranding: DEFAULT_BRANDING, plays: rows };
+    w.evalIn('window.fetch = () => Promise.resolve({ ok:true, json: () => Promise.resolve(window.__payload) });');
+    await w.evalIn('fetchAndRender()');
+    await new Promise(r => setTimeout(r, 220));
+    const grown = w.document.querySelector('#leaders .lteam').style.width;
+    if (parseInt(grown, 10) <= parseInt(wide, 10)) {
+      fail('leaders:grow', 'a longer team name should widen the column, got ' + grown + ' vs ' + wide);
+    }
+    w.close();
+  }
+
   return failures;
 }
 
