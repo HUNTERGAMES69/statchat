@@ -457,6 +457,11 @@
   /* The row that is missing something, and the words saying what. */
   #playPanel .row-gap, #guidedPanel .row-gap {
     outline:2px solid #e0b400; outline-offset:3px; border-radius:6px; }
+  /* Sits directly under Review, in the same amber as the row marks so
+     the two read as one complaint rather than two. */
+  #playPanel .review-msg { margin-top:8px; padding:8px 12px; border-radius:6px;
+    background:#fff3cd; border:1px solid #e0b400; color:#7a5c00;
+    font-size:13px; font-weight:600; }
   #playPanel .row-gap-msg, #guidedPanel .row-gap-msg {
     font-size:12.5px; font-weight:600; color:#7a5c00; margin:6px 0 2px; }
   #entryStage #playPanel .spot-heading, #guidedPanel .spot-heading {
@@ -836,8 +841,11 @@
   function showView(name){
     ['loading','errorView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
   }
-  function showMsg(elId, text, type){
-    document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+  function showMsg(elId, text, type, opts){
+    // `entry` marks a message that belongs to the open play panel rather
+    // than to the game, so Clear can take those down and leave the rest.
+    const cls = 'msg ' + type + ((opts && opts.entry) ? ' msg-entry' : '');
+    document.getElementById(elId).innerHTML = '<div class="' + cls + '">' + text + '</div>';
   }
 
   let currentGameId = null;
@@ -6190,6 +6198,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // without threading a getter through all of them. The 'picked' class is
   // set by wireStartingSpot itself, so it is a faithful proxy for the
   // side it recorded.
+  // Say it where Review was pressed. The top-of-page copy stays as a
+  // backstop for the reverse case -- somebody scrolled UP after pressing
+  // -- but this is the one that will actually be read.
+  function showReviewMsg(text){
+    const el = document.getElementById('pp_review_msg');
+    if (!el) return;
+    el.textContent = text;
+    el.style.display = 'block';
+    el.scrollIntoView({ block: 'nearest' });
+  }
+  function clearReviewMsg(){
+    const el = document.getElementById('pp_review_msg');
+    if (el){ el.textContent = ''; el.style.display = 'none'; }
+  }
+
   // A REQUIRED PLAYER IS MISSING, AND SAYING SO IS THE WHOLE POINT.
   // ---------------------------------------------------------------------
   // Every tree guarded its required player with a bare `return` -- eleven
@@ -6211,7 +6234,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   function missingPlayer(role, value){
     if (value) return false;
     const what = ROLE_LABEL[role] || 'a player';
-    showMsg('gameMsg', 'Nothing has been saved — still needed: ' + what + '.', 'error');
+    showReviewMsg('Nothing has been saved — still needed: ' + what + '.');
+    showMsg('gameMsg', 'Nothing has been saved — still needed: ' + what + '.', 'error', { entry: true });
     // Against the field itself, not only at the top of the page.
     const grid = document.getElementById(ROLE_FIELD[role]);
     const row = grid && (grid.closest('.pick-row') || grid.parentElement);
@@ -6247,6 +6271,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const clear = () => {
       msg.remove();
       wrap.classList.remove('row-gap');
+      clearReviewMsg();
     };
     wrap.querySelectorAll('button, input').forEach(el => {
       el.addEventListener('click', clear, { once: true });
@@ -6363,6 +6388,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   function collapsePlayPanel(){
     const panel = document.getElementById('playPanel');
     if (panel){ panel.style.display = 'none'; panel.innerHTML = ''; }
+    // THE ERROR GOES WITH THE TREE IT BELONGS TO.
+    // -------------------------------------------------------------------
+    // "Still needed: the punter" is a statement about a punt panel that
+    // no longer exists. Left on screen after Clear it is worse than
+    // nothing: the commonest way to meet it is opening the WRONG tree,
+    // noticing because a field is missing, and clearing -- and the
+    // complaint then follows you onto the right tree, where it is false.
+    //
+    // Only the entry error is cleared. gameMsg also carries notices that
+    // outlive a panel -- "Back to halftime", connectivity, save failures
+    // -- and those are about the GAME, not about the tree that was open,
+    // so they are left alone. The marker below is what tells them apart.
+    const gm = document.getElementById('gameMsg');
+    if (gm && gm.querySelector('.msg-entry')) gm.innerHTML = '';
+    clearReviewMsg();
+    const fp = document.getElementById('fieldPosWarning');
+    if (fp){ fp.textContent = ''; fp.style.display = 'none'; }
+    // Any row still outlined as missing something goes too -- the row is
+    // gone with the panel, but the message sits outside it.
+    document.querySelectorAll('.row-gap-msg').forEach(el => el.remove());
+    document.querySelectorAll('.row-gap').forEach(el => el.classList.remove('row-gap'));
     const cc = document.getElementById('confirmCard');
     if (cc) cc.style.display = 'none';
     // The manual panel too. Clear closed every tree but left this one
@@ -7721,7 +7767,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_2pt_pass_def" style="display:none;">' + defBlock('Intercepted by (optional)', '_2ptPass') + '<p style="font-size:12px; color:#888; margin:6px 0 0;">NFHS: the try ends when the defense gains possession — no return, and the defense cannot score.</p>' + '</div>' +
         '</div>';
 
-    html += '<div class="row" style="margin-top:12px;"><button class="primary" id="pp_review">Review play</button><button class="secondary" id="pp_clear">Clear</button></div>';
+    // A message slot BESIDE REVIEW. The refusal used to be reported at
+    // the top of the page, which on a tall tree is off-screen at the
+    // moment Review is pressed -- so the button read as simply not
+    // working. This sits where the thumb already is.
+    html += '<div class="row" style="margin-top:12px;"><button class="primary" id="pp_review">Review play</button><button class="secondary" id="pp_clear">Clear</button></div>' +
+      '<div id="pp_review_msg" class="review-msg" style="display:none;"></div>';
     panel.innerHTML = html;
     const tdToggle = document.getElementById('pp_td_toggle');
     if (tdToggle){
@@ -10307,7 +10358,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (gaps){
         const msg = 'This ' + type + ' sets up the next drive, so the spot is required — ' +
           'still needed: ' + gaps.join(' and ') + '. Nothing has been saved.';
-        showMsg('gameMsg', msg, 'error');
+        showReviewMsg(msg);
+        showMsg('gameMsg', msg, 'error', { entry: true });
         const w = document.getElementById('fieldPosWarning');
         // In the panel as well as at the top of the page. gameMsg sits
         // well above where the coach is looking when they press Review, so
