@@ -145,6 +145,20 @@ async function run() {
     // banner; matching the pill left the links floating inside a row that
     // was already the right height.
     h.evalIn("document.getElementById('onAirBanner').style.display='flex';");
+    // BROADCAST is hidden until the role check reveals it, and that check
+    // runs during load rather than from a function a test can call. What
+    // matters is the VALUE it sets: an inline display beats the
+    // stylesheet, so setting 'block' there cost this one button the flex
+    // centring the other two keep -- its label sat against the top of a
+    // banner-height box. Asserted against the file, since revealing the
+    // button by hand here would paper over exactly that.
+    {
+      const src = require('fs').readFileSync(__dirname + '/../game.html', 'utf8');
+      if (/bcFab\.style\.display\s*=\s*'(?!flex')/.test(src)) {
+        fail('toprow:broadcast-display', "the role check must reveal BROADCAST as 'flex' -- any other inline display overrides the stylesheet and breaks its centring");
+      }
+    }
+    h.evalIn("var b=document.getElementById('broadcastFab'); if (b) b.style.display='flex';");
     const ref = win.getComputedStyle(doc.getElementById('onAirBanner'));
     ['broadcastFab', 'helpFab', 'launchViewLink'].forEach(id => {
       const c = win.getComputedStyle(doc.getElementById(id));
@@ -162,6 +176,14 @@ async function run() {
     if (win.getComputedStyle(doc.getElementById('topActions')).alignItems !== 'stretch') {
       fail('toprow:stretch', 'the links should fill the row height, not be centred inside it');
     }
+    // Each label centred inside its own block. A stretched button whose
+    // display is not flex puts its text at the top of a banner-height box.
+    ['broadcastFab', 'helpFab', 'launchViewLink'].forEach(id => {
+      const c = win.getComputedStyle(doc.getElementById(id));
+      if (c.display !== 'flex' || c.alignItems !== 'center') {
+        fail('toprow:centred', id + ' is not centring its label: display=' + c.display + ' align=' + c.alignItems);
+      }
+    });
     // And the row rides the banner's own line, like ON AIR.
     h.evalIn('Object.defineProperty(window,"innerWidth",{value:1600,configurable:true}); document.querySelector(".banner").getBoundingClientRect=()=>({top:24,height:64,bottom:88}); window.__syncAir && window.__syncAir();');
     const ta = doc.getElementById('topActions'), oa = doc.getElementById('onAirBanner');
