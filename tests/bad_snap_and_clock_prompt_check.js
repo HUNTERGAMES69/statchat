@@ -19,7 +19,7 @@
 //    while tabbing between fields.
 
 const { bootPage } = require('./harness');
-const { click, setDrive, typeInto, radio } = require('./ui_driver');
+const { click, setDrive, typeInto, radio, enterPlay } = require('./ui_driver');
 
 const PAGES = ['game.html', 'gametest3.html'];
 
@@ -79,7 +79,43 @@ async function run() {
       h.close();
     }
 
-    // --- 3. The clock prompt raises its keypad with no tap.
+    // --- 3a. THE ONE A TREE ACTUALLY LANDS ON. A play that changes
+    //     possession comes through Review into the confirm card's own
+    //     clock row -- not showClockPrompt's card. The first version of
+    //     this feature covered only the latter, so in real use the pad
+    //     still waited for a tap. Reported, then reproduced here.
+    {
+      const h = await bootPage(page, {});
+      setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+      h.evalIn('window.__pads = []; const _op = openPad; openPad = function(t,a,k){ window.__pads.push((t && t.id) + ":" + k); return _op.apply(this, arguments); };');
+      h.evalIn("(function(){var r=document.getElementById('confirmClockRow'); new MutationObserver(function(){ window.__rowShown = window.__rowShown || r.style.display === 'block'; }).observe(r,{attributes:true,attributeFilter:['style']});})();");
+      enterPlay(h, { type: 'punt', punter: '3', puntyds: '40', credit: '21', retyds: '6', spot: { side: 'own', yardline: 36 } });
+      await new Promise(r => setTimeout(r, 250));
+      if (!h.evalIn('window.__rowShown')) {
+        fail(page + ':confirm-clock-row', 'a punt should have asked for a clock on the confirm card');
+      }
+      const pads = JSON.parse(h.evalIn('JSON.stringify(window.__pads)'));
+      if (!pads.some(x => /^confirmClockInput:/.test(x))) {
+        fail(page + ':confirm-clock-keypad', 'the keypad must open on the confirm card clock field without a tap, openPad calls: ' + JSON.stringify(pads));
+      }
+      h.close();
+    }
+
+    // --- 3b. And NOT on a play that never asks for a clock.
+    {
+      const h = await bootPage(page, {});
+      setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+      h.evalIn('window.__pads = []; const _op = openPad; openPad = function(t,a,k){ window.__pads.push((t && t.id) + ":" + k); return _op.apply(this, arguments); };');
+      enterPlay(h, { type: 'rush', carrier: '22', yards: '8' });
+      await new Promise(r => setTimeout(r, 200));
+      const clockPads = JSON.parse(h.evalIn('JSON.stringify(window.__pads)')).filter(x => /clock/i.test(x));
+      if (clockPads.length) {
+        fail(page + ':no-clock-no-pad', 'an ordinary rush asks for no clock, so no clock keypad should open: ' + JSON.stringify(clockPads));
+      }
+      h.close();
+    }
+
+    // --- 3c. The standalone clock prompt card raises its keypad too.
     {
       const h = await bootPage(page, {});
       const doc = h.window.document;
