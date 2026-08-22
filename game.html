@@ -5905,7 +5905,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         return;
       }
       const r = banner.getBoundingClientRect();
-      const top = Math.round(r.top + (window.pageYOffset || 0)) + 'px';
+      // offsetTop, NOT rect.top + pageYOffset.
+      // -----------------------------------------------------------------
+      // THE BANNER IS position:sticky. Once the page scrolls past it the
+      // banner stops moving and its rect.top freezes at its sticky offset
+      // -- while pageYOffset keeps climbing. The sum therefore walked
+      // further down the document on every recompute, so after scrolling
+      // a screen and entering a play that resizes the banner (a second
+      // line of status text does it) the ON AIR tile and the top row
+      // landed a screenful low, on top of whatever was there. Reported
+      // from a real game.
+      //
+      // offsetTop is the element's position in the DOCUMENT and ignores
+      // both scroll and sticky displacement, which is what an absolutely
+      // positioned sibling needs. The two other syncs on this page use
+      // rect.top + pageYOffset and are correct: they measure entryCard,
+      // which is not sticky. It is the sticky anchor that breaks the
+      // arithmetic, not the arithmetic itself.
+      const top = Math.round(banner.offsetTop) + 'px';
       const height = Math.round(r.height) + 'px';
       if (air.style.top !== top) air.style.top = top;
       if (air.style.height !== height) air.style.height = height;
