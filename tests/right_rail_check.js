@@ -257,6 +257,36 @@ async function run() {
     h.close();
   }
 
+  // --- 1d. Team logos sit ABOVE the name in the live totals. The mark is
+  //     what the eye lands on; the name confirms it.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '8' });
+    h.evalIn("TEAMS.teamA.logo='https://example.test/a.png'; TEAMS.teamB.logo='https://example.test/b.png'; renderAll();");
+    await new Promise(r => setTimeout(r, 700));
+    const wraps = [...doc.querySelectorAll('#liveBoxBody .lb-teamwrap')];
+    if (wraps.length < 2) fail('logo:wrappers', 'expected a wrapper per team heading, got ' + wraps.length);
+    wraps.forEach(w => {
+      const img = w.querySelector('.lb-logo');
+      if (!img) { fail('logo:missing', 'a team heading has no logo when one is set'); return; }
+      // ABOVE, not beside: the image must precede the label in the DOM and
+      // the wrapper must stack.
+      if (w.firstElementChild !== img) fail('logo:order', 'the logo should come before the name');
+      if (win.getComputedStyle(w).flexDirection !== 'column') fail('logo:stack', 'the heading should stack, not sit in a row');
+    });
+
+    // A team with no logo -- the opponent, usually, early in a season --
+    // must still read as a complete heading rather than a caption with a
+    // missing picture.
+    h.evalIn("TEAMS.teamB.logo = null; renderAll();");
+    await new Promise(r => setTimeout(r, 700));
+    const labels = [...doc.querySelectorAll('#liveBoxBody .lb-team')].map(e => e.textContent);
+    if (!labels.some(l => /TEST OPP/.test(l))) fail('logo:fallback', 'the name must survive when there is no logo: ' + labels.join(' | '));
+    h.close();
+  }
+
   return failures;
 }
 
