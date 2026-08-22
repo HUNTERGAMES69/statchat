@@ -303,6 +303,48 @@ async function run() {
     n.close();
   }
 
+  // TRANSLUCENT, WITH A BLUR BEHIND. Shown at halftime and after the
+  // final only, so there is no live play to obscure -- that is what makes
+  // it safe here and would not make it safe over a snap.
+  {
+    const w = await bootPage('broadcast_stats.html',
+      { query: '?id=test-game-1', readyWhen: win => !!win.document.getElementById('panel') });
+    await paint(w, rows);
+    const d = w.document, win = w.window;
+    for (const sel of ['.card', '.lside']) {
+      const c = win.getComputedStyle(d.querySelector(sel));
+      // The ALPHA AS A NUMBER, not a regex on the string. A pattern
+      // matching "0.8 or 0.9" also matched the 0.97 it replaced, so the
+      // check passed with the change reverted -- it could not see the
+      // thing it was for.
+      const alpha = parseFloat((c.backgroundColor.match(/rgba\([^)]*,\s*([0-9.]+)\)/) || [])[1]);
+      if (!(alpha > 0 && alpha <= 0.92)) {
+        fail('glass:alpha', sel + ' should be translucent enough to see through, got ' + c.backgroundColor);
+      }
+      // The blur is what stops yard lines and crowd showing through as
+      // detail -- alpha alone makes the graphic shimmer.
+      const src = require('fs').readFileSync(__dirname + '/../broadcast_stats.html', 'utf8');
+      if (!/backdrop-filter:\s*blur/.test(src)) {
+        fail('glass:blur', 'translucency without a backdrop blur will shimmer over the field');
+      }
+      if (!/-webkit-backdrop-filter/.test(src)) {
+        fail('glass:webkit', 'the vMix Chromium build wants the -webkit- prefix as well');
+      }
+    }
+    // The greys are the first casualty of the alpha, so they were
+    // darkened -- a check that survives someone lightening them back.
+    const lab = win.getComputedStyle(d.querySelector('.slab')).color;
+    if (lab !== 'rgb(61, 66, 73)') {
+      fail('glass:contrast', 'the row labels need the darker grey to survive the transparency, got ' + lab);
+    }
+    // The sponsor bar stays solid: white artwork on a see-through black
+    // bar would lose the byline against a bright field.
+    if (win.getComputedStyle(d.getElementById('sponsorTop')).backgroundColor !== 'rgb(0, 0, 0)') {
+      fail('glass:sponsor', 'the sponsor bar should stay solid');
+    }
+    w.close();
+  }
+
   return failures;
 }
 
