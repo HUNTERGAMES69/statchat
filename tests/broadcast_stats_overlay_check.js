@@ -219,6 +219,57 @@ async function run() {
     w.close();
   }
 
+  // --- 6. PRESENTED BY. Both positions render by default so the two can
+  //     be judged on one screen; ?sponsor= picks one once chosen.
+  {
+    const paintAt = async (q) => {
+      const w = await bootPage('broadcast_stats.html',
+        { query: q, readyWhen: win => !!win.document.getElementById('panel') });
+      await paint(w, rows);
+      return w;
+    };
+    const vis = (w, id) => w.window.getComputedStyle(w.document.getElementById(id)).display !== 'none';
+
+    let w = await paintAt('?id=test-game-1');
+    if (!vis(w, 'sponsorTop') || !vis(w, 'sponsorBottom')) {
+      fail('sponsor:both', 'the default should show both banners so they can be compared');
+    }
+    // The banner sits OUTSIDE the cards, first and last in the panel, so
+    // choosing one does not reflow the graphic between them.
+    const order = [...w.document.getElementById('panel').children].map(c => c.id || c.className);
+    if (order[0] !== 'sponsorTop' || order[order.length - 1] !== 'sponsorBottom') {
+      fail('sponsor:position', 'the banners should bracket the panel, got ' + order.join(' > '));
+    }
+    // Height-driven so the 2.52:1 mark is never squashed.
+    const img = w.document.querySelector('.sponsor img');
+    if (!/sponsor_nettech\.png$/.test(img.getAttribute('src'))) {
+      fail('sponsor:src', 'unexpected logo path: ' + img.getAttribute('src'));
+    }
+    if (w.window.getComputedStyle(img).width !== 'auto') {
+      fail('sponsor:aspect', 'the logo width should follow its height, not be fixed');
+    }
+    w.close();
+
+    w = await paintAt('?id=test-game-1&sponsor=top');
+    if (!vis(w, 'sponsorTop') || vis(w, 'sponsorBottom')) fail('sponsor:top', 'sponsor=top should show only the top banner');
+    w.close();
+
+    w = await paintAt('?id=test-game-1&sponsor=bottom');
+    if (vis(w, 'sponsorTop') || !vis(w, 'sponsorBottom')) fail('sponsor:bottom', 'sponsor=bottom should show only the bottom banner');
+    w.close();
+
+    w = await paintAt('?id=test-game-1&sponsor=none');
+    if (vis(w, 'sponsorTop') || vis(w, 'sponsorBottom')) fail('sponsor:none', 'sponsor=none should show neither banner');
+    w.close();
+
+    // Portrait carries them too, at its own scale.
+    w = await paintAt('?id=test-game-1&layout=portrait');
+    if (!vis(w, 'sponsorTop') || !vis(w, 'sponsorBottom')) fail('sponsor:portrait', 'portrait should carry the banners as well');
+    const ph = w.window.getComputedStyle(w.document.querySelector('.sponsor img')).height;
+    if (ph === '34px') fail('sponsor:portrait-scale', 'the portrait logo should be scaled down, got ' + ph);
+    w.close();
+  }
+
   return failures;
 }
 
