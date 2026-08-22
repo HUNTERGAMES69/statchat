@@ -287,7 +287,7 @@
       <div id="guidedContent"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="entryCard">
       <div id="entryHeaderRow" style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
         <!-- Removed from the layout, not from the DOM: renderAll() still
              writes this and guarding every caller is not worth it in a
@@ -5005,13 +5005,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     //    changes as the page moves until it locks.
     const dock = document.getElementById('driveDock');
     const syncDock = () => {
-      if (typeof document === 'undefined' || !document || !dock || !rail) return;
+      if (typeof document === 'undefined' || !document || !dock) return;
       // Under the breakpoint the dock is back in the normal flow and
       // must not carry a fixed height.
       if (window.innerWidth < 1220){ dock.style.top = ''; dock.style.height = ''; return; }
-      const r = rail.getBoundingClientRect();
-      dock.style.top = Math.max(8, r.top) + 'px';
-      dock.style.height = r.height + 'px';
+      // Matched to the whole entry CARD -- the white area holding the
+      // ladder and whatever tree is open -- not just the ladder. The two
+      // panels then start and finish on the same lines, and the dock
+      // grows with a tall tree instead of ending partway down it.
+      const card = document.getElementById('entryCard');
+      const r = (card || rail).getBoundingClientRect();
+      // Clamped to the viewport at both ends. The dock is position:fixed,
+      // so a card taller than the screen would otherwise run off the
+      // bottom and take the end of the play list with it, unreachable --
+      // it cannot scroll away with the page the way the card does. Top
+      // still tracks the card as it scrolls (this runs on scroll), so
+      // the two stay aligned whenever the card is fully on screen, which
+      // is the case this is really about.
+      const top = Math.max(8, r.top);
+      const bottom = Math.min(window.innerHeight - 8, r.bottom);
+      dock.style.top = top + 'px';
+      dock.style.height = Math.max(120, bottom - top) + 'px';
     };
     if (dock){
       syncDock();
@@ -5021,7 +5035,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // (Start game -> Quarter marker -> End game), so watch it rather
       // than measuring once at load.
       if (window.MutationObserver){
-        new MutationObserver(syncDock).observe(rail, { childList: true, subtree: true, attributes: true });
+        // The card's height changes on every tree open and close, not
+        // just when the ladder itself changes.
+        const watch = document.getElementById('entryCard') || rail;
+        new MutationObserver(syncDock).observe(watch, { childList: true, subtree: true, attributes: true });
       }
     }
     window.__syncDock = syncDock;
