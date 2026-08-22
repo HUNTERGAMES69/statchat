@@ -8660,6 +8660,29 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const ccw = document.getElementById('confirmClockWarn');
       if (ccw) ccw.style.display = 'block';
       if (needsClock) document.getElementById('confirmClockInput').value = '';
+      // THE PAD OPENS ITSELF HERE TOO. The first pass at this covered
+      // only showClockPrompt()'s own card, which is not the screen a
+      // tree actually lands on: a play that changes possession comes
+      // through Review into THIS row, and it was still waiting for a
+      // tap. Same reasoning as there -- the app brought the field up
+      // unasked and a clock value is the only thing it wants -- and the
+      // same deferral, since attachPickers() classifies fields from a
+      // MutationObserver and may not have reached this one yet.
+      if (needsClock){
+        const cci = document.getElementById('confirmClockInput');
+        if (cci && typeof openPad === 'function'){
+          const raise = () => {
+            // Gone again already (saved, edited, or the row re-hidden):
+            // opening a pad over a card nobody is looking at is worse
+            // than not opening one.
+            const row = document.getElementById('confirmClockRow');
+            if (!row || row.style.display === 'none') return;
+            if (cci.dataset.pickerKind) openPad(cci, cci, cci.dataset.pickerKind);
+          };
+          if (window.requestAnimationFrame) window.requestAnimationFrame(() => window.requestAnimationFrame(raise));
+          else setTimeout(raise, 0);
+        }
+      }
     }
     document.getElementById('confirmCard').style.display = 'block';
     const cc = document.getElementById('confirmCard');
