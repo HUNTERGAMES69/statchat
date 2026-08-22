@@ -56,7 +56,17 @@
      falls below it, near the tile's own bottom edge, where
      padding-bottom below already accounts for it. The border-top
      gives it a visible edge to sit against either way. */
-  .drive-card.drive-previous { margin-top:30px; padding-top:14px; padding-bottom:16px; border-top:1px solid #eee; }
+  #scoringCard { border-left-color:#8a8f98; }
+  #scoringCard h2 { color:#5b6068; }
+  .score-row { display:flex; align-items:baseline; gap:10px; padding:7px 0;
+               border-bottom:1px solid #f0f0f0; font-size:19px; }
+  .score-row:last-child { border-bottom:none; }
+  .score-q { flex:0 0 34px; font-size:13px; font-weight:700; color:#8a8f98; }
+  .score-team { flex:0 0 auto; font-weight:800; padding:1px 8px; border-radius:5px; font-size:15px; }
+  .score-text { flex:1 1 auto; min-width:0; font-weight:600; color:#1a1a1a; }
+  .score-tally { flex:0 0 auto; font-weight:800; font-variant-numeric:tabular-nums; color:#1a1a2e; }
+  .score-detail { font-size:13px; font-weight:600; color:#5b6068; margin-left:6px; }
+    .drive-card.drive-previous { margin-top:30px; padding-top:14px; padding-bottom:16px; border-top:1px solid #eee; }
   .team-summary-row { display:flex; gap:28px; flex:1; min-height:0; }
   .team-summary-col { flex:1; display:flex; flex-direction:column; min-width:0; }
   .team-summary-header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:8px; font-weight:800; font-size:20px; margin-bottom:10px; }
@@ -190,6 +200,14 @@
         <div class="card compact drive-card drive-previous">
           <h2>Previous Drive</h2>
           <div id="prevDriveLogScroll"></div>
+        </div>
+        <!-- Takes the whole quad at halftime and at the final whistle.
+             Both drive cards are hidden then: there is no current drive
+             to watch, and the question a spectator arrives with at those
+             two moments is how the score got there. -->
+        <div class="card compact drive-card" id="scoringCard" style="display:none;">
+          <h2 id="scoringHeading">Scoring</h2>
+          <div id="scoringBody"></div>
         </div>
       </div>
 
@@ -1196,6 +1214,45 @@ function extractNameTag(rawName){
         ? computeDriveSummary(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1])
         : null;
       document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary);
+
+      // AT HALFTIME AND FINAL, THE SCORING SUMMARY TAKES THE QUAD.
+      // ----------------------------------------------------------------
+      // Requested directly. Neither drive card says anything useful at
+      // those two moments -- there is no current drive, and the previous
+      // one is a single play from minutes ago -- while the question a
+      // spectator actually arrives with is how the score got there.
+      //
+      // Reads the same `phase` the banner does, so the three can never
+      // disagree about what moment this is. NOT shown for 'NOT STARTED':
+      // that state already hands the bottom-left tile to season stats,
+      // and an empty Scoring card would say nothing at all.
+      const showScoring = phase === 'HALFTIME' || phase === 'FINAL';
+      const scoringCard = document.getElementById('scoringCard');
+      document.querySelectorAll('#quadTR .drive-current, #quadTR .drive-previous')
+        .forEach(el => { el.style.display = showScoring ? 'none' : ''; });
+      scoringCard.style.display = showScoring ? '' : 'none';
+      if (showScoring){
+        document.getElementById('scoringHeading').textContent =
+          phase === 'HALFTIME' ? 'Scoring — first half' : 'Scoring — final';
+        const rows = scoringSummary(plays);
+        document.getElementById('scoringBody').innerHTML = rows.length
+          ? rows.map(r => {
+              const t = TEAMS[r.team] || {};
+              const bg = t.bg || '#1a1a2e';
+              return '<div class="score-row">' +
+                '<span class="score-q">' + (r.quarter >= 5 ? 'OT' : 'Q' + r.quarter) + '</span>' +
+                '<span class="score-team" style="background:' + bg + '; color:' +
+                  safeTextColor(bg, t.text || '#fff') + ';">' + (t.name || '') + '</span>' +
+                '<span class="score-text">' + r.text +
+                  (r.detail ? '<span class="score-detail">(' + r.detail + ')</span>' : '') + '</span>' +
+                // The running score after this play, which is the column a
+                // spectator scans -- the play text alone does not say
+                // whether it tied the game or extended a lead.
+                '<span class="score-tally">' + r.teamA + '&ndash;' + r.teamB + '</span>' +
+                '</div>';
+            }).join('')
+          : '<div style="color:#999; padding:14px 0;">no scoring yet</div>';
+      }
 
       // COLOUR EACH DRIVE CARD FOR THE TEAM THAT HAD THE BALL.
       // ----------------------------------------------------------------
