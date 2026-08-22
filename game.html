@@ -617,6 +617,14 @@
         <button class="primary" id="endGameBtn" style="display:none;">End game</button>
         <button id="otUtilBtn" style="display:none;">Start overtime</button>
         <a id="recapLink" href="#" style="display:none; padding:8px 12px; border-radius:6px; background:#1a7a4c; color:#fff; font-size:13px; font-weight:600; text-decoration:none;">View game recap &rarr;</a>
+        <!-- The same Clear the trees carry, at the top of the panel and
+             pushed to the far right. The tree's own Clear sits at the
+             BOTTOM, below however tall the open tree happens to be; on a
+             long one that is a scroll away from where the mistake was
+             noticed. margin-left:auto rather than a spacer, so it holds
+             the right edge whatever else on this row is showing -- the
+             phase buttons come and go through the game. -->
+        <button class="secondary" id="phaseClearBtn" style="margin-left:auto;">Clear</button>
       </div>
 
       <!-- RAIL LAYOUT. #entryLayout, #typeRail and
@@ -8167,7 +8175,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // opposite of confirming. Tapping now commits; only a second tap
         // on a committed pick clears it.
         const manual = document.getElementById('pp_passer_manual');
-        if (manual) manual.value = lastPasser;
+        // NOT prefilled with the number. Every other manual box on the
+        // page reads "or type #", so a box already carrying 7 looked like
+        // somebody had typed it -- and it is the SUGGESTION, not a
+        // choice, which is what the highlighted button beside it is
+        // there to say. sel.passer still carries him, so confirming or
+        // simply entering the play is unaffected; only the box's own
+        // appearance changes.
+        void lastPasser;
         sel.passer = lastPasser;
         const btn = panel.querySelector('.pp_passer_pick[data-num="' + lastPasser + '"]');
         if (btn){
@@ -11112,6 +11127,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       renderAll();
     }));
     document.getElementById('to_clear').addEventListener('click', collapsePlayPanel);
+  });
+
+  // Routed through collapsePlayPanel, the same function the tree's own
+  // Clear calls, so the two can never come to mean different things.
+  document.getElementById('phaseClearBtn').addEventListener('click', () => {
+    collapsePlayPanel();
+    if (window.__railClear) window.__railClear();
   });
 
   document.getElementById('flipBtn').addEventListener('click', () => {
