@@ -190,6 +190,57 @@ async function run() {
     h.close();
   }
 
+  // REVIEW MUST NEVER REFUSE SILENTLY.
+  // ---------------------------------------------------------------------
+  // Every tree guarded its required player with a bare `return` -- eleven
+  // of them. Pressing Review with no ball carrier, passer, punter or
+  // kicker did nothing at all: no message, no confirm box, no clue which
+  // field was wanted. Reported as "it fails silently", and it is the most
+  // common way to meet it, since the player is the first thing skipped
+  // when moving fast.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    const probe = async (type, prep) => {
+      setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="' + type + '"]'));
+      if (prep) prep();
+      click(win, doc.getElementById('pp_review'));
+      await new Promise(r => setTimeout(r, 150));
+      const top = ((doc.getElementById('gameMsg') || {}).textContent || '').trim();
+      const row = doc.querySelector('#playPanel .row-gap-msg');
+      // At the top of the page AND against the field. The top message
+      // alone sits well above where the scorer is looking.
+      if (!/still needed/i.test(top)) {
+        fail('silent:' + type, 'Review said nothing about the missing player: ' + JSON.stringify(top));
+      }
+      if (!row) fail('silent:' + type + ':row', 'nothing marked the row that is missing a player');
+      // And it must not have opened the confirm box on an incomplete play.
+      if (doc.getElementById('confirmCard').style.display !== 'none') {
+        fail('silent:' + type + ':confirm', 'the confirm box opened on an incomplete play');
+      }
+      click(win, doc.getElementById('phaseClearBtn'));
+      await new Promise(r => setTimeout(r, 80));
+    };
+    await probe('punt', () => typeInto(win, doc.getElementById('pp_yards'), '38'));
+    await probe('rush', () => typeInto(win, doc.getElementById('pp_yards'), '5'));
+    await probe('pass');
+
+    // The warning clears as soon as the field is answered -- one that
+    // outlives the problem teaches people to ignore warnings.
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="rush"]'));
+    click(win, doc.getElementById('pp_review'));
+    await new Promise(r => setTimeout(r, 120));
+    if (!doc.querySelector('#playPanel .row-gap-msg')) fail('silent:setup', 'expected a warning to clear');
+    click(win, doc.querySelector('.pp_carrier_pick'));
+    await new Promise(r => setTimeout(r, 60));
+    if (doc.querySelector('#playPanel .row-gap-msg')) {
+      fail('silent:persists', 'the warning should clear once the player is picked');
+    }
+    h.close();
+  }
+
   return failures;
 }
 
