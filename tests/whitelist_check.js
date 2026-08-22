@@ -632,26 +632,33 @@ async function run() {
     const h = await bootGamePage({ roster });
     const doc = h.window.document, win = h.window;
     setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    // BOTH long lists: the receiver on the pass tree and the carrier on
+    // the rush tree. The carrier was left out when the receiver was done
+    // and had exactly the same problem.
+    for (const [type, gridId, boxId] of [['pass', 'pp_receiver_grid', 'pp_receiver_manual'],
+                                          ['rush', 'pp_carrier_grid', 'pp_carrier_manual']]) {
+      click(win, doc.querySelector('.ptypeBtn[data-type="' + type + '"]'));
+      const rg = doc.getElementById(gridId);
+      if (!rg) { fail(type + ':grid', 'no ' + gridId); continue; }
+      if (!rg.classList.contains('grid-inline-manual')) {
+        fail(type + ':inline', 'the box should sit at the end of the list, not in a column');
+      }
+      const inp = rg.querySelector('input');
+      if (!inp || inp.id !== boxId) { fail(type + ':box', 'the manual box should be inside the grid'); continue; }
+      // LAST, after the names -- not first, where it would read as a
+      // control rather than the overflow it is.
+      const kids = [...rg.children];
+      if (kids.indexOf(inp) < kids.filter(k => k.tagName === 'BUTTON').length) {
+        fail(type + ':order', 'the box should follow the names');
+      }
+      // NOT collapsed. Who carried or caught it is the question being
+      // asked; hiding the list behind "+N more" would put a tap in front
+      // of the most-used control on the page.
+      if (rg.classList.contains('grid-lead') || rg.querySelector('.grid-more')) {
+        fail(type + ':collapse', 'this list must stay open');
+      }
+    }
     click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
-    const rg = doc.getElementById('pp_receiver_grid');
-    if (!rg) { fail('receiver:grid', 'no receiver grid'); h.close(); return failures; }
-    if (!rg.classList.contains('grid-inline-manual')) {
-      fail('receiver:inline', 'the receiver box should sit at the end of the list, not in a column');
-    }
-    const inp = rg.querySelector('input');
-    if (!inp || inp.id !== 'pp_receiver_manual') fail('receiver:box', 'the manual box should be inside the grid');
-    // LAST, after the names -- not first, where it would be read as a
-    // control rather than the overflow it is.
-    const kids = [...rg.children];
-    if (kids.indexOf(inp) < kids.filter(k => k.tagName === 'BUTTON').length) {
-      fail('receiver:order', 'the box should follow the names');
-    }
-    // NOT collapsed. Which receiver caught it is the question being
-    // asked; hiding the list behind "+N more" would put a tap in front of
-    // the most-used control on the page.
-    if (rg.classList.contains('grid-lead') || rg.querySelector('.grid-more')) {
-      fail('receiver:collapse', 'the receiver list must stay open');
-    }
     // The passer keeps its column -- its list is one or two names, so
     // there is no row to win and a box that moves is worse than one that
     // sits still.
