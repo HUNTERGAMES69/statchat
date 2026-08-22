@@ -1114,13 +1114,44 @@ function extractNameTag(rawName){
       // kickoff is PREPENDED rather than assigned, so the timeout-
       // peeling inside renderCurrentDriveLastPlay pairs the two:
       // kickoff as the headline, timeout as its amber sub-line.
-      if (!currentDriveDisplayList.some(p => !(p.effect && p.effect.timeout)) && resetIdxs.length){
-        for (let i = resetIdxs[resetIdxs.length - 1] - 1; i >= 0; i--){
+      if (!currentDriveDisplayList.some(p => !(p.effect && p.effect.timeout))){
+        // Widened 22 Aug 2026, reported directly: a kickoff RETURNED FOR
+        // A TOUCHDOWN left both drive tiles reading "no active drive
+        // yet" -- the score and the try that followed it were nowhere on
+        // the page. No "New drive" marker is written when the return
+        // scores (correctly: nobody takes over, the try comes next), so
+        // there is no drive segment at all, and the earlier version of
+        // this fallback required one before it would look back.
+        //
+        // Anchored on the end of the PLAY LIST when there is no segment
+        // to anchor on, and it collects backwards to the play that
+        // started the sequence -- a kickoff, or anything that scored six
+        // -- so the touchdown arrives together with the try behind it and
+        // renderCurrentDriveLastPlay's own touchdown lock pairs them the
+        // way it does everywhere else.
+        //
+        // Still display only: nothing here is written back, and a return
+        // touchdown remains NOT a possession, which is the ruling and is
+        // what countPossessions already reports.
+        const start = resetIdxs.length ? resetIdxs[resetIdxs.length - 1] : plays.length;
+        const picked = [];
+        for (let i = start - 1; i >= 0; i--){
           const cand = plays[i];
           if (!cand || cand.isDivider || isDriveTileNoise(cand)) continue;
-          if (cand.roles && cand.roles.playType === 'kickoff') currentDriveDisplayList = [cand].concat(currentDriveDisplayList);
-          break;
+          picked.unshift(cand);
+          const e = cand.effect || {};
+          const pt = (cand.roles || {}).playType;
+          // The anchor: the kick that began the sequence, or the play
+          // that scored it. Anything after it (a try, a timeout) is
+          // carried along with it.
+          if (pt === 'kickoff' || pt === 'kickoff_return' ||
+              (e.score && e.score.points === 6)) break;
+          // A guard, not a feature: without a kick or a score behind it
+          // this is an unusual log, and walking the whole game backwards
+          // to fill a tile is not worth it.
+          if (picked.length >= 3) break;
         }
+        if (picked.length) currentDriveDisplayList = picked.concat(currentDriveDisplayList);
       }
       document.getElementById('driveLogScroll').innerHTML =
         renderCurrentDriveLastPlay(currentDriveDisplayList, state, distDisplay);
