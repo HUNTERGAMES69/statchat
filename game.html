@@ -1311,7 +1311,13 @@ function parseInput(raw, state){
       // clearly a completion for N yards before the number is readable.
       text = O(p1) + ' pass' + (rest[0] === '?' ? '' : ' to ' + O(rest[0])) + ' ' + gainPhrase(netYards);
     }
-    else if (type === 'i'){ netYards = 0; text = O(p1) + ' incomplete' + (rest[0] === '?' ? '' : ', intended for ' + O(rest[0])); }
+    // "pass incomplete", not bare "incomplete". Reported directly, 22 Aug
+    // 2026: "Montrell Conner incomplete" never says what he did -- it
+    // reads as a description of the player rather than of a pass. The
+    // completion on the line above says "pass to X for N", so the
+    // incompletion now matches it: same verb, same shape, differing only
+    // in outcome.
+    else if (type === 'i'){ netYards = 0; text = O(p1) + ' pass incomplete' + (rest[0] === '?' ? '' : ', intended for ' + O(rest[0])); }
     else if (type === 's'){
       const sackLossYards = parseInt(rest[0]) || 0; tackler = rest[1];
       netYards = -sackLossYards;
