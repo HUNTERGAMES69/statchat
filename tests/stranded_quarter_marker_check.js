@@ -121,6 +121,44 @@ async function run() {
     h.close();
   }
 
+  // --- 5. AN ORDINARY UNDO SAYS NOTHING. "Back in the first half." was
+  //     meant for undoing back ACROSS the interval, but its condition
+  //     could not tell that apart from any other undo: with no divider in
+  //     the log yet, halfEnded is false and afterHalf is false too, so
+  //     all three tests passed on every first-half undo. A notice that
+  //     appears on a routine action trains the reader to ignore the one
+  //     that does carry news.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    h.evalIn('window.confirm = () => true;');
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '8' });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '4' });
+    click(win, doc.getElementById('undoBtn'));
+    await new Promise(r => setTimeout(r, 250));
+    const msg = doc.getElementById('gameMsg').textContent.trim();
+    if (msg) fail('undo:quiet', 'an ordinary first-half undo should say nothing, got: ' + JSON.stringify(msg));
+    h.close();
+  }
+
+  // --- 6. ...but undoing back ACROSS the interval still does, because
+  //     that one tells you Start 2nd half has to be run again.
+  {
+    const h = await toHalftime();
+    const doc = h.window.document, win = h.window;
+    await runSecondHalfKickoff(h);
+    for (let i = 0; i < 8 && h.evalIn('derivePhase()') !== 'halftime'; i++) {
+      click(win, doc.getElementById('undoBtn'));
+      await new Promise(r => setTimeout(r, 200));
+    }
+    const msg = doc.getElementById('gameMsg').textContent;
+    if (!/Back to halftime/.test(msg)) {
+      fail('undo:halftime-msg', 'undoing back across the interval should still say so, got: ' + JSON.stringify(msg.trim()));
+    }
+    h.close();
+  }
+
   return failures;
 }
 
