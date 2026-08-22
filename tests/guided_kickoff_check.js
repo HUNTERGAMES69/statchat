@@ -214,6 +214,53 @@ async function run() {
     h.close();
   }
 
+  // THE MARGINS FOLLOW THE GUIDED PANEL.
+  // ---------------------------------------------------------------------
+  // The drive dock and the right rail are positioned from entryCard, and
+  // the guided panel sits ABOVE it -- so a guided repaint that changes
+  // height displaces the card and leaves both margins behind at the old
+  // offset. Pressing Back swaps a tall panel for a short one, and both
+  // sides of the screen stayed down where the tall one had been.
+  // Reported from real use.
+  //
+  // entryCard's own ResizeObserver cannot see this: the card is not
+  // resizing, it is being displaced.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    Object.defineProperty(win, 'innerWidth', { value: 1600, configurable: true });
+    const card = doc.getElementById('entryCard');
+    // entryCard's top tracks whatever the guided panel above it measures.
+    let guidedH = 700;
+    card.getBoundingClientRect = () => ({ top: 120 + guidedH, height: 500, bottom: 0 });
+    const tops = () => ['driveDock', 'rightRail']
+      .map(id => { const e = doc.getElementById(id); return e ? e.style.top : null; });
+
+    click(win, doc.getElementById('startGameBtn'));
+    await new Promise(r => setTimeout(r, 80));
+    click(win, doc.getElementById('pickA'));
+    await new Promise(r => setTimeout(r, 80));
+    click(win, doc.querySelector('.gk_kicker_pick'));
+    const dir = doc.querySelector('.gk_dir_btn');
+    if (dir) click(win, dir);
+    click(win, doc.getElementById('guidedKickoffSave'));
+    await new Promise(r => setTimeout(r, 300));
+    if (!tops().every(t => t === '820px')) {
+      fail('margins:before', 'expected both margins at 820px, got ' + tops().join(' , '));
+    }
+
+    // Back shortens the panel, so the card rides up and the margins must
+    // come with it.
+    guidedH = 300;
+    click(win, doc.querySelector('#guidedPanel .guided-back'));
+    await new Promise(r => setTimeout(r, 500));
+    const after = tops();
+    if (!after.every(t => t === '420px')) {
+      fail('margins:follow', 'the margins did not follow the card after Back: ' + after.join(' , '));
+    }
+    h.close();
+  }
+
   return failures;
 }
 
