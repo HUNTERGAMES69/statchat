@@ -3937,11 +3937,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // one flat #888 at 12px, so the numbers a coach actually reads --
       // possession time and timeouts left -- were the same weight as the
       // words around them and washed out against the page.
-      '<span style="color:#777; font-weight:400;">TOP</span> ' +
-      TEAMS.teamA.name + ' ' + formatDuration(state.possessionTime.teamA) +
-      ' <span style="color:#aaa;">·</span> ' +
-      TEAMS.teamB.name + ' ' + formatDuration(state.possessionTime.teamB) +
-      ' <span style="color:#ccc;">|</span> ' +
+      // TIME OF POSSESSION REMOVED, 22 Aug. Both teams' TOP now sits in
+      // the Live totals tile in the right margin, which is on screen the
+      // whole time and gives it more room than this line ever did.
+      // Carrying it in two places meant two things to keep agreeing for
+      // no gain, and it was the longest item here.
       '<span style="color:#777; font-weight:400;">Timeouts</span> ' +
       TEAMS.teamA.name + ' ' + state.timeouts.teamA +
       ' <span style="color:#aaa;">·</span> ' +
@@ -3954,7 +3954,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // renderAll() runs it after every play, so it is never more than
       // one save behind. See renderLastClockHint() for the quarter-
       // staleness colouring; nothing about that logic changes here.
-      ' <span style="color:#ccc;">|</span> <span id="lastClockText"></span>';
+      // WIDER GAP before the clock hint. With TOP gone these two are the
+      // only items on the line, and at the old single-space spacing the
+      // timeout counts ran straight into "Last entered" as though they
+      // were one reading.
+      ' <span style="color:#ccc; margin:0 14px 0 18px;">|</span> <span id="lastClockText"></span>';
     renderLastClockHint('lastClockText');
     const banner = document.getElementById('banner');
     const c = TEAMS[state.possession];
@@ -6206,7 +6210,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (!el) return;
     el.textContent = text;
     el.style.display = 'block';
-    el.scrollIntoView({ block: 'nearest' });
+    // NO scrollIntoView. The message sits directly under the button that
+    // was just pressed, so it is already in view -- and scrolling to it
+    // is the same unasked-for movement as the top-of-page copy.
   }
   function clearReviewMsg(){
     const el = document.getElementById('pp_review_msg');
@@ -6234,15 +6240,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   function missingPlayer(role, value){
     if (value) return false;
     const what = ROLE_LABEL[role] || 'a player';
+    // BESIDE REVIEW ONLY. A copy at the top of the page was kept as a
+    // backstop and turned out to cause the very problem it was meant to
+    // cover: writing into gameMsg grows the top of the document, which
+    // moves the panel under the scorer's thumb at the exact moment they
+    // are reading a refusal. Reported directly.
     showReviewMsg('Nothing has been saved — still needed: ' + what + '.');
-    showMsg('gameMsg', 'Nothing has been saved — still needed: ' + what + '.', 'error', { entry: true });
     // Against the field itself, not only at the top of the page.
     const grid = document.getElementById(ROLE_FIELD[role]);
     const row = grid && (grid.closest('.pick-row') || grid.parentElement);
     if (row){
       if (!row.id) row.id = 'rowgap_' + role;
       markRowGap(row.id, 'Still needed: ' + what);
-      row.scrollIntoView({ block: 'nearest' });
     }
     const cc = document.getElementById('confirmCard');
     if (cc) cc.style.display = 'none';
@@ -10359,7 +10368,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const msg = 'This ' + type + ' sets up the next drive, so the spot is required — ' +
           'still needed: ' + gaps.join(' and ') + '. Nothing has been saved.';
         showReviewMsg(msg);
-        showMsg('gameMsg', msg, 'error', { entry: true });
         const w = document.getElementById('fieldPosWarning');
         // In the panel as well as at the top of the page. gameMsg sits
         // well above where the coach is looking when they press Review, so
@@ -11518,15 +11526,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<p style="font-size:13px; color:#888; margin:0 0 6px;">QB kneel — recorded as a team rush, ' +
       'so no quarterback is charged with the attempt or the yardage.</p>' +
       '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Yards lost</p>' +
-      '<input autocomplete="off" type="text" id="kneel_yds" placeholder="1" style="width:80px;">' +
+      // PREFILLED 0. A kneel is nearly always taken at the spot -- the
+      // loss is the exception, not the rule -- so the common case should
+      // need no typing. The old placeholder of 1 asked for a number on
+      // every kneel and suggested the wrong one.
+      '<input autocomplete="off" type="text" id="kneel_yds" value="0" placeholder="0" style="width:80px;">' +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="kneel_review">Review play</button>' +
       '<button class="secondary" id="kneel_clear">Clear</button></div>';
     document.getElementById('kneel_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('kneel_review').addEventListener('click', () => {
-      // Explicit NaN check, not `|| 1`. A typed 0 is falsy, so the
-      // fallback swallowed it and every zero-yard kneel logged as -1.
+      // Explicit NaN check, not `|| 0`. A typed 0 is falsy, so a
+      // fallback would swallow it -- which is the bug that once logged
+      // every zero-yard kneel as -1, in the other direction.
+      //
+      // The fallback is now 0 to match the prefilled value: a field the
+      // scorer has emptied means no loss, the same as leaving the 0 they
+      // were given. It used to be 1, so clearing the box quietly charged
+      // a yard nobody entered.
       const n = parseInt((document.getElementById('kneel_yds').value || '').trim(), 10);
-      document.getElementById('code').value = '0kn ' + (isNaN(n) ? 1 : Math.abs(n));
+      document.getElementById('code').value = '0kn ' + (isNaN(n) ? 0 : Math.abs(n));
       showConfirm();
       // No individual carrier -- that is the whole point of a team rush.
       // The yardage still has to ride on the role, or computeBoxScore
