@@ -131,7 +131,14 @@ async function run() {
       // handlers that only fire on paths a single test run cannot visit
       // all of, so the DOM would show nothing either way.
       const file = require('fs').readFileSync(__dirname + '/../' + page, 'utf8');
-      ['clockPromptInput', 'confirmClockInput', 'guidedReturnClock', 'setclock_val'].forEach(id => {
+      // guidedReturnClock is deliberately NOT in this list. See below: the
+      // guided kickoff is the one place the pad opens over a form the
+      // scorer is still working down, so it was taken out on 22 Aug.
+      const wired = ['clockPromptInput', 'confirmClockInput', 'setclock_val'];
+      // The fallback still raises it on the guided return; the live page
+      // deliberately does not.
+      if (page !== 'game.html') wired.push('guidedReturnClock');
+      wired.forEach(id => {
         if (file.indexOf("raiseClockPad('" + id + "'") === -1) {
           fail(page + ':unwired-clock-field', id + ' has no raiseClockPad call -- its keypad will not open by itself');
         }
@@ -164,8 +171,21 @@ async function run() {
       click(win, doc.getElementById('guidedKickoffSave'));
       await new Promise(r => setTimeout(r, 400));
       const pads = JSON.parse(h.evalIn('JSON.stringify(window.__log)'));
-      if (!pads.some(x => /^guidedReturnClock:/.test(x))) {
-        fail(page + ':guided-return-keypad', 'the guided kickoff return should raise its own keypad, got: ' + JSON.stringify(pads));
+      // INVERTED 22 Aug. The guided kickoff return must NOT raise its own
+      // keypad. Everywhere else the pad opens over a field that is the
+      // only thing being asked for -- the change-of-possession prompt,
+      // Set clock -- and there it is ahead of the scorer. Here it opens
+      // over a form with a returner, yardage, a spot and outcome toggles
+      // still to work down, and it covers them. Reported directly.
+      //
+      // Tapping the clock box still opens it; only the automatic raise is
+      // gone.
+      // game.html only. game_legacy.html is the frozen fallback and keeps
+      // the old behaviour on purpose -- it is a different layout, it was
+      // not the page reported on, and changing a fallback to match a
+      // preference is how a fallback stops being a known quantity.
+      if (page === 'game.html' && pads.some(x => /^guidedReturnClock:/.test(x))) {
+        fail(page + ':guided-return-keypad', 'the guided kickoff return should NOT raise a keypad by itself, got: ' + JSON.stringify(pads));
       }
       h.close();
     }
