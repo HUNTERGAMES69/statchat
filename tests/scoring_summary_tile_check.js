@@ -203,6 +203,13 @@ async function run() {
     if (!/no previous drive/i.test(w.document.getElementById('prevDriveLogScroll').textContent)) {
       fail('half-reset:previous', 'Previous Drive should not show a first-half drive after the interval');
     }
+    // THE BANNER TOO. computeState() keeps the down, distance and spot the
+    // first half ended on, so the black bar read "3rd & 16 at own 12"
+    // while the teams lined up to kick. Reported from a real game.
+    if (w.document.getElementById('downText').textContent.trim()) {
+      fail('half-reset:banner', 'the banner is still showing the situation the interval interrupted: ' +
+        JSON.stringify(w.document.getElementById('downText').textContent.trim()));
+    }
     w.close();
 
     // (b) Kickoff entered: it becomes the headline. It belongs to the
@@ -212,6 +219,19 @@ async function run() {
     head = w.document.getElementById('driveLogScroll').textContent;
     if (!/kicks off/.test(head)) fail('half-reset:kickoff', 'expected the kickoff as the headline, got: ' + JSON.stringify(head.trim()));
     if (/punts|rush for 9/.test(head)) fail('half-reset:stale', 'a first-half play is showing on a second-half card: ' + JSON.stringify(head.trim()));
+    // Still blank through the kick: a kickoff sets no down, so there is
+    // nothing to report until a snap or a drive marker lands.
+    if (w.document.getElementById('downText').textContent.trim()) {
+      fail('half-reset:banner-kickoff', 'the banner should stay blank during the kickoff, got: ' +
+        JSON.stringify(w.document.getElementById('downText').textContent.trim()));
+    }
+    // AND IN THE TILE, which builds its own copy of that line -- fixing
+    // the banner alone left "3rd & 16 at own 12" sitting under the
+    // kickoff here. Reported from a real game after the banner was fixed.
+    if (/\d+(st|nd|rd|th) & /.test(head)) {
+      fail('half-reset:tile-downline', 'the drive tile is still showing a down from the first half: ' +
+        JSON.stringify(head.trim()));
+    }
     // THE TILES ARE THE REAL TEST. The first half's last drive had a
     // 9-yard rush in it; if the card still measures from before the
     // interval those yards appear here, on a half in which nothing has
