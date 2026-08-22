@@ -6032,7 +6032,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         return;
       }
       const card = document.getElementById('entryCard');
-      const r = (card || rail).getBoundingClientRect();
+      const r = columnTopRect() || (card || rail).getBoundingClientRect();
       const top = Math.round(r.top + (window.pageYOffset || 0)) + 'px';
       const height = Math.round(r.height) + 'px';
       // Written only when the value actually changes: an unconditional
@@ -6134,7 +6134,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
       const card = document.getElementById('entryCard');
       if (!card) return;
-      const r = card.getBoundingClientRect();
+      const r = columnTopRect() || card.getBoundingClientRect();
       const top = Math.round(r.top + (window.pageYOffset || 0)) + 'px';
       const height = Math.round(r.height) + 'px';
       if (rail2.style.top !== top) rail2.style.top = top;
@@ -6249,6 +6249,36 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // without threading a getter through all of them. The 'picked' class is
   // set by wireStartingSpot itself, so it is a faithful proxy for the
   // side it recorded.
+  // THE TOP OF THE CENTRE COLUMN, not the top of the entry card.
+  // ---------------------------------------------------------------------
+  // Both margins used to measure entryCard. The guided kickoff panel sits
+  // ABOVE that card, so while it is open the card starts several hundred
+  // pixels down the page -- and the drive dock and the right rail went
+  // down with it, leaving the two sides of the screen sitting well below
+  // where they belong. Reported twice: re-syncing them on a guided
+  // repaint fixed the LAG but not the position, because the position was
+  // being measured from the wrong thing.
+  //
+  // The margins belong at the top of the column whatever the column
+  // happens to start with, so they measure the first card in it: the
+  // guided panel when one is showing, the entry card otherwise. Only the
+  // centre section moves.
+  function columnTopRect(){
+    const gp = document.getElementById('guidedPanel');
+    const card = document.getElementById('entryCard');
+    const gpShown = gp && gp.style.display !== 'none' && gp.offsetParent !== null;
+    // offsetParent is null under jsdom for everything, so fall back to
+    // the inline display -- which is what the guided flow actually sets.
+    const useGuided = gp && gp.style.display !== 'none';
+    const topEl = (gpShown || useGuided) ? gp : card;
+    if (!topEl || !card) return null;
+    const t = topEl.getBoundingClientRect();
+    const c = card.getBoundingClientRect();
+    // Height runs from the top of the column to the bottom of the entry
+    // card, so the margin still spans the whole of it.
+    return { top: t.top, height: Math.max(c.bottom - t.top, c.height) };
+  }
+
   // ON AIR IS A TOGGLE ON THIS PAGE TOO.
   // ---------------------------------------------------------------------
   // It used to be a read-only badge -- "the flag is changed from the
