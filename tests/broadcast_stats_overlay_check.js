@@ -164,6 +164,61 @@ async function run() {
     w.close();
   }
 
+  // --- 5. PORTRAIT: a tall narrow column for a lower-third or side slot,
+  //     with the two leaders panels STACKED and our team on top.
+  //     Side by side the panels are peers and visitor-then-home is right,
+  //     matching the comparison. Stacked, the top one reads as the
+  //     subject of the graphic -- on a Neville broadcast that is Neville,
+  //     home or away.
+  {
+    const homeGame = Object.assign({}, DEFAULT_GAME, { our_team_is_home: true,
+      home_team_name: 'Neville', away_team_name: 'TEST OPP' });
+    const paintWith = async (w, game) => {
+      w.window.__payload = { game, roster: defaultRoster(), ourBranding: DEFAULT_BRANDING, plays: rows };
+      w.evalIn('window.fetch = () => Promise.resolve({ ok:true, json: () => Promise.resolve(window.__payload) });');
+      await w.evalIn('fetchAndRender()');
+      await new Promise(r => setTimeout(r, 250));
+    };
+    const names = d => [...d.querySelectorAll('#leaders .ltname')].map(e => e.textContent);
+
+    // NEVILLE AT HOME is the case that separates the two orders. With
+    // Neville away both layouts agree, so a test using only that fixture
+    // would pass whatever the portrait branch did.
+    let w = await bootPage('broadcast_stats.html',
+      { query: '?id=test-game-1', readyWhen: win => !!win.document.getElementById('panel') });
+    await paintWith(w, homeGame);
+    if (names(w.document)[0] !== 'TEST OPP') {
+      fail('portrait:landscape-order', 'landscape should stay visitor-first, got ' + names(w.document).join(' then '));
+    }
+    if (w.window.getComputedStyle(w.document.getElementById('leaders')).flexDirection !== 'row') {
+      fail('portrait:landscape-dir', 'landscape leaders should sit side by side');
+    }
+    w.close();
+
+    w = await bootPage('broadcast_stats.html',
+      { query: '?id=test-game-1&layout=portrait', readyWhen: win => !!win.document.getElementById('panel') });
+    await paintWith(w, homeGame);
+    const d = w.document, win = w.window;
+    if (!d.body.classList.contains('layout-portrait')) fail('portrait:class', 'the portrait class was not applied');
+    if (names(d)[0] !== 'Neville') {
+      fail('portrait:order', 'portrait should stack our team on top, got ' + names(d).join(' then '));
+    }
+    if (win.getComputedStyle(d.getElementById('leaders')).flexDirection !== 'column') {
+      fail('portrait:stack', 'portrait leaders should stack, not sit side by side');
+    }
+    // Narrower, and the same data -- only the shape changes.
+    if (win.getComputedStyle(d.getElementById('panel')).right !== 'auto') {
+      fail('portrait:width', 'the portrait panel should be a fixed-width column, not full bleed');
+    }
+    if (d.querySelectorAll('#rows .srow').length !== 6) {
+      fail('portrait:rows', 'portrait should carry the same six rows');
+    }
+    if (d.querySelectorAll('.lcard').length !== 6) {
+      fail('portrait:cards', 'portrait should carry the same six leader cards');
+    }
+    w.close();
+  }
+
   return failures;
 }
 
