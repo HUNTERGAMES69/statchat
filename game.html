@@ -1581,9 +1581,28 @@ const PENALTIES = {
   illegal_snap:         { name: 'Illegal snap',                    side: 'off', group: 'Before the snap', yards: 5 },
   illegal_numbering:    { name: 'Illegal numbering',               side: 'off', group: 'Before the snap', yards: 5 },
   // NFHS keeps "encroachment" for the DEFENCE entering the neutral zone
-  // and uses "false start" for the offence -- it is not the NFL's
-  // "offside", and calling it that in the log would be wrong.
+  // and uses "false start" for the offence.
   encroachment:         { name: 'Encroachment',                    side: 'def', group: 'Before the snap', yards: 5 },
+  // OFFSIDE, added 22 Aug on Andy's call, for all three sides at 5 yards.
+  //
+  // The note above used to end "...it is not the NFL's offside, and
+  // calling it that in the log would be wrong" -- which is true of the
+  // NFHS rule book and beside the point in a press box. Officials and
+  // crews say offside, and a scorer who hears it should be able to enter
+  // it without first translating it into encroachment.
+  //
+  // Encroachment is deliberately KEPT alongside it rather than replaced.
+  // Both are now offered on the defence, so a game's log can contain
+  // either; that is the cost of matching what is actually said aloud.
+  // ONE scrimmage entry at side 'both' rather than one per team: three
+  // entries put two identically-named "Offside" options in front of the
+  // scorer on every side, which is a choice with no right answer.
+  // 'both' already means "either team can commit this".
+  offside:              { name: 'Offside',                         side: 'both', group: 'Before the snap', yards: 5 },
+  // The free-kick one is NAMED differently for the same reason -- it sits
+  // in its own group, and two bare "Offside" entries in one list would
+  // read as a duplicate rather than as two different fouls.
+  offside_kick:         { name: 'Offside (free kick)',              side: 'both', group: 'Kicking plays', yards: 5 },
   delay_of_game:        { name: 'Delay of game',                   side: 'both', group: 'Before the snap', yards: 5 },
   illegal_substitution: { name: 'Illegal substitution',            side: 'both', group: 'Before the snap', yards: 5 },
   too_many_players:     { name: 'Too many players on the field',   side: 'both', group: 'Before the snap', yards: 5 },
@@ -11378,7 +11397,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<button type="button" id="pen_half_dist_btn" class="secondary" style="padding:8px 12px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">Half the distance</button>' +
       '</div>' +
       '<div id="pen_half_readout" style="display:none; font-size:13px; margin-top:6px;"></div>' +
-      '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pen_no_down" style="display:none;"><button type="button" id="pen_no_down_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Dead-ball / after a kick or change of possession (move the ball, keep the down &amp; distance)</button></div>' +
+      // A SHORT LABEL ON A NARROW BOX, wrapped. It read
+      // "Dead-ball / after a kick or change of possession (move the ball,
+      // keep the down & distance)" -- a sentence on a button, running the
+      // full width of the panel for a control that is used rarely.
+      // The parenthetical is what the toggle DOES, which belongs in the
+      // title where it can be read on demand, not on the face of it.
+      '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pen_no_down" style="display:none;">' +
+      '<button type="button" id="pen_no_down_toggle" class="ptoggle" ' +
+        'title="Moves the ball but keeps the down and distance — for a foul after a kick or a change of possession" ' +
+        'style="padding:8px 12px; border-radius:6px; font-size:13.5px; font-weight:600; cursor:pointer; ' +
+        'max-width:210px; white-space:normal; text-align:left; line-height:1.25;">Dead-ball<br>(after a kick or change of possession)</button></div>' +
       '<div style="margin-top:8px;">' +
         '<input autocomplete="off" type="checkbox" id="pen_first_down" style="display:none;">' +
         '<button type="button" id="pen_first_down_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Automatic first down</button>' +
