@@ -3413,7 +3413,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // belongs to the PREVIOUS possessor's drive, so the new drive
     // starts at the next play instead.
     const resetIdxs = findDriveStarts(plays);
-    const currentDrivePlays = resetIdxs.length ? plays.slice(resetIdxs[resetIdxs.length - 1]) : [];
+    // BEFORE THE FIRST DRIVE MARKER, fall back to the whole log rather
+    // than to nothing. Reported directly, 22 Aug 2026: a penalty entered
+    // straight after a change of possession, before any play, did not
+    // appear in the Current drive box at all.
+    //
+    // findDriveStarts has nothing to find until a drive actually begins
+    // -- between the opening kickoff and the receiving team's first snap
+    // there is no isReset marker and no possession change to detect --
+    // so this was an empty slice and the box read "no active drive yet"
+    // while real, saved plays sat in the log unshown. A penalty in that
+    // gap is exactly the play a scorer would go back to check.
+    //
+    // The quarter marker is dropped here specifically: it is not noise
+    // in the full log (it is how the quarter is derived), so
+    // isDriveTileNoise deliberately keeps it -- but in a drive box that
+    // is falling back to the top of the game it would otherwise be the
+    // first thing listed.
+    const currentDrivePlays = resetIdxs.length
+      ? plays.slice(resetIdxs[resetIdxs.length - 1])
+      : plays.filter(x => !(x.effect && x.effect.setQuarter));
     const previousDrivePlays = resetIdxs.length >= 2 ? plays.slice(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1]) : [];
     document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.filter(x => !isDriveTileNoise(x)).slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
     document.getElementById('prevDriveLogScroll').innerHTML = renderLogLines(previousDrivePlays.filter(x => !isDriveTileNoise(x)).slice().reverse()) || '<div style="color:#999;">no previous drive yet</div>';
@@ -10350,6 +10369,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   document.getElementById('flipBtn').addEventListener('click', () => {
     const state = computeState();
     const outgoingTeam = state.possession, incomingTeam = otherTeam(state.possession);
+    // Confirmed, like End 1st half and End game, and for the same reason:
+    // one tap, no second step, and it writes a play that rewrites who has
+    // the ball. Undo walks it back, but only if you notice -- and it sits
+    // in the utilities row beside controls that are pressed often.
+    //
+    // The two team names are in the prompt because that is the thing
+    // worth checking: the button says "Flip possession" without saying
+    // which way, and after a turnover the answer is not always the one
+    // in mind.
+    if (!confirm('Give the ball to ' + TEAMS[incomingTeam].name + '?\n\n' +
+        TEAMS[outgoingTeam].name + ' currently has possession. This writes a ' +
+        'manual change of possession.')) return;
     pushAndPersist({ id: nextId++, text: 'Manual flip — possession to ' + TEAMS[incomingTeam].name, effect: { forcePossession: incomingTeam } });
     renderAll();
     showClockPrompt({ mode: 'transition', outgoingTeam, incomingTeam }, () => { document.getElementById('code').focus(); });
