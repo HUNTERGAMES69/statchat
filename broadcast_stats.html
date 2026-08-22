@@ -110,6 +110,44 @@
   .lunit { font-size:14px; font-weight:700; color:#6b7280; margin-left:5px; }
   .lsub { font-size:13.5px; font-weight:600; color:#4a5058; }
   .lcard.empty .lnone { font-size:30px; font-weight:800; color:#b9bec6; }
+
+  /* ================= PORTRAIT =================
+     /broadcast_stats.html?layout=portrait
+
+     A tall narrow column instead of a full-width band, for a lower-third
+     slot or a side panel rather than a full-frame graphic. Same data and
+     the same DOM -- only the shape changes, so there is one renderer to
+     keep correct rather than two pages that drift apart.
+
+     The two leaders panels stack, OUR TEAM ON TOP. Side by side they were
+     peers; stacked, whichever is first reads as the subject of the
+     graphic, and on a Neville broadcast that is Neville -- so the order
+     here is our team then the opponent, NOT visitor then home the way the
+     comparison above it runs. */
+  body.layout-portrait #panel { right:auto; width:640px; }
+  body.layout-portrait .hteam { gap:10px; padding:11px 16px; }
+  body.layout-portrait .hteam img { width:34px; height:34px; }
+  body.layout-portrait .hname { font-size:20px; }
+  body.layout-portrait .hpts { font-size:27px; margin-left:11px; }
+  body.layout-portrait .hmid { padding:0 16px; font-size:13px; letter-spacing:0.12em; }
+  body.layout-portrait #rows { padding:4px 16px 10px; }
+  body.layout-portrait .srow { padding:5px 0; }
+  body.layout-portrait .sv { font-size:20px; flex-basis:24%; }
+  body.layout-portrait .slab { font-size:11.5px; letter-spacing:0.07em; }
+
+  body.layout-portrait #leaders { flex-direction:column; gap:10px; margin-top:10px; }
+  body.layout-portrait .lside { padding:11px 14px; gap:12px; }
+  body.layout-portrait .lteam { flex:0 0 84px; }
+  body.layout-portrait .lteam img { width:42px; height:42px; margin-bottom:4px; }
+  body.layout-portrait .ltname { font-size:15px; }
+  body.layout-portrait .lcards { gap:7px; }
+  body.layout-portrait .lcard { padding:7px 9px; }
+  body.layout-portrait .lcat { font-size:10.5px; margin-bottom:1px; }
+  body.layout-portrait .lname { font-size:13.5px; }
+  body.layout-portrait .lval { font-size:22px; }
+  body.layout-portrait .lunit { font-size:11px; margin-left:3px; }
+  body.layout-portrait .lsub { font-size:11.5px; }
+  body.layout-portrait .lcard.empty .lnone { font-size:22px; }
 </style>
 
 <div id="panel">
@@ -227,10 +265,18 @@
   function buildTeams(game, rosterRows, ourBranding){
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
     const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    // isHome, which buildTeams did NOT carry. It comes from the scoreboard
+    // overlay, where nothing ever asked which side was at home -- that
+    // page puts our team on the left always. This one orders the
+    // comparison visitor-then-home like the recap, so without it the test
+    // was inert: teamA.isHome was undefined, so Neville sat on the left of
+    // every graphic including their own home games.
     TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
+      isHome: !!game.our_team_is_home,
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, rosterUnassigned:{}, posOffense:{}, logo: ourBranding.logo_url || null };
     const oppPrimary = game.opponent_primary_color || '#8B0000', oppSecondary = game.opponent_secondary_color || '#ffffff';
     TEAMS.teamB = { name: oppName, bg: oppPrimary, text: oppSecondary,
+      isHome: !game.our_team_is_home,
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, rosterUnassigned:{}, posOffense:{}, logo: game.opponent_logo_url || null };
     // Each team's color is set independently -- nothing checks that
     // they're actually distinguishable from each other, and two
@@ -878,6 +924,12 @@ function extractNameTag(rawName){
       '<span class="slab">' + r[0] + '</span>' +
       '<span class="sv">' + hRows[i][1] + '</span></div>').join('');
 
+    // PORTRAIT STACKS OUR TEAM FIRST. Side by side the two panels are
+    // peers and visitor-then-home is the right order, matching the
+    // comparison above. Stacked, the top one reads as the subject of the
+    // graphic -- so on a Neville broadcast Neville goes there, whether
+    // they are at home or away that week.
+    const portrait = new URLSearchParams(window.location.search).get('layout') === 'portrait';
     const ldSide = (k) => {
       const t = TEAMS[k];
       return '<div class="lside">' +
@@ -888,10 +940,13 @@ function extractNameTag(rawName){
         '<div class="lcards">' + leaderCards(k, box) + '</div>' +
       '</div>';
     };
-    document.getElementById('leaders').innerHTML = ldSide(visitorKey) + ldSide(homeKey);
+    document.getElementById('leaders').innerHTML = portrait
+      ? ldSide('teamA') + ldSide('teamB')
+      : ldSide(visitorKey) + ldSide(homeKey);
 
     document.getElementById('panel').style.display = 'block';
     const p = new URLSearchParams(window.location.search);
+    document.body.classList.toggle('layout-portrait', portrait);
     document.body.classList.toggle('debug', p.get('debug') === '1');
   }
 
