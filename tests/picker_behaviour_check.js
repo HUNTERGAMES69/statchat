@@ -505,6 +505,51 @@ async function run(){
     h.close();
   }
 
+  // THE KICKER AND PUNTER BOXES DO NOT PREFILL EITHER. The quarterback's
+  // was fixed first and left these behind: a box already carrying 39
+  // looks like somebody typed it, when it is the suggestion -- which the
+  // highlighted button beside it already says.
+  {
+    const roster = defaultRoster().concat([
+      { team_side: 'teamA', unit: 'special', jersey_number: '39', player_name: 'Rivers Sorrell', position: 'P' }
+    ]);
+    const h = await bootGamePage({ roster });
+    const doc = h.window.document, win = h.window;
+    h.evalIn('window.confirm = () => true;');
+    setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+    enterPlay(h, { type: 'punt', punter: '39', puntyds: '42', spot: { side: 'own', yardline: 38 } });
+    // Give the ball back, or the "last punter for the team now on
+    // offence" is the other side and nothing is suggested at all.
+    click(win, doc.getElementById('flipBtn'));
+    await new Promise(r => setTimeout(r, 200));
+    setDrive(h, { down: 4, distance: 9, side: 'own', yardline: 28 });
+    const n0 = h.evalIn('plays.length');
+
+    click(win, doc.querySelector('.ptypeBtn[data-type="punt"]'));
+    const manual = doc.getElementById('pp_punter_manual');
+    if (manual.value) fail('kick-suggest:prefill', 'the punter box should be empty, got ' + JSON.stringify(manual.value));
+    if (!/type #/.test(manual.placeholder)) fail('kick-suggest:placeholder', 'expected the shared placeholder, got ' + manual.placeholder);
+    const sug = doc.querySelector('#pp_punter_grid button.suggested');
+    if (!sug) fail('kick-suggest:lost', 'the last punter should still be suggested');
+
+    // THE POINT: entering the play WITHOUT touching the picker still
+    // credits him. Removing a prefill must not remove the carry.
+    typeInto(win, doc.getElementById('pp_yards'), '38');
+    click(win, doc.querySelector('.pp_spot_side[data-side="opp"]'));
+    typeInto(win, doc.getElementById('pp_spot_yardline'), '34');
+    click(win, doc.getElementById('pp_review'));
+    await new Promise(r => setTimeout(r, 150));
+    click(win, doc.getElementById('saveBtn'));
+    await new Promise(r => setTimeout(r, 200));
+    if (h.evalIn('plays.length') <= n0) fail('kick-suggest:save', 'the punt did not save');
+    const roles = JSON.parse(h.evalIn('JSON.stringify((plays.filter(p=>p.roles&&p.roles.playType==="punt").pop()||{}).roles||null)'));
+    if (!roles || !roles.punter || roles.punter.num !== '39') {
+      fail('kick-suggest:credit', 'the suggested punter should be credited untouched, got ' +
+        (roles && roles.punter ? roles.punter.num : 'none'));
+    }
+    h.close();
+  }
+
   return failures;
 }
 
