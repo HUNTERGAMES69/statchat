@@ -97,6 +97,38 @@ async function run() {
     w.close();
   }
 
+  // --- 5. HALFTIME ENDS WHEN "START 2ND HALF" IS PRESSED, not when the
+  //     kickoff is finally entered. Requested directly: the guided
+  //     kickoff takes a while to fill in, and this page sat on a HALFTIME
+  //     card throughout it while the teams were visibly lining up.
+  //     "Start 2nd half" writes a Q3 quarter marker and nothing else, so
+  //     that marker is the signal.
+  {
+    const half = rows.concat([{ id: 'hh', text: 'End of 1st half', effect: {}, is_divider: true, quarter: 2, sequence_number: 900 }]);
+    let w = await view(half);
+    if (!/HALFTIME/.test(w.document.getElementById('quarterText').textContent)) {
+      fail('halftime:banner', 'expected the HALFTIME banner at the interval');
+    }
+    // The second-half kicker, beside the word. Whoever kicked off to start
+    // the GAME receives now, so it is the other team.
+    const head = w.document.getElementById('quarterText').textContent;
+    if (!/kicks off/.test(head)) {
+      fail('halftime:kicker', 'expected the second-half kicker beside HALFTIME, got: ' + JSON.stringify(head));
+    }
+    w.close();
+
+    const started = half.concat([{ id: 'q3', text: 'Quarter marker — start of Q3', effect: { setQuarter: 3 }, quarter: 3, sequence_number: 901 }]);
+    w = await view(started);
+    const after = w.document.getElementById('quarterText').textContent;
+    if (/HALFTIME/.test(after)) {
+      fail('halftime:cleared', 'pressing Start 2nd half must clear the HALFTIME card without waiting for the kickoff, got: ' + JSON.stringify(after));
+    }
+    // And the drive cards come back with it.
+    if (shown(w, '#scoringCard')) fail('halftime:scoring-cleared', 'the scoring card should hand the quad back once the half has started');
+    if (!shown(w, '.drive-current')) fail('halftime:drive-back', 'the Current Drive card should return once the half has started');
+    w.close();
+  }
+
   return failures;
 }
 
