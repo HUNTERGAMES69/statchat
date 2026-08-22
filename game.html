@@ -154,7 +154,9 @@
      from crowding the yard-line box at the end of the row. */
   #entryStage #playPanel .calcSide,
   #entryStage #playPanel .spot-row > button,
-  #entryStage #playPanel [class$="_side"] {
+  #entryStage #playPanel [class$="_side"],
+  #guidedPanel .calcSide,
+  #guidedPanel [class$="_side"] {
     white-space:nowrap; font-size:12.5px; padding:8px 9px; }
   #entryStage #playPanel p { margin-top:6px; margin-bottom:3px; }
   /* Kicker trees (FG, PAT, kickoff, punt) are the tallest in the app --
@@ -391,7 +393,7 @@
      Sized to the text it takes -- a jersey number -- rather than the
      96px column, since it is now sitting among the buttons and a wide
      box would read as an empty one. */
-  #entryStage #playPanel .grid-inline-manual { display:flex; flex-wrap:wrap;
+  #entryStage #playPanel .grid-inline-manual, #guidedPanel .grid-inline-manual { display:flex; flex-wrap:wrap;
                                                align-items:center; gap:4px; }
   /* Collapsed: only the leading name shows. The rest stay in the DOM --
      hidden, not removed -- so revealing them is a class flip rather than
@@ -406,7 +408,7 @@
     padding:5px 9px !important; font-size:11.5px !important; font-weight:700 !important;
     border:1px dashed #b8b8b8 !important; background:#fff !important;
     color:#555 !important; border-radius:6px !important; margin:0 !important; }
-  #entryStage #playPanel .grid-inline-manual > input {
+  #entryStage #playPanel .grid-inline-manual > input, #guidedPanel .grid-inline-manual > input {
     flex-grow:0; flex-shrink:0; flex-basis:88px; width:88px; margin:0; }
 
   /* An expanded optional block puts its manual box DIRECTLY BELOW the
@@ -442,11 +444,16 @@
   /* The spot on one line. The yard box keeps a fixed width and sits at
      the end, so it lands on the same right edge as the "type #" boxes
      above it rather than wherever the two side buttons happen to end. */
-  #entryStage #playPanel .spot-row { display:flex; align-items:center; gap:8px;
+  #entryStage #playPanel .spot-row, #guidedPanel .spot-row { display:flex; align-items:center; gap:8px;
                                      flex-wrap:wrap; margin-top:9px; }
-  #entryStage #playPanel .spot-row > button { flex:0 1 auto; margin:0; }
-  #entryStage #playPanel .spot-row > input { flex:0 0 96px; width:96px; margin-left:auto; }
-  #entryStage #playPanel .spot-label { flex:0 0 auto; line-height:normal; }
+  #entryStage #playPanel .spot-row > button, #guidedPanel .spot-row > button { flex:0 1 auto; margin:0; }
+  #entryStage #playPanel .spot-row > input, #guidedPanel .spot-row > input { flex:0 0 96px; width:96px; margin-left:auto; }
+  #entryStage #playPanel .spot-label, #guidedPanel .spot-label { flex:0 0 auto; line-height:normal; }
+  #entryStage #playPanel .spot-heading, #guidedPanel .spot-heading {
+    font-size:12.5px; color:#6b7280; margin:9px 0 3px; }
+  /* With the label on its own line the row above it is already spaced. */
+  #entryStage #playPanel .spot-heading + .spot-row,
+  #guidedPanel .spot-heading + .spot-row { margin-top:0; }
   #entryStage #playPanel .pick-row + .pick-row,
   #entryStage #playPanel .pick-row + .opt-block,
   #entryStage #playPanel .opt-block + .pick-row { margin-top:9px; }
@@ -5038,8 +5045,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       content.innerHTML =
         '<div style="font-size:16px; margin-bottom:8px;">' + TEAMS[guided.receivingTeam].name + ' returns.</div>' +
         '<p style="font-size:13px; color:#888; margin:0 0 4px;">Returner</p>' +
-        '<div id="gr_returner_grid">' + pickerHtml(returnerList, 'gr_returner_pick') + '</div>' +
-        '<input autocomplete="off" type="text" id="gr_returner_manual" placeholder="type #" style="width:100px; margin:4px 0 8px;"><br>' +
+        // The box at the END OF THE LIST, as on every other picker. It
+        // was a separate element after a <br>, so it claimed a line of
+        // its own -- and the guided panel is not inside #entryStage, so
+        // none of the layout rules written for the trees reached it.
+        '<div id="gr_returner_grid" class="grid-inline-manual">' +
+          pickerHtml(returnerList, 'gr_returner_pick') +
+          '<input autocomplete="off" type="text" id="gr_returner_manual" placeholder="type #">' +
+        '</div>' +
         // Laid out like the manual panels: labelled fields on one
         // baseline, then the full-width Touchdown toggle. The guided
         // flow cannot see renderPlayPanel's tdBlock (different scope),
@@ -5319,7 +5332,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // only the first two is why the pad came up on the scrimmage trees
       // and not on the kicking ones: the guided kickoff never touches
       // either of them.
-      raiseClockPad('guidedReturnClock');
+      // NO AUTO KEYPAD HERE. Reported directly: on the guided kickoff the
+      // pad opens over a form the scorer is still working down, and it is
+      // in the way rather than ahead of them. The change-of-possession
+      // prompt and Set clock keep theirs -- there the clock field is the
+      // only thing being asked for, which is what made the pad welcome.
+      // Tapping the box still opens it.
       const grClock = document.getElementById('guidedReturnClock');
       if (grClock) grClock.addEventListener('input', e => {
         const w = document.getElementById('grClockWarn');
@@ -5971,8 +5989,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // the full sentence in a tooltip.
     const longLabel = label || 'Starting spot for the ensuing drive (optional — leave blank to set later)';
     const shortLabel = /required/i.test(longLabel) ? 'Spot' : longLabel;
-    return '<div id="' + idPrefix + '_wrap" class="spot-row">' +
-      '<span class="pick-label spot-label" title="' + longLabel.replace(/"/g, '') + '">' + shortLabel + '</span>' +
+    // A LABEL TOO LONG TO SIT INLINE GETS ITS OWN LINE instead of being
+    // cut down. The guided kickoff's is "Ball spot after the return (sets
+    // 1st down for Neville)" -- 55 characters, which on one flex line
+    // pushed the side buttons into the middle of the words. Shortening it
+    // to "Spot" would fit, but "sets 1st down for Neville" is the part
+    // that tells a scorer what the field is actually for, and the guided
+    // flow is where that is least obvious.
+    //
+    // So: short labels stay inline and save the row, long ones take a
+    // line and stay readable. The threshold is where the label starts
+    // crowding the two team buttons beside it.
+    const inlineLabel = shortLabel.length <= 22;
+    const heading = inlineLabel ? '' :
+      '<p class="spot-heading">' + shortLabel + '</p>';
+    return heading +
+      '<div id="' + idPrefix + '_wrap" class="spot-row">' +
+      (inlineLabel
+        ? '<span class="pick-label spot-label" title="' + longLabel.replace(/"/g, '') + '">' + shortLabel + '</span>'
+        : '') +
       '<button type="button" class="' + idPrefix + '_side" data-side="own">' + driveTeamLabel + '</button>' +
       '<button type="button" class="' + idPrefix + '_side" data-side="opp">' + otherTeamLabel + '</button>' +
       '<input autocomplete="off" type="text" id="' + idPrefix + '_yardline" placeholder="Yard line">' +
