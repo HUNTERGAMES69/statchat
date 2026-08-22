@@ -445,6 +445,66 @@ async function run(){
     h.close();
   }
 
+  // THE SUGGESTED QUARTERBACK DOES NOT PREFILL THE MANUAL BOX. Every
+  // other box on the page reads "or type #", so one already carrying 7
+  // looked like somebody had typed it -- and it is the SUGGESTION, which
+  // is what the highlighted button beside it already says.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'pass', passer: '7', receiver: '80', yards: '12' });
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    const manual = doc.getElementById('pp_passer_manual');
+    if (manual.value) fail('suggest:prefill', 'the manual box should be empty, got ' + JSON.stringify(manual.value));
+    if (!/type #/.test(manual.placeholder)) fail('suggest:placeholder', 'expected the shared placeholder, got ' + manual.placeholder);
+    // The suggestion itself must survive -- the point is the box, not the
+    // carried-forward quarterback.
+    const sug = doc.querySelector('#pp_passer_grid button.suggested');
+    if (!sug) fail('suggest:lost', 'the last quarterback should still be suggested');
+    // And confirming him with one tap still records him.
+    click(win, sug);
+    typeInto(win, doc.getElementById('pp_receiver_manual'), '84');
+    typeInto(win, doc.getElementById('pp_yards'), '17');
+    click(win, doc.getElementById('pp_review'));
+    await new Promise(r => setTimeout(r, 120));
+    click(win, doc.getElementById('saveBtn'));
+    await new Promise(r => setTimeout(r, 150));
+    if (!/Quarterback/.test(h.evalIn('plays[plays.length-1].text'))) {
+      fail('suggest:record', 'confirming the suggestion should record him: ' + h.evalIn('plays[plays.length-1].text'));
+    }
+    h.close();
+  }
+
+  // A CLEAR ON THE PHASE ROW. The tree's own Clear sits at the bottom,
+  // below however tall the open tree happens to be -- on a long one that
+  // is a scroll away from where the mistake was noticed.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    const btn = doc.getElementById('phaseClearBtn');
+    if (!btn) { fail('phaseclear:missing', 'no Clear on the phase row'); h.close(); return failures; }
+    if (!btn.parentElement.contains(doc.getElementById('quarterUtilBtn'))) {
+      fail('phaseclear:row', 'it should share the row with the quarter/half buttons');
+    }
+    if (win.getComputedStyle(btn).marginLeft !== 'auto') {
+      fail('phaseclear:right', 'it should hold the right edge, got ' + win.getComputedStyle(btn).marginLeft);
+    }
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    click(win, doc.querySelector('.pp_passer_pick'));
+    typeInto(win, doc.getElementById('pp_yards'), '14');
+    const before = h.evalIn('plays.length');
+    click(win, btn);
+    await new Promise(r => setTimeout(r, 120));
+    if (doc.getElementById('playPanel').innerHTML.trim()) fail('phaseclear:panel', 'the tree should be emptied');
+    if (h.evalIn('plays.length') !== before) fail('phaseclear:wrote', 'Clear must not write a play');
+    if (doc.getElementById('typeRail').querySelectorAll('.rail-active').length) {
+      fail('phaseclear:rail', 'the ladder should be unlit after Clear');
+    }
+    h.close();
+  }
+
   return failures;
 }
 
