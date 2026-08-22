@@ -333,6 +333,49 @@ async function run() {
     h.close();
   }
 
+  // THE TOP ROW MUST NOT DRIFT WITH SCROLL.
+  // ---------------------------------------------------------------------
+  // ON AIR and the three links are absolutely positioned in the document
+  // and given a top measured from the banner. The banner is
+  // position:sticky, so once the page scrolls past it its rect.top
+  // freezes at the sticky offset while pageYOffset keeps climbing --
+  // rect.top + pageYOffset therefore walked them further down the
+  // document on every recompute. Scroll a screen, enter a play that
+  // resizes the banner, and they land a screenful low on top of the
+  // right-hand panels. Reported from a real game.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    const banner = doc.querySelector('.banner');
+    const ta = doc.getElementById('topActions'), air = doc.getElementById('onAirBanner');
+    if (!banner || !ta) { fail('drift:missing', 'banner or top row absent'); h.close(); return failures; }
+    // Sticky is the precondition for the bug -- if it ever stops being
+    // sticky this test is measuring something that cannot happen.
+    if (win.getComputedStyle(banner).position !== 'sticky') {
+      fail('drift:precondition', 'the banner is no longer sticky; revisit why this test exists');
+    }
+    Object.defineProperty(win, 'innerWidth', { value: 1600, configurable: true });
+    Object.defineProperty(banner, 'offsetTop', { value: 120, configurable: true });
+    const at = (scroll) => {
+      // A sticky banner pins its rect at the sticky offset once passed.
+      banner.getBoundingClientRect = () => ({ top: scroll > 112 ? 8 : 120 - scroll, height: 64, bottom: 0 });
+      Object.defineProperty(win, 'pageYOffset', { value: scroll, configurable: true });
+      win.dispatchEvent(new win.Event('resize'));
+      return { ta: ta.style.top, air: air ? air.style.top : null };
+    };
+    const base = at(0).ta;
+    [200, 600, 1200].forEach(scroll => {
+      const got = at(scroll);
+      if (got.ta !== base) {
+        fail('drift:toprow', 'the top row moved after scrolling ' + scroll + 'px: ' + base + ' -> ' + got.ta);
+      }
+      if (air && got.air !== base) {
+        fail('drift:onair', 'the ON AIR tile moved after scrolling ' + scroll + 'px: ' + base + ' -> ' + got.air);
+      }
+    });
+    h.close();
+  }
+
   return failures;
 }
 
