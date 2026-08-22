@@ -42,10 +42,13 @@ async function run() {
     setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
     enterPlay(h, { type: 'rush', carrier: '22', yards: '8' });
     enterPlay(h, { type: 'rush', carrier: '22', yards: '12' });
-    // More carries, fewer yards -- must NOT lead.
-    enterPlay(h, { type: 'rush', carrier: '30', yards: '1' });
-    enterPlay(h, { type: 'rush', carrier: '30', yards: '1' });
-    enterPlay(h, { type: 'rush', carrier: '30', yards: '1' });
+    // More carries, fewer yards -- must NOT lead. #7 is Neville's own
+    // quarterback: #30 belongs to the OPPONENT, so using him here put
+    // these carries on the other team's sheet and quietly gave that team
+    // a leaders block of its own.
+    enterPlay(h, { type: 'rush', carrier: '7', yards: '1' });
+    enterPlay(h, { type: 'rush', carrier: '7', yards: '1' });
+    enterPlay(h, { type: 'rush', carrier: '7', yards: '1' });
     enterPlay(h, { type: 'pass', passer: '7', receiver: '80', yards: '22' });
     enterPlay(h, { type: 'pass', passer: '7', receiver: '84', yards: '5' });
     await new Promise(r => setTimeout(r, 700));
@@ -62,6 +65,12 @@ async function run() {
     // every line would double the width of the busiest column to say
     // nothing, and in a rail this narrow the name is what gets squeezed.
     if (rows.some(r => /TD/.test(r))) fail('leaders:td-noise', 'no touchdowns were scored, so none should be listed: ' + rows.join(' | '));
+    // Only one team has done anything, so only one block -- a name
+    // against 0 yds reads as a stat when it is not one.
+    if (doc.querySelectorAll('#liveBoxBody .ld-block').length !== 1) {
+      fail('leaders:empty-team', 'the team with no stats should have no leaders block, blocks: ' +
+        doc.querySelectorAll('#liveBoxBody .ld-block').length);
+    }
     h.close();
   }
 
@@ -78,10 +87,39 @@ async function run() {
       .map(e => e.textContent.replace(/\s+/g, ' ').trim()).find(r => /^RUSH/.test(r));
     if (!rush || !/1 TD/.test(rush)) fail('leaders:td', 'expected the touchdown on the rushing leader, got: ' + rush);
     if (!/28 yds/.test(rush || '')) fail('leaders:td-yards', 'yards should still be there beside the TD, got: ' + rush);
-    // A team with nothing yet has no leaders block -- a name against
-    // 0 yds reads as a stat when it is not one.
-    const blocks = doc.querySelectorAll('#liveBoxBody .ld-block');
-    if (blocks.length !== 1) fail('leaders:empty-team', 'only the team with stats should show leaders, blocks: ' + blocks.length);
+    h.close();
+  }
+
+  // --- 1b3. Passing leads the block, interceptions thrown are shown, and
+  //     each team gets a defence line counted from the PLAY LOG rather
+  //     than by summing the per-player bucket -- naming a tackler is
+  //     optional, so a sack with nobody credited belongs to the team
+  //     total even though it is in nobody's line.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'pass', passer: '7', receiver: '80', yards: '22' });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '8' });
+    enterPlay(h, { type: 'int', passer: '7', credit: '52', spot: { side: 'own', yardline: 40 } });
+    enterPlay(h, { type: 'sack', passer: '30', yards: '7', credit: '45' });
+    await new Promise(r => setTimeout(r, 700));
+    const rows = [...doc.querySelectorAll('#liveBoxBody .ld-row')]
+      .map(e => e.textContent.replace(/\s+/g, ' ').trim());
+    if (!/^PASS/.test(rows[0] || '')) fail('leaders:order', 'passing should lead the block, got: ' + rows[0]);
+    const pass = rows.find(r => /^PASS/.test(r));
+    if (!pass || !/1 INT/.test(pass)) fail('leaders:int', 'an interception thrown should be shown, got: ' + pass);
+    const defs = rows.filter(r => /^DEF/.test(r));
+    if (defs.length !== 2) fail('leaders:def-both', 'both teams should have a defence line, got ' + defs.length + ': ' + rows.join(' | '));
+    if (!defs.some(d => /1 sack/.test(d))) fail('leaders:def-sack', 'the sack is missing from the defence line: ' + defs.join(' | '));
+    if (!defs.some(d => /1 TFL/.test(d))) fail('leaders:def-tfl', 'a sack is also a tackle for loss: ' + defs.join(' | '));
+    if (!defs.some(d => /1 INT/.test(d))) fail('leaders:def-int', 'the interception is missing from the defence line: ' + defs.join(' | '));
+    // BOTH teams have a block here, and should: each has a defence line.
+    // A defence can have done something before anyone on that side's
+    // offence has -- a three-and-out with a sack in it.
+    if (doc.querySelectorAll('#liveBoxBody .ld-block').length !== 2) {
+      fail('leaders:both-blocks', 'both teams have defensive stats, so both should have a block');
+    }
     h.close();
   }
 
