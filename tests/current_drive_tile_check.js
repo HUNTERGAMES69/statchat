@@ -45,7 +45,9 @@ async function run() {
     if (!/font-size:36px/.test(html)) fail('last-play-size', 'expected the last play at 36px, got: ' + html);
     if (!/pass to N Receiver for 12/.test(html)) fail('last-play-is-last', 'expected only the SECOND (most recent) play to show, got: ' + html);
     if (/rush for 8/.test(html)) fail('last-play-not-both', 'expected the FIRST play to be absent -- only the last play should show, got: ' + html);
-    if (!/1st &amp; 10 at own 45/.test(html)) fail('down-distance-line', 'expected "1st & 10 at own 45" underneath the play, got: ' + html);
+    // Named, not own/opp: the spectator page uses team names -- see the
+    // markerLabelNamed block at the foot of this file.
+    if (!/1st &amp; 10 at Neville 45/.test(html)) fail('down-distance-line', 'expected "1st & 10 at Neville 45" underneath the play, got: ' + html);
     v.close();
   }
 
@@ -354,7 +356,9 @@ async function run() {
     await new Promise(r => setTimeout(r, 150));
     let html = v.document.getElementById('driveLogScroll').innerHTML;
     if (!/kicks off/.test(html)) fail('kickoff-window', 'expected the kickoff shown in the window before the first snap, got: ' + html);
-    if (!/1st &amp; 10 at own 30/.test(html)) fail('kickoff-window-downline', 'expected the resulting drive start beneath the kickoff, got: ' + html);
+    // The receiving team's own 30, named. After a kickoff possession has
+    // passed to them, so their name is the one on the spot.
+    if (!/1st &amp; 10 at TEST OPP 30/.test(html)) fail('kickoff-window-downline', 'expected the resulting drive start beneath the kickoff, got: ' + html);
 
     // (b) Possession count and box score: byte-identical plays array
     // after a full render pass that runs this exact branch, and the
@@ -534,6 +538,31 @@ async function run() {
       }
       w.close();
     }
+  }
+
+  // TEAM NAMES, NOT own/opp, ON THE SPECTATOR PAGE. "at opp 45" asks the
+  // reader to work out whose 45 that is, and a screen watched from across
+  // a room by people who did not enter the play gives them nothing to
+  // work it out from.
+  //
+  // engine.js's markerLabel is deliberately untouched: it is shared with
+  // the entry page and the reports, where own/opp is the right register.
+  {
+    const h = await bootPage('view.html', { existingPlays: [],
+      readyWhen: win => !!win.document.getElementById('driveLogScroll') });
+    await new Promise(r => setTimeout(r, 200));
+    const t = (fp, poss) => h.evalIn('markerLabelNamed(' + fp + ', ' + JSON.stringify(poss) + ')');
+    if (!/Neville 25/.test(t(25, 'teamA'))) fail('marker:own', 'own territory should name the team with the ball, got ' + t(25, 'teamA'));
+    if (!/TEST OPP 45/.test(t(55, 'teamA'))) fail('marker:opp', 'opponent territory should name the other team, got ' + t(55, 'teamA'));
+    // Possession decides which side is which.
+    if (!/TEST OPP 25/.test(t(25, 'teamB'))) fail('marker:flip', 'the sides should follow possession, got ' + t(25, 'teamB'));
+    // The 50 belongs to neither side, so it keeps its own name.
+    if (t(50, 'teamA') !== 'the 50') fail('marker:fifty', 'the 50 should not be given to a team, got ' + t(50, 'teamA'));
+    if (t(null, 'teamA') !== '') fail('marker:null', 'an unknown spot should render blank');
+    if (/\bown\b|\bopp\b/.test(t(25, 'teamA') + t(75, 'teamA'))) {
+      fail('marker:wording', 'own/opp should not survive on the spectator page');
+    }
+    h.close();
   }
 
   return failures;
