@@ -144,6 +144,18 @@
      tree (interception especially) run off the screen. */
   #entryStage #playPanel button[id$="_toggle"] { padding:8px !important; font-size:13px !important; }
   #entryStage #playPanel .ptoggle { padding:8px 10px; font-size:13px; }
+  /* TEAM-NAME BUTTONS MUST NOT WRAP. These carry a school name -- the
+     calculator's "tackled on" pair and the spot row's side pair -- and a
+     two-word name broke across two lines, making that one button taller
+     than the one beside it and knocking the whole row out of alignment.
+     Reported with "West Monroe".
+     nowrap first, so the button grows sideways instead of downwards; the
+     slightly smaller text and tighter padding are what keep that growth
+     from crowding the yard-line box at the end of the row. */
+  #entryStage #playPanel .calcSide,
+  #entryStage #playPanel .spot-row > button,
+  #entryStage #playPanel [class$="_side"] {
+    white-space:nowrap; font-size:12.5px; padding:8px 9px; }
   #entryStage #playPanel p { margin-top:6px; margin-bottom:3px; }
   /* Kicker trees (FG, PAT, kickoff, punt) are the tallest in the app --
      a kicker picker, a result choice, a returner picker, return yards,
@@ -6934,11 +6946,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         'padding-left:22px; border-left:1px solid #d8d8d8;">' +
         fieldLabel(label || 'Or enter tackled on') +
         '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:nowrap;">' +
+          // Size and padding come from the stylesheet, not from here. They
+          // were inline, which beats a rule -- so the nowrap fix for long
+          // team names applied and the smaller text that makes room for
+          // it did not.
           '<button type="button" class="ptoggle calcSide" data-side="own" ' +
-            'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+            'style="border-radius:6px; font-weight:600; cursor:pointer;">' +
             TEAMS[off].name + '</button>' +
           '<button type="button" class="ptoggle calcSide" data-side="opp" ' +
-            'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+            'style="border-radius:6px; font-weight:600; cursor:pointer;">' +
             TEAMS[opp].name + '</button>' +
           '<input autocomplete="off" type="text" id="pp_calc_yardline" placeholder="yard line" style="width:96px; flex:0 0 96px;">' +
 
