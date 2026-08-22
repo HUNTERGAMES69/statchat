@@ -209,12 +209,27 @@ async function run() {
       await new Promise(r => setTimeout(r, 150));
       const top = ((doc.getElementById('gameMsg') || {}).textContent || '').trim();
       const row = doc.querySelector('#playPanel .row-gap-msg');
-      // At the top of the page AND against the field. The top message
-      // alone sits well above where the scorer is looking.
-      if (!/still needed/i.test(top)) {
-        fail('silent:' + type, 'Review said nothing about the missing player: ' + JSON.stringify(top));
+      // NOT AT THE TOP OF THE PAGE. A copy up there was kept as a
+      // backstop and caused the very problem it was meant to cover:
+      // writing into gameMsg grows the top of the document, which moves
+      // the panel under the scorer's thumb at the moment they are reading
+      // a refusal. Reported directly.
+      if (top) {
+        fail('silent:' + type + ':top', 'the refusal should not be written at the top of the page: ' + JSON.stringify(top));
       }
       if (!row) fail('silent:' + type + ':row', 'nothing marked the row that is missing a player');
+      // AND BESIDE REVIEW. On a tall tree the top of the page is
+      // off-screen at the moment Review is pressed, so a message only up
+      // there reads as the button not working.
+      const rv = doc.getElementById('pp_review_msg');
+      if (!rv || win.getComputedStyle(rv).display === 'none' || !/still needed/i.test(rv.textContent)) {
+        fail('silent:' + type + ':review', 'nothing said beside the Review button');
+      }
+      // Directly under the button, not somewhere else on the panel.
+      const btnRow = doc.getElementById('pp_review').closest('.row');
+      if (!btnRow || btnRow.nextElementSibling !== rv) {
+        fail('silent:' + type + ':place', 'the message should sit under the Review row');
+      }
       // And it must not have opened the confirm box on an incomplete play.
       if (doc.getElementById('confirmCard').style.display !== 'none') {
         fail('silent:' + type + ':confirm', 'the confirm box opened on an incomplete play');
@@ -237,6 +252,165 @@ async function run() {
     await new Promise(r => setTimeout(r, 60));
     if (doc.querySelector('#playPanel .row-gap-msg')) {
       fail('silent:persists', 'the warning should clear once the player is picked');
+    }
+
+    // CLEAR TAKES THE ERROR WITH THE TREE. "Still needed: the punter" is
+    // a statement about a panel that no longer exists. The commonest way
+    // to meet it is opening the WRONG tree, noticing because a field is
+    // missing, and clearing -- and the complaint then follows you onto
+    // the right tree, where it is false. Reported directly.
+    setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="punt"]'));
+    typeInto(win, doc.getElementById('pp_yards'), '38');
+    click(win, doc.getElementById('pp_review'));
+    await new Promise(r => setTimeout(r, 150));
+    const gm = () => ((doc.getElementById('gameMsg') || {}).textContent || '').trim();
+    const rvNow = () => {
+      const e = doc.getElementById('pp_review_msg');
+      return e && win.getComputedStyle(e).display !== 'none' ? e.textContent.trim() : '';
+    };
+    if (!/still needed/i.test(rvNow())) fail('clear:setup', 'expected an entry error to clear');
+    click(win, doc.getElementById('phaseClearBtn'));
+    await new Promise(r => setTimeout(r, 150));
+    if (rvNow()) fail('clear:stale', 'Clear left the entry error up: ' + JSON.stringify(rvNow()));
+    if (doc.querySelector('.row-gap-msg') || doc.querySelector('.row-gap')) {
+      fail('clear:rowmark', 'Clear left a row still marked as missing something');
+    }
+    if (doc.getElementById('fieldPosWarning').style.display !== 'none') {
+      fail('clear:fieldwarn', 'Clear left the panel warning up');
+    }
+    const rvAfter = doc.getElementById('pp_review_msg');
+    if (rvAfter && win.getComputedStyle(rvAfter).display !== 'none') {
+      fail('clear:reviewmsg', 'Clear left the message beside Review up');
+    }
+
+    // But a GAME notice must survive it. gameMsg also carries things that
+    // outlive a panel -- halftime, connectivity, save failures -- and
+    // those are about the game, not the tree that was open.
+    h.evalIn("showMsg('gameMsg','Back to halftime. Use Start 2nd half.','info');");
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    click(win, doc.getElementById('phaseClearBtn'));
+    await new Promise(r => setTimeout(r, 150));
+    if (!/halftime/i.test(gm())) {
+      fail('clear:overreach', 'Clear removed a game notice it should have left: ' + JSON.stringify(gm()));
+    }
+    h.close();
+  }
+
+  // A QB KNEEL DEFAULTS TO NO LOSS. The kneel is nearly always taken at
+  // the spot, so the common case should need no typing. The field used to
+  // be empty with a placeholder of 1, which asked for a number every time
+  // and suggested the wrong one -- and an emptied box charged a yard
+  // nobody had entered.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 40 });
+    click(win, doc.getElementById('kneelUtilBtn'));
+    if (doc.getElementById('kneel_yds').value !== '0') {
+      fail('kneel:prefill', 'the yards field should start at 0, got ' +
+        JSON.stringify(doc.getElementById('kneel_yds').value));
+    }
+    const kneel = async (prep) => {
+      click(win, doc.getElementById('kneelUtilBtn'));
+      if (prep) prep();
+      click(win, doc.getElementById('kneel_review'));
+      await new Promise(r => setTimeout(r, 150));
+      click(win, doc.getElementById('saveBtn'));
+      await new Promise(r => setTimeout(r, 180));
+      return h.evalIn('plays[plays.length-1].text');
+    };
+    click(win, doc.getElementById('kneel_clear'));
+    const asGiven = await kneel();
+    if (!/no gain/.test(asGiven)) fail('kneel:default', 'an untouched kneel should lose nothing: ' + asGiven);
+    // An EMPTIED box means the same as the 0 it replaced. This is the
+    // case that used to charge a yard silently.
+    const emptied = await kneel(() => typeInto(win, doc.getElementById('kneel_yds'), ''));
+    if (!/no gain/.test(emptied)) fail('kneel:emptied', 'an emptied box should still mean no loss: ' + emptied);
+    // And a real loss still records -- a default of 0 must not swallow one.
+    const typed = await kneel(() => typeInto(win, doc.getElementById('kneel_yds'), '2'));
+    if (!/loss of 2/.test(typed)) fail('kneel:typed', 'a typed loss should survive: ' + typed);
+    // Three kneels, one loss: the team bucket must reconcile.
+    const rush = JSON.parse(h.evalIn('JSON.stringify(computeBoxScore(plays).teamA.rushing)'));
+    if (!rush.TEAM || rush.TEAM.att !== 3 || rush.TEAM.yds !== -2) {
+      fail('kneel:box', 'expected 3 team rushes for -2, got ' + JSON.stringify(rush.TEAM));
+    }
+    h.close();
+  }
+
+  // OFFSIDE, on all three sides at 5 yards. Added 22 Aug on Andy's call:
+  // officials and crews say "offside", and a scorer who hears it should be
+  // able to enter it without first translating it into encroachment. The
+  // NFHS book uses false start and encroachment for scrimmage, which is
+  // true and beside the point in a press box.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+
+    const optionsFor = async (side) => {
+      click(win, doc.getElementById('penUtilBtn'));
+      click(win, doc.querySelector('.penTeamBtn[data-team="' + side + '"]'));
+      await new Promise(r => setTimeout(r, 80));
+      const sel = doc.getElementById('pen_type');
+      const opts = sel ? [...sel.options].map(o => o.textContent.trim()) : [];
+      return { sel, opts };
+    };
+
+    for (const side of ['off', 'def']) {
+      const { sel, opts } = await optionsFor(side);
+      const offsides = opts.filter(o => /offside/i.test(o));
+      if (!offsides.includes('Offside')) {
+        fail('offside:' + side, 'no scrimmage Offside offered to the ' + side + ': ' + offsides.join(' | '));
+      }
+      if (!offsides.includes('Offside (free kick)')) {
+        fail('offside:' + side + ':kick', 'no free-kick Offside offered: ' + offsides.join(' | '));
+      }
+      // Exactly two, and DISTINCTLY NAMED. Three entries -- one per team
+      // plus kicking -- put two identically-labelled "Offside" options in
+      // front of the scorer, which is a choice with no right answer.
+      if (offsides.length !== 2 || offsides[0] === offsides[1]) {
+        fail('offside:' + side + ':dupe', 'offside entries must be two and distinct: ' + offsides.join(' | '));
+      }
+      // Picking it fills 5 yards and logs as Offside.
+      // GUARDED: without this the suite THREW when the foul was missing
+      // rather than failing, which stops every later check and reports
+      // nothing useful. A test that crashes is worse than one that fails.
+      const opt = [...sel.options].find(o => o.textContent.trim() === 'Offside');
+      if (!opt) { click(win, doc.getElementById('phaseClearBtn')); continue; }
+      sel.value = opt.value;
+      sel.dispatchEvent(new win.Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 80));
+      if (doc.getElementById('pen_yds').value !== '5') {
+        fail('offside:' + side + ':yards', 'offside should auto-fill 5 yards, got ' +
+          JSON.stringify(doc.getElementById('pen_yds').value));
+      }
+      click(win, doc.getElementById('pen_review'));
+      await new Promise(r => setTimeout(r, 120));
+      click(win, doc.getElementById('saveBtn'));
+      await new Promise(r => setTimeout(r, 180));
+      const text = h.evalIn('plays[plays.length-1].text');
+      if (!/Offside/.test(text)) fail('offside:' + side + ':log', 'the log should name the foul: ' + text);
+    }
+
+    // The dead-ball toggle is a short wrapped label on a narrow box, not a
+    // sentence running the width of the panel.
+    click(win, doc.getElementById('penUtilBtn'));
+    click(win, doc.querySelector('.penTeamBtn[data-team="off"]'));
+    await new Promise(r => setTimeout(r, 80));
+    const db = doc.getElementById('pen_no_down_toggle');
+    if (!db) fail('deadball:missing', 'no dead-ball toggle');
+    else {
+      const c = win.getComputedStyle(db);
+      if (db.textContent.trim().length > 60) {
+        fail('deadball:length', 'the label is a sentence again: ' + JSON.stringify(db.textContent.trim()));
+      }
+      if (c.maxWidth === 'none') fail('deadball:width', 'the box should be constrained, not full width');
+      if (c.whiteSpace === 'nowrap') fail('deadball:wrap', 'the label should wrap');
+      // What it DOES belongs in the title, readable on demand.
+      if (!/down and distance/i.test(db.getAttribute('title') || '')) {
+        fail('deadball:title', 'the explanation should survive in the tooltip');
+      }
     }
     h.close();
   }
