@@ -259,6 +259,57 @@ async function run() {
     }
   }
 
+  // OPTIONAL CREDITS COLLAPSE, and the returner is one of them. A full
+  // picker grid plus a manual box, on every punt and every kickoff, for a
+  // field whose own label says optional -- it was the largest block on
+  // the punt tree's ordinary path.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="punt"]'));
+    const rb = [...doc.querySelectorAll('#playPanel .opt-block')]
+      .find(b => /Returned/.test(b.textContent));
+    if (!rb) fail('returner:collapse', 'the optional returner should collapse behind a button');
+    else {
+      if (win.getComputedStyle(rb.querySelector('.opt-body')).display !== 'none') {
+        fail('returner:closed', 'it should start closed');
+      }
+      click(win, rb.querySelector('.opt-toggle'));
+      if (win.getComputedStyle(rb.querySelector('.opt-body')).display === 'none') {
+        fail('returner:opens', 'tapping the button should reveal the picker');
+      }
+    }
+    h.close();
+  }
+
+  // THE PASSER GRID FOLDS to a chip once a passer is committed, and the
+  // chip is a way back INTO the list rather than a way to lose the pick.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    const chip = doc.querySelector('.passer-chip');
+    const grid = doc.getElementById('pp_passer_grid');
+    const row = grid && (grid.closest('.pick-row') || grid.parentElement);
+    if (!chip || !grid) { fail('passer:chip', 'no folded passer control'); h.close(); return failures; }
+    // NOT folded on the suggestion -- that is the app's guess, and the
+    // grid is how it gets corrected.
+    if (win.getComputedStyle(chip).display !== 'none') {
+      fail('passer:premature', 'the grid should stay open until a passer is committed');
+    }
+    click(win, doc.querySelector('.pp_passer_pick'));
+    await new Promise(r => setTimeout(r, 60));
+    if (win.getComputedStyle(chip).display === 'none' || win.getComputedStyle(row).display !== 'none') {
+      fail('passer:fold', 'the grid should fold once a passer is picked');
+    }
+    click(win, chip);
+    if (win.getComputedStyle(row).display === 'none') fail('passer:reopen', 'tapping the chip should bring the grid back');
+    if (!grid.querySelector('button.picked')) fail('passer:keeps-pick', 'reopening must not clear the pick');
+    h.close();
+  }
+
   return failures;
 }
 
