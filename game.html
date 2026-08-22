@@ -3444,6 +3444,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // showing a name against 0 yds reads as a stat when it is not one.
         return best && best.v > 0 ? best : null;
       };
+      // A passer's touchdowns are thrown, not scored -- computeBoxScore
+      // keeps them under the same `td` key, so the label distinguishes
+      // them rather than the number pretending they are the same thing.
+      const tds = d => {
+        const n = d.td || 0;
+        return n ? ' · ' + n + ' TD' : '';
+      };
       const rush = top(b.rushing, 'yds');
       const pass = top(b.passing, 'yds');
       const rec  = top(b.receiving, 'yds');
@@ -3456,9 +3463,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       return '<div class="ld-block">' +
         '<span class="lb-team" style="background:' + TEAMS[t].bg + '; color:' +
           safeTextColor(TEAMS[t].bg, TEAMS[t].text) + ';">' + TEAMS[t].name + ' leaders</span>' +
-        line('RUSH', rush, d => (d.att || 0) + ' att, ' + (d.yds || 0) + ' yds') +
-        line('PASS', pass, d => (d.comp || 0) + '/' + (d.att || 0) + ', ' + (d.yds || 0) + ' yds') +
-        line('REC',  rec,  d => (d.rec || 0) + ' rec, ' + (d.yds || 0) + ' yds') +
+        // TDs appended only when there are any. A trailing ", 0 TD" on
+        // every line would double the width of the busiest column to say
+        // nothing, and in a rail this narrow the name is what gets
+        // squeezed for it.
+        line('RUSH', rush, d => (d.att || 0) + ' att, ' + (d.yds || 0) + ' yds' + tds(d)) +
+        line('PASS', pass, d => (d.comp || 0) + '/' + (d.att || 0) + ', ' + (d.yds || 0) + ' yds' + tds(d)) +
+        line('REC',  rec,  d => (d.rec || 0) + ' rec, ' + (d.yds || 0) + ' yds' + tds(d)) +
         '</div>';
     }
   }
