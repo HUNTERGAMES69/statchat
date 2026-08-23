@@ -447,7 +447,14 @@ async function run() {
     h.close();
   }
 
-  // THE HEADER ROW IS ASSEMBLED BELOW 1220, and taken apart again above.
+  // THE HEADER BLOCK IS ASSEMBLED BELOW 1220, and taken apart again above.
+  //
+  // #metaRow was deleted on 23 Aug -- it held Timeouts (already in the
+  // Live totals tile, on screen the whole time) and Last entered (moved
+  // into the Checks tile, where a scorer looks when something needs
+  // attention anyway). Dashboard moved up beside ON AIR into #headerLeft.
+  // On a landscape iPad the header was three rows deep before any
+  // football happened; it is now one.
   // ---------------------------------------------------------------------
   // #onAirBanner is a child of #mainView and #topActions is a child of
   // <body>, written at the FOOT of the file. On desktop both are
@@ -475,26 +482,80 @@ async function run() {
         return e ? (e.parentElement.id || e.parentElement.tagName) : 'absent';
       };
       if (w <= 1219) {
-        if (parentOf('topActions') !== 'metaRow') {
+        if (parentOf('topActions') !== 'headerLeft') {
           fail('header:' + w, 'the action links belong in the header row, found in ' + parentOf('topActions'));
         }
-        if (parentOf('onAirBanner') !== 'metaRow') {
+        if (parentOf('onAirBanner') !== 'headerLeft') {
           fail('header:' + w, 'ON AIR should share the header row rather than taking one of its own');
         }
       } else {
-        if (parentOf('topActions') === 'metaRow') {
+        if (parentOf('topActions') === 'headerLeft') {
           fail('header:' + w, 'desktop should keep the action links pinned, not in the header row');
         }
-        if (parentOf('onAirBanner') === 'metaRow') {
-          fail('header:' + w, 'desktop should keep ON AIR on its own row');
+        // ON AIR now lives in #headerLeft in the MARKUP, at every width --
+        // it shares the top-left block with Dashboard rather than taking a
+        // row of its own. Only #topActions moves in and out.
+        if (parentOf('onAirBanner') !== 'headerLeft') {
+          fail('header:' + w, 'ON AIR should sit beside Dashboard, found in ' + parentOf('onAirBanner'));
         }
       }
       // NOTHING from the reverted rail work may survive at any width.
       if (doc.querySelectorAll('.rail-strip').length) {
         fail('rails:' + w, 'a rail strip is still being created — the revert is incomplete');
       }
+      // The deleted row stays deleted. #topText in particular: it was
+      // written to on every render, and a hidden element still being
+      // written to looks alive in the source and is not.
+      if (doc.getElementById('metaRow')) fail('meta:' + w, '#metaRow should be gone');
+      if (doc.getElementById('topText')) fail('meta:' + w, '#topText should be gone');
+      // Last entered has to have somewhere to render, or the hint writes
+      // into nothing and the scorer silently loses it.
+      const lc = doc.getElementById('lastClockText');
+      if (!lc) fail('clock:' + w, 'no last-entered element at all');
+      else if (!doc.getElementById('validationCard').contains(lc)) {
+        fail('clock:' + w, 'last entered should live in the Checks tile');
+      }
       h.close();
     }
+  }
+
+  // THE RAILS MUST TRACK THE CARD WIDTH.
+  // ---------------------------------------------------------------------
+  // The rails sit at `50% + half the card + a gutter`. That half used to
+  // be written out as a literal 380 in three separate rules, so widening
+  // the card meant finding all three and halving by hand -- and missing
+  // one would lay a rail over the card. It is now a single variable.
+  //
+  // Asserted as arithmetic, not as a fixed string: the point is that the
+  // two numbers AGREE, not that either has a particular value. Widening
+  // the card in future should not fail this test; only decoupling them
+  // should.
+  {
+    const src = require('fs').readFileSync(__dirname + '/../game.html', 'utf8');
+    const half = src.match(/--sc-card-half:\s*(\d+)px/);
+    const full = src.match(/--sc-card-w:\s*(\d+)px/);
+    if (!half || !full) {
+      fail('cardw:vars', 'the card width and its half should both be declared as variables');
+    } else if (parseInt(full[1], 10) !== parseInt(half[1], 10) * 2) {
+      fail('cardw:half', '--sc-card-half must be exactly half of --sc-card-w, got ' +
+        half[1] + ' and ' + full[1]);
+    }
+    // And nothing may still be hardcoding the old half-width.
+    const stale = (src.match(/calc\(50% \+ 380px/g) || []).length;
+    if (stale) fail('cardw:stale', stale + ' rule(s) still use a literal 380px instead of the variable');
+
+    // The rails resolve against it at desktop width.
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    Object.defineProperty(win, 'innerWidth', { value: 1600, configurable: true });
+    win.dispatchEvent(new win.Event('resize'));
+    await new Promise(r => setTimeout(r, 200));
+    const want = 'calc(50% + ' + (parseInt(half[1], 10) + 18) + 'px)';
+    const got = win.getComputedStyle(doc.getElementById('rightRail')).left;
+    if (got !== want) {
+      fail('cardw:rail', 'the rail should sit at ' + want + ', got ' + got);
+    }
+    h.close();
   }
 
   return failures;
