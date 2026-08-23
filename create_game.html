@@ -779,65 +779,87 @@
     // empty string is NaN, and filtering by NaN would return zero
     // players rather than the whole roster, reading as an empty
     // roster rather than an unconfigured one.
-    const gameSeasonYear = parseInt(document.getElementById('seasonYear').value, 10) || new Date().getFullYear();
-    const { data: players, error: playersError } = await supabaseClient
-      .from('players').select('name, primary_position, default_jersey_number, id, unit_override')
-      .eq('team_id', ourTeamId).eq('season_year', gameSeasonYear);
-    if (playersError){
-      showView('mainView');
-      showMsg('setupMsg', 'Could not load your roster: ' + playersError.message, 'error');
-      return;
+    // THE ROSTER FOLLOWS THE SEASON YEAR, and re-follows it when the
+    // year is changed.
+    // -------------------------------------------------------------------
+    // This ran ONCE inside init(), reading the season field at that
+    // moment -- which on a new game is the team's CURRENT season. Change
+    // the year afterwards to enter a game from a past season and nothing
+    // re-fetched: the current roster was snapshotted into game_rosters
+    // and the game was scored against players who were not on that team
+    // that year. Reported directly, entering a 2025 game.
+    //
+    // The comment below already spelled out that an old game must resolve
+    // against its own historical roster. It was right about the rule and
+    // wrong about when the field is settled: the year is not final until
+    // the coach stops changing it.
+    async function loadOurRoster(){
+      const gameSeasonYear = parseInt(document.getElementById('seasonYear').value, 10) || new Date().getFullYear();
+      const { data: players, error: playersError } = await supabaseClient
+        .from('players').select('name, primary_position, default_jersey_number, id, unit_override')
+        .eq('team_id', ourTeamId).eq('season_year', gameSeasonYear);
+      if (playersError){
+        showView('mainView');
+        showMsg('setupMsg', 'Could not load your roster: ' + playersError.message, 'error');
+        return;
+      }
+
+      // Reported directly: resolving "our" team's needs-assignment radio
+      // (a player whose position isn't a recognized one) never stuck --
+      // every new game, or even reopening this same one, asked again for
+      // the same two players, since nothing about the choice was ever
+      // saved anywhere except THIS game's own game_rosters snapshot.
+      // unit_override is that missing, persistent home for it: read here
+      // and preferred over guessing from position, and written back the
+      // moment the radio is resolved, a few hundred lines down.
+      const entries = (players || [])
+        .filter(p => p.default_jersey_number)
+        .map(p => ({ number: p.default_jersey_number, name: p.name, position: p.primary_position, explicitUnit: p.unit_override || null, playerId: p.id }));
+      let { resolved, conflicts, needsAssignment, sharedInfo } = resolveByNumber(entries);
+
+      // In edit mode, resolveByNumber just re-picks a default (the first
+      // entry) for every conflict, since it has no memory of what was
+      // chosen last time. Load whatever was actually saved for this game
+      // and use it to override those defaults, so a coach's prior "quick
+      // check" choices are still there instead of silently resetting.
+      if (editGameId){
+        const { data: savedOurRows } = await supabaseClient
+          .from('game_rosters').select('jersey_number, unit, player_id, player_name').eq('game_id', editGameId).eq('team_side', 'teamA');
+        (savedOurRows || []).forEach(saved => {
+          const bucket = resolved[saved.jersey_number];
+          if (!bucket) return;
+          const match = entries.find(en =>
+            String(en.number).trim() === String(saved.jersey_number).trim() &&
+            (en.playerId === saved.player_id || en.name === saved.player_name)
+          );
+          if (match){
+            bucket[saved.unit] = (bucket[saved.unit] || []);
+            if (bucket[saved.unit].indexOf(match) === -1) bucket[saved.unit].push(match);
+          }
+        });
+        conflicts = filterUnresolvedConflicts(conflicts, savedOurRows);
+      }
+
+      ourResolved = resolved;
+      ourConflictsList = conflicts;
+      ourNeedsAssignment = needsAssignment;
+      document.getElementById('ourRosterStatus').innerHTML =
+        '<div class="roster-summary">' + entries.length + ' players loaded from your roster' +
+        (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>' +
+        sharedNumbersHtml(sharedInfo);
+      renderAssignmentUI('ourAssignments', 'our', needsAssignment, ourResolved);
+      renderConflictUI('ourConflicts', 'our', conflicts, ourResolved);
+      // A roster just became available, so any starter numbers already
+      // typed can now be resolved to actual players. Seeding before
+      // uploading is the normal order, not an edge case.
+      wireStarterResolve();
     }
-
-    // Reported directly: resolving "our" team's needs-assignment radio
-    // (a player whose position isn't a recognized one) never stuck --
-    // every new game, or even reopening this same one, asked again for
-    // the same two players, since nothing about the choice was ever
-    // saved anywhere except THIS game's own game_rosters snapshot.
-    // unit_override is that missing, persistent home for it: read here
-    // and preferred over guessing from position, and written back the
-    // moment the radio is resolved, a few hundred lines down.
-    const entries = (players || [])
-      .filter(p => p.default_jersey_number)
-      .map(p => ({ number: p.default_jersey_number, name: p.name, position: p.primary_position, explicitUnit: p.unit_override || null, playerId: p.id }));
-    let { resolved, conflicts, needsAssignment, sharedInfo } = resolveByNumber(entries);
-
-    // In edit mode, resolveByNumber just re-picks a default (the first
-    // entry) for every conflict, since it has no memory of what was
-    // chosen last time. Load whatever was actually saved for this game
-    // and use it to override those defaults, so a coach's prior "quick
-    // check" choices are still there instead of silently resetting.
-    if (editGameId){
-      const { data: savedOurRows } = await supabaseClient
-        .from('game_rosters').select('jersey_number, unit, player_id, player_name').eq('game_id', editGameId).eq('team_side', 'teamA');
-      (savedOurRows || []).forEach(saved => {
-        const bucket = resolved[saved.jersey_number];
-        if (!bucket) return;
-        const match = entries.find(en =>
-          String(en.number).trim() === String(saved.jersey_number).trim() &&
-          (en.playerId === saved.player_id || en.name === saved.player_name)
-        );
-        if (match){
-          bucket[saved.unit] = (bucket[saved.unit] || []);
-          if (bucket[saved.unit].indexOf(match) === -1) bucket[saved.unit].push(match);
-        }
-      });
-      conflicts = filterUnresolvedConflicts(conflicts, savedOurRows);
-    }
-
-    ourResolved = resolved;
-    ourConflictsList = conflicts;
-    ourNeedsAssignment = needsAssignment;
-    document.getElementById('ourRosterStatus').innerHTML =
-      '<div class="roster-summary">' + entries.length + ' players loaded from your roster' +
-      (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>' +
-      sharedNumbersHtml(sharedInfo);
-    renderAssignmentUI('ourAssignments', 'our', needsAssignment, ourResolved);
-    renderConflictUI('ourConflicts', 'our', conflicts, ourResolved);
-    // A roster just became available, so any starter numbers already
-    // typed can now be resolved to actual players. Seeding before
-    // uploading is the normal order, not an edge case.
-    wireStarterResolve();
+    await loadOurRoster();
+    // Re-fetch on change. 'change' rather than 'input' so a number field
+    // does not fire a query per keystroke while 2025 is being typed.
+    document.getElementById('seasonYear').addEventListener('change', () => {
+      loadOurRoster().catch(() => {});
+    });
 
     if (editGameStatus === 'final'){
       setFormLocked(true);
