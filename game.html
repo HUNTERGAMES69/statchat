@@ -7221,6 +7221,102 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   //
   // `change` is dispatched on the ones being cleared so any panel logic
   // watching them -- field visibility, spot prefills -- unwinds too.
+  // THE HEADER IS LAID OUT FROM SCRIPT, NOT FROM THE STYLESHEET.
+  // ---------------------------------------------------------------------
+  // Written this way after a long run of CSS fixes on 23 Aug that were
+  // correct in the file, correct in the harness, and did nothing in the
+  // browser. Two reasons they kept failing, and both are avoided here:
+  //
+  //   * MEDIA QUERIES. Every fix sat in @media (max-width: 1219px). An
+  //     iPad in Safari's "Request Desktop Website" mode reports a
+  //     desktop-class width, so the query never matched and none of them
+  //     ran. Nothing here asks the stylesheet anything.
+  //
+  //   * THE CASCADE. #topActions and #onAirBanner carry absolute
+  //     positioning from base rules, syncAir writes top/height inline, and
+  //     .hdr-btn's metrics are !important and shared with controls that
+  //     want a different shape. Every override uncovered another.
+  //
+  // Inline styles set from script beat all of it. The trade is that this
+  // layout now lives in two places -- here and the stylesheet -- so the
+  // rule is: the stylesheet describes DESKTOP, and this function is the
+  // only thing that changes it for touch. Nothing here runs on a desktop
+  // except the one width calculation at the end.
+  function layoutHeader(){
+    const touch = (window.matchMedia &&
+                   window.matchMedia('(hover: none) and (pointer: coarse)').matches) ||
+                  window.innerWidth <= 1219;
+    const left = document.getElementById('headerLeft');
+    const acts = document.getElementById('topActions');
+    const air  = document.getElementById('onAirBanner');
+    const rail = document.getElementById('rightRail');
+    if (!acts) return;
+
+    if (touch){
+      // ONE WRAPPING ROW. Everything static, so nothing can overlap, and
+      // wrap:wrap so a narrow screen gets a second line rather than
+      // controls sliding off the right edge.
+      [left, acts].forEach(el => {
+        if (!el) return;
+        el.style.position = 'static';
+        el.style.left = el.style.right = el.style.top = '';
+        el.style.height = 'auto';
+        el.style.width = 'auto';
+        el.style.display = 'flex';
+        el.style.flexWrap = 'wrap';
+        el.style.alignItems = 'center';
+        el.style.gap = '8px';
+        el.style.margin = '0 0 8px';
+      });
+      if (air){
+        air.style.position = 'static';
+        air.style.left = air.style.right = air.style.top = '';
+        air.style.height = 'auto';
+      }
+      // Each control keeps its own width and may shrink before the row
+      // wraps. Explicitly NOT stretched: five stretched controls on a
+      // 768px screen is what produced the overlap.
+      [left, acts].forEach(el => {
+        if (!el) return;
+        [...el.children].forEach(c => {
+          c.style.position = 'static';
+          c.style.top = '';
+          c.style.height = 'auto';
+          c.style.flex = '0 1 auto';
+          c.style.margin = '0';
+        });
+      });
+    } else {
+      // DESKTOP. Clear everything the touch branch may have set, then give
+      // the action row the same span as the rail beneath it so the two
+      // line up -- the thing the stylesheet was meant to do and did not.
+      [left, acts, air].forEach(el => {
+        if (!el) return;
+        ['position','left','right','top','height','width','display',
+         'flexWrap','alignItems','gap','margin'].forEach(k => { el.style[k] = ''; });
+      });
+      [left, acts].forEach(el => {
+        if (!el) return;
+        [...el.children].forEach(c => {
+          ['position','top','height','flex','margin'].forEach(k => { c.style[k] = ''; });
+        });
+      });
+      if (rail){
+        // Measured from the rail itself rather than recomputed from the
+        // card width, so the two cannot drift apart.
+        const r = rail.getBoundingClientRect();
+        acts.style.position = 'absolute';
+        acts.style.left = Math.round(r.left) + 'px';
+        acts.style.width = Math.round(r.width) + 'px';
+        acts.style.right = 'auto';
+        acts.style.display = 'flex';
+        acts.style.gap = '8px';
+        [...acts.children].forEach(c => { c.style.flex = '1 1 auto'; });
+      }
+    }
+  }
+  window.addEventListener('resize', layoutHeader);
+
   // THE HEADER ROW IS ASSEMBLED AT TABLET WIDTH.
   // ---------------------------------------------------------------------
   // #onAirBanner is a child of #mainView and #topActions is a child of
@@ -7255,7 +7351,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     });
   }
   window.addEventListener('resize', layoutHeaderForWidth);
+  window.addEventListener('resize', () => setTimeout(layoutHeader, 0));
   layoutHeaderForWidth();
+  layoutHeader();
 
   function wireExclusiveToggles(ids, afterChange){
     const clearOthers = (keepId) => {
