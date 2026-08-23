@@ -2133,6 +2133,30 @@ hex colours, 6 breakpoints, 0 pages on a shared sheet.
   broadcast_leaders, broadcast_stats, game. **Do `game.html` LAST** -- 439
   inline styles, and it is the page a mistake costs most.
 
+### A REAL BREAK THIS CAUSED, 22 Aug -- read this first
+
+The first converter replaced EVERY hex in a file, including ones inside
+JavaScript string literals:
+
+    game.opponent_primary_color || '#8B0000'
+ -> game.opponent_primary_color || 'var(--sc-red-deep, #8b0000)'
+
+That value is passed to safeTextColor() and the contrast maths, which
+parse hex. `var(...)` is not a colour to them. It shipped to GitHub in
+dashboard.html, create_game.html and player_report.html before anyone
+noticed, and a visual spot-check did NOT catch it -- the fault only shows
+on the opponent-colour fallback and the chart palette.
+
+It was found by a TEXTUAL PROOF, not a rendering one: reverse the
+substitution and diff against the pristine file. Byte-identical means the
+conversion changed nothing but names. That is the right check for a
+same-value swap and it should be run on every page from now on.
+
+**Do not convert `style="..."` attributes by pattern matching.** The
+obvious regex runs past the closing quote whenever an attribute is built
+by JS concatenation -- `'<div style="background:' + colour + '">'` -- and
+swallows the code between. Only `<style>` blocks are converted now.
+
 ### THE VERIFICATION GAP -- read before continuing
 
 The conversion is a same-value swap (`#1a7a4c` -> `var(--sc-green,
@@ -2143,8 +2167,11 @@ AND does not implement `var()` at all -- it returns the literal string
 
 So the usual before/after comparison reports every converted element as
 changed, and there is no way to tell a real break from the tooling gap.
-Ten pages were converted on that basis and are UNVERIFIED BY TEST. They
-were syntax-checked and each still loads; that is all that was proven.
+Ten pages were converted on that basis. They are unverified BY TEST --
+syntax-checked and loading is all the harness could prove -- but Andy
+spot-checked them in a real browser on 22 Aug and confirmed they render
+correctly. That is the evidence standing behind those ten; it is a human
+eye, not a green test, and the next batch needs the same.
 
 Two things follow:
 
@@ -2154,7 +2181,9 @@ Two things follow:
   every converted page: a single point of failure for 18 files. The four
   delivered before this was understood have been re-issued with fallbacks.
 - **Spot-check each converted page in a real browser** before trusting it.
-  A glance is enough; the failure mode would be obvious, not subtle.
+  A glance is enough; the failure mode would be obvious, not subtle. Done
+  for the first ten (22 Aug) -- keep doing it until the harness gap below
+  is closed.
 
 - [ ] **Teach the harness to load `statchat.css`** so this becomes
   verifiable -- jsdom takes `resources: 'usable'`, and the var() gap can be
