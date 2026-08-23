@@ -4955,9 +4955,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // The score is in the prompt because it is the thing worth checking
     // before the half closes. A missed PAT noticed here is a ten-second
     // fix; noticed after the interval it is an unlock and a re-entry.
+    // Q2 named explicitly. The old wording warned in general terms and
+    // left the scorer to work out what was wrong.
+    const missingQ2 = missingQuarters(2);
     const ok = confirm('End the 1st half now? Score at the half: ' +
       TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' +
       TEAMS.teamB.name + ' ' + state.scores.teamB + '.\n\n' +
+      (missingQ2.length
+        ? 'WARNING: Q2 was never started — there is no quarter marker for it, ' +
+          'so every play since Q1 is filed under the first quarter.\n\n'
+        : '') +
       'This closes the first half and moves to halftime.');
     if (!ok) return false;
     const heClock = halfEndClock(state);
@@ -5006,8 +5013,40 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // check the coach learns to click past is worse than no check.
   //
   // It warns, it never blocks. "Finalize anyway" is always available.
+  // QUARTERS THAT WERE NEVER STARTED.
+  // ---------------------------------------------------------------------
+  // A quarter marker is how the app knows a period began. Miss one and
+  // every play after it is filed under the previous quarter -- the drive
+  // log, the clock, the quarter-by-quarter scoring on the recap and the
+  // broadcast feed all inherit it, and none of them can tell.
+  //
+  // End 1st half and End game both warned before, but only in general
+  // terms. Reported: the warning never says WHICH quarter is missing, so
+  // a scorer reading it has no idea what to go and fix.
+  function missingQuarters(upTo){
+    const seen = new Set([1]);   // Q1 starts with the game itself
+    plays.forEach(p => { if (p.effect && p.effect.setQuarter) seen.add(p.effect.setQuarter); });
+    const out = [];
+    for (let q = 2; q <= upTo; q++) if (!seen.has(q)) out.push(q);
+    return out;
+  }
+
   function validateGame(){
     const issues = [];
+
+    // Quarters first: it is the one thing here that mis-files every play
+    // after it rather than just looking odd on its own.
+    const missingQ = missingQuarters(4);
+    if (missingQ.length){
+      // "Q2, Q3 and Q4", not "Q2 and Q3 and Q4".
+      const qs = missingQ.map(q => 'Q' + q);
+      const qList = qs.length === 1 ? qs[0]
+        : qs.slice(0, -1).join(', ') + ' and ' + qs[qs.length - 1];
+      issues.push(qList + ' ' +
+        (missingQ.length === 1 ? 'was' : 'were') + ' never started — ' +
+        'no quarter marker, so plays after that point are filed under the ' +
+        'previous quarter.');
+    }
 
     // 1. Plays that never reached the server. The most urgent one at
     //    finalize time: the record is about to be locked in incomplete.
@@ -5710,10 +5749,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           document.getElementById('gr_ko_ret_fum_wrap').style.display = on ? 'block' : 'none';
           const kickingRecoversFum = on && content.querySelector('input[name=gr_koret_fumrec]:checked').value === 'k';
           document.getElementById('gr_koretfumspot_wrap').style.display = kickingRecoversFum ? 'block' : 'none';
+          // AND HIDE THE GENERAL ONE. Two spot fields were on screen at
+          // once when the kicking team recovered the fumble, and they
+          // contradicted each other: this branch's own field asked where
+          // the KICKING team took over, while gr_spot_recv above it was
+          // still headed "Ball spot after the return (sets 1st down for
+          // the receiving team)" -- for a play in which the receiving
+          // team does not have the ball at all. Reported with a
+          // screenshot showing both.
+          //
+          // Only when the KICKING team recovers. A receiving-team
+          // recovery is an ordinary return that happened to include a
+          // fumble they got back, so the general spot is exactly right
+          // and this branch has no field of its own.
+          const genRecv = document.getElementById('gr_spot_recv');
+          if (genRecv) genRecv.style.display = kickingRecoversFum ? 'none' : 'block';
+          // Green like every other picked toggle in this panel -- the
+          // brown here was the last survivor of the per-button styling
+          // that made Muff / Fumble the wrong colour.
           grKoRetFumBtn.textContent = on ? '\u2713 Fumbled during the return' : 'Fumbled during the return';
-          grKoRetFumBtn.style.background = on ? '#a05a00' : '#fff';
+          grKoRetFumBtn.style.background = on ? '#1a7a4c' : '#fff';
           grKoRetFumBtn.style.color = on ? '#fff' : '#555';
-          grKoRetFumBtn.style.borderColor = on ? '#a05a00' : '#ccc';
+          grKoRetFumBtn.style.borderColor = on ? '#1a7a4c' : '#ccc';
         };
         grKoRetFumBtn.addEventListener('click', () => {
           grKoRetFumCb.checked = !grKoRetFumCb.checked;
