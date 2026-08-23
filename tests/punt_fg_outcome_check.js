@@ -449,6 +449,68 @@ async function run() {
     await badSnap('deftd', 6, /TOUCHDOWN/);
   }
 
+  // WHICH TEAM RECOVERED THE BLOCK OR THE MUFFED HOLD.
+  // ---------------------------------------------------------------------
+  // Reported 23 Aug, after a first attempt at item 6 that missed it: the
+  // panel went straight to "Recovered by", whose picker defBlock builds
+  // from defenseEligible() -- the BLOCKING side only. So the tree quietly
+  // assumed the blocking team recovered every block, and a kicking team
+  // falling on its own blocked kick, which is what usually happens, could
+  // not be entered at all.
+  //
+  // Three things have to follow the answer: the picker's roster, the name
+  // the log resolves, and who has the ball next.
+  {
+    const check = async (tog, grp, suffix, label) => {
+      for (const team of ['r', 'k']) {
+        const h = await bootGamePage();
+        const doc = h.window.document, win = h.window;
+        setDrive(h, { down: 4, distance: 3, side: 'opp', yardline: 25 });
+        click(win, doc.querySelector('.ptypeBtn[data-type="fg"]'));
+        click(win, doc.querySelector('.pp_kicker_pick'));
+        const t = doc.getElementById(tog);
+        if (!t) { fail('fgrec:' + label, 'no ' + tog); h.close(); return; }
+        click(win, t);
+        await new Promise(r => setTimeout(r, 90));
+        const radio = doc.querySelector('input[name=' + grp + '][value=' + team + ']');
+        if (!radio) {
+          fail('fgrec:' + label, 'no way to choose which team recovered the ' + label);
+          h.close();
+          return;
+        }
+        radio.checked = true;
+        radio.dispatchEvent(new win.Event('change', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 90));
+        // THE PICKER FOLLOWS. Picking a number off the wrong roster is
+        // worse than no picker: the name that comes back is a real player
+        // who was not on the field for it.
+        const names = [...doc.querySelectorAll('.pp_credit_pick' + suffix)]
+          .map(b => b.textContent.trim());
+        if (team === 'k' && !names.some(n => /Kicker|Punter|Returner/.test(n))) {
+          fail('fgrec:' + label + ':roster',
+            'the kicking team\'s players should be offered, got [' + names.join(', ') + ']');
+        }
+        const btn = doc.querySelector('.pp_credit_pick' + suffix);
+        if (btn) click(win, btn);
+        click(win, doc.getElementById('pp_review'));
+        await new Promise(r => setTimeout(r, 200));
+        click(win, doc.getElementById('saveBtn'));
+        await new Promise(r => setTimeout(r, 240));
+        // AND POSSESSION FOLLOWS. A block the kicking team falls on is not
+        // a turnover; this handed the ball over on every block.
+        const poss = h.evalIn('computeState().possession');
+        const want = team === 'k' ? 'teamA' : 'teamB';
+        if (poss !== want) {
+          fail('fgrec:' + label + ':poss',
+            label + ' recovered by ' + team + ' should leave possession ' + want + ', got ' + poss);
+        }
+        h.close();
+      }
+    };
+    await check('pp_fg_blocked_cb_toggle', 'pp_fgb_rec', '_fgb', 'blocked');
+    await check('pp_fg_muffhold_toggle', 'pp_fgmuff_rec', '_fgmuff', 'muffed hold');
+  }
+
   return failures;
 }
 
