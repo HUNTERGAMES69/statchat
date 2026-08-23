@@ -6650,7 +6650,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // ON AIR sits level with the banner and matches its height. Same
     // reasoning as the dock: measured, not hardcoded, because the
     // banner's height follows its own content.
-    const air = document.getElementById('onAirBanner');
+    // THE POSITIONED ELEMENT IS #headerLeft, NOT THE BUTTON.
+    // -------------------------------------------------------------------
+    // syncAir writes `top` and `height` INLINE, and an inline style beats
+    // any stylesheet rule -- so while this still pointed at the button,
+    // moving the absolute positioning onto the container had no visible
+    // effect at all. The button kept the banner's height and its old
+    // place, Dashboard stayed on a row of its own, and two attempts to
+    // fix it in CSS changed nothing. Reported twice as "no change".
+    //
+    // Pointed at the container, the two children lay out inside it.
+    const air = document.getElementById('headerLeft') ||
+                document.getElementById('onAirBanner');
     const syncAir = () => {
       if (typeof document === 'undefined' || !document || !air) return;
       const banner = document.querySelector('.banner');
