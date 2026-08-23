@@ -447,52 +447,29 @@ async function run() {
     h.close();
   }
 
-  // COLLAPSIBLE RAILS AND THE ASSEMBLED HEADER — landscape tablet only.
+  // THE HEADER ROW IS ASSEMBLED BELOW 1220, and taken apart again above.
   // ---------------------------------------------------------------------
-  // NOTE ON WHAT THIS CAN AND CANNOT PROVE. jsdom does not support
-  // matchMedia and ignores @media entirely, so the CSS half of this is
-  // NOT verified here -- the widths, the rotated strip, the padding all
-  // have to be looked at on a real iPad. What IS verified is the
-  // JavaScript: which classes are applied at which width, that only one
-  // rail is ever open in the band, and that the header elements are moved
-  // and moved back. That is the half that has broken twice.
+  // #onAirBanner is a child of #mainView and #topActions is a child of
+  // <body>, written at the FOOT of the file. On desktop both are
+  // position:absolute so their source position is invisible -- but below
+  // 1220 they drop to static and flow where they are written, which put
+  // the Broadcast/Help/Crew view links at the very bottom of the page and
+  // gave ON AIR a whole row of its own. On a landscape iPad, about 700px
+  // of usable height, neither is affordable.
+  //
+  // Moved physically rather than with CSS `order`, which only sorts
+  // SIBLINGS -- these live in three different parents.
+  //
+  // (The collapsible rails that used to be tested here were reverted on
+  // 23 Aug; see TODO.md. Portrait stacks and is good enough, and the
+  // landscape work needs a fresh start.)
   {
-    const widths = [
-      [900,  'portrait tablet — stacked, no collapsing'],
-      [1180, 'landscape iPad — one rail at a time'],
-      [1600, 'desktop — both rails, header pinned']
-    ];
-    for (const [w, label] of widths) {
+    for (const w of [900, 1180, 1600]) {
       const h = await bootGamePage();
       const doc = h.window.document, win = h.window;
       Object.defineProperty(win, 'innerWidth', { value: w, configurable: true });
       win.dispatchEvent(new win.Event('resize'));
       await new Promise(r => setTimeout(r, 200));
-      const collapsed = id => doc.getElementById(id).classList.contains('rail-collapsed');
-      const band = w >= 1024 && w <= 1219;
-
-      if (band) {
-        // Exactly one open, and it is Current drive by default -- Andy
-        // checks it constantly while entering.
-        if (collapsed('driveDock')) fail('rails:' + w, 'Current drive should be open by default');
-        if (!collapsed('rightRail')) fail('rails:' + w, 'both rails open leaves ~176px each — too narrow to use');
-        // Tapping the shut one swaps them.
-        doc.querySelector('#rightRail > .rail-strip').click();
-        await new Promise(r => setTimeout(r, 80));
-        if (!collapsed('driveDock') || collapsed('rightRail')) {
-          fail('rails:' + w + ':swap', 'tapping a strip should open it and close the other');
-        }
-      } else {
-        // OUTSIDE the band nothing may be left collapsed, or a desktop
-        // user inherits a 34px strip.
-        if (collapsed('driveDock') || collapsed('rightRail')) {
-          fail('rails:' + w, label + ': rails must not be collapsed outside the band');
-        }
-      }
-
-      // The header elements move into #metaRow below 1220 and back above.
-      // #topActions is a child of <body> written at the FOOT of the file,
-      // so left alone it lands at the very bottom of the page.
       const parentOf = id => {
         const e = doc.getElementById(id);
         return e ? (e.parentElement.id || e.parentElement.tagName) : 'absent';
@@ -508,49 +485,15 @@ async function run() {
         if (parentOf('topActions') === 'metaRow') {
           fail('header:' + w, 'desktop should keep the action links pinned, not in the header row');
         }
+        if (parentOf('onAirBanner') === 'metaRow') {
+          fail('header:' + w, 'desktop should keep ON AIR on its own row');
+        }
+      }
+      // NOTHING from the reverted rail work may survive at any width.
+      if (doc.querySelectorAll('.rail-strip').length) {
+        fail('rails:' + w, 'a rail strip is still being created — the revert is incomplete');
       }
       h.close();
-    }
-  }
-
-  // THE RAIL STRIP MUST BE HIDDEN BY DEFAULT, not only outside the band.
-  // ---------------------------------------------------------------------
-  // setupRails() creates the strip unconditionally -- built once and kept,
-  // because rebuilding it on resize would drop its listener. So the
-  // element exists at EVERY width, and something has to hide it.
-  //
-  // The hide rule was first written INSIDE the landscape-tablet query,
-  // which meant desktop had no rule hiding it at all and the button
-  // rendered as a black box at the foot of each rail. Reported with a
-  // screenshot.
-  //
-  // Asserted from the SOURCE rather than from getComputedStyle, because
-  // jsdom ignores @media entirely -- it would report display:none at
-  // every width whether the rule were scoped correctly or not, and a
-  // check that cannot fail is worse than no check.
-  {
-    const src = require('fs').readFileSync(__dirname + '/../game.html', 'utf8');
-    const css = (src.match(/<style[^>]*>([\s\S]*?)<\/style>/g) || []).join('\n');
-    const insideMedia = idx => {
-      let depth = 0, media = false;
-      for (let i = 0; i < idx; i++) {
-        if (css.startsWith('@media', i)) media = true;
-        if (css[i] === '{') depth++;
-        else if (css[i] === '}') { depth--; if (depth === 0) media = false; }
-      }
-      return media;
-    };
-    const hide = css.indexOf('> .rail-strip, #rightRail > .rail-strip { display:none; }');
-    if (hide === -1) {
-      fail('strip:hide', 'no default rule hiding the rail strip — it will render on desktop');
-    } else if (insideMedia(hide)) {
-      fail('strip:hide-scoped',
-        'the hide rule sits inside a media query, so it does not apply on desktop');
-    }
-    const show = css.indexOf('#driveDock.rail-collapsed > .rail-strip');
-    if (show !== -1 && !insideMedia(show)) {
-      fail('strip:show-global',
-        'the show rule must stay inside the landscape-tablet query');
     }
   }
 
