@@ -169,6 +169,18 @@ async function run() {
       own.dispatchEvent(new win.Event('change', { bubbles: true }));
       await new Promise(r => setTimeout(r, 80));
       if (spot) {
+        // VISIBLE, not merely present. The first version of this test
+        // clicked the control without checking it was on screen, and
+        // passed while the whole block sat inside the OPPONENT-recovery
+        // div -- hidden on every own recovery, which is the only time it
+        // applies. Andy found it in the browser; the test could not.
+        const wrap = doc.getElementById('pp_rushfum_ownspot_wrap');
+        let vis = !!wrap, node = wrap;
+        while (vis && node && node !== doc.body) {
+          if (win.getComputedStyle(node).display === 'none') vis = false;
+          node = node.parentElement;
+        }
+        if (!vis) { fail('ownfum:hidden', 'the recovery spot is not on screen for an own recovery'); h.close(); return null; }
         const side = doc.querySelector('.pp_rushfum_ownspot_side[data-side="own"]');
         if (!side) { h.close(); return null; }
         click(win, side);
@@ -219,6 +231,52 @@ async function run() {
     if (r && r.st.possession !== 'teamB') {
       fail('ownfum:possession', 'possession should change, got ' + r.st.possession);
     }
+  }
+
+  // THE CONTROL MUST BE VISIBLE ON ALL THREE TREES, and hidden when the
+  // OPPONENT recovers. Three separate div-nesting faults put it in the
+  // wrong branch on rush, pass and sack in turn.
+  {
+    const check = async (tree, pfx, ptype) => {
+      const h = await bootGamePage();
+      const doc = h.window.document, win = h.window;
+      setDrive(h, { down: 2, distance: 7, side: 'own', yardline: 30 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="' + ptype + '"]'));
+      if (tree === 'sack') {
+        const sb = [...doc.querySelectorAll('#playPanel button')]
+          .find(b => /^Sacked$/.test(b.textContent.trim()));
+        if (sb) click(win, sb);
+        await new Promise(r => setTimeout(r, 60));
+      }
+      const tog = doc.getElementById('pp_' + tree + '_fumbled_toggle');
+      if (!tog) { fail('ownfum:' + tree + ':toggle', 'no fumble toggle'); h.close(); return; }
+      click(win, tog);
+      await new Promise(r => setTimeout(r, 80));
+      const onScreen = () => {
+        let e = doc.getElementById('pp_' + pfx + '_ownspot_wrap');
+        if (!e) return false;
+        while (e && e !== doc.body) {
+          if (win.getComputedStyle(e).display === 'none') return false;
+          e = e.parentElement;
+        }
+        return true;
+      };
+      const pick = v => {
+        const r = doc.querySelector('input[name=pp_' + tree + '_fumrec][value=' + v + ']');
+        r.checked = true;
+        r.dispatchEvent(new win.Event('change', { bubbles: true }));
+      };
+      pick('own');
+      await new Promise(r => setTimeout(r, 80));
+      if (!onScreen()) fail('ownfum:' + tree + ':own', 'the recovery spot should show when your own team recovers');
+      pick('opp');
+      await new Promise(r => setTimeout(r, 80));
+      if (onScreen()) fail('ownfum:' + tree + ':opp', 'the OWN recovery spot should hide when the opponent recovers');
+      h.close();
+    };
+    await check('rush', 'rushfum', 'rush');
+    await check('pass', 'passfum', 'pass');
+    await check('sack', 'sackfum', 'pass');
   }
 
   return failures;
