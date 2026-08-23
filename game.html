@@ -388,6 +388,43 @@
 
      Declared once here and referenced everywhere, so the next row added
      cannot quietly introduce a tenth value. */
+/* =====================================================================
+   ENTRY TREE LAYOUT RULES
+   =====================================================================
+   Five rules. Every one of them exists because the same fault was
+   reported on four or five panels at once -- a panel built by hand,
+   slightly differently from its neighbours, and nobody notices until a
+   scorer opens the two side by side. Anything new in a tree follows
+   these; whitelist_check enforces all five across every tree, so a panel
+   that breaks one fails the suite rather than waiting to be spotted.
+
+   1. HORIZONTAL GAP. One value, --pp-gap, for every row of controls.
+      Never an inline gap on a row. 4px (the digit pad's grid), 9px
+      (inside a player button, between number and name) and 14px (the
+      two-column split) are deliberately different things and are exempt.
+
+   2. MANUAL ENTRY BOXES sit INSIDE their picker grid, immediately after
+      the last player -- class grid-inline-manual on the grid, the input
+      as its last child. Never a sibling of the grid: that makes it a
+      .pick-row child, which gives it a fixed 96px basis at the end of
+      the row, so it lands hard right or wraps underneath depending on
+      how many names the list happens to hold.
+
+   3. YARD-LINE BOXES follow their side buttons on the row's own gap.
+      No margin-left:auto. The boxes they used to align to moved in
+      rule 2, and an auto margin left them aligning to nothing.
+
+   4. LABELS keep their own space: flex-shrink:0 and white-space:nowrap,
+      so buttons cannot ride over the text.
+
+   5. TOGGLES built by blockedToggleHtml are already wired by the shared
+      .pp-blocked-toggle handler -- it flips the checkbox, paints the
+      button and dispatches change. Do NOT add a second click handler;
+      two of them cancel out and the button does nothing. If a toggle
+      must clear its siblings, register it with wireExclusiveToggles and
+      make sure anything that sets .checked directly also dispatches
+      `change`, or the exclusivity never hears about it.
+   ===================================================================== */
   #entryStage #playPanel, #guidedPanel { --pp-gap: 10px; }
   /* .row is global -- it holds button pairs on the dashboard and the
      setup screens too, and those are not being changed here. Scoped to
@@ -501,7 +538,15 @@
      above now does that job for every row at once. Two mechanisms for
      one piece of spacing is how the nine values happened. */
   #entryStage #playPanel .spot-row > input, #guidedPanel .spot-row > input { flex:0 0 96px; width:96px; }
-  #entryStage #playPanel .spot-label, #guidedPanel .spot-label { flex:0 0 auto; line-height:normal; }
+  /* The spot label sizes to its own text and keeps its space.
+     `flex:0 0 auto` alone let it size to content but gave it no room of
+     its own on a crowded row, so the side buttons rode over the top of
+     it -- "Spot" with a button sitting across the word. margin-right
+     holds the row's own gap open next to it, because the gap collapses
+     against a zero-width shrink. */
+  #entryStage #playPanel .spot-label, #guidedPanel .spot-label {
+    flex-grow:0; flex-shrink:0; flex-basis:auto; line-height:normal;
+    margin-right:2px; white-space:nowrap; }
   /* The row that is missing something, and the words saying what. */
   #playPanel .row-gap, #guidedPanel .row-gap {
     outline:2px solid var(--sc-amber, #e0b400); outline-offset:3px; border-radius:6px; }
@@ -2120,6 +2165,13 @@ function parseInput(raw, state){
   }
 
   if (type === 'x'){
+    // The fumble flags come off the end before the positional slots are
+    // read, the same way td/sf/kr are handled at the head of the
+    // function -- leaving them in would shift `ret`.
+    let intFum = null;
+    if (rest.length && /^xfumb?$/i.test(String(rest[rest.length - 1]))){
+      intFum = String(rest.pop()).toLowerCase() === 'xfumb' ? 'back' : 'kept';
+    }
     const defn = rest[0], ret = rest[1];
     let t = O(p1) + ' intercepted' + (defn === '?' ? '' : ' by ' + D(defn));
     // Caught in the end zone and downed. `isTouchback` is stripped from
@@ -2131,6 +2183,20 @@ function parseInput(raw, state){
         flipEligible: true, flipTo: def, team: off, quarter: state.quarter };
     }
     if (ret) t += ', returned ' + ret;
+    // FUMBLED ON THE RETURN. Note the teams read the opposite way round
+    // from every other fumble branch: possession has ALREADY changed by
+    // this point, so `def` is the intercepting side keeping it and `off`
+    // is the team that threw it, getting it straight back.
+    if (intFum){
+      t += ', fumble — recovered by ' +
+        TEAMS[intFum === 'back' ? off : def].name;
+      return { text: t, effect: {},
+        // Only a recovery by the INTERCEPTING team is a change of
+        // possession. If the throwing team fell on it, the ball never
+        // really left them and the down carries on.
+        flipEligible: intFum !== 'back', flipTo: def,
+        team: off, quarter: state.quarter };
+    }
     let score = null;
     if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
     // TEAM FLIPS TO def ON THE TD, not left at off. Andy reported this
@@ -8158,7 +8224,33 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // the catch to describe.
         '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_int_tb" style="display:none;">' +
         '<button type="button" id="pp_int_tb_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Downed in the end zone — touchback</button></div>' +
-        '<div id="pp_int_return_wrap">' + yardsBlock('Return yards (optional)') + tdBlock + '</div>' +
+        '<div id="pp_int_return_wrap">' + yardsBlock('Return yards (optional)') + tdBlock +
+          // FUMBLED AFTER THE INTERCEPTION.
+          // -------------------------------------------------------------
+          // The interceptor putting it on the ground on the return is an
+          // ordinary loose ball, and the tree had no way to record it --
+          // the only outcomes offered were downed in the end zone and
+          // touchdown. Same shape as the fumble branch on rush, pass and
+          // sack: a toggle, then who recovered, then a spot.
+          //
+          // The teams read the opposite way round from those, and that is
+          // the whole trap here: possession has ALREADY changed by the
+          // time of the fumble. "Own team" is the intercepting side --
+          // the defence on the original snap -- and "opponent" is the
+          // team that threw it, getting it straight back.
+          '<div id="pp_int_fum_wrap" style="margin-top:10px;">' +
+            blockedToggleHtml('pp_int_fumbled', 'Fumbled on the return') +
+          '</div>' +
+          '<div id="pp_int_fum_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
+            '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" ' +
+              'name="pp_int_fumrec" value="own" checked> Recovered by ' +
+              TEAMS[otherTeam(computeState().possession)].name + ' (they keep it)</label>' +
+            '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" ' +
+              'name="pp_int_fumrec" value="opp"> Recovered by ' +
+              TEAMS[computeState().possession].name + ' (back to them)</label>' +
+            defBlock('Recovered by (optional)', '_intfum') +
+          '</div>' +
+        '</div>' +
         startingSpotFieldsHtml('pp_spot', null, def) +
         // TAKEOVER SPOT CALCULATOR.
         // ----------------------------------------------------------------
@@ -9334,9 +9426,39 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         };
         document.getElementById('pp_int_tb_toggle').addEventListener('click', () => {
           intTb.checked = !intTb.checked;
+          // DISPATCH, don't just refresh. wireExclusiveToggles listens for
+          // `change`, and this handler set the property directly -- which
+          // fires nothing -- so pressing Touchback left Fumbled on the
+          // return still set underneath it.
+          intTb.dispatchEvent(new Event('change'));
           refreshIntTb();
         });
         refreshIntTb();
+
+        // FUMBLED ON THE RETURN. Same shape as the fumble branch on every
+        // other tree: a toggle that reveals who recovered.
+        //
+        // Mutually exclusive with the touchback -- a ball downed in the
+        // end zone was not fumbled -- and both are wired through
+        // wireExclusiveToggles so the two cannot be held at once.
+        const intFumCb = document.getElementById('pp_int_fumbled');
+        if (intFumCb){
+          const refreshIntFum = () => {
+            const on = intFumCb.checked;
+            document.getElementById('pp_int_fum_fields').style.display = on ? 'block' : 'none';
+            // NO painting and NO click handler here. blockedToggleHtml
+            // produces a .pp-blocked-toggle, and the shared wiring above
+            // already flips the checkbox, applies .picked, rewrites the
+            // label and dispatches change. A second click handler simply
+            // toggled it straight back -- the button did nothing at all.
+          };
+          intFumCb.addEventListener('change', refreshIntFum);
+          wireExclusiveToggles(['pp_int_tb', 'pp_int_fumbled'], () => {
+            refreshIntTb();
+            refreshIntFum();
+          });
+          refreshIntFum();
+        }
 
         // Wire the takeover spot calculator. It writes into the SAME
         // fields the scorer could fill by hand, so nothing downstream
@@ -10921,8 +11043,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // A touchback has no return and no touchdown by definition, so
       // neither token is emitted even if a stale value is sitting in a
       // hidden field.
+      // FUMBLED ON THE RETURN. A trailing flag, like every other optional
+      // outcome: 'xfum' means the interceptor put it down, and 'xfumb'
+      // that the throwing team got it straight back. Absent means no
+      // fumble, so every interception stored before today reads the same.
+      const intFumOn = !!(document.getElementById('pp_int_fumbled') || {}).checked;
+      const intFumBack = intFumOn &&
+        (document.querySelector('input[name=pp_int_fumrec]:checked') || {}).value === 'opp';
+      const intFumTok = !intFumOn ? '' : (intFumBack ? ' xfumb' : ' xfum');
       code = sel.passer + 'x ' + (sel.credit || '?') +
-        (intTbOn ? ' tb' : ((yds ? ' ' + yds : '') + (td ? ' td' : '')));
+        (intTbOn ? ' tb' : ((yds ? ' ' + yds : '') + (td ? ' td' : ''))) + intFumTok;
       roles = { passer: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'int' };
       if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       // Carries the target. No yardage: the throw was not caught, so the
