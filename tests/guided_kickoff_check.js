@@ -323,6 +323,54 @@ async function run() {
     h.close();
   }
 
+  // THE FOUR GUIDED OUTCOMES: one at a time, and the right button lights.
+  // ---------------------------------------------------------------------
+  // Reported 23 Aug. Three faults in one place. Each button painted
+  // itself inline and inconsistently -- Touchback and Out of bounds
+  // green, Muff BROWN, Onside never painted at all. The muff button was
+  // painted from a flag that was true for muff OR onside, so pressing
+  // Onside lit up Muff / Fumble and left Onside looking untouched. And
+  // the clearing was partial: muff and onside cleared each other, nothing
+  // cleared touchback or out of bounds.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    click(win, doc.getElementById('startGameBtn'));
+    await new Promise(r => setTimeout(r, 80));
+    click(win, doc.getElementById('pickA'));
+    await new Promise(r => setTimeout(r, 80));
+    click(win, doc.querySelector('.gk_kicker_pick'));
+    const dir = doc.querySelector('.gk_dir_btn');
+    if (dir) click(win, dir);
+    click(win, doc.getElementById('guidedKickoffSave'));
+    await new Promise(r => setTimeout(r, 250));
+
+    const ids = ['gr_touchback', 'gr_oob', 'gr_muffed', 'gr_onside'];
+    const missing = ids.filter(i => !doc.getElementById(i) || !doc.getElementById(i + '_toggle'));
+    if (missing.length) {
+      fail('guided:outcomes', 'missing controls: ' + missing.join(', '));
+    } else {
+      // Every order, including returning to one already used -- the
+      // muff/onside pair behaved differently on a second visit.
+      for (const id of ids.concat(['gr_muffed', 'gr_touchback'])) {
+        click(win, doc.getElementById(id + '_toggle'));
+        await new Promise(r => setTimeout(r, 110));
+        const checked = ids.filter(i => doc.getElementById(i).checked);
+        // "Lit" means the shared green, which is the whole point: one
+        // painter, so no button can be a different colour from its peers.
+        const lit = ids.filter(i => /26, 122, 76/.test(
+          doc.getElementById(i + '_toggle').style.background || ''));
+        if (checked.length !== 1 || checked[0] !== id) {
+          fail('guided:exclusive', 'after ' + id + ' exactly one should be set, got [' + checked.join(', ') + ']');
+        }
+        if (lit.length !== 1 || lit[0] !== id) {
+          fail('guided:lit', 'after ' + id + ' exactly that button should light, lit [' + lit.join(', ') + ']');
+        }
+      }
+    }
+    h.close();
+  }
+
   return failures;
 }
 
