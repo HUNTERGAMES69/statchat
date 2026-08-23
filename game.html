@@ -330,33 +330,6 @@
     #rightRail { position:static; left:auto; right:auto; height:auto !important;
                  top:auto !important; margin:16px auto 0; max-width:760px; }
     #validationCard { max-height:none; }
-    /* ORDER, because the source order is wrong for a stacked layout.
-       -----------------------------------------------------------------
-       #rightRail is written BEFORE #entryCard in the markup. On desktop
-       that is invisible -- the rail is position:absolute, so where it
-       sits in the source does not matter. Drop to static below 1220 and
-       it flows exactly where it is written: Checks and Live totals
-       ABOVE the entry card, which is what an iPad shows. Reported.
-
-       Fixed by ordering rather than by moving the markup: #rightRail is
-       positioned by 22 references to syncRail/syncDock that all assume
-       the current source order, and re-ordering the HTML to fix a
-       tablet-only symptom would put every one of those at risk.
-
-       mainView becomes a flex column only at this width, so `order`
-       has something to act on. Desktop is untouched -- it never sees
-       this block.
-
-       Entry card first: it is the thing being used. Current drive next,
-       because it is checked constantly while entering. Then the rest. */
-    #mainView { display:flex; flex-direction:column; }
-    #banner          { order:0; }
-    #metaRow         { order:1; }
-    #clockPromptCard { order:2; }
-    #onAirBanner     { order:3; }
-    #entryCard       { order:4; }
-    #driveDock       { order:5; }
-    #rightRail       { order:6; }
   }
 
   /* DRIVE LOG DOCKED IN THE LEFT MARGIN (prototype).
@@ -729,16 +702,6 @@
          always used. Two things a scorer would otherwise have to leave
          the entry screen to see, and one of them (validation) is not
          available anywhere during a game at all. -->
-    <div id="rightRail">
-      <div class="card compact" id="validationCard">
-        <h2 style="margin:0 0 6px; font-size:15px;">Checks <span id="validationCount"></span></h2>
-        <div id="validationBody"></div>
-      </div>
-      <div class="card compact" id="liveBoxCard">
-        <h2 style="margin:0 0 6px; font-size:15px;">Live totals</h2>
-        <div id="liveBoxBody"></div>
-      </div>
-    </div>
     <div class="card" id="entryCard">
       <!-- INSIDE the entry card, not a sibling above it.
            ---------------------------------------------------------------
@@ -952,6 +915,35 @@
         <button class="secondary" id="redoBtn" disabled>Redo last</button>
       </div>
       <div id="driveLogScroll"></div>
+    </div>
+    <!-- MOVED here from above #entryCard, 23 Aug.
+         On desktop this rail is position:absolute, so where it sits in
+         the source is invisible. Below 1220 it drops to static and
+         flows exactly where it is written -- which put Checks and Live
+         totals ABOVE the entry card on an iPad.
+
+         Fixed by moving the markup, not by CSS order. An earlier
+         attempt made #mainView a flex container and set `order` on the
+         children -- but that applies to ALL children, and the two cards
+         at the end (Previous drive, All plays) had no order set, so they
+         defaulted to 0 and leapt to the top of the page. Worse than the
+         bug it fixed.
+
+         Moving it is safe: absolute positioning resolves against the
+         nearest positioned ancestor, which is still #mainView either
+         way. Source order among absolutely-positioned siblings affects
+         only paint order on a z-index tie, and this carries an explicit
+         z-index. The syncRail/syncDock code measures elements by id and
+         never walks siblings. -->
+    <div id="rightRail">
+      <div class="card compact" id="validationCard">
+        <h2 style="margin:0 0 6px; font-size:15px;">Checks <span id="validationCount"></span></h2>
+        <div id="validationBody"></div>
+      </div>
+      <div class="card compact" id="liveBoxCard">
+        <h2 style="margin:0 0 6px; font-size:15px;">Live totals</h2>
+        <div id="liveBoxBody"></div>
+      </div>
     </div>
 
     <div class="card">
