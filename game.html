@@ -279,7 +279,24 @@
      thing from ON AIR on the opposite side. Stretched, all five blocks
      across the top -- ON AIR, the banner, and these three -- are the
      same height because they are all measured from the same element. */
-  #topActions { position:absolute; right:16px; z-index:95;
+  /* THE SAME SPAN AS THE RIGHT RAIL BENEATH IT.
+     ---------------------------------------------------------------------
+     This had `right:16px` and no left edge, so it sized to its own three
+     labels and stopped wherever they happened to end -- while the Checks
+     tile below it runs the full width of the rail. The two never lined up.
+
+     Given the same left edge as #rightRail, the row now spans exactly the
+     rail's width. `flex:1 1 auto` on the children shares the surplus in
+     proportion to their natural widths, so HELP! gets a little wider and
+     BROADCAST SETUP a little more again, rather than all three being
+     forced to equal thirds -- which would leave a very wide button around
+     a five-letter word.
+
+     Desktop only: the tablet block overrides all of this with !important,
+     where the row wraps and each control keeps its own width. */
+  #topActions { position:absolute; right:16px;
+                left:calc(50% + var(--sc-card-half, 380px) + 18px);
+                z-index:95;
                 display:flex; align-items:stretch; gap:8px; }
   /* THE SAME METRICS AS .hdr-btn, not merely similar ones. These three
      were 14px on 10x18 padding while Dashboard and ON AIR were 12px on
@@ -463,6 +480,8 @@
   #onAirBanner.hdr-btn { border-color:#b00020 !important; letter-spacing:0.04em !important;
                          animation:none !important; }
   a#launchViewLink.hdr-btn { border-color:#b00020 !important; }
+  /* Share the row. See the note on #topActions above. */
+  #topActions > * { flex:1 1 auto; }
 
   /* PLACED AFTER .hdr-btn deliberately. Both rule sets use !important
      and the ids should win on specificity alone -- but source order
