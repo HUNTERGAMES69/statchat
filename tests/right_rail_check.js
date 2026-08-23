@@ -496,15 +496,36 @@ async function run() {
         return e ? (e.parentElement.id || e.parentElement.tagName) : 'absent';
       };
       if (w <= 1219) {
-        if (parentOf('topActions') !== 'headerLeft') {
-          fail('header:' + w, 'the action links belong in the header row, found in ' + parentOf('topActions'));
-        }
+        // THE LINKS MOVE INDIVIDUALLY, not their wrapper. Moving
+        // #topActions itself put a nested flex CONTAINER in the row; it
+        // was squeezed for width and stacked its three buttons into a
+        // column, and the row's stretch then made Dashboard and ON AIR as
+        // tall as that column. One flat row of five wraps as a row should.
+        ['broadcastFab', 'helpFab', 'launchViewLink'].forEach(id => {
+          if (parentOf(id) !== 'headerLeft') {
+            fail('header:' + w, id + ' should sit in the header row, found in ' + parentOf(id));
+          }
+        });
+        // And exactly five siblings -- a sixth would mean the wrapper
+        // came along too.
+        const n = doc.getElementById('headerLeft').children.length;
+        if (n !== 5) fail('header:' + w, 'expected 5 controls in the row, got ' + n);
         if (parentOf('onAirBanner') !== 'headerLeft') {
           fail('header:' + w, 'ON AIR should share the header row rather than taking one of its own');
         }
       } else {
-        if (parentOf('topActions') === 'headerLeft') {
-          fail('header:' + w, 'desktop should keep the action links pinned, not in the header row');
+        // Desktop puts them back in their wrapper -- and back CLEAN. The
+        // first version cleared shorthands with removeProperty('margin'),
+        // which does not touch the longhands it expanded into, so the row
+        // carried its tablet margins and flex back to desktop.
+        ['broadcastFab', 'helpFab', 'launchViewLink'].forEach(id => {
+          if (parentOf(id) !== 'topActions') {
+            fail('header:' + w, id + ' should return to the action row, found in ' + parentOf(id));
+          }
+        });
+        const dash = doc.querySelector('#headerLeft > .hdr-btn');
+        if (dash && /margin-top|flex-grow/.test(dash.getAttribute('style') || '')) {
+          fail('header:' + w, 'tablet styles survived onto desktop: ' + dash.getAttribute('style'));
         }
         // ON AIR now lives in #headerLeft in the MARKUP, at every width --
         // it shares the top-left block with Dashboard rather than taking a
@@ -568,6 +589,46 @@ async function run() {
     const got = win.getComputedStyle(doc.getElementById('rightRail')).left;
     if (got !== want) {
       fail('cardw:rail', 'the rail should sit at ' + want + ', got ' + got);
+    }
+    h.close();
+  }
+
+  // ROUND TRIP ON ONE PAGE. The width loop above uses a fresh page each
+  // time, so it never exercises going tablet -> desktop -> tablet, which
+  // is exactly where this broke: the link list was read from the wrapper,
+  // and once the touch branch had emptied it the return journey found
+  // nothing to move back. A scorer rotating an iPad, or anyone dragging a
+  // window, does this constantly.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    const rail = doc.getElementById('rightRail');
+    if (rail) rail.getBoundingClientRect = () => ({ left: 1198, width: 386, top: 0, height: 200, right: 1584, bottom: 200 });
+    const go = async w => {
+      Object.defineProperty(win, 'innerWidth', { value: w, configurable: true });
+      win.dispatchEvent(new win.Event('resize'));
+      await new Promise(r => setTimeout(r, 150));
+    };
+    const where = id => {
+      const e = doc.getElementById(id);
+      return e ? (e.parentElement.id || e.parentElement.tagName) : 'absent';
+    };
+    for (const w of [1024, 1600, 768, 1600]) await go(w);
+    // Back on desktop after two trips: links home, and nothing left over.
+    ['broadcastFab', 'helpFab', 'launchViewLink'].forEach(id => {
+      if (where(id) !== 'topActions') {
+        fail('roundtrip', id + ' did not return to the action row, left in ' + where(id));
+      }
+    });
+    const dash = doc.querySelector('#headerLeft > .hdr-btn');
+    if (dash && /margin-top|flex-grow|position: static/.test(dash.getAttribute('style') || '')) {
+      fail('roundtrip:styles', 'tablet styles survived the trip back: ' + dash.getAttribute('style'));
+    }
+    // And going back to tablet still works, rather than half-applying.
+    await go(768);
+    if (doc.getElementById('headerLeft').children.length !== 5) {
+      fail('roundtrip:back', 'the flat row did not rebuild, got ' +
+        doc.getElementById('headerLeft').children.length + ' controls');
     }
     h.close();
   }
