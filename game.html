@@ -321,20 +321,42 @@
 
        Desktop never sees this block; #topActions stays pinned top-right
        and ON AIR keeps its own row. */
-    #headerLeft { flex-wrap:wrap; row-gap:8px; }
-    #onAirBanner { margin:0 !important; }
-    #topActions  { position:static; margin:0;
-                   align-items:center; justify-content:flex-end; }
-    #topActions a { padding:8px 14px; }
+    /* The header rules used to be split between here and a second
+       max-width:1219px block further down, which is how two of them ended
+       up absolutely positioned on a tablet. They are all in that one
+       block now -- search "THE WHOLE HEADER ROW, IN ONE PLACE". */
   }
   /* Under the dock breakpoint the margins vanish, so both come back into
      the flow rather than overlapping the card. */
   @media (max-width: 1219px) {
-    #headerLeft { position:static !important; left:auto; right:auto; }
-    #onAirBanner { position:static !important; left:auto; right:auto;
-                   height:auto !important; top:auto !important;
-                   padding:6px 12px; margin:0 0 8px; }
-    #launchViewLink { position:static; display:inline-block; margin:0 0 8px; }
+    /* THE WHOLE HEADER ROW, IN ONE PLACE — iPad and below.
+       -----------------------------------------------------------------
+       Five controls on one line: Dashboard, ON AIR, Broadcast setup,
+       Help, Crew view. They were overlapping and running off the right
+       edge on an iPad, because the rules for them were spread across two
+       separate max-width:1219px blocks and the base rules positioned two
+       of them absolutely.
+
+       Everything here is stated once, and positively:
+         - nothing is absolutely positioned, so nothing can overlap
+         - nothing carries an inline top/height (syncAir clears both
+           below 1220, but !important here means it cannot matter)
+         - the row WRAPS, so a narrow screen gets a second line rather
+           than controls sliding off the edge
+         - every child is content-sized and may shrink, which is what
+           lets five fit before wrapping is needed */
+    #headerLeft, #topActions {
+      position:static !important;
+      left:auto !important; right:auto !important; top:auto !important;
+      height:auto !important; width:auto !important;
+      display:flex !important; flex-wrap:wrap !important;
+      align-items:center !important; gap:8px !important;
+      margin:0 0 8px !important; }
+    #headerLeft > *, #topActions > * {
+      position:static !important;
+      top:auto !important; height:auto !important;
+      flex:0 1 auto !important; margin:0 !important;
+      padding:8px 14px !important; }
   }
 
   /* RIGHT MARGIN RAIL -- validation and live totals.
