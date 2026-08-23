@@ -7578,7 +7578,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // with Fumbled and Safety is exactly what made the rush panel
         // wrap unpredictably once the calculator arrived.
         '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div>' +
-          yardsBlock('Yards lost') + '</div>' + spotCalcHtml('Or enter sacked on') + '</div>' +
+          // THE 0-9 PAD, as on the rush and pass trees. It was missing
+          // here only because this branch calls yardsBlock directly --
+          // the pad is added by the CALL SITE, not by yardsBlock, so
+          // every panel that wants it has to say so. A sack is a yardage
+          // entry like any other and there is no reason it should be the
+          // one that makes you reach for a keyboard.
+          //
+          // Nested inside the yards column, not appended after the flex
+          // row -- same reasoning as the rush tree: it hugs the box it
+          // belongs to rather than dropping to the bottom of whichever
+          // column happens to be tallest.
+          yardsBlock('Yards lost') + quickYardageHtml('pp_yards') + '</div>' +
+          spotCalcHtml('Or enter sacked on') + '</div>' +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
         '<div id="pp_sack_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_sack_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_sack_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_sack_safety', 'Safety') + '</div></div>' +
@@ -11835,18 +11847,46 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     panel.querySelectorAll('.toTeamBtn').forEach(b => b.addEventListener('click', () => {
       const team = b.dataset.team;
       const st = computeState();
-      // Written straight to the log rather than through the confirm
-      // card: there is nothing to review and nothing to get wrong, and
-      // a timeout is called under time pressure.
-      pushAndPersist({
-        id: nextId++,
-        text: 'Timeout — ' + TEAMS[team].name + ' (' + Math.max(0, st.timeouts[team] - 1) + ' left)',
-        effect: { timeout: { team } },
-        quarter: st.quarter
+      const text = 'Timeout — ' + TEAMS[team].name +
+        ' (' + Math.max(0, st.timeouts[team] - 1) + ' left)';
+      // A REVIEW STEP, added 22 Aug on Andy's call.
+      // -----------------------------------------------------------------
+      // This used to write straight to the log, on the reasoning that
+      // "there is nothing to review and nothing to get wrong, and a
+      // timeout is called under time pressure". The first half of that is
+      // wrong: the thing to get wrong is WHICH TEAM, the two buttons sit
+      // side by side, and a mis-tap spends a timeout that team still has
+      // and hides one it does not -- visible immediately on the banner,
+      // the live totals and the broadcast feed.
+      //
+      // Undo fixes it, but only if the scorer notices. One tap to confirm
+      // is cheaper than a wrong timeout count for the rest of a half.
+      panel.innerHTML =
+        '<p style="font-size:13px; color:#888; margin:0 0 6px;">Timeout</p>' +
+        '<div style="font-size:17px; font-weight:700; color:#1a1a2e; margin-bottom:10px;">' +
+          text + '</div>' +
+        '<div class="row"><button class="primary" id="to_save">Save timeout</button>' +
+        '<button class="secondary" id="to_back">\u2190 Back</button></div>';
+      document.getElementById('to_save').addEventListener('click', () => {
+        // Recomputed, not reused: the panel has been open for a moment and
+        // a play could have landed from another device in between.
+        const now = computeState();
+        pushAndPersist({
+          id: nextId++,
+          text: 'Timeout — ' + TEAMS[team].name +
+                ' (' + Math.max(0, now.timeouts[team] - 1) + ' left)',
+          effect: { timeout: { team } },
+          quarter: now.quarter
+        });
+        collapsePlayPanel();
+        renderAll();
       });
-      panel.style.display = 'none';
-      panel.innerHTML = '';
-      renderAll();
+      // Back reopens the picker rather than closing the panel -- the
+      // likeliest reason to press it is the wrong team, and closing would
+      // make that two taps to correct instead of one.
+      document.getElementById('to_back').addEventListener('click', () => {
+        document.getElementById('timeoutUtilBtn').click();
+      });
     }));
     document.getElementById('to_clear').addEventListener('click', collapsePlayPanel);
   });
