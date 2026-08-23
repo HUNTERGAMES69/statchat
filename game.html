@@ -5653,6 +5653,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
       const grMuffBtn = document.getElementById('gr_muffed_toggle'), grMuffCb = document.getElementById('gr_muffed');
       const grOnsideBtn = document.getElementById('gr_onside_toggle'), grOnsideCb = document.getElementById('gr_onside');
+      // ONE PAINTER FOR ALL FOUR GUIDED OUTCOME BUTTONS.
+      // -----------------------------------------------------------------
+      // Each of these used to paint itself inline, and inconsistently:
+      // Touchback and Out of bounds went green, Muff went BROWN, and
+      // Onside was never painted at all. Worse, the muff button was
+      // painted from `on` -- true for muff OR onside -- so pressing
+      // Onside lit up Muff / Fumble and left Onside looking untouched.
+      // Reported exactly that way.
+      const paintGrToggle = (btn, isOn, label) => {
+        if (!btn) return;
+        btn.textContent = (isOn ? '\u2713 ' : '') + label;
+        btn.style.background = isOn ? '#1a7a4c' : '#fff';
+        btn.style.color = isOn ? '#fff' : '#555';
+        btn.style.borderColor = isOn ? '#1a7a4c' : '#ccc';
+      };
       const refreshGrMuff = () => {
         // Muff and onside share this whole block: the same recovery
         // question, the same two spot fields. Only the wording differs.
@@ -5669,11 +5684,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('gr_returner_manual').style.display = on ? 'none' : 'inline-block';
         document.getElementById('gr_spot_recv').style.display = kickingRecovers ? 'none' : 'block';
         document.getElementById('gr_spot_kick').style.display = kickingRecovers ? 'block' : 'none';
-        grMuffBtn.textContent = grMuffCb.checked ? '\u2713 Muff / Fumble' : 'Muff / Fumble';
-        if (grOnsideBtn) grOnsideBtn.textContent = onsideOn ? '\u2713 Onside kick' : 'Onside kick';
-        grMuffBtn.style.background = on ? '#a05a00' : '#fff';
-        grMuffBtn.style.color = on ? '#fff' : '#555';
-        grMuffBtn.style.borderColor = on ? '#a05a00' : '#ccc';
+        // Turning either of these on clears the other two outcomes. Muff
+        // and onside already cleared EACH OTHER but not touchback or out
+        // of bounds, so a scorer could leave two lit.
+        if (on){
+          if (grTbCb && grTbCb.checked){
+            grTbCb.checked = false;
+            paintGrToggle(grTbBtn, false, 'Touchback');
+          }
+          if (grOobCb && grOobCb.checked){
+            grOobCb.checked = false;
+            paintGrToggle(grOobBtn, false, 'Out of bounds');
+          }
+        }
+        // Each button reads ITS OWN checkbox. Painting muff from `on`
+        // is what lit the wrong control.
+        paintGrToggle(grMuffBtn, grMuffCb.checked, 'Muff / Fumble');
+        paintGrToggle(grOnsideBtn, onsideOn, 'Onside kick');
       };
       renderLastClockHint('guidedReturnLastHint');
       // The guided return has its OWN clock field -- a third one, after
@@ -5720,16 +5747,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const refreshGrTb = () => {
         const tb = grTbCb.checked;
         if (tb) prefillTouchbackClock('guidedReturnClock');
-        if (tb && grMuffCb.checked){ grMuffCb.checked = false; }
+        // Clears BOTH, not just muff. Onside was left set, so Touchback
+        // and Onside kick could be lit at once -- the guided panel's
+        // version of the exclusivity gap fixed on the plain trees.
+        if (tb){
+          if (grMuffCb.checked) grMuffCb.checked = false;
+          if (grOnsideCb && grOnsideCb.checked) grOnsideCb.checked = false;
+          refreshGrMuff();
+        }
         document.getElementById('gr_muff_wrap').style.display = tb ? 'none' : '';
         document.getElementById('gr_muff_box').style.display = 'none';
         grReturnFields().forEach(el => { if (el) el.style.display = tb ? 'none' : ''; });
         document.getElementById('gr_spot_recv').style.display = tb ? 'block' : (grMuffCb.checked ? '' : 'block');
         document.getElementById('gr_spot_kick').style.display = 'none';
-        grTbBtn.textContent = tb ? '\u2713 Touchback' : 'Touchback';
-        grTbBtn.style.background = tb ? '#1a7a4c' : '#fff';
-        grTbBtn.style.color = tb ? '#fff' : '#555';
-        grTbBtn.style.borderColor = tb ? '#1a7a4c' : '#ccc';
+        paintGrToggle(grTbBtn, tb, 'Touchback');
         // NFHS spots a touchback at the receiving team's own 20.
         if (tb){
           const yl = document.getElementById('gr_spot_yardline');
@@ -5745,15 +5776,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const grOobBtn = document.getElementById('gr_oob_toggle'), grOobCb = document.getElementById('gr_oob');
       const refreshGrOob = () => {
         const oob = grOobCb.checked;
+        // Same clearing as the touchback branch: out of bounds is one of
+        // the four outcomes and cleared none of the others.
+        if (oob){
+          if (grTbCb.checked) grTbCb.checked = false;
+          if (grMuffCb.checked) grMuffCb.checked = false;
+          if (grOnsideCb && grOnsideCb.checked) grOnsideCb.checked = false;
+          paintGrToggle(grTbBtn, false, 'Touchback');
+          refreshGrMuff();
+        }
         document.getElementById('gr_muff_wrap').style.display = oob ? 'none' : '';
         if (oob) document.getElementById('gr_muff_box').style.display = 'none';
         grReturnFields().forEach(el => { if (el) el.style.display = oob ? 'none' : ''; });
         document.getElementById('gr_spot_recv').style.display = oob ? 'block' : '';
         if (oob) document.getElementById('gr_spot_kick').style.display = 'none';
-        grOobBtn.textContent = oob ? '\u2713 Out of bounds' : 'Out of bounds';
-        grOobBtn.style.background = oob ? '#1a7a4c' : '#fff';
-        grOobBtn.style.color = oob ? '#fff' : '#555';
-        grOobBtn.style.borderColor = oob ? '#1a7a4c' : '#ccc';
+        paintGrToggle(grOobBtn, oob, 'Out of bounds');
         if (oob){
           // Overwrites, unlike the touchback prefill: switching from
           // Touchback to Out of bounds has to move the 20 to a 35, or the
