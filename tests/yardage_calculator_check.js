@@ -448,25 +448,28 @@ async function run() {
     await new Promise(r => setTimeout(r, 60));
     if (lit().join(',') !== '5') fail('pad:follow', 'the pad should follow the box, got [' + lit().join(',') + ']');
 
-    // THE SIZE CUE, not just the colour. Three colour-only versions were
-    // reported as "no change" -- the code was right each time, but a navy
-    // fill on a 36px key is not legible as feedback on a sideline screen.
-    // The scale is what makes it read, so it is asserted, not left as a
-    // nicety someone could tidy away.
+    // THE STANDARD GOLD, and NO size change.
+    // -------------------------------------------------------------------
+    // An earlier version used a navy fill and grew the key. Both were
+    // wrong: the navy matched nothing else, and growing it made this the
+    // only control on the page that moves when pressed. `button.picked`
+    // is #ffc72c with an inset 2px #8a6a00 ring, and that is what a
+    // scorer already reads as "chosen" everywhere else.
     const key5 = pad.find(b => b.dataset.yds === '5');
-    if (!/scale\(/.test(key5.style.transform || '')) {
-      fail('pad:scale', 'the lit key should grow, not only change colour');
+    if (!/255,\s*199,\s*44|ffc72c/i.test(key5.style.background || '')) {
+      fail('pad:gold', 'the lit key should use the standard gold, got ' + key5.style.background);
     }
-    if (key5.style.zIndex !== '2') {
-      // A transformed grid item is painted in source order, so without
-      // this the keys after it clip the corners of the one that grew.
-      fail('pad:z', 'the lit key needs to paint above its neighbours, z-index=' + key5.style.zIndex);
+    if (!/inset/.test(key5.style.boxShadow || '')) {
+      fail('pad:ring', 'the lit key is missing the inset ring the other picked controls have');
     }
-    // And the growth must come back off, or the pad ends up all bumps.
+    if (/scale\(/.test(key5.style.transform || '')) {
+      fail('pad:nogrow', 'the key must not change size, got ' + key5.style.transform);
+    }
+    // And the gold comes back off when another key is pressed.
     click(win, pad.find(b => b.dataset.yds === '1'));
     await new Promise(r => setTimeout(r, 60));
-    if (/scale\(/.test(key5.style.transform || '')) {
-      fail('pad:scale-clear', 'the previous key stayed enlarged');
+    if (/255,\s*199,\s*44|ffc72c/i.test(key5.style.background || '')) {
+      fail('pad:gold-clear', 'the previous key stayed gold');
     }
     h.close();
   }
