@@ -2089,6 +2089,47 @@ watch for.
   blocked-kick return, muffed-kick recovery, guided kickoff return). Then
   `computeBoxScore`, then recap / stat package / season report / view /
   overlay. History will not backfill.
+
+  **The role key is the other half of this, and it is now the bigger
+  half.** A returner is written as `r.defense` — the returning side is the
+  defence at the moment of the kick — which is the same key the tackler,
+  the interceptor and the fumble recoverer use. Nothing downstream can
+  tell them apart except by play type.
+
+  That surfaced on 22 Aug as a real report: a man who had only returned a
+  kickoff was being offered in the "Tackled by" picker for the rest of the
+  game, and because he wore a shared number, every player on that number
+  came with him. Fixed for now by gating `computePlayerStats` on the same
+  play types `computeBoxScore` already gates on, so the picker offers
+  exactly who the engine would credit. **The stats were never wrong** —
+  `computeBoxScore` has always gated on play type, so a returner never
+  received a tackle.
+
+  The gate is a correct fix, not a workaround, but it leaves the returner
+  with no identity of his own. Giving him a real `returner` role is what
+  this feature needs anyway, since the yardage has to be persisted
+  alongside him — do the two together rather than touching the same five
+  entry paths twice.
+
+  Two adjacent gaps found the same night, worth doing in the same pass
+  because they are the same fault — the entry layer collecting a fact and
+  the data layer dropping it:
+  - **An interception does not record the intended receiver.** The panel
+    collects it; `roles` comes out as `{passer, playType:'int', defense}`
+    with no receiver, so the target lands in the `Unknown` bucket rather
+    than on the player. Reports already show targeted-with-no-catch
+    receivers correctly, so capturing it is the whole fix.
+  - Check the **sack** path for the same omission while in there.
+- [ ] **Remove the `<script src="team-icon.js">` tag from all 21 pages.**
+  The script was neutered to an empty file on 22 Aug -- the browser tab
+  now shows the StatChat logo, which is what every page already declares
+  in markup. The tag is harmless but the file must STAY PRESENT until the
+  tags go, or every page logs a 404. Do it whenever those files are next
+  touched for other reasons; it is not worth 21 manual uploads on its own.
+- [ ] **Drop `teams.icon_url`** once the schema is versioned (see
+  MULTI_TENANT_PLAN.md step 0). Nothing reads it now. Left in place
+  because dropping a column is a migration and there is no migration
+  mechanism yet.
 - [ ] **Delete `gametest3.html` from the repo** — it is now a byte-level
   duplicate of `game.html` and will drift the moment either is edited.
   `gametest.html` and `gametest2.html` stay, marked DEAD PROTOTYPE;

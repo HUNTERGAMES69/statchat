@@ -78,15 +78,7 @@
 
       <div class="field-row" style="margin-top:14px;">
         <div>
-          <label>Browser / Home Screen Icon</label>
-          <button type="button" id="chooseIconBtn" class="secondary">Choose file</button>
-          <input type="file" id="iconInput" accept="image/*" style="display:none;">
-          <div class="hint">A square image — used as the browser tab icon, the home screen icon when added on an iPhone, and on the loading screen alongside the StatChat logo. Separate from the logo above.</div>
-        </div>
-      </div>
-      <div style="margin-top:10px;">
-        <img id="iconPreview" style="display:none; height:56px; width:56px; border-radius:8px; object-fit:cover;">
-      </div>
+
 
       <div class="field-row">
         <div>
@@ -114,7 +106,6 @@
 
   let ourTeamId = null;
   let pendingLogoFile = null;
-  let pendingIconFile = null;
 
   function showView(name){
     ['loading', 'mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
@@ -149,7 +140,7 @@
 
   async function init(){
     const { data, error } = await supabaseClient
-      .from('teams').select('id, name, full_name, logo_url, icon_url, primary_color, secondary_color, current_season_year')
+      .from('teams').select('id, name, full_name, logo_url, primary_color, secondary_color, current_season_year')
       .eq('is_our_team', true).limit(1);
     if (error){
       showView('mainView');
@@ -170,11 +161,6 @@
     if (team.logo_url){
       const img = document.getElementById('logoPreview');
       img.src = team.logo_url;
-      img.style.display = 'inline-block';
-    }
-    if (team.icon_url){
-      const img = document.getElementById('iconPreview');
-      img.src = team.icon_url;
       img.style.display = 'inline-block';
     }
     showView('mainView');
@@ -266,22 +252,13 @@
     }
   });
 
-  document.getElementById('chooseIconBtn').addEventListener('click', () => document.getElementById('iconInput').click());
-  document.getElementById('iconInput').addEventListener('change', (e) => {
-    pendingIconFile = e.target.files[0] || null;
-    if (!pendingIconFile) return;
-    if (URL.createObjectURL){
-      try {
-        const img = document.getElementById('iconPreview');
-        img.src = URL.createObjectURL(pendingIconFile);
-        img.style.display = 'inline-block';
-      } catch (e){}
-    }
-  });
 
-  // Both uploads share this: the icon had the identical fault and would
-  // have been fixed twice, then drifted the first time only one of them
-  // was touched.
+
+  // Takes a `kind` although only 'logo' is passed now: the browser tab
+  // icon was the other caller and was removed on 22 Aug (see
+  // team-icon.js). Left parameterised rather than inlined -- a second
+  // team image is plausible again under multi-tenancy, and the caching
+  // rules below are the part that must not be rewritten from memory.
   async function uploadImage(file, teamId, kind){
     const ext = file.name.split('.').pop();
     const path = teamId + '/' + kind + '.' + ext;
@@ -314,7 +291,6 @@
     return data.publicUrl + sep + 'v=' + Date.now();
   }
 
-  async function uploadIcon(file, teamId){ return uploadImage(file, teamId, 'icon'); }
 
   async function uploadLogo(file, teamId){ return uploadImage(file, teamId, 'logo'); }
 
@@ -339,14 +315,6 @@
         updates.logo_url = await uploadLogo(pendingLogoFile, ourTeamId);
       } catch (logoErr){
         showMsg('Logo upload failed: ' + logoErr.message, 'error');
-        return;
-      }
-    }
-    if (pendingIconFile){
-      try {
-        updates.icon_url = await uploadIcon(pendingIconFile, ourTeamId);
-      } catch (iconErr){
-        showMsg('Icon upload failed: ' + iconErr.message, 'error');
         return;
       }
     }
