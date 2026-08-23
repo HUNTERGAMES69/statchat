@@ -2122,9 +2122,12 @@ watch for.
   - Check the **sack** path for the same omission while in there.
 ## ORDER OF WORK — decided 23 Aug
 
-    1. iPad          <- NEXT
+    1. iPad PORTRAIT   <- NEXT (landscape/rails deferred, see below)
     2. Multi-tenant
     3. Everything else
+
+Portrait stacks and already looks good enough for new users -- that is
+the bar, and it is met. Landscape rails are a refinement, not a blocker.
 
 **PC is considered DONE.** Andy's call. The entry app on a laptop is the
 product as intended; further work there is polish, not readiness.
@@ -2179,6 +2182,32 @@ iPad reaches 1220 in landscape** -- mini 1133, iPad 10th/Air 1180, Pro 11"
 1194; only the 13" Pro at 1366 clears it. So today the three-column layout
 never engages on the iPad you would actually use, and the rails silently
 fall back to stacked.
+
+### DEFERRED 23 Aug — collapsible rails and landscape iPad
+
+**Attempted and REVERTED the same day.** Portrait looks good enough to
+put in front of new users, and the landscape work is not worth blocking
+on. Everything below stands as the design when it is picked up again;
+nothing of it remains in the code.
+
+What went wrong, so the next attempt does not repeat it:
+
+  * The strip is created unconditionally by setupRails() -- built once and
+    kept, because rebuilding it on resize drops its click listener. So the
+    element exists at EVERY width and something must hide it. The hide
+    rule was written inside the landscape query, so desktop had no rule
+    hiding it and the button rendered as a black box at the foot of each
+    rail. Moving the rule to a global default did not fix what Andy saw,
+    which means there is a second cause still unfound.
+  * An earlier attempt made #mainView a flex container and set `order` on
+    its children. `order` applies to ALL children, and the two cards at
+    the end had none set, so they defaulted to 0 and leapt to the top of
+    the page.
+  * **jsdom ignores @media entirely** -- matchMedia is undefined and the
+    tablet rules never apply. Nothing below 1220px can be verified in the
+    harness. Two desktop regressions shipped from exactly this blind spot.
+    Anything scoped to a media query must be asserted from the SOURCE
+    TEXT, not from getComputedStyle, or the check cannot fail.
 
 **Collapsible rails -- TABLET ONLY, desktop untouched.**
 

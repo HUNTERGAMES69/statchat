@@ -346,66 +346,6 @@
              padding:3px 8px; border-radius:5px; display:inline-block; margin:8px 0 4px; }
   /* Below the dock breakpoint the margins are gone, so it comes back into
      the flow underneath everything else rather than overlapping the card. */
-  /* THE RAIL STRIP IS HIDDEN BY DEFAULT, EVERYWHERE.
-     ---------------------------------------------------------------------
-     It is created unconditionally by setupRails() -- built once and kept,
-     because rebuilding it on resize would drop its listener with it. So
-     the element exists at every width, and only the media query below
-     ever showed it.
-
-     The hide rule used to live INSIDE that query, which meant desktop had
-     no rule hiding it at all: the button simply rendered, as a black box
-     at the foot of each rail. Reported with a screenshot.
-
-     Hidden here, shown only by the collapsed state inside the band. A
-     default that holds everywhere beats a rule that has to be repeated in
-     every context that does not want it. */
-  #driveDock > .rail-strip, #rightRail > .rail-strip { display:none; }
-
-  /* COLLAPSIBLE RAILS — LANDSCAPE TABLET ONLY (1024-1219px).
-     ---------------------------------------------------------------------
-     The entry card is fixed at 760px, so the rails split what is left. On
-     an 1180px iPad that is about 176px each with both open -- narrower
-     than the word "possessions", and drive lines wrap three deep. With
-     one open it is about 386px, comparable to desktop.
-
-     So one-at-a-time is not a preference here, it is the only way a rail
-     fits at all. A collapsed rail becomes a thin strip down its side with
-     the label rotated; tapping it opens that rail and closes the other.
-
-     Below 1024 (portrait) none of this applies -- the stacked layout
-     already works and is left alone. Above 1219 neither does: desktop
-     keeps both rails open side by side. */
-  @media (min-width: 1024px) and (max-width: 1219px) {
-    #driveDock, #rightRail {
-      transition:none;
-      overflow:hidden;
-    }
-    /* COLLAPSED: a strip. Width is the strip, and the contents are hidden
-       rather than merely narrow -- a 34px-wide card would reflow its text
-       into a column of single letters before it disappeared. */
-    #driveDock.rail-collapsed, #rightRail.rail-collapsed {
-      width:34px; min-width:34px; padding:0; cursor:pointer;
-      background:var(--sc-card, #fff);
-      border:1px solid var(--sc-rule, #e6e6e6); border-radius:8px;
-    }
-    #driveDock.rail-collapsed > *, #rightRail.rail-collapsed > * { display:none; }
-    /* The rotated label, and the only child a collapsed rail shows. */
-    #driveDock.rail-collapsed > .rail-strip,
-    #rightRail.rail-collapsed > .rail-strip {
-      display:flex; align-items:center; justify-content:center;
-      writing-mode:vertical-rl; text-orientation:mixed;
-      height:100%; width:100%; gap:8px;
-      font-size:13px; font-weight:700; letter-spacing:0.02em;
-      color:var(--sc-ink-soft, #555); white-space:nowrap;
-      background:none; border:0; padding:14px 0; cursor:pointer;
-    }
-    /* The open one takes the room the collapsed one gave up. */
-    #driveDock:not(.rail-collapsed) { right:calc(50% + 380px + 18px); }
-    #rightRail:not(.rail-collapsed) { left:calc(50% + 380px + 18px); }
-    #driveDock.rail-collapsed  { right:auto; width:34px; }
-    #rightRail.rail-collapsed  { left:auto; width:34px; }
-  }
 
   @media (max-width: 1219px) {
     #rightRail { position:static; left:auto; right:auto; height:auto !important;
@@ -7118,62 +7058,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   //
   // `change` is dispatched on the ones being cleared so any panel logic
   // watching them -- field visibility, spot prefills -- unwinds too.
-  // COLLAPSIBLE RAILS, ONE OPEN AT A TIME — landscape tablet only.
-  // ---------------------------------------------------------------------
-  // Why one at a time: the entry card is a fixed 760px, so on an 1180px
-  // iPad two rails get about 176px each -- narrower than the word
-  // "possessions", with drive lines wrapping three deep. One rail gets
-  // about 386px, comparable to desktop. It is what makes a rail usable
-  // rather than a preference.
-  //
-  // Current drive is the one open by default: Andy checks it constantly
-  // while entering plays, where Checks and Live totals are glanced at.
-  //
-  // Only between 1024 and 1219. Below that the page stacks and already
-  // works; above it desktop shows both. Outside the band every class this
-  // adds is removed, so neither layout inherits a collapsed rail.
-  const RAILS = [
-    { id: 'driveDock', label: 'Current drive' },
-    { id: 'rightRail', label: 'Checks & totals' }
-  ];
-  function railBandActive(){
-    return window.innerWidth >= 1024 && window.innerWidth <= 1219;
-  }
-  function openRail(openId){
-    RAILS.forEach(r => {
-      const el = document.getElementById(r.id);
-      if (!el) return;
-      el.classList.toggle('rail-collapsed', r.id !== openId);
-    });
-    try { localStorage.setItem('sc_open_rail', openId); } catch (e) {}
-  }
-  function setupRails(){
-    const active = railBandActive();
-    RAILS.forEach(r => {
-      const el = document.getElementById(r.id);
-      if (!el) return;
-      // The strip is built once and kept -- rebuilding it on every resize
-      // would drop the listener with it.
-      let strip = el.querySelector(':scope > .rail-strip');
-      if (!strip){
-        strip = document.createElement('button');
-        strip.type = 'button';
-        strip.className = 'rail-strip';
-        strip.textContent = r.label;
-        strip.addEventListener('click', () => openRail(r.id));
-        el.appendChild(strip);
-      }
-      if (!active) el.classList.remove('rail-collapsed');
-    });
-    if (active){
-      let want = 'driveDock';
-      try { want = localStorage.getItem('sc_open_rail') || want; } catch (e) {}
-      if (!RAILS.some(r => r.id === want)) want = 'driveDock';
-      openRail(want);
-    }
-  }
-  window.addEventListener('resize', setupRails);
-
   // THE HEADER ROW IS ASSEMBLED AT TABLET WIDTH.
   // ---------------------------------------------------------------------
   // #onAirBanner is a child of #mainView and #topActions is a child of
@@ -7213,7 +7097,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   }
   window.addEventListener('resize', layoutHeaderForWidth);
   layoutHeaderForWidth();
-  setupRails();
 
   function wireExclusiveToggles(ids, afterChange){
     const clearOthers = (keepId) => {
