@@ -111,15 +111,12 @@
      score just because it happens to be biggest. */
   .banner.compact .score,
   .banner.compact .downdist { font-size:19px; font-weight:700; }
-  .banner.compact #downText { flex:1; text-align:center; letter-spacing:0.01em;
-                              white-space:nowrap; }
   /* Below roughly 1100px the three parts stop fitting on one line, so the
      down-and-distance wraps to its own full-width row rather than being
      squeezed. */
   @media (max-width: 1219px){
     .banner.compact .score,
     .banner.compact .downdist { font-size:17px; }
-    .banner.compact #downText { flex-basis:100%; }
   }
   .hint { font-size:12px; color:#888; margin:6px 0; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
@@ -197,7 +194,15 @@
       <div class="quad" id="quadTL">
         <div class="banner compact" id="banner">
           <span class="score" id="scoreText"></span>
-          <span class="downdist" id="downText"></span>
+          <!-- DOWN AND DISTANCE REMOVED FROM THE BANNER, 23 Aug.
+               It took a full line of its own here (a rule below 1220
+               gave it flex-basis:100%), so the banner ran to three lines
+               on an iPad -- score, down, quarter.
+
+               Nothing is lost: the situation is on screen twice already,
+               in Current Drive and via the possession marker on the team
+               tiles. This was the third telling and the one paying for it
+               in vertical space. Score and quarter only now. -->
           <span class="downdist" id="quarterText"></span>
         </div>
         <div id="gameMsg"></div>
@@ -1066,7 +1071,7 @@ function extractNameTag(rawName){
       });
     const qEl = document.getElementById('quarterText');
     if (phase){
-      document.getElementById('downText').textContent = '';
+      // #downText is gone from the banner -- see the note in the markup.
       // Just the phase. Who kicks off to start the second half is shown
       // under the scoring summary instead -- it is a fact about what
       // happens next, and it reads better beside the half's scoring than
@@ -1115,11 +1120,9 @@ function extractNameTag(rawName){
       // hand, an unusual recovery -- would have left the banner blank
       // with a play visibly on screen. The kick itself is excluded
       // because it sets no down; that is the whole window being closed.
-      const hasDrive = driveThisHalf && !!state.down &&
-        state.fieldPos !== null && state.fieldPos !== undefined;
-      document.getElementById('downText').textContent = hasDrive
-        ? (ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabelNamed(state.fieldPos, state.possession))
-        : '';
+      // The banner no longer carries down and distance; Current Drive
+      // and the possession marker already say it. hasDrive and the
+      // markerLabelNamed call that fed this went with it.
       // Just the quarter, matching game.html. Which half it belongs to is
       // obvious from the number and only crowded the banner.
       document.getElementById('quarterText').textContent =
