@@ -404,6 +404,52 @@ async function run() {
     h.close();
   }
 
+  // THE 0-9 PAD SHOWS WHICH DIGIT IS ENTERED.
+  // ---------------------------------------------------------------------
+  // Reported: pressing a number gave no feedback beyond the value
+  // appearing in the box -- on a touchscreen that leaves a scorer unsure
+  // the tap registered, and the box is not always where they are looking.
+  //
+  // A LIT STATE rather than a flash, because a press REPLACES the value:
+  // the box holds one digit, so the lit key is an accurate picture of what
+  // is entered rather than just an acknowledgement.
+  //
+  // The half that matters is that it FOLLOWS THE BOX. A key still lit
+  // while the box says something else would be worse than no indicator.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="rush"]'));
+    await new Promise(r => setTimeout(r, 80));
+    const pad = [...doc.querySelectorAll('.quickYardsBtn[data-for="pp_yards"]')];
+    if (pad.length !== 10) { fail('pad', 'expected 10 keys, got ' + pad.length); h.close(); return failures; }
+    const lit = () => pad.filter(b => b.style.background &&
+      !/255,\s*255,\s*255|#fff/.test(b.style.background)).map(b => b.dataset.yds);
+
+    if (lit().length) fail('pad:rest', 'nothing should be lit before a press, got ' + lit().join(','));
+
+    click(win, pad[7]);
+    await new Promise(r => setTimeout(r, 60));
+    if (lit().join(',') !== '7') fail('pad:press', 'pressing 7 should light 7, got [' + lit().join(',') + ']');
+
+    // ONE AT A TIME -- a second press must clear the first.
+    click(win, pad[3]);
+    await new Promise(r => setTimeout(r, 60));
+    if (lit().join(',') !== '3') fail('pad:swap', 'pressing 3 should light only 3, got [' + lit().join(',') + ']');
+
+    // Typing a two-digit number matches no key, so nothing stays lit.
+    typeInto(win, doc.getElementById('pp_yards'), '12');
+    await new Promise(r => setTimeout(r, 60));
+    if (lit().length) fail('pad:typed', '12 matches no key, but [' + lit().join(',') + '] is lit');
+
+    // And typing a single digit lights it, without a press.
+    typeInto(win, doc.getElementById('pp_yards'), '5');
+    await new Promise(r => setTimeout(r, 60));
+    if (lit().join(',') !== '5') fail('pad:follow', 'the pad should follow the box, got [' + lit().join(',') + ']');
+    h.close();
+  }
+
   return failures;
 }
 
