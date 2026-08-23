@@ -382,7 +382,13 @@
       left:auto !important; right:auto !important; top:auto !important;
       height:auto !important; width:auto !important;
       display:flex !important; flex-wrap:wrap !important;
-      align-items:center !important; gap:8px !important;
+      /* STRETCH so every control in the row matches the tallest.
+         Centring left each at its natural height, and Dashboard carries
+         .hdr-btn's smaller padding while ON AIR runs to two lines -- the
+         row came out ragged with Dashboard visibly short. !important
+         here beat the inline style the layout function sets, so the two
+         have to agree; they now say the same thing. */
+      align-items:stretch !important; gap:8px !important;
       margin:0 0 8px !important; }
     #headerLeft > *, #topActions > * {
       position:static !important;
@@ -7264,7 +7270,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         el.style.width = 'auto';
         el.style.display = 'flex';
         el.style.flexWrap = 'wrap';
-        el.style.alignItems = 'center';
+        // STRETCH, not centre. Centring lets each control keep its own
+        // natural height, and Dashboard carries .hdr-btn's smaller padding
+        // (5px/12px) while ON AIR runs to two lines -- so the row came out
+        // ragged with Dashboard visibly short. Stretching makes every
+        // control match the tallest, whatever that happens to be, rather
+        // than hardcoding a height that would drift when a label changes.
+        // setProperty with 'important', because a plain inline style still
+        // loses to an !important stylesheet rule -- and this row has
+        // several. Belt and braces: whatever else is declared for these
+        // two elements, the row stretches.
+        el.style.setProperty('align-items', 'stretch', 'important');
         el.style.gap = '8px';
         el.style.margin = '0 0 8px';
       });
@@ -7284,6 +7300,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           c.style.height = 'auto';
           c.style.flex = '0 1 auto';
           c.style.margin = '0';
+          // The control is now as tall as the row, so its own label has to
+          // centre itself inside that height or it sits at the top.
+          c.style.display = 'flex';
+          c.style.flexDirection = 'column';
+          c.style.alignItems = 'center';
+          c.style.justifyContent = 'center';
         });
       });
     } else {
@@ -7298,7 +7320,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       [left, acts].forEach(el => {
         if (!el) return;
         [...el.children].forEach(c => {
-          ['position','top','height','flex','margin'].forEach(k => { c.style[k] = ''; });
+          ['position','top','height','flex','margin','display',
+           'flexDirection','alignItems','justifyContent'].forEach(k => { c.style[k] = ''; });
         });
       });
       if (rail){
