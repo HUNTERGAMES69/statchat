@@ -52,11 +52,13 @@ async function run() {
       typeInto(h.window, h.document.getElementById('pp_carrier_manual'), '22');
       click(h.window, h.document.querySelector('input[name=pp_2pt_rush_res][value=x]'));
     }, 'none'],
-    ['2PT fumbled, turned over', async h => {
-      h.evalIn("renderPlayPanel('twopt')");
-      typeInto(h.window, h.document.getElementById('pp_carrier_manual'), '22');
-      click(h.window, h.document.querySelector('input[name=pp_2pt_rush_res][value=b]'));
-    }, 'none'],
+    // '2PT fumbled, turned over' was removed from the tree on 23 Aug:
+    // NFHS ends the try the moment the defence gains possession, so there
+    // is no return, no score and nothing to record beyond "no good". The
+    // case is gone with the control. parseInput still understands the old
+    // code so stored games keep rendering -- that is covered in
+    // punt_fg_outcome_check, not here, because this suite is about the
+    // clock rather than about history.
   ];
 
   for (const [label, setup, expected] of cases) {

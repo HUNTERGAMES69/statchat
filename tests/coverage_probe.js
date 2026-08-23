@@ -101,14 +101,15 @@ const CASES = [
   ['PAT blocked',             { type: 'pat', kicker: '3', blocked: true, credit: '55' }],
 
   // --- Two-point conversions ----------------------------------------
+  // The two 2PT turnover paths were removed from the tree on 23 Aug --
+  // NFHS ends a try when the defence gains possession, so there is
+  // no return and no score to describe. Nothing reaches them now.
   ['2pt rush good',           { type: 'twopt', sub: 'rush', carrier: '22', result: 'g' }],
   ['2pt rush failed',         { type: 'twopt', sub: 'rush', carrier: '22', result: 'x' }],
   // NFHS: a try ends when the defense gains possession, so there is no
   // defensive score to reach. The turnover itself is still recorded.
-  ['2pt rush turned over',    { type: 'twopt', sub: 'rush', carrier: '22', result: 'b', credit: '55' }],
   ['2pt pass good',           { type: 'twopt', sub: 'pass', passer: '7', receiver: '80', result: 'g' }],
   ['2pt pass failed',         { type: 'twopt', sub: 'pass', passer: '7', receiver: '80', result: 'x' }],
-  ['2pt pass intercepted',    { type: 'twopt', sub: 'pass', passer: '7', receiver: '80', result: 'b', credit: '21' }],
 
   // --- Utilities ----------------------------------------------------
   ['safety (standalone)',     { type: 'safety', credit: '55' }],
