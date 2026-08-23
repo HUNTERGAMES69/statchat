@@ -37,7 +37,7 @@
 //      as a control.
 
 const { bootGamePage } = require('./harness');
-const { click, setDrive } = require('./ui_driver');
+const { click, setDrive, typeInto } = require('./ui_driver');
 
 async function run() {
   const failures = [];
@@ -275,6 +275,83 @@ async function run() {
         if (checked().length) {
           fail('exclusive:' + tree + ':release', 'unchecking should leave none set, got [' + checked().join(', ') + ']');
         }
+      }
+      h.close();
+    }
+  }
+
+  // A TERMINAL OUTCOME LEAVES ONLY WHAT STILL APPLIES.
+  // ---------------------------------------------------------------------
+  // Two reports. On a kickoff touchback or out of bounds the return
+  // fields should go and only the ball spot remain -- the plain tree did
+  // this, the GUIDED one left "Fumbled during the return" on screen,
+  // offering to record a fumble during a return that never happened. And
+  // a blocked punt has no distance: the kick never got away, so the
+  // yardage box is a question with no answer, left open and empty as
+  // though the scorer had forgotten it.
+  {
+    const onScreen = (win, doc, id) => {
+      let e = doc.getElementById(id);
+      if (!e) return false;
+      while (e && e !== doc.body) {
+        if (win.getComputedStyle(e).display === 'none') return false;
+        e = e.parentElement;
+      }
+      return true;
+    };
+
+    // GUIDED kickoff: touchback and out of bounds.
+    for (const tog of ['gr_touchback_toggle', 'gr_oob_toggle']) {
+      const h = await bootGamePage();
+      const doc = h.window.document, win = h.window;
+      click(win, doc.getElementById('startGameBtn'));
+      await new Promise(r => setTimeout(r, 80));
+      click(win, doc.getElementById('pickA'));
+      await new Promise(r => setTimeout(r, 80));
+      click(win, doc.querySelector('.gk_kicker_pick'));
+      const dir = doc.querySelector('.gk_dir_btn');
+      if (dir) click(win, dir);
+      click(win, doc.getElementById('guidedKickoffSave'));
+      await new Promise(r => setTimeout(r, 250));
+      const t = doc.getElementById(tog);
+      if (!t) { fail('terminal:' + tog, 'toggle missing'); h.close(); continue; }
+      click(win, t);
+      await new Promise(r => setTimeout(r, 100));
+      ['gr_returner_grid', 'gr_returner_manual', 'gr_retto_wrap',
+       'gr_ko_ret_fumbled_wrap', 'gr_ko_ret_fum_wrap'].forEach(id => {
+        if (onScreen(win, doc, id)) {
+          fail('terminal:' + tog + ':' + id, id + ' should not survive a terminal outcome');
+        }
+      });
+      // But the spot must REMAIN -- it is the one thing still being asked.
+      if (!onScreen(win, doc, 'gr_spot_recv')) {
+        fail('terminal:' + tog + ':spot', 'the ball spot should still be asked for');
+      }
+      h.close();
+    }
+
+    // PUNT blocked: the distance question is greyed out, and restored when
+    // the toggle comes back off.
+    {
+      const h = await bootGamePage();
+      const doc = h.window.document, win = h.window;
+      setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="punt"]'));
+      typeInto(win, doc.getElementById('pp_yards'), '42');
+      await new Promise(r => setTimeout(r, 60));
+      click(win, doc.getElementById('pp_blocked_toggle'));
+      await new Promise(r => setTimeout(r, 90));
+      const y = doc.getElementById('pp_yards');
+      if (!y.disabled) fail('terminal:blocked', 'a blocked punt has no distance to enter');
+      if (y.value) fail('terminal:blocked-value', 'the stale distance should be cleared, found ' + JSON.stringify(y.value));
+      if ([...doc.querySelectorAll('.quickYardsBtn[data-for="pp_yards"]')].some(b => !b.disabled)) {
+        fail('terminal:blocked-pad', 'the 0-9 pad should be disabled too');
+      }
+      // Reversible: turning Blocked off has to give the field back.
+      click(win, doc.getElementById('pp_blocked_toggle'));
+      await new Promise(r => setTimeout(r, 90));
+      if (doc.getElementById('pp_yards').disabled) {
+        fail('terminal:blocked-restore', 'clearing Blocked should re-enable the distance');
       }
       h.close();
     }
