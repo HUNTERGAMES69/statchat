@@ -2580,6 +2580,17 @@ function parseInput(raw, state){
       if (retyds) t += ', returned ' + retyds;
       let score = null;
       if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
+      // RECOVERED BEHIND THEIR OWN GOAL LINE IS A SAFETY. A block or a
+      // muffed hold from close range often does not travel: the kicking
+      // team falls on it in their own end zone and that is two the other
+      // way. Touchdown was askable here from the start; the mirror case
+      // was not, so the play could only be entered as an ordinary
+      // blocked kick with the score left to a manual adjustment.
+      else if (isSafety){
+        t += ' \u2014 recovered in own end zone, SAFETY';
+        return { text: t, effect: { score: { team: def, points: 2 }, endsDrive: true },
+          flipEligible: false, team: off, quarter: state.quarter };
+      }
       // team: td ? def : off, matching the 'b' branch exactly -- whoever
       // recovered gets the play; the kicking team keeps it (as it always
       // has) unless the return actually scored.
@@ -2602,6 +2613,17 @@ function parseInput(raw, state){
       if (retyds) t += ', returned ' + retyds;
       let score = null;
       if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
+      // RECOVERED BEHIND THEIR OWN GOAL LINE IS A SAFETY. A block or a
+      // muffed hold from close range often does not travel: the kicking
+      // team falls on it in their own end zone and that is two the other
+      // way. Touchdown was askable here from the start; the mirror case
+      // was not, so the play could only be entered as an ordinary
+      // blocked kick with the score left to a manual adjustment.
+      else if (isSafety){
+        t += ' \u2014 recovered in own end zone, SAFETY';
+        return { text: t, effect: { score: { team: def, points: 2 }, endsDrive: true },
+          flipEligible: false, team: off, quarter: state.quarter };
+      }
       // team: def on the TD -- THE ORIGINAL REPORT, 19 Aug 2026: score
       // correctly went to the defense, but this line still filed the
       // play itself under the offense's own team, which is what a
@@ -8358,14 +8380,38 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         fakeBlockHtml('pp_fgfake', 'field goal') +
         '<div id="pp_fgres_wrap" style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="g" checked> Good</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="x"> Missed</label></div>' +
-        '<div id="pp_fg_blocked" style="display:none;">' + defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + '</div>' +
+        '<div id="pp_fg_blocked" style="display:none;">' + defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') +
+          // A BLOCKED KICK RECOVERED IN YOUR OWN END ZONE IS A SAFETY.
+          // A block on a field goal from close range often does not
+          // travel: the kicking team falls on it behind their own goal
+          // line and that is two points the other way. Touchdown was
+          // already askable here, the mirror case was not.
+          '<div style="margin-top:10px;">' +
+            '<input autocomplete="off" type="checkbox" id="pp_fgb_safety" style="display:none;">' +
+            '<button type="button" id="pp_fgb_safety_toggle" style="width:100%; padding:12px; ' +
+              'border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; ' +
+              'font-size:15px; font-weight:700; cursor:pointer;">Recovered in own end zone — safety</button>' +
+          '</div>' +
+        '</div>' +
         // MUFFED HOLD RECOVERY, added 19 Aug 2026 alongside the parseInput
         // change above -- same shape as the blocked sub-panel just above
         // (a live ball, a defense-side recovery credit, optional return
         // yards), with its own suffixed credit fields (_fgmuff) so the
         // two panels' pickers never collide if both happened to render at
         // once mid-toggle.
-        '<div id="pp_fg_muff" style="display:none;">' + defBlock('Recovered by', '_fgmuff') + yardsBlock('Return yards (optional)', 'pp_fgmuffretyds') + '</div>' +
+        '<div id="pp_fg_muff" style="display:none;">' + defBlock('Recovered by', '_fgmuff') + yardsBlock('Return yards (optional)', 'pp_fgmuffretyds') +
+          // A BLOCKED KICK RECOVERED IN YOUR OWN END ZONE IS A SAFETY.
+          // A block on a field goal from close range often does not
+          // travel: the kicking team falls on it behind their own goal
+          // line and that is two points the other way. Touchdown was
+          // already askable here, the mirror case was not.
+          '<div style="margin-top:10px;">' +
+            '<input autocomplete="off" type="checkbox" id="pp_fgmuff_safety" style="display:none;">' +
+            '<button type="button" id="pp_fgmuff_safety_toggle" style="width:100%; padding:12px; ' +
+              'border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; ' +
+              'font-size:15px; font-weight:700; cursor:pointer;">Recovered in own end zone — safety</button>' +
+          '</div>' +
+        '</div>' +
         // SHARED touchdown toggle for whichever of the two is active --
         // Blocked and Muffed hold are mutually exclusive (see clearOther
         // below), so one toggle answers the same question for either,
@@ -10059,6 +10105,40 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // handlers are gone: the group does it, and doing it twice meant
       // two places to keep in step.
       wireExclusiveToggles(['pp_fg_blocked_cb', 'pp_fg_muffhold', 'pp_fg_fake']);
+      // The two safety toggles, one per sub-panel. Button/checkbox pairs
+      // like every other on the page.
+      //
+      // A safety and a return TOUCHDOWN are opposite ends of the same
+      // play, so each clears the other -- the ball cannot both be downed
+      // in the kicking team's end zone and carried into the other one.
+      [['pp_fgb_safety', 'pp_td'], ['pp_fgmuff_safety', 'pp_td']].forEach(([id, tdId]) => {
+        const btn = document.getElementById(id + '_toggle'), cb = document.getElementById(id);
+        if (!btn || !cb) return;
+        const paint = () => {
+          btn.textContent = (cb.checked ? '\u2713 ' : '') + 'Recovered in own end zone — safety';
+          btn.style.background = cb.checked ? '#1a7a4c' : '#fff';
+          btn.style.color = cb.checked ? '#fff' : '#555';
+          btn.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
+        };
+        btn.addEventListener('click', () => {
+          cb.checked = !cb.checked;
+          if (cb.checked){
+            const tdCb = document.getElementById(tdId);
+            if (tdCb && tdCb.checked){ tdCb.checked = false; tdCb.dispatchEvent(new Event('change')); }
+            const tdBtn = document.getElementById(tdId + '_toggle');
+            if (tdBtn){
+              tdBtn.classList.remove('picked');
+              tdBtn.textContent = 'Touchdown';
+              tdBtn.style.background = '#fff';
+              tdBtn.style.color = '#555';
+              tdBtn.style.borderColor = '#ccc';
+            }
+          }
+          paint();
+        });
+        cb.addEventListener('change', paint);
+        paint();
+      });
       document.getElementById('pp_fg_blocked_cb').addEventListener('change', (e) => {
         document.getElementById('pp_fg_blocked').style.display = e.target.checked ? 'block' : 'none';
         setKickResultLocked('pp_fgres', e.target.checked || isChecked('pp_fg_muffhold'));
@@ -10964,7 +11044,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // the recovery-credit slot the moment nobody is named.
         const muffCreditTok = sel.credit || (muffRetyds ? '?' : '');
         code = sel.kicker + 'fg m' + (muffCreditTok ? ' ' + muffCreditTok : '') +
-          (muffRetyds ? ' ' + muffRetyds : '') + (td ? ' td' : '');
+          (muffRetyds ? ' ' + muffRetyds : '') + (td ? ' td' : '') +
+          // 'sf' LAST. parseInput pops td first and then sf, so the
+          // order here has to mirror that or the tokens are read as
+          // each other.
+          (!!(document.getElementById('pp_fgmuff_safety') || {}).checked ? ' sf' : '');
         // NO early return, unlike PAT's own muffed-hold branch just
         // below (which is correct to skip the tail: a try always ends in
         // a kickoff, never a drive starting at a spot, so it genuinely
@@ -10994,7 +11078,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // muffed-hold branch above and testing this one directly rather
           // than trusting that it already worked.
           const blockCreditTok = sel.credit || (retyds ? '?' : '');
-          code = sel.kicker + 'fg b' + (blockCreditTok ? ' ' + blockCreditTok : '') + (retyds ? ' ' + retyds : '') + (td ? ' td' : '');
+          code = sel.kicker + 'fg b' + (blockCreditTok ? ' ' + blockCreditTok : '') +
+            (retyds ? ' ' + retyds : '') + (td ? ' td' : '') +
+            (!!(document.getElementById('pp_fgb_safety') || {}).checked ? ' sf' : '');
         } else {
           code = sel.kicker + 'fg ' + yds + ' ' + res;
         }
