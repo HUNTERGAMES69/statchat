@@ -2300,3 +2300,172 @@ documenting it in three places.
 `tests/stranded_quarter_marker_check.js` covers all four cases: undo
 immediately after Start 2nd half, undo back across a completed kickoff,
 a legitimate marker surviving, and redo restoring a removed one.
+
+---
+
+## 23 August 2026 — eleven reported bugs, then the iPad
+
+Andy played a game through the UI and reported eleven faults, then two
+more, then a run of layout problems on an iPad. What follows is the
+reasoning worth keeping, not a changelog.
+
+### fieldDelta and statYds are genuinely different numbers
+
+The engine has always carried both on an effect: `statYds` credits the
+player, `fieldDelta` moves the ball. Every caller had been passing the
+same value to both, so the distinction was theoretical until now.
+
+A runner's yardage is measured to the SPOT OF THE FUMBLE, not to where
+his team fell on it. Gain 8, fumble, recover 3 back: the rusher is
+credited 8 while the ball sits 5 ahead of the snap. That is the first
+place in the app where the two must differ, and no engine change was
+needed to do it -- only the entry layer had been conflating them.
+
+Distance-to-go had to follow `fieldDelta` too. It measures the ball, not
+the stat sheet.
+
+### The own-recovery fumble never awarded a first down
+
+Found while adding the above, and much worse than it. The effect never
+set `converts`, so the engine advanced the down but could not convert:
+2nd & 7 at own 30, rush for 8, own recovery came out 3rd & 1 instead of
+1st & 10. Verified against the live build before touching anything, so it
+long predated the work. Every own-recovery fumble that reached the marker
+had been scored a down short.
+
+### NFHS: the defence cannot score or take possession on a try
+
+The 2PT tree offered "Fumbled, turned over" and "Intercepted, turned
+over", with an NFHS note directly above them saying the try ends the
+moment the defence gains possession. The tree contradicted itself. Both
+removed; the PARSER still understands the old codes so stored games keep
+rendering.
+
+### A game must use the roster of ITS OWN season
+
+Reported entering a 2025 game and getting the 2026 roster. The query
+always filtered by season correctly -- but it ran once inside `init()`,
+reading the year field at that moment, which on a new game is the team's
+CURRENT season. Changing the year afterwards re-fetched nothing.
+
+This mattered more than a display bug: `create_game` snapshots the roster
+into `game_rosters`, and that snapshot is what `game.html` reads for the
+rest of that game's life. A wrong roster at creation is wrong in every
+report afterwards. Any 2025 games created before the fix have the wrong
+snapshot baked in.
+
+Andy confirmed prior-year rosters are already read-only, so the three
+protections now line up: the roster is frozen per season, the game keeps
+its own snapshot, and the snapshot comes from the right season. Making a
+whole past season read-only would add nothing and would block entering a
+past game, which is a normal thing to do.
+
+### FIVE LESSONS FROM THE LAYOUT WORK, which took far longer than it should
+
+**1. jsdom cannot see media queries at all.** `matchMedia` is undefined
+and `@media` blocks are ignored, so every responsive rule reports as
+though it does not exist. Its cascade also cannot settle `!important`
+conflicts reliably. A whole afternoon of iPad fixes tested correct here
+and did nothing in the browser. Anything scoped to a media query must be
+asserted from the SOURCE TEXT, not from getComputedStyle, or the check
+cannot fail.
+
+**2. Style the element, not its container.** Three separate bugs, all the
+same shape: a rule scoped to where an element used to live, applied to an
+element that had been moved.
+
+  * `#onAirBanner` carried `position:absolute` itself, so wrapping it in a
+    flex container changed nothing -- an absolutely positioned child
+    ignores its parent's layout.
+  * `.hdr-btn`'s metrics are `!important` and shared with controls that
+    want a different shape.
+  * `#topActions a { color:#fff }` stopped matching the moment the links
+    moved, and they fell back to the browser's default link colour --
+    purple, in a header full of dark tiles.
+
+The point of MOVING elements rather than duplicating them is that they
+keep their behaviour. Their appearance has to be attached to them too.
+
+**3. An inline style beats any stylesheet rule.** `syncAir` writes `top`
+and `height` inline onto the positioned header element. Two CSS fixes had
+no visible effect whatsoever because of it. When a style change does
+nothing at all, look for script writing to that element FIRST, not third.
+
+**4. `removeProperty` on a shorthand leaves the longhands behind.**
+`margin` set via `setProperty` expands to four longhands, each still
+`!important`; removing `margin` clears none of them. Tablet styles rode
+back to desktop this way.
+
+**5. Move the children, not the wrapper.** Relocating `#topActions` into
+the header row put a nested flex CONTAINER inside it, which was squeezed
+for width and stacked its three buttons into a column -- then the row's
+`align-items:stretch` made everything else as tall as that column. Moving
+the three links individually gives one flat row that wraps as a row
+should.
+
+### The card was silently widened
+
+The entry card is 760px and every rail offset is written against it. It
+was widened to 860 at some point during the responsive work, which
+squeezed both rails and the top row -- and made several header fixes look
+like they had failed when they had not. A test already asserted the rail
+sits at `calc(50% + 398px)`; it had been failing and was read past.
+Reverted, and the declared value and all four fallbacks now agree.
+
+### Layout that must be reliable is set from script
+
+After the CSS route failed repeatedly, the header is now positioned by
+`layoutHeader()` rather than by media queries: it reads the width (or
+`(hover: none) and (pointer: coarse)`, which catches an iPad reporting a
+desktop width in "Request Desktop Website" mode) and sets inline styles.
+The trade is that the layout lives in two places, so the rule is: the
+stylesheet describes DESKTOP, and `layoutHeader` is the only thing that
+changes it for touch.
+
+It runs again after the game row loads. Broadcast Setup is revealed only
+once the user's role is known, which is asynchronous -- so on a first
+visit the row was short, and appeared correct after a refresh purely
+because the second load won the race.
+
+### The 0-9 pad needed a SIZE change, not a colour change
+
+Reported: pressing a number gave no feedback beyond the value appearing
+in the box, which on a touchscreen leaves a scorer unsure the tap
+registered -- and the box is not always where they are looking.
+
+A lit state rather than a flash, because a press REPLACES the value
+rather than appending: the box holds one digit, so the lit key is an
+accurate picture of what is entered. It follows the box however the box
+changes -- typed, filled by the calculator, cleared on collapse, negated
+by LOSS -- because a key lit while the box disagreed would be worse than
+no indicator.
+
+**Three colour-only attempts were all reported as "no change".** Each was
+verified deployed, unopposed by any CSS, and confirmed applying the
+inline style. The code was right every time. A navy fill on a 36px key
+simply was not legible as feedback on that screen, and adding
+`transform: scale(1.18)` and a ring made it obvious immediately.
+
+Two real bugs did surface on the way, both worth remembering:
+
+  * The repaint was scoped to `panel` and reached only the key just
+    clicked, one of ten -- so the previously lit key never went out.
+    Scoped to `document` now; the pad is unambiguous by `data-for`.
+  * It used `var(--sc-navy, #1a1a2e)` in a JS-set inline style. A custom
+    property there is one more thing that can resolve to nothing, and
+    when it does the assignment fails silently -- indistinguishable from
+    the feature not working. Literal values in script-set styles.
+
+### WHAT COST THE MOST TIME TODAY, and how to avoid it
+
+The harness cannot see anything visual. jsdom has no layout engine,
+ignores `@media` entirely, and cannot settle `!important` conflicts -- so
+for a styling change it reports "correct" almost regardless. Treating
+that as verification and handing the result over to be tested turned Andy
+into the test harness, repeatedly, on work that could not be checked
+here.
+
+The rule that follows: **functional work can be verified here and should
+be; visual work cannot.** Batch visual changes and ask for one look, or
+leave them. Do not iterate blind, and say plainly when the harness cannot
+settle a question rather than reporting a green test as though it had.

@@ -2120,10 +2120,51 @@ watch for.
     than on the player. Reports already show targeted-with-no-catch
     receivers correctly, so capturing it is the whole fix.
   - Check the **sack** path for the same omission while in there.
+## WHERE THINGS STAND — end of 23 Aug
+
+**Desktop is done and confirmed working.** iPad portrait is usable and
+Andy's own judgement is that it is good enough to put in front of new
+users. That was the bar for this stage and it is met.
+
+Closed today: all eleven bugs from the play-through, plus two more found
+after (manual-entry box placement, and uniform horizontal spacing), plus
+the season-roster bug, the iPad header, the view-page banner, and the
+0-9 pad indicator.
+
+**A note on visual work.** The harness cannot see it -- no layout engine,
+@media ignored, !important unresolvable -- so it reports styling changes
+as correct almost regardless. Several rounds today were spent shipping
+changes that tested green and did nothing, with Andy as the only way to
+find out. Batch visual work and ask for one look; do not iterate blind.
+
+Still open, in rough order of value:
+
+- **Landscape collapsible rails** -- deferred, see the section below. Read
+  the failure notes before starting; this ate an afternoon.
+- **Interception panel has no FUMBLE option.** Its only outcomes are
+  "downed in the end zone" and "touchdown", so a returner putting it on
+  the ground after an INT cannot be recorded. Found while fixing items 5
+  and 6; not on Andy's list, so not built. Same class as those two.
+- **Hairline colours** -- four near-duplicates left uncollapsed on
+  purpose (#e6e6e6 vs #e0e0e0, #dde1e6, #f0f0f0). Contrast 1.05-1.10, so
+  visible if barely, and #dde1e6 is faintly blue where the others are
+  neutral. Needs a look rather than a contrast number.
+- **Games created before the season-roster fix** carry the wrong roster
+  snapshot. Re-opening setup and saving pulls the right one, but they
+  will not fix themselves and the symptom is subtle: real names, wrong
+  year's squad. A Supabase query comparing a game's season_year against
+  the season_year of the players in its snapshot would find them.
+- **Step 0 of multi-tenancy: version the schema.** Unchanged, and still
+  the real gate on tenancy. Also a standalone risk -- if the Supabase
+  project were lost today the application code would survive and the
+  shape of the data would not.
+
+---
+
 ## ORDER OF WORK — decided 23 Aug
 
-    1. iPad PORTRAIT   <- NEXT (landscape/rails deferred, see below)
-    2. Multi-tenant
+    1. iPad PORTRAIT   -- DONE 23 Aug (landscape/rails deferred, below)
+    2. Multi-tenant    <- NEXT, starting with Step 0 (schema versioning)
     3. Everything else
 
 Portrait stacks and already looks good enough for new users -- that is
@@ -2155,7 +2196,7 @@ code would survive and the shape of the data would not.
 
 ---
 
-## iPad / responsive plan — DECIDED 23 Aug, not yet built
+## iPad / responsive plan — PORTRAIT BUILT, landscape deferred
 
 **Scope of support, Andy's call:**
 - **Phone: game entry NOT supported.** A phone opening game.html as an
