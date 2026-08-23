@@ -4367,9 +4367,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const rush = top(b.rushing, 'yds');
       const pass = top(b.passing, 'yds');
       const rec  = top(b.receiving, 'yds');
+      // RETURNS, kickoff and punt combined -- from specialTeams, where
+      // kickers and punters also live, so `top` has to pick on a key only
+      // a returner has rather than on raw yardage.
+      const ret  = top(b.specialTeams, 'retYds');
       // A defence can have done something before anyone on offence has --
       // a three-and-out with a sack in it. Bail only when BOTH are empty.
-      if (!rush && !pass && !rec && !defLine(t)) return '';
+      // `ret` counts too. Without it a team whose only contribution so far
+      // is a kick return -- which is every receiving team after the
+      // opening kickoff -- rendered no leaders block at all, so the RET
+      // line could never appear no matter what the box score held.
+      if (!rush && !pass && !rec && !ret && !defLine(t)) return '';
       const line = (tag, best, detail) => best
         ? '<div class="ld-row"><span class="ld-tag">' + tag + '</span>' +
           '<span class="ld-name">' + shortPickerName(best.n) + '</span>' +
@@ -4392,6 +4400,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           tds(d) + ints(d)) +
         line('RUSH', rush, d => (d.att || 0) + ' att, ' + (d.yds || 0) + ' yds' + tds(d)) +
         line('REC',  rec,  d => (d.rec || 0) + ' rec, ' + (d.yds || 0) + ' yds' + tds(d)) +
+        // Only when there has BEEN a return -- an empty RET line on every
+        // game before the first kickoff is noise, and this rail is read at
+        // a glance.
+        (ret && ret.d && ret.d.retYds
+          ? line('RET', ret, d => (d.returns || 0) + ' ret, ' + (d.retYds || 0) + ' yds' +
+              (d.retLong ? ' · long ' + d.retLong : '') +
+              (d.retTd ? ' · ' + d.retTd + ' TD' : ''))
+          : '') +
         defLine(t) +
         '</div>';
     }
