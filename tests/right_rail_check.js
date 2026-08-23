@@ -186,9 +186,13 @@ async function run() {
     });
     // And the row rides the banner's own line, like ON AIR.
     h.evalIn('Object.defineProperty(window,"innerWidth",{value:1600,configurable:true}); document.querySelector(".banner").getBoundingClientRect=()=>({top:24,height:64,bottom:88}); window.__syncAir && window.__syncAir();');
-    const ta = doc.getElementById('topActions'), oa = doc.getElementById('onAirBanner');
+    // #headerLeft carries the inline top/height now, not the button --
+    // the position moved onto the container so Dashboard could sit beside
+    // ON AIR. Reading the button gives an element that carries neither.
+    const ta = doc.getElementById('topActions');
+    const oa = doc.getElementById('headerLeft') || doc.getElementById('onAirBanner');
     if (ta.style.top !== oa.style.top || ta.style.height !== oa.style.height) {
-      fail('toprow:level', 'the top row and ON AIR should sit on the same line at the same height: ' +
+      fail('toprow:level', 'the top row and the ON AIR block should sit on the same line at the same height: ' +
         ta.style.top + '/' + ta.style.height + ' vs ' + oa.style.top + '/' + oa.style.height);
     }
     h.close();
@@ -289,7 +293,11 @@ async function run() {
     // Level with the ON AIR tile, both measured from the banner rather
     // than pinned at a fixed inset that only matches by luck.
     h.evalIn("Object.defineProperty(window,'innerWidth',{value:1500,configurable:true}); window.pageYOffset=0; document.querySelector('.banner').getBoundingClientRect=()=>({top:30,height:56,bottom:86}); window.__syncAir();");
-    const air = doc.getElementById('onAirBanner');
+    // #headerLeft, not the button. The absolute position moved onto the
+    // container on 23 Aug so Dashboard could sit beside ON AIR -- syncAir
+    // writes top/height there now, and measuring the button instead reads
+    // an element that no longer carries either.
+    const air = doc.getElementById('headerLeft') || doc.getElementById('onAirBanner');
     if (ta.style.top !== air.style.top || ta.style.height !== air.style.height) {
       fail('topow:aligned', 'the top row and the ON AIR tile should sit on the same line: ' +
         ta.style.top + '/' + ta.style.height + ' vs ' + air.style.top + '/' + air.style.height);
@@ -363,14 +371,20 @@ async function run() {
       win.dispatchEvent(new win.Event('resize'));
       return { ta: ta.style.top, air: air ? air.style.top : null };
     };
-    const base = at(0).ta;
+    // EACH ELEMENT AGAINST ITS OWN BASELINE. The point of this check is
+    // that nothing DRIFTS as the page scrolls -- not that the two agree
+    // with each other. They are positioned by different code and need not
+    // share a value; comparing ON AIR against the top row's baseline made
+    // this fail the moment the header block was restructured, for a
+    // reason that had nothing to do with drift.
+    const base = at(0);
     [200, 600, 1200].forEach(scroll => {
       const got = at(scroll);
-      if (got.ta !== base) {
-        fail('drift:toprow', 'the top row moved after scrolling ' + scroll + 'px: ' + base + ' -> ' + got.ta);
+      if (got.ta !== base.ta) {
+        fail('drift:toprow', 'the top row moved after scrolling ' + scroll + 'px: ' + base.ta + ' -> ' + got.ta);
       }
-      if (air && got.air !== base) {
-        fail('drift:onair', 'the ON AIR tile moved after scrolling ' + scroll + 'px: ' + base + ' -> ' + got.air);
+      if (air && got.air !== base.air) {
+        fail('drift:onair', 'the ON AIR block moved after scrolling ' + scroll + 'px: ' + base.air + ' -> ' + got.air);
       }
     });
     h.close();
