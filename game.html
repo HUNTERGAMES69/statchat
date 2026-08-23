@@ -4606,7 +4606,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (el) el.disabled = true;
       });
     }
-    if (disable) document.getElementById('playPanel').style.display = 'none';
+    if (disable){
+      document.getElementById('playPanel').style.display = 'none';
+      if (typeof currentLadderType !== 'undefined') currentLadderType = null;
+    }
     document.getElementById('startGameBtn').style.display = (gamePhase === 'notStarted' && !guided.active) ? 'inline-block' : 'none';
     // Self-heal a stranded guided flow. guided_state is stored on the
     // game row, so a second-half kickoff that was started and then undone
@@ -5983,7 +5986,43 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     renderGuided();
   });
 
-  document.querySelectorAll('.ptypeBtn').forEach(b => b.addEventListener('click', () => renderPlayPanel(b.dataset.type)));
+  // THE LADDER IS ONE CHOICE, AND PRESSING IT AGAIN PUTS IT BACK.
+  // ---------------------------------------------------------------------
+  // Two faults reported together. Manual entry could be opened ON TOP of
+  // an open tree -- two panels claiming the screen, and the code buffer
+  // written by whichever was touched last. And an open tree could not be
+  // shut by pressing its own button; the only way out was Clear, which is
+  // not where a scorer looks.
+  //
+  // Pressing the open one now COLLAPSES AND DISCARDS, exactly as Clear
+  // does (Andy's call). It routes through collapsePlayPanel so there is
+  // one definition of what "put the screen back" means -- the entry
+  // error, the row marks, the code buffer and the pending play all clear
+  // together, and a second implementation cannot drift from the first.
+  //
+  // `currentLadderType` rather than reading .picked: the picked class is
+  // applied by renderPlayPanel for some trees and by the rail prototype
+  // for others, so it is not a reliable record of what is open.
+  let currentLadderType = null;
+  window.__ladderOpen = () => currentLadderType;
+  document.querySelectorAll('.ptypeBtn').forEach(b => b.addEventListener('click', () => {
+    const t = b.dataset.type;
+    if (currentLadderType === t){
+      currentLadderType = null;
+      collapsePlayPanel();
+      return;
+    }
+    // Manual entry is part of the same either/or even though it is not a
+    // .ptypeBtn -- opening a tree has to shut it.
+    const mp = document.getElementById('manualPanel');
+    if (mp && mp.style.display !== 'none'){
+      mp.style.display = 'none';
+      const mt = document.getElementById('manualText');
+      if (mt) mt.value = '';
+    }
+    currentLadderType = t;
+    renderPlayPanel(t);
+  }));
 
   // ===================================================================
   // RAIL BEHAVIOUR. Promoted from gametest3.html, 22 Aug 2026.
@@ -6810,6 +6849,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (code) code.value = '';
     pending = null;
     document.querySelectorAll('.ptypeBtn').forEach(b => b.classList.remove('picked'));
+    // Forget which tree was open. Without this, Clear leaves the ladder
+    // thinking rush is still up, and the next press of Rush collapses
+    // nothing instead of opening it.
+    if (typeof currentLadderType !== 'undefined') currentLadderType = null;
     // Prototype: drop the rail's selected state and its offset with it.
     if (window.__railClear) window.__railClear();
     syncStageEmpty();
@@ -11288,6 +11331,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('playPanel').innerHTML = '';
     document.getElementById('code').value = '';
     pending = null;
+    // THE LADDER FORGETS TOO. Saving closes the panel by hand here rather
+    // than through collapsePlayPanel, so without this the ladder still
+    // believed the tree was open -- and the next press of the SAME button
+    // collapsed nothing instead of opening it. Two rushes in a row, which
+    // is most of a game, entered only the first.
+    if (typeof currentLadderType !== 'undefined') currentLadderType = null;
     if (insertMode){ insertMode = null; renderInsertBanner(); }
     // Prototype: the scroll-to-top below is original, but it left the
     // rail's selected button lit and the stage still offset, so the next
@@ -12164,6 +12213,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // likeliest reason to press it is the wrong team, and closing would
       // make that two taps to correct instead of one.
       document.getElementById('to_back').addEventListener('click', () => {
+        // Forget first. This re-opens the picker by clicking the ladder
+        // button, and since 23 Aug that button TOGGLES -- so with the
+        // ladder still recording Timeout as open, the click collapsed the
+        // panel instead of redrawing it.
+        if (typeof currentLadderType !== 'undefined') currentLadderType = null;
         document.getElementById('timeoutUtilBtn').click();
       });
     }));
@@ -12208,9 +12262,62 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   // Manual entry opens and closes its own panel without going through
   // renderPlayPanel or renderAll, so it has to say so itself.
+  // THE UTILITY BUTTONS ARE ON THE LADDER TOO.
+  // ---------------------------------------------------------------------
+  // Penalty, Timeout, Bad snap, QB kneel, Adjust Down/Distance, Flip
+  // possession and Set clock all open a panel in the same place as a play
+  // tree, so they answer to the same rule: one at a time, and pressing the
+  // open one puts it back.
+  //
+  // Wired in the CAPTURE phase so this runs before each button's own
+  // handler and can stop it -- their handlers build a panel unconditionally
+  // and have no notion of being already open. Rewriting all seven to check
+  // first would be seven places to keep in step.
+  //
+  // Fumble and Safety are not here: they carry data-type and are already
+  // covered as .ptypeBtn above.
+  ['penUtilBtn', 'timeoutUtilBtn', 'badSnapUtilBtn', 'kneelUtilBtn',
+   'driveUtilBtn', 'setClockUtilBtn'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.addEventListener('click', (e) => {
+      if (currentLadderType === id){
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        currentLadderType = null;
+        collapsePlayPanel();
+        return;
+      }
+      const mp = document.getElementById('manualPanel');
+      if (mp && mp.style.display !== 'none'){
+        mp.style.display = 'none';
+        const mt = document.getElementById('manualText');
+        if (mt) mt.value = '';
+      }
+      // Set SYNCHRONOUSLY. A deferred set raced with programmatic clicks
+      // -- setDrive() clicks driveUtilBtn to open its own panel, and the
+      // deferred assignment landed after a later, unrelated click, so the
+      // ladder believed Adjust Down/Distance was open when Rush was.
+      // These handlers build their panel directly and never call
+      // collapsePlayPanel, so there is nothing to clear it afterwards.
+      currentLadderType = id;
+    }, true);
+  });
+
   document.getElementById('manualBtn').addEventListener('click', () => {
+    const mp = document.getElementById('manualPanel');
+    // Pressing it again closes it, matching every other ladder button.
+    if (mp.style.display !== 'none'){
+      mp.style.display = 'none';
+      const mt = document.getElementById('manualText');
+      if (mt) mt.value = '';
+      syncStageEmpty();
+      return;
+    }
+    // And opening it shuts whatever tree is up: one panel at a time.
+    collapsePlayPanel();
     populateInsertOptions();
-    document.getElementById('manualPanel').style.display = 'block';
+    mp.style.display = 'block';
     syncStageEmpty();
   });
   document.getElementById('cancelManual').addEventListener('click', () => {
