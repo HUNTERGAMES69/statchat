@@ -6,6 +6,10 @@
      Harmless, but a red console error should MEAN something. -->
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <!-- Apple renamed this; the old tag warns in the console on every
@@ -15,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="StatChat">
 <title>StatChat — Game Entry</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
   .wrap { max-width:760px; margin:0 auto; }
   .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:20px; margin:0; }
@@ -41,10 +45,10 @@
      user-select:none is the same tap, other symptom: iOS also treats a
      double-tap as select-the-word, so a fast second tap could leave the
      button's own label highlighted. */
-  button { padding:8px 12px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; cursor:pointer; touch-action:manipulation; -webkit-user-select:none; user-select:none; }
-  button.primary { background:#1a7a4c; }
+  button { padding:8px 12px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:13px; font-weight:600; cursor:pointer; touch-action:manipulation; -webkit-user-select:none; user-select:none; }
+  button.primary { background:var(--sc-green, #1a7a4c); }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
-  button.danger { background:#fff; color:#a32d2d; border:1px solid #a32d2d; }
+  button.danger { background:#fff; color:var(--sc-red, #a32d2d); border:1px solid var(--sc-red, #a32d2d); }
   /* Deliberately unlike anything else on the page. Manual entry writes a
      text note that is flagged unresolved and contributes no stats, no
      yardage and no down change -- it is the escape hatch for a play the
@@ -69,12 +73,12 @@
      background beats any class, which is why these buttons never turned
      gold. Declared before .picked so the selected state wins. */
   button.ptoggle { background:#fff; color:#555; border:2px solid #ccc; }
-  button.picked, button.suggested { background:#ffc72c; color:#1a1a2e; box-shadow:inset 0 0 0 2px #8a6a00; }
+  button.picked, button.suggested { background:#ffc72c; color:var(--sc-navy, #1a1a2e); box-shadow:inset 0 0 0 2px #8a6a00; }
   .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .hidden { display:none; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
-  .msg.error { background:#fdecea; color:#a32d2d; }
-  .msg.success { background:#e8f5e9; color:#1a7a4c; }
+  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
+  .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
   .banner { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border-radius:10px; padding:12px 16px; margin-bottom:6px; transition:background 0.2s; position:sticky; top:8px; z-index:50; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
   .banner .score { font-size:20px; font-weight:700; }
   /* OFF AIR: white with a dark outline, and a single red dot.
@@ -143,7 +147,7 @@
      already use for their own toggles -- reusing it would have made a
      rail selection and an in-panel toggle indistinguishable to the
      existing handlers. */
-  #typeRail button.rail-active { box-shadow:inset 0 0 0 3px #1a7a4c, 0 0 0 2px #1a7a4c; }
+  #typeRail button.rail-active { box-shadow:inset 0 0 0 3px var(--sc-green, #1a7a4c), 0 0 0 2px var(--sc-green, #1a7a4c); }
   #entryStage { flex:1 1 auto; min-width:0; }
   #entryStage #playPanel, #entryStage #manualPanel, #entryStage #utilPanel { margin-top:0; }
   #entryStage #confirmCard { position:sticky; bottom:12px; box-shadow:0 -2px 10px rgba(0,0,0,0.10); }
@@ -256,8 +260,8 @@
                   padding:0 16px; border-radius:10px; border:none;
                   display:flex; align-items:center; justify-content:center; }
   /* Colours unchanged, so each stays recognisable where it was. */
-  #broadcastFab { background:#1a1a2e; border-color:#1a1a2e; }
-  #helpFab { background:#1a7a4c; border-color:#1a7a4c; }
+  #broadcastFab { background:var(--sc-navy, #1a1a2e); border-color:var(--sc-navy, #1a1a2e); }
+  #helpFab { background:var(--sc-green, #1a7a4c); border-color:var(--sc-green, #1a7a4c); }
   #launchViewLink { background:#b00020; border-color:#b00020; }
   @media (max-width:1219px) {
     /* Back into the flow: at this width the row would sit over the card. */
@@ -292,8 +296,8 @@
   #validationBody, #liveBoxBody { overflow-y:auto; flex:1 1 auto; min-height:0; }
   #validationCount { font-size:12px; font-weight:700; padding:1px 7px; border-radius:9px;
                      vertical-align:middle; margin-left:4px; }
-  .vc-ok { background:#e6f4ea; color:#1a7a4c; }
-  .vc-bad { background:#fdecea; color:#a32d2d; }
+  .vc-ok { background:#e6f4ea; color:var(--sc-green, #1a7a4c); }
+  .vc-bad { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
   .v-issue { font-size:12.5px; line-height:1.4; padding:6px 0;
              border-bottom:1px solid #f2f2f2; color:#7a2d2d; }
   .v-issue:last-child { border-bottom:none; }
@@ -348,10 +352,10 @@
   #driveDock .dock-undo { display:flex; gap:4px; margin:8px 0 10px; }
   #driveDock .dock-undo button { flex:1 1 calc(50% - 2px); padding:7px 5px;
                                  font-size:12.5px; font-weight:700; border:none;
-                                 border-radius:6px; background:#1a1a2e; color:#fff; }
+                                 border-radius:6px; background:var(--sc-navy, #1a1a2e); color:#fff; }
   /* Redo is dead except immediately after an Undo, so it reads as
      disabled rather than as a second live action. */
-  #driveDock .dock-undo button:disabled { background:#e6e6e6; color:#9a9a9a; }
+  #driveDock .dock-undo button:disabled { background:var(--sc-rule, #e6e6e6); color:#9a9a9a; }
   /* Below this the margin is too thin to hold it, so it drops back to a
      normal card in the flow -- exactly where it sits today. */
   @media (max-width:1219px) {
@@ -471,11 +475,11 @@
   #entryStage #playPanel .spot-label, #guidedPanel .spot-label { flex:0 0 auto; line-height:normal; }
   /* The row that is missing something, and the words saying what. */
   #playPanel .row-gap, #guidedPanel .row-gap {
-    outline:2px solid #e0b400; outline-offset:3px; border-radius:6px; }
+    outline:2px solid var(--sc-amber, #e0b400); outline-offset:3px; border-radius:6px; }
   /* Sits directly under Review, in the same amber as the row marks so
      the two read as one complaint rather than two. */
   #playPanel .review-msg { margin-top:8px; padding:8px 12px; border-radius:6px;
-    background:#fff3cd; border:1px solid #e0b400; color:#7a5c00;
+    background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400); color:#7a5c00;
     font-size:13px; font-weight:600; }
   #playPanel .row-gap-msg, #guidedPanel .row-gap-msg {
     font-size:12.5px; font-weight:600; color:#7a5c00; margin:6px 0 2px; }
@@ -499,7 +503,7 @@
      line it occupies reads as the same field rather than a new control. */
   .passer-chip { display:block; width:100%; text-align:left; padding:7px 11px;
                  font-size:13px; font-weight:700; border:1px solid #cfd4da;
-                 border-radius:6px; background:#f4f6f9; color:#1a1a2e;
+                 border-radius:6px; background:#f4f6f9; color:var(--sc-navy, #1a1a2e);
                  cursor:pointer; margin:0 0 2px; }
   .passer-chip:hover { background:#e9edf3; }
   #entryStage #playPanel .opt-toggle { padding:5px 10px; font-size:12px; font-weight:700;
@@ -557,8 +561,8 @@
      and a wrapped line starts where the description starts. */
   .logline .logtext { display:block; margin-top:1px; }
   .badge { font-size:10px; padding:2px 6px; border-radius:8px; margin-left:6px; font-weight:600; }
-  .badge.unresolved { background:#fff3cd; color:#7a6a2a; }
-  .conflict-block { background:#fff3cd; border-radius:8px; padding:10px; margin-top:8px; }
+  .badge.unresolved { background:var(--sc-amber-tint, #fff3cd); color:#7a6a2a; }
+  .conflict-block { background:var(--sc-amber-tint, #fff3cd); border-radius:8px; padding:10px; margin-top:8px; }
   @media (min-width: 640px) {
     body { padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
     .card { padding:24px; }

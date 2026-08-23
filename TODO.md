@@ -2133,9 +2133,26 @@ hex colours, 6 breakpoints, 0 pages on a shared sheet.
   **13 of 18.** Each proven by reversing the substitution and diffing
   against the pristine file, then re-checked against raw.githubusercontent
   after upload -- not assumed from the delivery.
-- [ ] Remaining: view, broadcast, broadcast_leaders, broadcast_stats,
-  game. **Do `game.html` LAST** -- 439 inline styles, and it is the page a
-  mistake costs most. Close the harness gap below before starting it.
+- [x] `view.html` and `game.html` converted 23 Aug -- **15 of 18, which is
+  the ceiling.** `game.html` was proven twice: reverse-and-diff textually,
+  and 3,004 rendered elements compared across nine states (two plays
+  entered, all five entry trees open, all three utility panels) with zero
+  differences.
+- [x] **Harness gap CLOSED.** `tests/harness.js` now inlines
+  `statchat.css` -- the same trick it already used for `engine.js`, since
+  jsdom fetches neither -- and resolves `var()` by hand, substituting each
+  token with its value so jsdom has plain CSS to parse. The fallback is by
+  construction the same value the token holds, so what the harness renders
+  is what a browser renders. A rendering comparison is now meaningful.
+  Note: the resolver must handle ANY value, not just hex; a hex-only
+  version left the px spacing tokens literal and jsdom dropped every rule
+  using them.
+- [x] **The three broadcast overlays are deliberately EXCLUDED** -- see
+  the note at the head of `statchat.css`. They are vMix inputs composited
+  over the programme feed, a failed request during a live game is worse
+  than a few unshared colours, and their palette is tuned for legibility
+  over moving video rather than for a laptop. If they are ever brought in
+  it should be a separate `broadcast.css`.
 
 **Uploads silently failed three times on 22 Aug**, always on files
 delivered more than once (a stale duplicate in Downloads winning). Always
