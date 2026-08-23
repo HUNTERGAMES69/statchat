@@ -790,6 +790,65 @@ async function run() {
     h.close();
   }
 
+  // THE YARD BOX FOLLOWS ITS SIDE BUTTONS, everywhere.
+  // ---------------------------------------------------------------------
+  // Reported 23 Aug on the punt muff, both field goal panels, the utility
+  // fumble tree and the guided kickoff ball spot -- one CSS rule, four
+  // symptoms. The input carried margin-left:auto so it landed on the same
+  // right edge as the "type #" boxes above it. Item 12 moved every one of
+  // those inside its picker grid, so the edge it was aligning to no
+  // longer existed and the box just sat stranded at the far right.
+  {
+    const check = async (label, open_, wrapId) => {
+      const h = await bootGamePage();
+      const doc = h.window.document, win = h.window;
+      await open_(h, doc, win);
+      const wrap = doc.getElementById(wrapId);
+      if (!wrap) { fail('spotgap:' + label, wrapId + ' not found'); h.close(); return; }
+      const inp = wrap.querySelector('input');
+      if (!inp) { fail('spotgap:' + label, 'no yard-line box in ' + wrapId); h.close(); return; }
+      const ml = win.getComputedStyle(inp).marginLeft;
+      // 'auto' is the fault. Anything else means it flows after the
+      // buttons on the row's own gap, like every other control.
+      if (ml === 'auto') {
+        fail('spotgap:' + label, 'the yard box is pushed to the far right instead of following the side buttons');
+      }
+      h.close();
+    };
+
+    await check('punt muff', async (h, doc, win) => {
+      setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="punt"]'));
+      click(win, doc.getElementById('pp_muffed_toggle'));
+      await new Promise(r => setTimeout(r, 100));
+    }, 'pp_muff_spot_wrap');
+
+    await check('fg blocked', async (h, doc, win) => {
+      setDrive(h, { down: 4, distance: 3, side: 'opp', yardline: 25 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="fg"]'));
+      click(win, doc.getElementById('pp_fg_blocked_cb_toggle'));
+      await new Promise(r => setTimeout(r, 100));
+    }, 'pp_fg_spot_wrap');
+
+    await check('utility fumble', async (h, doc, win) => {
+      setDrive(h, { down: 2, distance: 7, side: 'own', yardline: 30 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="fumble"]'));
+      await new Promise(r => setTimeout(r, 100));
+    }, 'pp_spot_wrap');
+
+    await check('guided ball spot', async (h, doc, win) => {
+      click(win, doc.getElementById('startGameBtn'));
+      await new Promise(r => setTimeout(r, 80));
+      click(win, doc.getElementById('pickA'));
+      await new Promise(r => setTimeout(r, 80));
+      click(win, doc.querySelector('.gk_kicker_pick'));
+      const d = doc.querySelector('.gk_dir_btn');
+      if (d) click(win, d);
+      click(win, doc.getElementById('guidedKickoffSave'));
+      await new Promise(r => setTimeout(r, 250));
+    }, 'gr_spot_wrap');
+  }
+
   return failures;
 }
 
