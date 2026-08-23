@@ -2443,8 +2443,19 @@ no indicator.
 **Three colour-only attempts were all reported as "no change".** Each was
 verified deployed, unopposed by any CSS, and confirmed applying the
 inline style. The code was right every time. A navy fill on a 36px key
-simply was not legible as feedback on that screen, and adding
-`transform: scale(1.18)` and a ring made it obvious immediately.
+simply was not legible as feedback on that screen; the moment it also
+changed SIZE it read instantly.
+
+Final form: navy fill, white text, a 2px ring, and `scale(1.12)`. Not
+1.18 -- the grid is 36px keys on a 4px gap, so a scaled key eats into
+that gap, and 1.18 grew it 3.2px a side and all but touched its
+neighbours. The lit key also takes `position:relative; z-index:2`,
+because a transformed grid item is otherwise painted in source order and
+the keys after it clip the corners of the one that grew.
+
+The scale is asserted in the tests, not left as a nicety: it is the part
+that actually communicates, and colour alone has now been demonstrated
+insufficient three times.
 
 Two real bugs did surface on the way, both worth remembering:
 
