@@ -6,6 +6,10 @@
      Harmless, but a red console error should MEAN something. -->
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <!-- Apple renamed this; the old tag warns in the console on every
@@ -16,7 +20,7 @@
 <title>StatChat — Crew View</title>
 <style>
   html, body { height:100%; margin:0; box-sizing:border-box; overflow:hidden; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; padding:0; padding-top:env(safe-area-inset-top); }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; padding:0; padding-top:env(safe-area-inset-top); }
   .wrap { width:1920px; height:1080px; max-width:none; margin:0; padding:8px; box-sizing:border-box; flex-shrink:0; transform-origin:center center; }
   #mainView.hidden, #loading, #errorView { height:auto; overflow:visible; }
   #mainView { height:100%; }
@@ -24,7 +28,7 @@
   #centerLogoLink { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:20; }
   #centerLogo { display:block; width:56px; height:auto; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.25); }
   #mobileBackLink { display:none; }
-  .quad { min-height:0; overflow-y:hidden; display:flex; flex-direction:column; background:#fff; border:2px solid #1a1a1a; border-radius:4px; padding:8px; box-sizing:border-box; }
+  .quad { min-height:0; overflow-y:hidden; display:flex; flex-direction:column; background:#fff; border:2px solid var(--sc-ink, #1a1a1a); border-radius:4px; padding:8px; box-sizing:border-box; }
   .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   .card.compact { padding:0 0 8px; margin-bottom:16px; background:none; box-shadow:none; border-radius:0; border-bottom:2px solid #d5d2c8; }
   .card.compact:last-child { border-bottom:none; margin-bottom:0; }
@@ -36,7 +40,7 @@
      nothing about the game, and a reader had to check the heading to see
      whose drive they were looking at. */
   .drive-card { --drive-accent:#8a8f98; --drive-heading:#5b6068; --drive-tint:#edeef0; }
-  .drive-current { --drive-accent:#1a7a4c; --drive-heading:#1a7a4c; --drive-tint:#e6f4ea; }
+  .drive-current { --drive-accent:var(--sc-green, #1a7a4c); --drive-heading:var(--sc-green, #1a7a4c); --drive-tint:#e6f4ea; }
   .drive-card { border-left-color:var(--drive-accent); }
   .drive-card h2 { color:var(--drive-heading); }
   .drive-current h2::before { content:"● LIVE  "; font-size:10px; letter-spacing:0.05em; }
@@ -63,13 +67,13 @@
   .score-row:last-child { border-bottom:none; }
   .score-q { flex:0 0 34px; font-size:13px; font-weight:700; color:#8a8f98; }
   .score-team { flex:0 0 auto; font-weight:800; padding:1px 8px; border-radius:5px; font-size:15px; }
-  .score-text { flex:1 1 auto; min-width:0; font-weight:600; color:#1a1a1a; }
-  .score-tally { flex:0 0 auto; font-weight:800; font-variant-numeric:tabular-nums; color:#1a1a2e; }
+  .score-text { flex:1 1 auto; min-width:0; font-weight:600; color:var(--sc-ink, #1a1a1a); }
+  .score-tally { flex:0 0 auto; font-weight:800; font-variant-numeric:tabular-nums; color:var(--sc-navy, #1a1a2e); }
   .score-detail { font-size:13px; font-weight:600; color:#5b6068; margin-left:6px; }
   /* The SOP badge. Boxed rather than merely tinted: at label size a
      colour change alone is easy to miss, and the point is that this one
      reading is a different kind of thing from the three beside it. */
-  .stat-label-badge { background:#fff3cd; border:1px solid #e0b400;
+  .stat-label-badge { background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400);
                       color:#7a5c00; border-radius:4px; padding:1px 6px; }
   /* Each trailing clause on its own line, indented slightly so a wrapped
      one still reads as belonging to the play above it rather than as a
@@ -85,16 +89,16 @@
   .team-summary-logo { height:36px; width:36px; object-fit:contain; border-radius:6px; background:rgba(255,255,255,0.85); flex-shrink:0; }
   .stat-tile-grid { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr 1fr; gap:8px; flex:1; min-height:0; }
   .stat-tile { background:#f5f7fa; border-radius:8px; padding:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
-  .stat-tile-value { font-size:34px; font-weight:500; color:#1a1a2e; line-height:1.1; }
+  .stat-tile-value { font-size:34px; font-weight:500; color:var(--sc-navy, #1a1a2e); line-height:1.1; }
   .stat-tile-label { font-size:16px; font-weight:700; color:#777; text-transform:uppercase; letter-spacing:0.03em; margin-top:3px; }
   .inline-stat-line { display:flex; gap:5px; margin-bottom:5px; }
   .inline-stat-item { flex:1; white-space:nowrap; text-align:center; background:#f5f7fa; border-radius:6px; padding:7px 4px; display:flex; flex-direction:column; align-items:center; }
-  .inline-stat-item .stat-value { font-size:28px; font-weight:700; color:#1a1a2e; line-height:1.1; }
+  .inline-stat-item .stat-value { font-size:28px; font-weight:700; color:var(--sc-navy, #1a1a2e); line-height:1.1; }
   .inline-stat-item .stat-label { font-size:13px; font-weight:800; color:#5b6068; text-transform:uppercase; letter-spacing:0.03em; margin-top:2px; }
   .card.compact h2 { font-size:13px; margin:0 0 6px; }
   h1 { font-size:20px; margin:0; }
   h2 { font-size:16px; margin:0 0 10px; color:#444; }
-  h3 { font-size:14px; font-weight:700; margin:12px 0 6px; color:#1a1a1a; letter-spacing:0.02em; }
+  h3 { font-size:14px; font-weight:700; margin:12px 0 6px; color:var(--sc-ink, #1a1a1a); letter-spacing:0.02em; }
   p.sub { color:#888; margin:0 0 14px; font-size:13px; }
   .banner { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border-radius:10px; padding:12px 16px; margin-bottom:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
   .banner .score { font-size:20px; font-weight:700; }
@@ -119,7 +123,7 @@
   }
   .hint { font-size:12px; color:#888; margin:6px 0; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
-  .msg.error { background:#fdecea; color:#a32d2d; }
+  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
   .hidden { display:none; }
   .logline { font-size:14px; padding:6px 0; border-bottom:1px solid #f2f2f2; }
   table.stattable { width:100%; border-collapse:collapse; font-size:11px; margin:0; }
@@ -148,8 +152,8 @@
   table.player-stat-table th { text-align:right; font-size:calc(10px * var(--stat-scale, 1)); color:#5b7ca8; font-weight:600; padding:1px 4px; white-space:nowrap; }
   table.player-stat-table th:first-child, table.player-stat-table td:first-child { text-align:left; }
   table.player-stat-table td { text-align:right; padding:calc(2px * var(--stat-scale, 1)) 4px; white-space:nowrap; }
-  table.player-stat-table td:first-child { font-weight:700; color:#1a1a2e; white-space:nowrap; }
-  .live-badge { display:inline-block; font-size:11px; font-weight:700; color:#a37a00; background:#fff3cd; padding:2px 8px; border-radius:10px; margin-left:8px; vertical-align:middle; }
+  table.player-stat-table td:first-child { font-weight:700; color:var(--sc-navy, #1a1a2e); white-space:nowrap; }
+  .live-badge { display:inline-block; font-size:11px; font-weight:700; color:var(--sc-amber-text, #a37a00); background:var(--sc-amber-tint, #fff3cd); padding:2px 8px; border-radius:10px; margin-left:8px; vertical-align:middle; }
   @media (min-width: 640px) { body { padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); } .card { padding:24px; } }
 
   /* Mobile: drop the fixed 1920x1080 desktop layout entirely. Show only
@@ -161,7 +165,7 @@
     body { width:auto; height:auto; display:block; padding:10px; padding-top:calc(10px + env(safe-area-inset-top)); }
     .wrap { width:auto; height:auto; max-width:none; padding:0; transform:none !important; }
     .quad-grid { display:flex; flex-direction:column; height:auto; gap:12px; }
-    .quad { border:1px solid #1a1a1a; overflow-y:visible; padding:10px; }
+    .quad { border:1px solid var(--sc-ink, #1a1a1a); overflow-y:visible; padding:10px; }
     #quadTR { order:99; }
     .team-summary-row { flex-direction:column; gap:16px; }
     .stat-category-grid { grid-template-columns:1fr; }
