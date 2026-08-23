@@ -1338,6 +1338,18 @@
       // identical reason.
       bcFab.style.display = 'flex';
     }
+    // THE HEADER IS LAID OUT AGAIN NOW THE ROLE IS KNOWN.
+    // -------------------------------------------------------------------
+    // layoutHeader() runs once at load, but these three controls are
+    // revealed HERE -- after the game row has been fetched and the user's
+    // role resolved, which is asynchronous. On a tablet the first visit
+    // therefore showed only Dashboard and ON AIR, and they appeared on a
+    // refresh purely because the second load was warm enough to win the
+    // race. Reported.
+    //
+    // Cheap to repeat: the function is idempotent -- it decides the layout
+    // from the current width every time and sets the same styles.
+    if (typeof layoutHeader === 'function') layoutHeader();
     // The scorer must know their typing is going out live rather than
     // merely being recorded. Read once at load: the flag is changed from
     // the dashboard, not from here.
@@ -7370,6 +7382,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
   }
   window.addEventListener('resize', layoutHeader);
+  // And once after everything has loaded, for any control revealed by a
+  // path that does not call it directly. Idempotent, so a spare call
+  // costs nothing.
+  window.addEventListener('load', layoutHeader);
 
   layoutHeader();
 
