@@ -513,6 +513,47 @@ async function run() {
     }
   }
 
+  // THE RAIL STRIP MUST BE HIDDEN BY DEFAULT, not only outside the band.
+  // ---------------------------------------------------------------------
+  // setupRails() creates the strip unconditionally -- built once and kept,
+  // because rebuilding it on resize would drop its listener. So the
+  // element exists at EVERY width, and something has to hide it.
+  //
+  // The hide rule was first written INSIDE the landscape-tablet query,
+  // which meant desktop had no rule hiding it at all and the button
+  // rendered as a black box at the foot of each rail. Reported with a
+  // screenshot.
+  //
+  // Asserted from the SOURCE rather than from getComputedStyle, because
+  // jsdom ignores @media entirely -- it would report display:none at
+  // every width whether the rule were scoped correctly or not, and a
+  // check that cannot fail is worse than no check.
+  {
+    const src = require('fs').readFileSync(__dirname + '/../game.html', 'utf8');
+    const css = (src.match(/<style[^>]*>([\s\S]*?)<\/style>/g) || []).join('\n');
+    const insideMedia = idx => {
+      let depth = 0, media = false;
+      for (let i = 0; i < idx; i++) {
+        if (css.startsWith('@media', i)) media = true;
+        if (css[i] === '{') depth++;
+        else if (css[i] === '}') { depth--; if (depth === 0) media = false; }
+      }
+      return media;
+    };
+    const hide = css.indexOf('> .rail-strip, #rightRail > .rail-strip { display:none; }');
+    if (hide === -1) {
+      fail('strip:hide', 'no default rule hiding the rail strip — it will render on desktop');
+    } else if (insideMedia(hide)) {
+      fail('strip:hide-scoped',
+        'the hide rule sits inside a media query, so it does not apply on desktop');
+    }
+    const show = css.indexOf('#driveDock.rail-collapsed > .rail-strip');
+    if (show !== -1 && !insideMedia(show)) {
+      fail('strip:show-global',
+        'the show rule must stay inside the landscape-tablet query');
+    }
+  }
+
   return failures;
 }
 
