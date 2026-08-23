@@ -366,6 +366,89 @@ async function run() {
     }
   }
 
+  // A LOOSE BALL RECOVERED IN YOUR OWN END ZONE IS A SAFETY.
+  // ---------------------------------------------------------------------
+  // Items 5 and 6, reported 23 Aug. Three trees asked who recovered and
+  // then stopped. A snap over the punter's head that he falls on behind
+  // his own goal line, and a field goal blocked from close range that
+  // never travels, are both two points the other way -- and both are
+  // among the commonest ways a safety actually happens. Touchdown was
+  // askable on the kicking trees from the start; the mirror case was not,
+  // so the play could only be entered as an ordinary block with the score
+  // left to a manual adjustment.
+  {
+    const fgSafety = async (tog, safeBtn, label) => {
+      const h = await bootGamePage();
+      const doc = h.window.document, win = h.window;
+      setDrive(h, { down: 4, distance: 3, side: 'own', yardline: 6 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="fg"]'));
+      click(win, doc.querySelector('.pp_kicker_pick'));
+      const t = doc.getElementById(tog);
+      if (!t) { fail('safety:' + label, 'no ' + tog); h.close(); return; }
+      click(win, t);
+      await new Promise(r => setTimeout(r, 90));
+      const b = doc.getElementById(safeBtn);
+      if (!b) { fail('safety:' + label, 'no safety option on the ' + label + ' panel'); h.close(); return; }
+      click(win, b);
+      await new Promise(r => setTimeout(r, 80));
+      click(win, doc.getElementById('pp_review'));
+      await new Promise(r => setTimeout(r, 200));
+      click(win, doc.getElementById('saveBtn'));
+      await new Promise(r => setTimeout(r, 240));
+      const text = h.evalIn('plays[plays.length-1].text');
+      const scores = JSON.parse(h.evalIn('JSON.stringify(computeState().scores)'));
+      if (!/SAFETY/.test(text)) fail('safety:' + label + ':text', 'the log should say SAFETY: ' + text);
+      // Two points, and to the OTHER team -- the direction is the part
+      // that is easy to get backwards.
+      if (scores.teamB !== 2 || scores.teamA !== 0) {
+        fail('safety:' + label + ':score', 'expected 0-2, got ' + JSON.stringify(scores));
+      }
+      h.close();
+    };
+    await fgSafety('pp_fg_blocked_cb_toggle', 'pp_fgb_safety_toggle', 'blocked');
+    await fgSafety('pp_fg_muffhold_toggle', 'pp_fgmuff_safety_toggle', 'muffed hold');
+
+    // BAD SNAP, both directions: own recovery in the end zone is a
+    // safety, defensive recovery run in is their touchdown.
+    const badSnap = async (mode, wantScore, wantText) => {
+      const h = await bootGamePage();
+      const doc = h.window.document, win = h.window;
+      setDrive(h, { down: 2, distance: 9, side: 'own', yardline: 6 });
+      click(win, doc.getElementById('badSnapUtilBtn'));
+      await new Promise(r => setTimeout(r, 90));
+      typeInto(win, doc.getElementById('badsnap_yds'), '8');
+      if (mode === 'deftd') {
+        const d = doc.querySelector('input[name=bs_rec][value=d]');
+        d.checked = true;
+        d.dispatchEvent(new win.Event('change', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 70));
+      }
+      const btn = doc.getElementById(mode === 'deftd' ? 'bs_def_td_toggle' : 'bs_safety_toggle');
+      if (!btn) { fail('badsnap:' + mode, 'no option for ' + mode); h.close(); return; }
+      click(win, btn);
+      await new Promise(r => setTimeout(r, 70));
+      click(win, doc.getElementById('badsnap_review'));
+      await new Promise(r => setTimeout(r, 180));
+      click(win, doc.getElementById('saveBtn'));
+      await new Promise(r => setTimeout(r, 220));
+      const text = h.evalIn('plays[plays.length-1].text');
+      const scores = JSON.parse(h.evalIn('JSON.stringify(computeState().scores)'));
+      if (!wantText.test(text)) fail('badsnap:' + mode + ':text', 'unexpected log: ' + text);
+      if (scores.teamB !== wantScore) {
+        fail('badsnap:' + mode + ':score', 'expected teamB ' + wantScore + ', got ' + JSON.stringify(scores));
+      }
+      // The yardage stays a TEAM rushing loss either way -- the snap
+      // still went backwards, whoever ended up with it.
+      const rush = JSON.parse(h.evalIn('JSON.stringify(computeBoxScore(plays).teamA.rushing)'));
+      if (!rush.TEAM || rush.TEAM.yds !== -8) {
+        fail('badsnap:' + mode + ':rush', 'the loss should stay a TEAM rush of -8, got ' + JSON.stringify(rush.TEAM));
+      }
+      h.close();
+    };
+    await badSnap('safety', 2, /SAFETY/);
+    await badSnap('deftd', 6, /TOUCHDOWN/);
+  }
+
   return failures;
 }
 
