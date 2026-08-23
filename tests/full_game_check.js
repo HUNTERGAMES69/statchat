@@ -28,7 +28,7 @@
 // moment it happened rather than reporting a wrong total at the end.
 
 const { bootGamePage, bootPage } = require('./harness');
-const { enterPlay, click, typeInto } = require('./ui_driver');
+const { enterPlay, click, typeInto, enterTimeout } = require('./ui_driver');
 
 async function run() {
   const failures = [];
@@ -96,11 +96,14 @@ async function run() {
 
   // ================= a timeout must not disturb the chains ===========
   const toBefore = JSON.parse(h.evalIn('JSON.stringify(computeState().timeouts)'));
-  click(win, doc.getElementById('timeoutUtilBtn'));
-  const toBtn = doc.getElementById('playPanel').querySelector('button');
-  if (toBtn) click(win, toBtn);
-  const toReview = doc.getElementById('to_review');
-  if (toReview) { click(win, toReview); click(win, doc.getElementById('saveBtn')); }
+  // Through the DRIVER, not hand-clicked. This block reached into the
+  // panel for "the first button" and then looked for a review step called
+  // `to_review` -- a name that never existed. When the real review step
+  // arrived on 22 Aug the timeout silently stopped being written and this
+  // suite reported it as a missing deduction, which is the right symptom
+  // from the wrong cause. The driver knows the current flow; every caller
+  // should use it rather than keep a private copy of the clicks.
+  enterTimeout(h, 'teamA');
   expect('after a timeout, the situation is unchanged',
     { down: 3, distance: 13, fieldPos: 35 });
   const toAfter = JSON.parse(h.evalIn('JSON.stringify(computeState().timeouts)'));

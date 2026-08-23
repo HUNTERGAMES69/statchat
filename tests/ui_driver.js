@@ -483,6 +483,13 @@ function enterTimeout(h, team) {
   const btn = doc.querySelector('.toTeamBtn[data-team="' + team + '"]');
   if (!btn) throw new UnreachableByUI('no timeout button for ' + team);
   click(win, btn);
+  // A REVIEW STEP since 22 Aug: picking the team no longer writes the
+  // timeout, it offers "Save timeout" first. Confirming here keeps this
+  // helper meaning "enter a timeout", which is what every caller wants --
+  // a driver that stopped half way would make every suite that uses it
+  // assert against a play that was never written.
+  const save = doc.getElementById('to_save');
+  if (save) click(win, save);
 }
 
 module.exports = { enterPlay, openPanel, pickPlayer, typeInto, click, toggle, radio, setStartingSpot, setDrive, enterTimeout, finish, UnreachableByUI };

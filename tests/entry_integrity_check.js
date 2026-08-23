@@ -401,15 +401,100 @@ async function run() {
     const db = doc.getElementById('pen_no_down_toggle');
     if (!db) fail('deadball:missing', 'no dead-ball toggle');
     else {
+      // ONE SHORT LINE. Two earlier versions were both too long: first a
+      // whole sentence, then a shortened label that still wrapped onto a
+      // second line and made the button taller than the two beneath it.
       const c = win.getComputedStyle(db);
-      if (db.textContent.trim().length > 60) {
-        fail('deadball:length', 'the label is a sentence again: ' + JSON.stringify(db.textContent.trim()));
+      const label = db.textContent.trim();
+      if (label !== 'Dead Ball / After Play') {
+        fail('deadball:label', 'unexpected label: ' + JSON.stringify(label));
       }
-      if (c.maxWidth === 'none') fail('deadball:width', 'the box should be constrained, not full width');
-      if (c.whiteSpace === 'nowrap') fail('deadball:wrap', 'the label should wrap');
+      if (c.whiteSpace !== 'nowrap') {
+        fail('deadball:wrap', 'the label should be short enough not to wrap');
+      }
       // What it DOES belongs in the title, readable on demand.
       if (!/down and distance/i.test(db.getAttribute('title') || '')) {
         fail('deadball:title', 'the explanation should survive in the tooltip');
+      }
+    }
+    h.close();
+  }
+
+  // A TIMEOUT IS REVIEWED BEFORE IT IS WRITTEN. It used to go straight to
+  // the log, on the reasoning that there was nothing to get wrong. The
+  // thing to get wrong is WHICH TEAM: the two buttons sit side by side,
+  // and a mis-tap spends a timeout that team still has while hiding one
+  // it does not -- visible immediately on the banner, the live totals and
+  // the broadcast feed.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    const before = h.evalIn('plays.length');
+
+    click(win, doc.getElementById('timeoutUtilBtn'));
+    await new Promise(r => setTimeout(r, 80));
+    click(win, doc.querySelector('.toTeamBtn[data-team="teamA"]'));
+    await new Promise(r => setTimeout(r, 80));
+    if (h.evalIn('plays.length') !== before) {
+      fail('timeout:written', 'picking a team should not write the timeout yet');
+    }
+    const toSave = doc.getElementById('to_save'), toBack = doc.getElementById('to_back');
+    if (!toSave || !toBack) {
+      // Guarded, not clicked blind: the driver THROWS on a missing
+      // element, which stops the suite and reports nothing.
+      fail('timeout:review', 'the review step needs Save and Back');
+      h.close();
+      return failures;
+    }
+    if (!/Neville/.test(doc.getElementById('playPanel').textContent)) {
+      fail('timeout:names', 'the review should name the team being charged');
+    }
+
+    // BACK REOPENS THE PICKER rather than closing -- the likeliest reason
+    // to press it is the wrong team, and closing would make correcting it
+    // two taps instead of one.
+    click(win, doc.getElementById('to_back'));
+    await new Promise(r => setTimeout(r, 80));
+    if (!doc.querySelector('.toTeamBtn')) fail('timeout:back', 'Back should return to the team picker');
+    if (h.evalIn('plays.length') !== before) fail('timeout:back-wrote', 'Back must not write anything');
+
+    // And the corrected team is the one charged.
+    click(win, doc.querySelector('.toTeamBtn[data-team="teamB"]'));
+    await new Promise(r => setTimeout(r, 80));
+    click(win, doc.getElementById('to_save'));
+    await new Promise(r => setTimeout(r, 200));
+    const to = JSON.parse(h.evalIn('JSON.stringify(computeState().timeouts)'));
+    if (to.teamA !== 3 || to.teamB !== 2) {
+      fail('timeout:charged', 'the corrected team should be charged, got ' + JSON.stringify(to));
+    }
+    h.close();
+  }
+
+  // THE SACK TREE HAS THE 0-9 PAD. It was missing only because that
+  // branch calls yardsBlock directly, and the pad is added by the call
+  // site rather than by yardsBlock -- so every panel that wants it has to
+  // ask. A sack is a yardage entry like any other.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    const sackBtn = [...doc.querySelectorAll('#playPanel button')]
+      .find(b => /^Sacked$/.test(b.textContent.trim()));
+    if (!sackBtn) { fail('sack:toggle', 'no Sacked toggle'); h.close(); return failures; }
+    click(win, sackBtn);
+    await new Promise(r => setTimeout(r, 100));
+    const digits = [...doc.querySelectorAll('#playPanel .quickYardsBtn')];
+    if (digits.length !== 10) {
+      fail('sack:pad', 'expected a 0-9 pad on the sack tree, got ' + digits.length + ' buttons');
+    } else {
+      if (digits[0].dataset.for !== 'pp_yards') {
+        fail('sack:pad-target', 'the pad should fill the yards-lost box, got ' + digits[0].dataset.for);
+      }
+      click(win, digits[7]);
+      if (doc.getElementById('pp_yards').value !== '7') {
+        fail('sack:pad-click', 'tapping 7 should enter 7, got ' + JSON.stringify(doc.getElementById('pp_yards').value));
       }
     }
     h.close();
