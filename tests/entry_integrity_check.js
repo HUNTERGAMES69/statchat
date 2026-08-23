@@ -500,6 +500,76 @@ async function run() {
     h.close();
   }
 
+  // THE LADDER IS ONE CHOICE, AND PRESSING IT AGAIN PUTS IT BACK.
+  // ---------------------------------------------------------------------
+  // Two faults reported together on 23 Aug: Manual entry could be opened
+  // ON TOP of an open tree -- two panels claiming the screen, with the
+  // code buffer written by whichever was touched last -- and an open tree
+  // could not be shut by pressing its own button, so the only way out was
+  // Clear, which is not where a scorer looks.
+  //
+  // Collapsing DISCARDS, exactly as Clear does (Andy's call).
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    const panelUp = () => doc.getElementById('playPanel').style.display !== 'none';
+    const manualUp = () => doc.getElementById('manualPanel').style.display !== 'none';
+    // A leading dot means a selector, anything else is an id. The first
+    // version treated every string as an id and threw on the selectors.
+    const tap = sel => click(win, sel[0] === '.'
+      ? doc.querySelector(sel) : doc.getElementById(sel));
+
+    tap('.ptypeBtn[data-type="rush"]');
+    await new Promise(r => setTimeout(r, 70));
+    if (!panelUp()) fail('ladder:open', 'Rush should open a tree');
+
+    // Manual entry shuts the tree rather than stacking on it.
+    tap('manualBtn');
+    await new Promise(r => setTimeout(r, 70));
+    if (panelUp()) fail('ladder:stack', 'opening Manual entry should close the open tree');
+    if (!manualUp()) fail('ladder:manual', 'Manual entry should open');
+    tap('manualBtn');
+    await new Promise(r => setTimeout(r, 70));
+    if (manualUp()) fail('ladder:manual-toggle', 'pressing Manual entry again should close it');
+
+    // Press-again collapses, and press once more reopens.
+    tap('.ptypeBtn[data-type="punt"]');
+    await new Promise(r => setTimeout(r, 70));
+    typeInto(win, doc.getElementById('pp_yards'), '17');
+    tap('.ptypeBtn[data-type="punt"]');
+    await new Promise(r => setTimeout(r, 70));
+    if (panelUp()) fail('ladder:collapse', 'pressing the open tree again should collapse it');
+    tap('.ptypeBtn[data-type="punt"]');
+    await new Promise(r => setTimeout(r, 70));
+    if (!panelUp()) fail('ladder:reopen', 'pressing it a third time should reopen it');
+    // DISCARDED, like Clear -- not preserved.
+    const yards = (doc.getElementById('pp_yards') || {}).value;
+    if (yards) fail('ladder:discard', 'collapsing should discard entered values, found ' + JSON.stringify(yards));
+
+    // The utility buttons are on the ladder too and answer to the same
+    // rule. They are wired in the capture phase, which is easy to get
+    // subtly wrong, so both directions are checked.
+    tap('penUtilBtn');
+    await new Promise(r => setTimeout(r, 70));
+    if (!/which team|on offense/i.test(doc.getElementById('playPanel').textContent)) {
+      fail('ladder:util-open', 'Penalty should replace the open tree');
+    }
+    tap('penUtilBtn');
+    await new Promise(r => setTimeout(r, 70));
+    if (panelUp()) fail('ladder:util-collapse', 'pressing Penalty again should collapse it');
+
+    // AND A SAVED PLAY LEAVES THE LADDER READY. Saving closes the panel by
+    // its own route, and without clearing the ladder state the next press
+    // of the SAME button collapsed nothing instead of opening it -- two
+    // rushes in a row, which is most of a game, entered only the first.
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '5' });
+    tap('.ptypeBtn[data-type="rush"]');
+    await new Promise(r => setTimeout(r, 70));
+    if (!panelUp()) fail('ladder:after-save', 'the same tree should open again after a save');
+    h.close();
+  }
+
   return failures;
 }
 

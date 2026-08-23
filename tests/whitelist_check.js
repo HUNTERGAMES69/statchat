@@ -620,6 +620,14 @@ async function run() {
     // The muff toggle is short enough not to clip. The long wording only
     // ever fitted on the widest panel.
     for (const type of ['kickoff', 'punt']) {
+      // Close whatever is open first. Since 23 Aug the ladder buttons
+      // TOGGLE, so clicking kickoff while kickoff is already open
+      // collapses it -- this loop opened kickoff a second time and got an
+      // empty panel. Clear is the honest way to reach a known state; a
+      // scorer switching trees does the same thing by pressing the one
+      // they want, which the button handles.
+      const clr = doc.getElementById('phaseClearBtn');
+      if (clr) click(win, clr);
       click(win, doc.querySelector('.ptypeBtn[data-type="' + type + '"]'));
       const muff = [...doc.querySelectorAll('#playPanel button')]
         .filter(b => /muff/i.test(b.textContent));
