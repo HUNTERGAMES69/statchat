@@ -69,23 +69,50 @@
   --sc-radius-lg: 14px;
 }
 
-/* BREAKPOINTS
+/* BREAKPOINTS — three, and only three. Folded 23 Aug 2026.
    ---------------------------------------------------------------------
-   Three, not six. The app currently uses 640, 700, 899, 1100 and 1219 --
-   five thresholds that mean roughly the same two things, spelled
-   inconsistently (`max-width: 700px` and `max-width:1219px` both appear).
+   The app carried FIVE: 640, 700, 899, 1100 and 1219. Two of them
+   contradicted -- one rule said "small is under 700", another said "large
+   is over 640", so anything between 640 and 767 matched both and got a
+   mixture of phone and laptop rules. Nothing you would spot as a bug;
+   just things quietly wrong at certain widths.
 
-       phone    up to  767px
-       tablet   768px to 1219px      -- iPad portrait lands here
-       desktop  1220px and up        -- where the three-column entry
-                                        layout is already gated
+       phone     up to 767px      @media (max-width: 767px)
+       tablet    768 - 1219px     @media (max-width: 1219px) catches
+                                  tablet AND phone; pair with min-width
+                                  768 when a rule is tablet-only
+       desktop   1220px and up    no query -- the default
 
-   1220 is kept because game.html's rail layout already switches there and
-   that number is load-bearing; the other two are new and should replace
-   640/700/899/1100 as pages are converted.
+   WHY THESE NUMBERS
 
-   Media queries cannot use var(), so these are written out. The comment
-   is the single source of truth for what the numbers mean. */
+   767/768 is the iPad's portrait width. Below it is a phone, and game
+   ENTRY is not supported there at all (Andy's call, 23 Aug) -- a phone
+   opening game.html is told so rather than left to struggle. The viewing
+   pages -- view, recap, the reports -- stay phone-first, because that is
+   where parents and students read them.
+
+   1219/1220 is where game.html's three-column rail layout already
+   switches, and that number is load-bearing.
+
+   WHAT MOVED, AND WHAT IT COST
+
+     min-width 640  -> 768    roomier padding now starts at tablet, so
+                              640-767 (large phone, landscape) gets the
+                              compact layout. Consistent with entry being
+                              unsupported there.
+     max-width 700  -> 767    the phone rules, widened 67px.
+     max-width 899  -> 767    game.html's stacked pick-rows. Was labelled
+                              "on a phone" but fired up to 899, which is a
+                              small tablet. Only 768-899 changes, and that
+                              is tablet PORTRAIT, where a rotate prompt is
+                              shown anyway.
+     max-width 1100 -> 1219   view.html's banner wrap. Content-driven, not
+                              device-driven -- widened to the tablet edge
+                              so it wraps on tablet too, which is the safe
+                              direction: it wraps earlier, never later.
+
+   Media queries cannot use var(), so these are written out. Do not add a
+   fourth. */
 
 /* THE BROADCAST OVERLAYS DO NOT LINK THIS FILE -- deliberate
    ---------------------------------------------------------------------
