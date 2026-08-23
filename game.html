@@ -7987,7 +7987,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             // calculator with its own ids, not to retarget the shared
             // one. Two controls that cannot collide.
           '</div>' +
-          '<div id="' + idPrefix + '_calc_slot"></div>' +
+          // THE FAKE'S OWN CALCULATOR, with its own ids.
+        // -----------------------------------------------------------
+        // The punt fake borrows the panel's pp_calc_wrap. The field
+        // goal panel has none to borrow, and giving it a shared one
+        // overwrote the KICK DISTANCE -- pp_yards means something
+        // different on that panel. Reverted once, then done properly:
+        // a separate control that writes only to the fake's own box
+        // and cannot collide with anything.
+        //
+        // Only on the field goal. The punt's borrow-and-move already
+        // works and two calculators there would be one too many.
+        '<div id="' + idPrefix + '_calc_slot">' +
+          (idPrefix === 'pp_fgfake'
+            ? spotCalcHtml('Or enter tackled on', 'pp_fgcalc')
+            : '') +
+        '</div>' +
         '</div>' +
         '<div style="margin-top:10px;">' +
           '<input autocomplete="off" type="checkbox" id="' + idPrefix + '_td" style="display:none;">' +
@@ -7996,13 +8011,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             'font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button></div>' +
       '</div>';
 
-    const spotCalcHtml = (label) => {
+    // A SECOND, INDEPENDENT CALCULATOR IS POSSIBLE.
+    // -------------------------------------------------------------------
+    // Every id here used to be hardcoded to pp_calc_*, so the only way to
+    // give the fake field goal a calculator was to share the panel's own
+    // -- and on that panel pp_yards is the KICK DISTANCE, which the
+    // shared control then overwrote. Reverted once on 23 Aug after the
+    // golden snapshot caught a blocked kick's 44 yards becoming the
+    // 60-yard return.
+    //
+    // Parameterised instead: two controls that cannot collide, which is
+    // the fix that note asked for. `pre` defaults to pp_calc, so every
+    // existing caller produces exactly the markup it did before.
+    const spotCalcHtml = (label, pre) => {
+      pre = pre || 'pp_calc';
       const st = computeState();
       const off = st.possession, opp = otherTeam(off);
       // A wide left margin and a rule: the gap is what tells the coach
       // these are two ways to answer the same question, not two things to
       // fill in. Sitting flush in the row they read as sequential fields.
-      return '<div id="pp_calc_wrap" style="margin-bottom:6px; margin-left:22px; ' +
+      return '<div id="' + pre + '_wrap" style="margin-bottom:6px; margin-left:22px; ' +
         'padding-left:22px; border-left:1px solid #d8d8d8;">' +
         fieldLabel(label || 'Or enter tackled on') +
         '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:nowrap;">' +
@@ -8016,10 +8044,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<button type="button" class="ptoggle calcSide" data-side="opp" ' +
             'style="border-radius:6px; font-weight:600; cursor:pointer;">' +
             TEAMS[opp].name + '</button>' +
-          '<input autocomplete="off" type="text" id="pp_calc_yardline" placeholder="yard line" style="width:96px; flex:0 0 96px;">' +
+          '<input autocomplete="off" type="text" id="' + pre + '_yardline" placeholder="yard line" style="width:96px; flex:0 0 96px;">' +
 
         '</span>' +
-        spotCalcReadoutHtml() +
+        spotCalcReadoutHtml(pre) +
       '</div>';
     };
     // The readout lives BELOW the flex row, not inside it. Sitting inside,
@@ -8040,8 +8068,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // reported as wrapping and not displaying. calcReadoutSync() below
     // shows it the moment there is real text and hides it again when it
     // is cleared.
-    const spotCalcReadoutHtml = () =>
-      '<div id="pp_calc_readout" style="display:none; font-size:14px; font-weight:600; color:#1a4d2e; ' +
+    // `pre` defaults to pp_calc so every existing caller is unchanged.
+    const spotCalcReadoutHtml = (pre) =>
+      '<div id="' + (pre || 'pp_calc') + '_readout" style="display:none; font-size:14px; font-weight:600; color:#1a4d2e; ' +
       'background:#eef6f1; border-left:3px solid #1a7a4c; border-radius:4px; ' +
       'padding:7px 10px; margin-top:10px;"></div>';
 
@@ -8932,6 +8961,58 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       });
     }
     // --- "tackled on" calculator -------------------------------------
+    // THE FAKE FIELD GOAL'S OWN CALCULATOR.
+    // ---------------------------------------------------------------------
+    // Deliberately small and separate from the 230-line shared one below.
+    // The shared calculator carries a lot that only a kick panel needs --
+    // touchback prefills, retargeting, a fielded-spot memory the punt
+    // return leans on -- and none of it applies here. A fake is a rush or
+    // a pass: two spots, one subtraction.
+    //
+    // It writes ONLY to pp_fgfake_yards. That is the whole point: sharing
+    // the panel's calculator is what overwrote a blocked kick's distance,
+    // because pp_yards on a field goal panel is the kick, not the run.
+    (function wireFgFakeCalc(){
+      const wrap = document.getElementById('pp_fgcalc_wrap');
+      if (!wrap) return;
+      const ylEl = document.getElementById('pp_fgcalc_yardline');
+      const readout = document.getElementById('pp_fgcalc_readout');
+      const target = () => document.getElementById('pp_fgfake_yards');
+      const sideBtns = [...wrap.querySelectorAll('.calcSide')];
+      const st0 = computeState();
+      // Default to the side the ball is already on, as the shared one does.
+      let side = st0.fieldPos !== null ? (st0.fieldPos <= 50 ? 'own' : 'opp') : null;
+      const paint = () => sideBtns.forEach(b => b.classList.toggle('picked', b.dataset.side === side));
+      const recompute = () => {
+        const box = target();
+        if (!box) return;
+        const cur = computeState().fieldPos;
+        const raw = (ylEl.value || '').trim();
+        const n = parseInt(raw, 10);
+        if (cur === null || !side || !raw || isNaN(n) || n < 0 || n > 50){
+          readout.style.display = 'none';
+          box.disabled = false;
+          box.style.opacity = '';
+          return;
+        }
+        const newPos = side === 'own' ? n : (100 - n);
+        const gain = newPos - cur;
+        box.value = String(gain);
+        // Disabled while the calculator owns it, exactly as the shared one
+        // does -- two ways to set one number is how they drift apart.
+        box.disabled = true;
+        box.style.opacity = '0.45';
+        readout.style.display = 'block';
+        readout.textContent = 'from ' + markerLabel(cur) + ' to ' + markerLabel(newPos) +
+          '  =  ' + (gain >= 0 ? '+' : '') + gain;
+      };
+      sideBtns.forEach(b => b.addEventListener('click', () => {
+        side = b.dataset.side; paint(); recompute();
+      }));
+      ylEl.addEventListener('input', recompute);
+      paint();
+    })();
+
     (function wireSpotCalc(){
       const wrap = document.getElementById('pp_calc_wrap');
       if (!wrap) return;
