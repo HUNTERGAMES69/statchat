@@ -205,6 +205,11 @@ async function run() {
       '.pp_passer_pick', 'pp_passer_manual',
       '.pp_receiver_pick', 'pp_receiver_manual',
       'pp_puntfake_yards', '.lossToggle',
+      // The 0-9 pad, live on a fake since 23 Aug for the same reason as
+      // the calculator below: a fake is a rush or a pass, and it was the
+      // one yardage entry in the app where a scorer had to reach for a
+      // keyboard. It targets the FAKE's own yards box, not pp_yards.
+      '.quickYardsBtn',
       // The yardage calculator, live on a fake since 14 Aug 2026. It used
       // to be hidden with the rest of the kick fields, on the reasoning
       // that it measures where a KICK came down -- but a fake is a rush
@@ -231,6 +236,11 @@ async function run() {
       '.pp_receiver_pick', 'pp_receiver_manual',
       'pp_fgfake_yards', '.lossToggle',
       'pp_fgfake_incomplete_toggle', 'pp_fgfake_td_toggle',
+      // The 0-9 pad, live on a fake since 23 Aug. NOT the calculator: the
+      // field goal panel has no pp_calc_wrap to borrow, and adding a
+      // hidden one silently broke the kick distance -- see the note in
+      // game.html beside the fake block.
+      '.quickYardsBtn',
       'pp_review', 'pp_clear'
     ]
   };
