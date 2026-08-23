@@ -7663,7 +7663,29 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // side, and it was missing from every fumble tree.
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_rush_fumrec" value="tb"> Out of the end zone — touchback</label>' +
           '<div id="pp_rush_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_rushfum_safety" style="display:none;">' +
-          '<button type="button" id="pp_rushfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
+          '<button type="button" id="pp_rushfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button>' +
+          // WHERE THEY RECOVERED IT. Optional -- blank leaves the ball
+          // where the play ended, which is the common case: most fumbles
+          // are fallen on where they are dropped.
+          //
+          // Deliberately NOT startingSpotFieldsHtml, which every other
+          // spot on this page uses. That widget returns {down:1,...}
+          // because it exists for a CHANGE OF POSSESSION; recovering your
+          // own fumble is not one, and reusing it would quietly award a
+          // first down.
+          '<div id="pp_rushfum_ownspot_wrap" style="margin-top:10px;">' +
+            fieldLabel('Recovered at (optional \u2014 leave blank if recovered where the play ended)') +
+            '<div class="pick-row">' +
+              '<button type="button" class="ptoggle pp_rushfum_ownspot_side" data-side="own" ' +
+                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+                TEAMS[computeState().possession].name + "'s side" + '</button>' +
+              '<button type="button" class="ptoggle pp_rushfum_ownspot_side" data-side="opp" ' +
+                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+                TEAMS[otherTeam(computeState().possession)].name + "'s side" + '</button>' +
+              '<input autocomplete="off" type="text" id="pp_rushfum_ownspot_yardline" placeholder="yard line" style="width:90px;">' +
+            '</div>' +
+          '</div>' +
+          '</div>' +
           // A lost fumble hands the ball over, so the takeover spot has to
           // be askable here. The dedicated Fumble play type has this field;
           // the rush and pass panels' own fumble paths never did, which
@@ -7674,25 +7696,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_rushfum_td" style="display:none;">' +
             '<button type="button" id="pp_rushfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
           
-          // WHERE THEY RECOVERED IT. Optional -- blank means the ball
-          // ended where the play ended, which is the common case.
-          // Deliberately NOT the startingSpotFields widget used for a
-          // change of possession: that one returns {down:1,...} and
-          // would hand out a first down for falling on your own
-          // fumble.
-          '<div id="pp_rushfum_ownspot_wrap" style="margin-top:10px;">' +
-            fieldLabel('Recovered at (optional \u2014 leave blank if recovered where the play ended)') +
-            '<div class="pick-row">' +
-              '<button type="button" class="ptoggle pp_rushfum_ownspot_side" data-side="own" '  +
-                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
-                TEAMS[computeState().possession].name + "'s side" + '</button>' +
-              '<button type="button" class="ptoggle pp_rushfum_ownspot_side" data-side="opp" ' +
-                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
-                TEAMS[otherTeam(computeState().possession)].name + "'s side" + '</button>' +
-              '<input autocomplete="off" type="text" id="pp_rushfum_ownspot_yardline" placeholder="yard line" style="width:90px;">' +
-            '</div>' +
-          '</div>' +
-          '</div>' +
+'</div>' +
         '</div>';
     else if (type === 'pass') html = outcomeSwitchRow('pass') +
         offBlock('passer','Passer') + offBlock('receiver','Receiver') +
@@ -7703,7 +7707,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
         '<div style="margin-bottom:6px;"><input autocomplete="off" type="checkbox" id="pp_incomplete" style="display:none;">' +
         '<button type="button" id="pp_incomplete_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Incomplete</button></div>' +
-        '<div id="pp_pass_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_fumbled', 'Fumbled') + '</div>' +
+        '<div id="pp_pass_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_fumbled', 'Fumbled') +
         '<div id="pp_pass_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_safety', 'Safety') + '</div></div>' +
         '<div id="pp_pass_extra">' + defBlock('Tackled by (optional)') + '<div id="pp_pass_td_wrap">' + tdBlock + '</div></div>' +
         '<div id="pp_pass_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
@@ -7716,22 +7720,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // side, and it was missing from every fumble tree.
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pass_fumrec" value="tb"> Out of the end zone — touchback</label>' +
           '<div id="pp_pass_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_passfum_safety" style="display:none;">' +
-          '<button type="button" id="pp_passfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
-          '<div id="pp_pass_fum_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_passfum') + yardsBlock('Return yards (optional)', 'pp_passfum_retyds') +
-            startingSpotFieldsHtml('pp_passfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
-            '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_passfum_td" style="display:none;">' +
-            '<button type="button" id="pp_passfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
-          
-          // WHERE THEY RECOVERED IT. Optional -- blank means the ball
-          // ended where the play ended, which is the common case.
-          // Deliberately NOT the startingSpotFields widget used for a
-          // change of possession: that one returns {down:1,...} and
-          // would hand out a first down for falling on your own
-          // fumble.
+          '<button type="button" id="pp_passfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button>' +
+          // WHERE THEY RECOVERED IT. Optional -- blank leaves the ball
+          // where the play ended, which is the common case: most fumbles
+          // are fallen on where they are dropped.
+          //
+          // Deliberately NOT startingSpotFieldsHtml, which every other
+          // spot on this page uses. That widget returns {down:1,...}
+          // because it exists for a CHANGE OF POSSESSION; recovering your
+          // own fumble is not one, and reusing it would quietly award a
+          // first down.
           '<div id="pp_passfum_ownspot_wrap" style="margin-top:10px;">' +
             fieldLabel('Recovered at (optional \u2014 leave blank if recovered where the play ended)') +
             '<div class="pick-row">' +
-              '<button type="button" class="ptoggle pp_passfum_ownspot_side" data-side="own" '  +
+              '<button type="button" class="ptoggle pp_passfum_ownspot_side" data-side="own" ' +
                 'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
                 TEAMS[computeState().possession].name + "'s side" + '</button>' +
               '<button type="button" class="ptoggle pp_passfum_ownspot_side" data-side="opp" ' +
@@ -7741,6 +7743,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '</div>' +
           '</div>' +
           '</div>' +
+          '<div id="pp_pass_fum_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_passfum') + yardsBlock('Return yards (optional)', 'pp_passfum_retyds') +
+            startingSpotFieldsHtml('pp_passfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
+            '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_passfum_td" style="display:none;">' +
+            '<button type="button" id="pp_passfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
+          
+'</div>' +
         '</div>';
     else if (type === 'sack') html = outcomeSwitchRow('sack') + offBlock('passer','Passer') +
         // The same two-row shape as rush and pass, and for the same
@@ -7777,22 +7785,20 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // side, and it was missing from every fumble tree.
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_sack_fumrec" value="tb"> Out of the end zone — touchback</label>' +
           '<div id="pp_sack_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_sackfum_safety" style="display:none;">' +
-          '<button type="button" id="pp_sackfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
-          '<div id="pp_sack_fum_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_sackfum') + yardsBlock('Return yards (optional)', 'pp_sackfum_retyds') +
-            startingSpotFieldsHtml('pp_sackfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
-            '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_sackfum_td" style="display:none;">' +
-            '<button type="button" id="pp_sackfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
-          
-          // WHERE THEY RECOVERED IT. Optional -- blank means the ball
-          // ended where the play ended, which is the common case.
-          // Deliberately NOT the startingSpotFields widget used for a
-          // change of possession: that one returns {down:1,...} and
-          // would hand out a first down for falling on your own
-          // fumble.
+          '<button type="button" id="pp_sackfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button>' +
+          // WHERE THEY RECOVERED IT. Optional -- blank leaves the ball
+          // where the play ended, which is the common case: most fumbles
+          // are fallen on where they are dropped.
+          //
+          // Deliberately NOT startingSpotFieldsHtml, which every other
+          // spot on this page uses. That widget returns {down:1,...}
+          // because it exists for a CHANGE OF POSSESSION; recovering your
+          // own fumble is not one, and reusing it would quietly award a
+          // first down.
           '<div id="pp_sackfum_ownspot_wrap" style="margin-top:10px;">' +
             fieldLabel('Recovered at (optional \u2014 leave blank if recovered where the play ended)') +
             '<div class="pick-row">' +
-              '<button type="button" class="ptoggle pp_sackfum_ownspot_side" data-side="own" '  +
+              '<button type="button" class="ptoggle pp_sackfum_ownspot_side" data-side="own" ' +
                 'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
                 TEAMS[computeState().possession].name + "'s side" + '</button>' +
               '<button type="button" class="ptoggle pp_sackfum_ownspot_side" data-side="opp" ' +
@@ -7802,6 +7808,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '</div>' +
           '</div>' +
           '</div>' +
+          '<div id="pp_sack_fum_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_sackfum') + yardsBlock('Return yards (optional)', 'pp_sackfum_retyds') +
+            startingSpotFieldsHtml('pp_sackfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
+            '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_sackfum_td" style="display:none;">' +
+            '<button type="button" id="pp_sackfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
+          
+'</div>' +
         '</div>';
     // The intended receiver is asked for here so the throw counts as a
     // TARGET against him. Every other pass outcome already records it;
