@@ -447,6 +447,27 @@ async function run() {
     typeInto(win, doc.getElementById('pp_yards'), '5');
     await new Promise(r => setTimeout(r, 60));
     if (lit().join(',') !== '5') fail('pad:follow', 'the pad should follow the box, got [' + lit().join(',') + ']');
+
+    // THE SIZE CUE, not just the colour. Three colour-only versions were
+    // reported as "no change" -- the code was right each time, but a navy
+    // fill on a 36px key is not legible as feedback on a sideline screen.
+    // The scale is what makes it read, so it is asserted, not left as a
+    // nicety someone could tidy away.
+    const key5 = pad.find(b => b.dataset.yds === '5');
+    if (!/scale\(/.test(key5.style.transform || '')) {
+      fail('pad:scale', 'the lit key should grow, not only change colour');
+    }
+    if (key5.style.zIndex !== '2') {
+      // A transformed grid item is painted in source order, so without
+      // this the keys after it clip the corners of the one that grew.
+      fail('pad:z', 'the lit key needs to paint above its neighbours, z-index=' + key5.style.zIndex);
+    }
+    // And the growth must come back off, or the pad ends up all bumps.
+    click(win, pad.find(b => b.dataset.yds === '1'));
+    await new Promise(r => setTimeout(r, 60));
+    if (/scale\(/.test(key5.style.transform || '')) {
+      fail('pad:scale-clear', 'the previous key stayed enlarged');
+    }
     h.close();
   }
 
