@@ -1886,6 +1886,12 @@ function parseInput(raw, state){
   if (td) rest.pop();
   const isSafety = rest[rest.length - 1] === 'sf';
   if (isSafety) rest.pop();
+  // 'kr' -- the KICKING team recovered a blocked kick or a muffed hold.
+  // Popped here with the other trailing flags. Its ABSENCE means the
+  // blocking team recovered, which is what every code written before this
+  // meant and still means, so nothing stored already changes.
+  const kickingRecovered = rest[rest.length - 1] === 'kr';
+  if (kickingRecovered) rest.pop();
   // OWN-RECOVERY SPOT, e.g. "orec:34".
   // ---------------------------------------------------------------------
   // Where the offence recovered its own fumble, as an absolute
@@ -2576,7 +2582,10 @@ function parseInput(raw, state){
       const rec = rest[1], retyds = rest[2];
       const named = rec && rec !== '?';
       let t = TEAMS[off].name + ' — muffed hold, no kick attempted';
-      if (named) t += ', recovered by ' + D(rec);
+      // Against the team that actually recovered -- see the blocked
+      // branch below for why D() alone was wrong.
+      if (named) t += ', recovered by ' + (kickingRecovered ? ST(rec) : D(rec));
+      else if (kickingRecovered) t += ', recovered by ' + TEAMS[off].name;
       if (retyds) t += ', returned ' + retyds;
       let score = null;
       if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
@@ -2594,7 +2603,9 @@ function parseInput(raw, state){
       // team: td ? def : off, matching the 'b' branch exactly -- whoever
       // recovered gets the play; the kicking team keeps it (as it always
       // has) unless the return actually scored.
-      return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter };
+      return { text: t, effect: score ? { score } : {},
+        flipEligible: !kickingRecovered, flipTo: def,
+        team: td ? def : off, quarter: state.quarter };
     }
     if (rest[0] === 'b' || rest[0] === 'B'){
       // rec checked against '?' explicitly -- see the muffed-hold branch
@@ -2609,7 +2620,11 @@ function parseInput(raw, state){
       const rec = rest[1], retyds = rest[2];
       const named = rec && rec !== '?';
       let t = ST(p1) + ' field goal BLOCKED';
-      if (named) t += ', recovered by ' + D(rec);
+      // Resolve against the team that ACTUALLY recovered it. D()
+      // searches the blocking side only, so a kicking-team recoverer
+      // came back as the wrong player's name entirely.
+      if (named) t += ', recovered by ' + (kickingRecovered ? ST(rec) : D(rec));
+      else if (kickingRecovered) t += ', recovered by ' + TEAMS[off].name;
       if (retyds) t += ', returned ' + retyds;
       let score = null;
       if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
@@ -2629,7 +2644,15 @@ function parseInput(raw, state){
       // play itself under the offense's own team, which is what a
       // coach reading the drive log actually sees. Found the same bug
       // in thirteen other branches once this one was traced.
-      return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter };
+      // WHO KEEPS THE BALL follows who recovered it. A block the kicking
+      // team falls on is not a turnover -- they keep it, and the down
+      // advances or the series ends on downs like any other failed
+      // fourth. This defaulted to a change of possession, handing the
+      // ball over on every block -- the common case, but not the only
+      // one, and there was no way to say otherwise.
+      return { text: t, effect: score ? { score } : {},
+        flipEligible: !kickingRecovered, flipTo: def,
+        team: td ? def : off, quarter: state.quarter };
     }
     const yds = rest[0], res = rest[1];
     const good = res === 'g';
@@ -8380,7 +8403,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         fakeBlockHtml('pp_fgfake', 'field goal') +
         '<div id="pp_fgres_wrap" style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="g" checked> Good</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fgres" value="x"> Missed</label></div>' +
-        '<div id="pp_fg_blocked" style="display:none;">' + defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') +
+        '<div id="pp_fg_blocked" style="display:none;">' +
+          // WHICH TEAM RECOVERED IT -- asked FIRST, because it decides
+          // everything after it.
+          //
+          // This was never asked. The panel went straight to "Recovered
+          // by", whose picker is built from defenseEligible() -- the
+          // BLOCKING side only -- so the tree quietly assumed they had
+          // recovered every block. A kicking team falling on its own
+          // blocked kick, which is what usually happens, could not be
+          // entered at all. Reported directly.
+          //
+          // Same k/r shape and wording as the punt tree's muff radios,
+          // deliberately: it is the same question and a scorer should
+          // not have to read two different phrasings of it.
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" ' +
+            'name="pp_fgb_rec" value="r" checked> Recovered by ' + TEAMS[otherTeam(computeState().possession)].name + '</label>' +
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" ' +
+            'name="pp_fgb_rec" value="k"> Recovered by ' + TEAMS[computeState().possession].name + ' (the kicking team keeps the ball)</label>' +
+          defBlock('Recovered by', '_fgb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') +
           // A BLOCKED KICK RECOVERED IN YOUR OWN END ZONE IS A SAFETY.
           // A block on a field goal from close range often does not
           // travel: the kicking team falls on it behind their own goal
@@ -8399,7 +8440,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // yards), with its own suffixed credit fields (_fgmuff) so the
         // two panels' pickers never collide if both happened to render at
         // once mid-toggle.
-        '<div id="pp_fg_muff" style="display:none;">' + defBlock('Recovered by', '_fgmuff') + yardsBlock('Return yards (optional)', 'pp_fgmuffretyds') +
+        '<div id="pp_fg_muff" style="display:none;">' +
+          // WHICH TEAM RECOVERED IT -- asked FIRST, because it decides
+          // everything after it.
+          //
+          // This was never asked. The panel went straight to "Recovered
+          // by", whose picker is built from defenseEligible() -- the
+          // BLOCKING side only -- so the tree quietly assumed they had
+          // recovered every block. A kicking team falling on its own
+          // blocked kick, which is what usually happens, could not be
+          // entered at all. Reported directly.
+          //
+          // Same k/r shape and wording as the punt tree's muff radios,
+          // deliberately: it is the same question and a scorer should
+          // not have to read two different phrasings of it.
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" ' +
+            'name="pp_fgmuff_rec" value="r" checked> Recovered by ' + TEAMS[otherTeam(computeState().possession)].name + '</label>' +
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" ' +
+            'name="pp_fgmuff_rec" value="k"> Recovered by ' + TEAMS[computeState().possession].name + ' (the kicking team keeps the ball)</label>' +
+          defBlock('Recovered by', '_fgmuff') + yardsBlock('Return yards (optional)', 'pp_fgmuffretyds') +
           // A BLOCKED KICK RECOVERED IN YOUR OWN END ZONE IS A SAFETY.
           // A block on a field goal from close range often does not
           // travel: the kicking team falls on it behind their own goal
@@ -10105,6 +10164,33 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // handlers are gone: the group does it, and doing it twice meant
       // two places to keep in step.
       wireExclusiveToggles(['pp_fg_blocked_cb', 'pp_fg_muffhold', 'pp_fg_fake']);
+      // THE RECOVERER PICKER FOLLOWS THE TEAM RADIO.
+      // -----------------------------------------------------------------
+      // defBlock builds its list from defenseEligible(def), so the grid
+      // shows the BLOCKING side. Once the kicking team can be the
+      // recoverer, the grid has to be rebuilt from their special-teams
+      // list or the scorer is picking a number off the wrong roster --
+      // worse than no picker, because the name that comes back is a real
+      // player who was not on the field for it.
+      [['pp_fgb_rec', '_fgb'], ['pp_fgmuff_rec', '_fgmuff']].forEach(([grp, suffix]) => {
+        const radios = panel.querySelectorAll('input[name=' + grp + ']');
+        if (!radios.length) return;
+        const refill = () => {
+          const picked = panel.querySelector('input[name=' + grp + ']:checked');
+          const kicking = picked && picked.value === 'k';
+          const grid = document.getElementById('pp_credit_grid' + suffix);
+          if (!grid) return;
+          const list = kicking ? specialTeamsEligible(off) : defenseEligible(def);
+          grid.innerHTML = pickerHtml(list, 'pp_credit_pick' + suffix);
+          // The buttons are rebuilt, so their click handlers went with
+          // them. wirePickerButtons is the same call the panel makes for
+          // every credit grid at build time -- reusing it means the
+          // rebuilt grid behaves identically to the original.
+          wirePickerButtons(panel, 'pp_credit_pick' + suffix,
+            'pp_credit_manual' + suffix, () => {});
+        };
+        radios.forEach(r => r.addEventListener('change', refill));
+      });
       // The two safety toggles, one per sub-panel. Button/checkbox pairs
       // like every other on the page.
       //
@@ -11042,13 +11128,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // matching fix on the blocked case just below) for why: omitting
         // the token outright, as this used to, shifts the yards into
         // the recovery-credit slot the moment nobody is named.
+        const fgmuffRec = document.querySelector('input[name=pp_fgmuff_rec]:checked');
+        const fgmuffKicking = !!(fgmuffRec && fgmuffRec.value === 'k');
         const muffCreditTok = sel.credit || (muffRetyds ? '?' : '');
         code = sel.kicker + 'fg m' + (muffCreditTok ? ' ' + muffCreditTok : '') +
           (muffRetyds ? ' ' + muffRetyds : '') + (td ? ' td' : '') +
-          // 'sf' LAST. parseInput pops td first and then sf, so the
+          // 'sf' then 'kr'. parseInput pops td, sf, then kr, so the
           // order here has to mirror that or the tokens are read as
           // each other.
-          (!!(document.getElementById('pp_fgmuff_safety') || {}).checked ? ' sf' : '');
+          (!!(document.getElementById('pp_fgmuff_safety') || {}).checked ? ' sf' : '') +
+          (fgmuffKicking ? ' kr' : '');
         // NO early return, unlike PAT's own muffed-hold branch just
         // below (which is correct to skip the tail: a try always ends in
         // a kickoff, never a drive starting at a spot, so it genuinely
@@ -11077,10 +11166,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // number. Found while building the identical field for the
           // muffed-hold branch above and testing this one directly rather
           // than trusting that it already worked.
+          const fgbRec = document.querySelector('input[name=pp_fgb_rec]:checked');
+          const fgbKicking = !!(fgbRec && fgbRec.value === 'k');
           const blockCreditTok = sel.credit || (retyds ? '?' : '');
           code = sel.kicker + 'fg b' + (blockCreditTok ? ' ' + blockCreditTok : '') +
             (retyds ? ' ' + retyds : '') + (td ? ' td' : '') +
-            (!!(document.getElementById('pp_fgb_safety') || {}).checked ? ' sf' : '');
+            (!!(document.getElementById('pp_fgb_safety') || {}).checked ? ' sf' : '') +
+            // 'kr' = the KICKING team recovered. A separate flag rather
+            // than a team token in the middle of the string: the
+            // recoverer and yardage slots are positional, and every
+            // existing code without this flag still means what it always
+            // did -- the blocking team recovered.
+            (fgbKicking ? ' kr' : '');
         } else {
           code = sel.kicker + 'fg ' + yds + ' ' + res;
         }
