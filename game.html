@@ -5117,12 +5117,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     return out;
   }
 
-  function validateGame(){
+  function validateGame(forFinal){
     const issues = [];
 
     // Quarters first: it is the one thing here that mis-files every play
     // after it rather than just looking odd on its own.
-    const missingQ = missingQuarters(4);
+    //
+    // ONLY UP TO THE QUARTER THE GAME HAS REACHED, unless we are
+    // finalising. The first version checked all four always, so a clean
+    // game one play into Q1 reported "Q2, Q3 and Q4 were never started" --
+    // true, and useless, because they are not meant to have. It made the
+    // live Checks panel cry wolf on every game from the first snap, which
+    // right_rail_check caught immediately.
+    //
+    // At finalize the bar is all four: a finished game that never started
+    // a quarter is exactly what this is for.
+    const nowQ = (computeState().quarter) || 1;
+    const missingQ = missingQuarters(forFinal ? 4 : nowQ);
     if (missingQ.length){
       // "Q2, Q3 and Q4", not "Q2 and Q3 and Q4".
       const qs = missingQ.map(q => 'Q' + q);
@@ -5256,7 +5267,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       alert('Score is tied ' + state.scores.teamA + '-' + state.scores.teamB + ' — the game can\'t end on a tie. Use "Start overtime" instead.');
       return false;
     }
-    const issues = validateGame();
+    // TRUE: at finalize the bar is all four quarters, not just the one
+    // the game has reached. Everywhere else this runs live and would
+    // otherwise warn about quarters that are simply still ahead.
+    const issues = validateGame(true);
     if (issues.length){
       // Warn, never block: "OK" finalizes regardless. The checks catch
       // real problems but cannot know about every legitimate oddity, so
@@ -6413,21 +6427,34 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // missed rush, which is the one that was reported. Walking up from
       // the input finds the row in every tree without editing any of
       // them.
-      const yards = panel.querySelector('#pp_yards');
-      if (!yards) return;
-      let row = yards.parentElement;
-      while (row && row !== panel){
-        // The flex row carrying both the yards column and the
-        // calculator beside it -- the only ancestor that both wraps and
-        // holds more than the yards column itself.
-        const st = row.style || {};
-        if (st.display === 'flex' && st.flexWrap === 'wrap' && row.children.length > 1){
-          row.style.flexWrap = 'nowrap';
-          row.style.alignItems = 'flex-start';
-          return;
+      // EVERY yards box, not just #pp_yards.
+      // -----------------------------------------------------------------
+      // This walked up from #pp_yards alone. The FAKE panels use their own
+      // box -- pp_fgfake_yards, pp_puntfake_yards -- so their row was
+      // never found and kept flex-wrap:wrap, which dropped the calculator
+      // onto its own line UNDER the 0-9 pad instead of beside it. Every
+      // other tree had it on the right. Reported directly.
+      //
+      // Still anchored on the INPUT rather than a wrapper id, for the
+      // reason above: the trees do not agree on wrapper ids, and they do
+      // not need to.
+      const boxes = [...panel.querySelectorAll('#pp_yards, [id$="fake_yards"]')];
+      if (!boxes.length) return;
+      boxes.forEach(yards => {
+        let row = yards.parentElement;
+        while (row && row !== panel){
+          // The flex row carrying both the yards column and the
+          // calculator beside it -- the only ancestor that both wraps and
+          // holds more than the yards column itself.
+          const st = row.style || {};
+          if (st.display === 'flex' && st.flexWrap === 'wrap' && row.children.length > 1){
+            row.style.flexWrap = 'nowrap';
+            row.style.alignItems = 'flex-start';
+            return;
+          }
+          row = row.parentElement;
         }
-        row = row.parentElement;
-      }
+      });
     };
     // 4. THE TREE IS ALWAYS REACHABLE, AND TALL ONES START AT THE TOP.
     //    Opening a tree from a button low on the ladder could leave the
