@@ -264,11 +264,31 @@
   #helpFab { background:var(--sc-green, #1a7a4c); border-color:var(--sc-green, #1a7a4c); }
   #launchViewLink { background:#b00020; border-color:#b00020; }
   @media (max-width: 1219px) {
-    /* Back into the flow: at this width the row would sit over the card. */
-    /* No banner to measure below the breakpoint, so the row sizes itself
-       and the links need their own vertical padding back. */
-    #topActions { position:static; justify-content:flex-end; margin:0 0 10px;
-                  align-items:center; }
+    /* EVERYTHING ON ONE HEADER ROW, and vertical space is the reason.
+       -----------------------------------------------------------------
+       Two faults, both from the same cause: these are position:absolute
+       on desktop, so where they sit in the source does not matter. Drop
+       them to static below 1220 and they flow where they are written.
+
+       #topActions is a child of <body>, written at the FOOT of the file,
+       so Broadcast setup / Help / Crew view landed at the very bottom of
+       the page. #onAirBanner took a whole row of its own under the
+       header. On a landscape iPad -- about 700px of usable height once
+       Safari has taken its share -- neither is affordable.
+
+       Both are now pulled INTO #metaRow beside Dashboard and the
+       timeouts, using order to place them: the row already exists, is
+       already flex, and is already the place a scorer looks for this
+       kind of control.
+
+       Desktop never sees this block; #topActions stays pinned top-right
+       and ON AIR keeps its own row. */
+    #metaRow { flex-wrap:wrap; row-gap:8px; }
+    #metaRow > .hdr-btn { order:0; }
+    #onAirBanner { order:1; margin:0 !important; }
+    #topActions  { order:2; position:static; margin:0;
+                   align-items:center; justify-content:flex-end; }
+    #topText     { order:3; }
     #topActions a { padding:8px 14px; }
   }
   /* Under the dock breakpoint the margins vanish, so both come back into
@@ -326,6 +346,53 @@
              padding:3px 8px; border-radius:5px; display:inline-block; margin:8px 0 4px; }
   /* Below the dock breakpoint the margins are gone, so it comes back into
      the flow underneath everything else rather than overlapping the card. */
+  /* COLLAPSIBLE RAILS — LANDSCAPE TABLET ONLY (1024-1219px).
+     ---------------------------------------------------------------------
+     The entry card is fixed at 760px, so the rails split what is left. On
+     an 1180px iPad that is about 176px each with both open -- narrower
+     than the word "possessions", and drive lines wrap three deep. With
+     one open it is about 386px, comparable to desktop.
+
+     So one-at-a-time is not a preference here, it is the only way a rail
+     fits at all. A collapsed rail becomes a thin strip down its side with
+     the label rotated; tapping it opens that rail and closes the other.
+
+     Below 1024 (portrait) none of this applies -- the stacked layout
+     already works and is left alone. Above 1219 neither does: desktop
+     keeps both rails open side by side. */
+  @media (min-width: 1024px) and (max-width: 1219px) {
+    #driveDock, #rightRail {
+      transition:none;
+      overflow:hidden;
+    }
+    /* COLLAPSED: a strip. Width is the strip, and the contents are hidden
+       rather than merely narrow -- a 34px-wide card would reflow its text
+       into a column of single letters before it disappeared. */
+    #driveDock.rail-collapsed, #rightRail.rail-collapsed {
+      width:34px; min-width:34px; padding:0; cursor:pointer;
+      background:var(--sc-card, #fff);
+      border:1px solid var(--sc-rule, #e6e6e6); border-radius:8px;
+    }
+    #driveDock.rail-collapsed > *, #rightRail.rail-collapsed > * { display:none; }
+    /* The rotated label, and the only child a collapsed rail shows. */
+    #driveDock.rail-collapsed > .rail-strip,
+    #rightRail.rail-collapsed > .rail-strip {
+      display:flex; align-items:center; justify-content:center;
+      writing-mode:vertical-rl; text-orientation:mixed;
+      height:100%; width:100%; gap:8px;
+      font-size:13px; font-weight:700; letter-spacing:0.02em;
+      color:var(--sc-ink-soft, #555); white-space:nowrap;
+      background:none; border:0; padding:14px 0; cursor:pointer;
+    }
+    /* Open rails hide their own strip. */
+    #driveDock .rail-strip, #rightRail .rail-strip { display:none; }
+    /* The open one takes the room the collapsed one gave up. */
+    #driveDock:not(.rail-collapsed) { right:calc(50% + 380px + 18px); }
+    #rightRail:not(.rail-collapsed) { left:calc(50% + 380px + 18px); }
+    #driveDock.rail-collapsed  { right:auto; width:34px; }
+    #rightRail.rail-collapsed  { left:auto; width:34px; }
+  }
+
   @media (max-width: 1219px) {
     #rightRail { position:static; left:auto; right:auto; height:auto !important;
                  top:auto !important; margin:16px auto 0; max-width:760px; }
@@ -7037,6 +7104,103 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   //
   // `change` is dispatched on the ones being cleared so any panel logic
   // watching them -- field visibility, spot prefills -- unwinds too.
+  // COLLAPSIBLE RAILS, ONE OPEN AT A TIME — landscape tablet only.
+  // ---------------------------------------------------------------------
+  // Why one at a time: the entry card is a fixed 760px, so on an 1180px
+  // iPad two rails get about 176px each -- narrower than the word
+  // "possessions", with drive lines wrapping three deep. One rail gets
+  // about 386px, comparable to desktop. It is what makes a rail usable
+  // rather than a preference.
+  //
+  // Current drive is the one open by default: Andy checks it constantly
+  // while entering plays, where Checks and Live totals are glanced at.
+  //
+  // Only between 1024 and 1219. Below that the page stacks and already
+  // works; above it desktop shows both. Outside the band every class this
+  // adds is removed, so neither layout inherits a collapsed rail.
+  const RAILS = [
+    { id: 'driveDock', label: 'Current drive' },
+    { id: 'rightRail', label: 'Checks & totals' }
+  ];
+  function railBandActive(){
+    return window.innerWidth >= 1024 && window.innerWidth <= 1219;
+  }
+  function openRail(openId){
+    RAILS.forEach(r => {
+      const el = document.getElementById(r.id);
+      if (!el) return;
+      el.classList.toggle('rail-collapsed', r.id !== openId);
+    });
+    try { localStorage.setItem('sc_open_rail', openId); } catch (e) {}
+  }
+  function setupRails(){
+    const active = railBandActive();
+    RAILS.forEach(r => {
+      const el = document.getElementById(r.id);
+      if (!el) return;
+      // The strip is built once and kept -- rebuilding it on every resize
+      // would drop the listener with it.
+      let strip = el.querySelector(':scope > .rail-strip');
+      if (!strip){
+        strip = document.createElement('button');
+        strip.type = 'button';
+        strip.className = 'rail-strip';
+        strip.textContent = r.label;
+        strip.addEventListener('click', () => openRail(r.id));
+        el.appendChild(strip);
+      }
+      if (!active) el.classList.remove('rail-collapsed');
+    });
+    if (active){
+      let want = 'driveDock';
+      try { want = localStorage.getItem('sc_open_rail') || want; } catch (e) {}
+      if (!RAILS.some(r => r.id === want)) want = 'driveDock';
+      openRail(want);
+    }
+  }
+  window.addEventListener('resize', setupRails);
+
+  // THE HEADER ROW IS ASSEMBLED AT TABLET WIDTH.
+  // ---------------------------------------------------------------------
+  // #onAirBanner is a child of #mainView and #topActions is a child of
+  // <body>, written at the foot of the file. On desktop both are
+  // position:absolute so their source position is invisible -- but below
+  // 1220 they drop to static and flow where they are written, which put
+  // the Broadcast/Help/Crew view links at the very BOTTOM of the page and
+  // gave ON AIR a whole row of its own under the header.
+  //
+  // CSS `order` cannot fix that: it only sorts SIBLINGS, and these three
+  // live in three different parents. So they are physically moved into
+  // #metaRow, and moved back above 1220.
+  //
+  // Their original position is remembered on first move, so going back is
+  // exact rather than an append -- the same approach the fake-kick
+  // calculator uses, and for the same reason.
+  function layoutHeaderForWidth(){
+    const meta = document.getElementById('metaRow');
+    if (!meta) return;
+    const tablet = window.innerWidth <= 1219;
+    ['onAirBanner', 'topActions'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (!el.__home){
+        el.__home = { parent: el.parentNode, next: el.nextSibling };
+      }
+      if (tablet){
+        if (el.parentNode !== meta) meta.appendChild(el);
+      } else if (el.parentNode !== el.__home.parent && el.__home.parent){
+        el.__home.parent.insertBefore(el, el.__home.next);
+      }
+    });
+    // topText last, so the timeouts sit at the right-hand end of the row
+    // rather than between two clumps of buttons.
+    const tt = document.getElementById('topText');
+    if (tablet && tt && tt !== meta.lastElementChild) meta.appendChild(tt);
+  }
+  window.addEventListener('resize', layoutHeaderForWidth);
+  layoutHeaderForWidth();
+  setupRails();
+
   function wireExclusiveToggles(ids, afterChange){
     const clearOthers = (keepId) => {
       ids.forEach(id => {
