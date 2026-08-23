@@ -7678,12 +7678,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // A leading minus is the LOSS toggle's doing -- "-7" is still a 7 on
       // the pad, so it lights.
       const val = String(input.value || '').trim().replace(/^-/, '');
-      panel.querySelectorAll('.quickYardsBtn[data-for="' + forId + '"]').forEach(btn => {
+      // document, not panel. Scoped to `panel` this repainted only the key
+      // that had just been clicked -- one of ten -- so the previously lit
+      // key never went out and, on first press, nothing appeared to
+      // happen at all. The pad is unambiguous by data-for; it does not
+      // need a container to disambiguate it.
+      document.querySelectorAll('.quickYardsBtn[data-for="' + forId + '"]').forEach(btn => {
         const on = btn.dataset.yds === val;
-        btn.style.background = on ? 'var(--sc-navy, #1a1a2e)' : '#fff';
-        btn.style.color = on ? '#fff' : '#1a1a2e';
-        btn.style.borderColor = on ? 'var(--sc-navy, #1a1a2e)' : '#ccc';
-        btn.style.fontWeight = on ? '800' : '700';
+        // LITERAL COLOURS, not var(). A custom property in a JS-set inline
+        // style is one more thing that can quietly resolve to nothing, and
+        // when it does the assignment fails silently and the key stays
+        // white -- indistinguishable from the feature not working. There
+        // is no theming to inherit here; the value is the value.
+        //
+        // setProperty with 'important' for the same reason: these keys
+        // carry their colours inline from the markup, and anything that
+        // re-renders or re-styles them must not quietly win.
+        btn.style.setProperty('background', on ? '#1a1a2e' : '#ffffff', 'important');
+        btn.style.setProperty('color', on ? '#ffffff' : '#1a1a2e', 'important');
+        // A HEAVIER BORDER as well as the fill. Colour alone is a weak
+        // signal on a glare-washed sideline screen, and it is the only
+        // signal a colour-blind scorer would have.
+        btn.style.setProperty('border',
+          on ? '2px solid #1a1a2e' : '1px solid #cccccc', 'important');
+        btn.style.setProperty('font-weight', on ? '800' : '700', 'important');
       });
     };
     panel.querySelectorAll('.quickYardsBtn').forEach(b => b.addEventListener('click', () => {
