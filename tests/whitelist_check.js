@@ -482,54 +482,24 @@ async function run() {
     const h = await bootGamePage();
     const doc = h.window.document, win = h.window;
     setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
-    for (const type of ['pass', 'punt', 'kickoff']) {
+    for (const type of ['pass', 'punt', 'kickoff', 'rush', 'fg']) {
+      const clr = doc.getElementById('phaseClearBtn');
+      if (clr) click(win, clr);
       click(win, doc.querySelector('.ptypeBtn[data-type="' + type + '"]'));
-      const inputs = [...doc.querySelectorAll('#playPanel .pick-row > input')];
+      const inputs = [...doc.querySelectorAll('#playPanel input[id$="_manual"]')];
       if (!inputs.length) { fail('layout:' + type, 'no manual boxes found'); continue; }
-      // FLEX-BASIS, not the rendered width. jsdom gives every input the
-      // same default width whether or not the column is fixed, so a
-      // width comparison passed even with the rule removed -- it could
-      // not see the thing it was checking.
-      // Kicker and punter boxes now live INSIDE their grid, flowing after
-      // the last name, so they are not part of the aligned column and
-      // are excluded from the width comparison below.
-      const columnInputs = inputs.filter(i => !i.closest('.grid-inline-manual') && !i.closest('.opt-block'));
-      const bases = new Set(columnInputs.map(i => win.getComputedStyle(i).flexBasis));
-      // continue, not return: this sits inside the per-tree loop, and a
-      // return here abandons run() itself -- the suite reported a
-      // TypeError on undefined failures rather than skipping one tree.
-      if (!columnInputs.length) continue;
-      if (bases.size !== 1 || [...bases][0] === 'auto') {
-        fail('layout:' + type + ':column', 'the manual boxes need one fixed column, got ' + [...bases].join(', '));
-      }
-      // THE GRID MUST CLAIM NO INTRINSIC WIDTH. The row wraps -- the
-      // name-confirm box needs a full-width line -- and a wrapping flex
-      // container wraps its items rather than shrinking them. With basis
-      // auto the grid demanded the full width of its buttons, so on any
-      // picker with more than two or three names the label and the
-      // "type #" box were pushed onto their own lines. The pass tree hid
-      // this: its passer list is one or two buttons and fitted anyway.
-      [...doc.querySelectorAll('#playPanel .pick-row > div')].forEach(g => {
-        if (g.classList.contains('name-confirm')) return;
-        // An EXPANDED OPTIONAL BLOCK is deliberately different: its grid
-        // takes the full width so the manual box drops to its own line
-        // directly under the button that opened it, rather than floating
-        // against a far right edge with an often-empty grid beside it.
-        if (g.closest('.opt-block')) return;
-        if (win.getComputedStyle(g).flexBasis !== '0px') {
-          fail('layout:' + type + ':grid-basis',
-            'the picker grid must not claim its content width, got ' + win.getComputedStyle(g).flexBasis);
-        }
-      });
-      // No PICKER label owns a line any more. Headings that ask a real
-      // question over their own row of controls -- "Which way is Neville
-      // kicking?" -- are not picker labels and correctly keep theirs; the
-      // check is that no <p> is left sitting directly above a pick-row.
-      [...doc.querySelectorAll('#playPanel > p')].forEach(pEl => {
-        const next = pEl.nextElementSibling;
-        if (next && next.classList && next.classList.contains('pick-row')) {
-          fail('layout:' + type + ':label',
-            'a picker label still owns its own line: ' + JSON.stringify(pEl.textContent.trim()));
+      // EVERY MANUAL BOX SITS INSIDE ITS GRID, immediately after the last
+      // player. This assertion REPLACES an earlier one that required the
+      // opposite -- a fixed 96px column so every box shared one right-hand
+      // edge. Andy reversed that on 23 Aug: some boxes were right
+      // justified, some below the list and some beside it, three
+      // arrangements for one control, and the fix he wanted was to put
+      // them all directly after the names rather than to align the ragged
+      // edges. The old rule is gone deliberately, not by accident.
+      inputs.forEach(i => {
+        if (!i.parentElement.classList.contains('grid-inline-manual')) {
+          fail('layout:' + type + ':' + i.id,
+            'the manual box should sit inside its picker grid, after the last player');
         }
       });
     }
@@ -681,12 +651,18 @@ async function run() {
       }
     }
     click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
-    // The passer keeps its column -- its list is one or two names, so
-    // there is no row to win and a box that moves is worse than one that
-    // sits still.
+    // THE PASSER IS INLINE TOO, since 23 Aug. This used to assert the
+    // opposite -- the passer kept the aligned column on the reasoning
+    // that its list is one or two names, so there was no row to win and a
+    // box that moves is worse than one that sits still.
+    //
+    // Andy reversed it: the complaint was that manual boxes appeared in
+    // three different places across the trees, and an exception for the
+    // shortest list is exactly what made it three. Uniformity beats the
+    // per-picker optimisation here.
     const pg = doc.getElementById('pp_passer_grid');
-    if (pg && pg.classList.contains('grid-inline-manual')) {
-      fail('receiver:passer', 'the passer was not meant to change');
+    if (pg && !pg.classList.contains('grid-inline-manual')) {
+      fail('receiver:passer', 'the passer box should sit inline with its names like every other picker');
     }
     h.close();
   }
@@ -763,6 +739,54 @@ async function run() {
     click(win, doc.getElementById('fieldStripShow'));
     await new Promise(r => setTimeout(r, 80));
     if (win.getComputedStyle(fs).display === 'none') fail('strip:show', 'Show did not bring it back');
+    h.close();
+  }
+
+  // ONE HORIZONTAL GAP FOR EVERY ROW OF CONTROLS.
+  // ---------------------------------------------------------------------
+  // Item 13. The trees carried nine different gap values, three of them
+  // on rows that hold buttons -- .pick-row and .spot-row at 8px, the
+  // calculator's side buttons at an inline 6px, the punt toggle grid at
+  // 6px, the outcome switch at 8px. So the same pair of side buttons sat
+  // closer together in one place than another on the same panel, and the
+  // spot row read as crowded.
+  //
+  // 4px, 9px and 14px are deliberately NOT included: the digit pad's grid
+  // cells, the space inside a player button between number and name, and
+  // the two-column split are different things, not row spacing.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+    const NOT_ROW_SPACING = ['4px', '9px', '14px'];
+    const src = require('fs').readFileSync(__dirname + '/../game.html', 'utf8');
+    const m = src.match(/--pp-gap:\s*([0-9]+px)/);
+    const declaredGap = m ? m[1] : '(--pp-gap not declared)';
+    for (const type of ['rush', 'pass', 'punt', 'kickoff', 'fg', 'pat']) {
+      const clr = doc.getElementById('phaseClearBtn');
+      if (clr) click(win, clr);
+      const btn = doc.querySelector('.ptypeBtn[data-type="' + type + '"]');
+      if (!btn) continue;
+      click(win, btn);
+      const seen = new Set();
+      [...doc.querySelectorAll('#playPanel *')].forEach(e => {
+        const g = win.getComputedStyle(e).gap;
+        if (!g || g === 'normal' || g === '0px') return;
+        if (NOT_ROW_SPACING.indexOf(g) !== -1) return;
+        // jsdom does not resolve var(), so read the DECLARED value out of
+        // the stylesheet rather than trusting the fallback in the
+        // reference. Using the fallback made this check blind: changing
+        // --pp-gap to 6px left it passing, because every var() reference
+        // still reported the 10px written after the comma.
+        seen.add(/^var\(/.test(g) ? declaredGap : g);
+      });
+      if (seen.size > 1) {
+        fail('gap:' + type,
+          'rows of controls should share one gap, found [' + [...seen].join(', ') + ']');
+      } else if (seen.size === 1 && [...seen][0] !== '10px') {
+        fail('gap:' + type, 'expected 10px, got ' + [...seen][0]);
+      }
+    }
     h.close();
   }
 
