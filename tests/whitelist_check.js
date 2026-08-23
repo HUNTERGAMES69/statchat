@@ -968,6 +968,77 @@ async function run() {
     h.close();
   }
 
+  // A SPOT ROW MUST STAY A FLEX CONTAINER. Rule 3, and the reason the
+  // punt spacing survived three attempts to fix it.
+  // ---------------------------------------------------------------------
+  // .spot-row is display:flex in the stylesheet, and that is what makes
+  // `gap` work. Eight handlers revealed their row with an inline
+  // style.display = 'block', which REPLACES flex -- so the row silently
+  // stopped being a flex container, gap was ignored, and every control
+  // sat flush against its neighbour. The CSS was right the whole time;
+  // only the inline override was wrong, which is why reading the
+  // stylesheet kept saying the spacing was fine.
+  //
+  // Show a spot row with '' (fall back to the sheet), never 'block'.
+  //
+  // Swept across every tree, every outcome toggle and every recovery
+  // radio rather than the handful of panels that were reported -- the
+  // same fault was in eight places and only three were noticed.
+  {
+    const onScreen = (win, doc, e) => {
+      while (e && e !== doc.body) {
+        if (win.getComputedStyle(e).display === 'none') return false;
+        e = e.parentElement;
+      }
+      return true;
+    };
+    const toggles = {
+      punt:    ['pp_punt_touchback_toggle', 'pp_blocked_toggle', 'pp_muffed_toggle', null],
+      kickoff: ['pp_ko_touchback_toggle', 'pp_ko_muffed_toggle', 'pp_ko_oob_toggle', null],
+      fg:      ['pp_fg_blocked_cb_toggle', 'pp_fg_muffhold_toggle', null],
+      rush:    ['pp_rush_fumbled_toggle', null],
+      pass:    ['pp_pass_fumbled_toggle', null],
+      pat:     [null], fumble: [null], safety: [null]
+    };
+    let seen = 0;
+    for (const tree of Object.keys(toggles)) {
+      for (const tog of toggles[tree]) {
+        const h = await bootGamePage();
+        const doc = h.window.document, win = h.window;
+        setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+        const b = doc.querySelector('.ptypeBtn[data-type="' + tree + '"]');
+        if (!b) { h.close(); continue; }
+        click(win, b);
+        if (tog) {
+          const t = doc.getElementById(tog);
+          if (t) click(win, t);
+          await new Promise(r => setTimeout(r, 120));
+        }
+        // Drive the recovery radios too: the 'block' was set by the
+        // handlers that fire when the kicking team recovers.
+        for (const v of ['k', 'r', 'own', 'opp']) {
+          const rr = doc.querySelector('input[value=' + v + ']:not(:checked)');
+          if (rr) {
+            rr.checked = true;
+            rr.dispatchEvent(new win.Event('change', { bubbles: true }));
+            await new Promise(r => setTimeout(r, 80));
+          }
+          [...doc.querySelectorAll('#playPanel .spot-row')]
+            .filter(r => onScreen(win, doc, r))
+            .forEach(r => {
+              seen++;
+              if (win.getComputedStyle(r).display !== 'flex') {
+                fail('spotflex:' + tree, (r.id || 'a spot row') + ' is ' +
+                  win.getComputedStyle(r).display + ' — an inline display kills the gap');
+              }
+            });
+        }
+        h.close();
+      }
+    }
+    if (seen < 20) fail('spotflex:coverage', 'only ' + seen + ' spot-row states reached; the sweep is not running');
+  }
+
   return failures;
 }
 
