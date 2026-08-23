@@ -175,6 +175,22 @@ async function run() {
     fail('automatic first down', 'down is ' + afterPen.down + ', expected 1');
   }
 
+  // ================= start of the second quarter =====================
+  // The walkthrough used to go from Q1 straight to halftime and from Q3
+  // straight to the end, never starting Q2 or Q4 -- so it played a
+  // "whole game" that a real scorer's game would never look like. The
+  // quarter-marker check added on 23 Aug caught it immediately, which is
+  // the check earning its place: every play after a missing marker is
+  // filed under the previous quarter.
+  const startQuarter = () => {
+    click(win, doc.getElementById('quarterUtilBtn'));
+    const b = doc.querySelector('#playPanel button.qMarkBtn');
+    if (!b) { fail('quarter marker', 'no Start Q button offered'); return; }
+    click(win, b);
+    click(win, doc.getElementById('saveBtn'));
+  };
+  startQuarter();
+
   // ================= end of the first half ==========================
   click(win, doc.getElementById('quarterUtilBtn'));
   if (!visible('endFirstHalfBtn')) {
@@ -244,6 +260,9 @@ async function run() {
   if (tied.scores.teamA !== tied.scores.teamB) {
     fail('before overtime', 'scores should be level, are ' + JSON.stringify(tied.scores));
   }
+
+  // Q4 before the game can honestly end.
+  startQuarter();
 
   click(win, doc.getElementById('quarterUtilBtn'));
   if (!visible('endGameBtn')) fail('end of game', 'End game is not offered in the second half');

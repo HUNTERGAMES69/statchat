@@ -570,6 +570,57 @@ async function run() {
     h.close();
   }
 
+  // THE WARNING SAYS WHICH QUARTER WAS NEVER STARTED.
+  // ---------------------------------------------------------------------
+  // Item 9. End 1st half and End game both warned before, but only in
+  // general terms -- a scorer reading the prompt had no idea what to go
+  // and fix. A missing quarter marker is not cosmetic: every play after
+  // it is filed under the previous quarter, and the drive log, the clock,
+  // the quarter-by-quarter scoring on the recap and the broadcast feed
+  // all inherit that with no way to tell.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '6' });
+
+    // Nothing marked: all three later quarters named, and listed
+    // readably rather than as "Q2 and Q3 and Q4".
+    let issues = JSON.parse(h.evalIn('JSON.stringify(validateGame())'));
+    let q = issues.find(i => /never started/.test(i));
+    if (!q) fail('quarters:none', 'a game with no quarter markers should warn');
+    else if (!/Q2, Q3 and Q4/.test(q)) fail('quarters:list', 'expected "Q2, Q3 and Q4", got: ' + q);
+
+    // The End 1st half prompt names Q2 specifically.
+    h.evalIn('window.__c=[]; window.confirm=(m)=>{window.__c.push(String(m)); return false;};');
+    click(win, doc.getElementById('quarterUtilBtn'));
+    await new Promise(r => setTimeout(r, 80));
+    click(win, doc.getElementById('endFirstHalfBtn'));
+    await new Promise(r => setTimeout(r, 150));
+    const prompt = JSON.parse(h.evalIn('JSON.stringify(window.__c[0] || "")'));
+    if (!/Q2 was never started/.test(prompt)) {
+      fail('quarters:prompt', 'End 1st half should name Q2: ' + prompt.slice(0, 120));
+    }
+
+    // Mark Q2 and the warning narrows -- it tracks what is actually
+    // missing rather than firing blindly.
+    h.evalIn('window.confirm=()=>true;');
+    click(win, doc.getElementById('quarterUtilBtn'));
+    await new Promise(r => setTimeout(r, 90));
+    const mark = doc.querySelector('#playPanel button.qMarkBtn');
+    if (mark) {
+      click(win, mark);
+      await new Promise(r => setTimeout(r, 150));
+      click(win, doc.getElementById('saveBtn'));
+      await new Promise(r => setTimeout(r, 220));
+      issues = JSON.parse(h.evalIn('JSON.stringify(validateGame())'));
+      q = issues.find(i => /never started/.test(i)) || '';
+      if (/Q2/.test(q)) fail('quarters:stale', 'Q2 is marked now and should not be listed: ' + q);
+      if (!/Q3 and Q4/.test(q)) fail('quarters:narrow', 'expected Q3 and Q4 to remain, got: ' + q);
+    }
+    h.close();
+  }
+
   return failures;
 }
 

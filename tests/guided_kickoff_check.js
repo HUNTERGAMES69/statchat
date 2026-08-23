@@ -371,6 +371,76 @@ async function run() {
     h.close();
   }
 
+  // ONE SPOT FIELD, NOT TWO, ON A FUMBLED RETURN.
+  // ---------------------------------------------------------------------
+  // Item 1, reported with a screenshot. When the KICKING team recovered a
+  // fumble during the return, two spot fields were on screen at once and
+  // they contradicted each other: this branch's own field asked where the
+  // kicking team took over, while the general one above it was still
+  // headed "Ball spot after the return (sets 1st down for the receiving
+  // team)" -- for a play in which the receiving team does not have the
+  // ball at all.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    click(win, doc.getElementById('startGameBtn'));
+    await new Promise(r => setTimeout(r, 80));
+    click(win, doc.getElementById('pickA'));
+    await new Promise(r => setTimeout(r, 80));
+    click(win, doc.querySelector('.gk_kicker_pick'));
+    const dir = doc.querySelector('.gk_dir_btn');
+    if (dir) click(win, dir);
+    click(win, doc.getElementById('guidedKickoffSave'));
+    await new Promise(r => setTimeout(r, 250));
+    typeInto(win, doc.getElementById('gr_returner_manual'), '21');
+    typeInto(win, doc.getElementById('gr_yards'), '15');
+    const fumTog = doc.getElementById('gr_ko_ret_fumbled_toggle');
+    if (!fumTog) { fail('fumspot:toggle', 'no fumble toggle'); h.close(); return failures; }
+    click(win, fumTog);
+    await new Promise(r => setTimeout(r, 110));
+
+    const onScreen = id => {
+      let e = doc.getElementById(id);
+      if (!e) return false;
+      while (e && e !== doc.body) {
+        if (win.getComputedStyle(e).display === 'none') return false;
+        e = e.parentElement;
+      }
+      return true;
+    };
+    const pick = v => {
+      const r = doc.querySelector('input[name=gr_koret_fumrec][value=' + v + ']');
+      r.checked = true;
+      r.dispatchEvent(new win.Event('change', { bubbles: true }));
+    };
+    const count = () => ['gr_koretfumspot_wrap', 'gr_spot_recv'].filter(onScreen);
+
+    // Receiving team recovers: an ordinary return that happened to
+    // include a fumble they got back, so the GENERAL spot is right and
+    // this branch has no field of its own.
+    pick('r');
+    await new Promise(r => setTimeout(r, 120));
+    let up = count();
+    if (up.length !== 1 || up[0] !== 'gr_spot_recv') {
+      fail('fumspot:recv', 'receiving recovery should show only the general spot, got [' + up.join(', ') + ']');
+    }
+    // Kicking team recovers: their own field, and the general one goes.
+    pick('k');
+    await new Promise(r => setTimeout(r, 120));
+    up = count();
+    if (up.length !== 1 || up[0] !== 'gr_koretfumspot_wrap') {
+      fail('fumspot:kick', 'kicking recovery should show only its own spot, got [' + up.join(', ') + ']');
+    }
+    // And back -- the switch has to be reversible.
+    pick('r');
+    await new Promise(r => setTimeout(r, 120));
+    up = count();
+    if (up.length !== 1 || up[0] !== 'gr_spot_recv') {
+      fail('fumspot:back', 'switching back should restore the general spot, got [' + up.join(', ') + ']');
+    }
+    h.close();
+  }
+
   return failures;
 }
 
