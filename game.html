@@ -375,7 +375,25 @@
   a#launchViewLink.hdr-btn { border-color:#b00020 !important; }
   /* A seeded picker and its "or type #" box on one line: the grid takes
      the room it needs, the box keeps its fixed width at the right. */
-  #entryStage #playPanel .pick-row { display:flex; align-items:flex-start; gap:8px; }
+  /* ONE HORIZONTAL GAP FOR EVERY ROW OF CONTROLS.
+     ---------------------------------------------------------------------
+     The trees carried nine different gap values. The rows that hold
+     buttons used three of them -- .pick-row and .spot-row at 8px, the
+     calculator's side buttons at an inline 6px -- so the same pair of
+     side buttons sat closer together in one place than another on the
+     same panel, and the spot row read as crowded. Reported directly.
+
+     10px, not 8: the complaint was that they run together, and the side
+     buttons are the widest text in these rows.
+
+     Declared once here and referenced everywhere, so the next row added
+     cannot quietly introduce a tenth value. */
+  #entryStage #playPanel, #guidedPanel { --pp-gap: 10px; }
+  /* .row is global -- it holds button pairs on the dashboard and the
+     setup screens too, and those are not being changed here. Scoped to
+     the entry panels so the trees match without touching the rest. */
+  #entryStage #playPanel .row, #guidedPanel .row { gap:var(--pp-gap, 10px); }
+  #entryStage #playPanel .pick-row { display:flex; align-items:flex-start; gap:var(--pp-gap, 10px); }
   /* FLEX-BASIS 0, not auto. The row wraps (it has to -- the name-confirm
      box below needs a full-width line of its own), and a WRAPPING flex
      container wraps its items rather than shrinking them: with basis
@@ -463,23 +481,18 @@
 
   /* Outcome toggles two-up rather than a single wide strip. */
   #entryStage #playPanel .toggle-grid { display:grid; grid-template-columns:1fr 1fr;
-                                        gap:6px; margin-top:10px; }
+                                        gap:var(--pp-gap, 10px); margin-top:10px; }
   #entryStage #playPanel .toggle-grid > * { margin:0; }
   /* The spot on one line. The yard box keeps a fixed width and sits at
      the end, so it lands on the same right edge as the "type #" boxes
      above it rather than wherever the two side buttons happen to end. */
-  #entryStage #playPanel .spot-row, #guidedPanel .spot-row { display:flex; align-items:center; gap:8px;
+  #entryStage #playPanel .spot-row, #guidedPanel .spot-row { display:flex; align-items:center; gap:var(--pp-gap, 10px);
                                      flex-wrap:wrap; margin-top:9px; }
   #entryStage #playPanel .spot-row > button, #guidedPanel .spot-row > button {
     flex:0 1 auto; margin:0; }
-  /* THE TWO SIDES NEED SEPARATING. The row's 8px gap applies between every
-     child, so the label, the two side buttons and the yard-line box were
-     all equally spaced -- and the pair read as one wide control rather
-     than a choice between two. Reported as "spot buttons running
-     together". The extra margin goes only between adjacent BUTTONS, so
-     the label and the input keep the row spacing. */
-  #entryStage #playPanel .spot-row > button + button,
-  #guidedPanel .spot-row > button + button { margin-left:6px; }
+  /* The one-off 6px margin that used to sit here is gone: the row gap
+     above now does that job for every row at once. Two mechanisms for
+     one piece of spacing is how the nine values happened. */
   #entryStage #playPanel .spot-row > input, #guidedPanel .spot-row > input { flex:0 0 96px; width:96px; margin-left:auto; }
   #entryStage #playPanel .spot-label, #guidedPanel .spot-label { flex:0 0 auto; line-height:normal; }
   /* The row that is missing something, and the words saying what. */
@@ -5556,7 +5569,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // guided.kickingTeam/guided.receivingTeam in place of off/def.
         '<div id="gr_kofielded_wrap" style="margin-top:10px;">' +
           '<p style="font-size:13px; color:#888; margin:0 0 4px;">Or enter fielded at</p>' +
-          '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+          '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
             '<button type="button" class="ptoggle gr_kofieldedSide" data-side="own" ' +
               'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
               TEAMS[guided.kickingTeam].name + '</button>' +
@@ -5569,7 +5582,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="gr_koretto_wrap" style="margin-top:6px; margin-left:22px; ' +
           'padding-left:22px; border-left:1px solid #d8d8d8;">' +
           '<p style="font-size:13px; color:#888; margin:0 0 4px;">Or enter returned to</p>' +
-          '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+          '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
             '<button type="button" class="ptoggle gr_koretSide" data-side="own" ' +
               'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
               TEAMS[guided.kickingTeam].name + '</button>' +
@@ -7188,7 +7201,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '; font-size:14px; font-weight:' + (on ? '700' : '600') + '; cursor:' +
         (on ? 'default' : 'pointer') + ';">' + (on ? '\u2713 ' : '') + label + '</button>';
     };
-    return '<div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">' +
+    return '<div style="margin-bottom:12px; display:flex; gap:10px; flex-wrap:wrap;">' +
       one('pass', 'Completed / incomplete') + one('sack', 'Sacked') +
       one('int', 'Intercepted') + '</div>';
   }
@@ -7688,18 +7701,29 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '</div>' +
           '</div>';
       }
+      // THE MANUAL BOX GOES INSIDE THE GRID, immediately after the last
+      // player -- the same place every other picker puts it.
+      // ---------------------------------------------------------------
+      // As a SIBLING of the grid it was a .pick-row child, and that rule
+      // gives it a fixed 96px basis at the end of the row -- so it landed
+      // hard right, or wrapped underneath, depending on how many players
+      // the list happened to hold. Three arrangements across the trees
+      // for one control. Reported directly.
       return '<div class="pick-row">' +
           '<span class="pick-label">' + label + '</span>' +
-          '<div id="pp_' + role + '_grid">' + pickerHtml(list, 'pp_' + role + '_pick', statFn) + '</div>' +
-          manual +
+          '<div id="pp_' + role + '_grid" class="grid-inline-manual">' +
+            pickerHtml(list, 'pp_' + role + '_pick', statFn) + manual +
+          '</div>' +
         '</div>';
     }
     function defBlock(label, suffix){
       suffix = suffix || '';
       const list = defenseEligible(def);
       const inner = '<div class="pick-row">' +
-          '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix) + '</div>' +
-          '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #">' +
+          '<div id="pp_credit_grid' + suffix + '" class="grid-inline-manual">' +
+            pickerHtml(list, 'pp_credit_pick' + suffix) +
+            '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #">' +
+          '</div>' +
         '</div>';
       // Optional credits collapse. "Tackled by (optional)" is a full
       // picker plus a manual box on every rush and pass, and it is
@@ -7727,8 +7751,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       suffix = suffix || '';
       const list = returnerEligible(def);
       const inner = '<div class="pick-row">' +
-          '<div id="pp_credit_grid' + suffix + '">' + pickerHtml(list, 'pp_credit_pick' + suffix, (num, p) => (p && p.pos) || '', 'no returners on the roster — type a number') + '</div>' +
-          '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #">' +
+          '<div id="pp_credit_grid' + suffix + '" class="grid-inline-manual">' +
+            pickerHtml(list, 'pp_credit_pick' + suffix, (num, p) => (p && p.pos) || '',
+              'no returners on the roster — type a number') +
+            '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #">' +
+          '</div>' +
         '</div>';
       // Collapses on the same rule as defBlock's optional credits: a full
       // picker grid plus a manual box, on every punt and every kickoff,
@@ -7769,7 +7796,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // same input, so a panel can carry either and nothing downstream
     // notices -- which is what makes comparing them on real plays cheap.
     const yardsBlock = (label, id, withLoss, picker) => fieldLabel(label || 'Enter yards') +
-      '<span style="display:inline-flex; align-items:center; gap:8px;">' +
+      '<span style="display:inline-flex; align-items:center; gap:10px;">' +
         '<input autocomplete="off" type="text" inputmode="numeric" id="' + (id||'pp_yards') + '" style="width:80px;">' +
 
         (withLoss ? '<button type="button" class="lossToggle ptoggle" data-for="' + (id||'pp_yards') + '" ' +
@@ -7831,7 +7858,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<div id="' + idPrefix + '_box" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
         '<p style="font-size:13px; color:#888; margin:0 0 6px;">Fake ' + kickLabel +
           ' \u2014 recorded as a rush or pass, not as a kick.</p>' +
-        '<div style="display:flex; gap:8px; margin-bottom:8px;">' +
+        '<div style="display:flex; gap:10px; margin-bottom:8px;">' +
           '<button type="button" class="secondary" id="' + idPrefix + '_rush_btn">Rush</button>' +
           '<button type="button" class="secondary" id="' + idPrefix + '_pass_btn">Pass</button>' +
         '</div>' +
@@ -7851,7 +7878,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // yards box is.
         '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">' +
           '<div>' + fieldLabel('Enter yards') +
-            '<span style="display:inline-flex; align-items:center; gap:8px;">' +
+            '<span style="display:inline-flex; align-items:center; gap:10px;">' +
               '<input autocomplete="off" type="text" id="' + idPrefix + '_yards" style="width:80px;">' +
               '<button type="button" class="lossToggle ptoggle" data-for="' + idPrefix + '_yards" ' +
                 'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button>' +
@@ -7875,7 +7902,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       return '<div id="pp_calc_wrap" style="margin-bottom:6px; margin-left:22px; ' +
         'padding-left:22px; border-left:1px solid #d8d8d8;">' +
         fieldLabel(label || 'Or enter tackled on') +
-        '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:nowrap;">' +
+        '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:nowrap;">' +
           // Size and padding come from the stylesheet, not from here. They
           // were inline, which beats a rule -- so the nowrap fix for long
           // team names applied and the smaller text that makes room for
@@ -7935,7 +7962,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // as soon as the calculator arrived they wrapped unpredictably and
         // nothing lined up with anything.
         '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;"><div>' + yardsBlock('Enter yards', null, true) +
-          '<span style="display:inline-flex; align-items:center; gap:8px;">' +
+          '<span style="display:inline-flex; align-items:center; gap:10px;">' +
             '<input autocomplete="off" type="text" id="pp_yards_dummy" style="display:none;">' +
           '</span>' + quickYardageHtml() + '</div>' + spotCalcHtml() + '</div>' +
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:12px;">' +
@@ -8139,7 +8166,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_intspot_calc" style="margin-top:6px; margin-left:22px; padding-left:22px; ' +
           'border-left:1px solid #d8d8d8;">' +
           fieldLabel('Or enter tackled on') +
-          '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+          '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
             '<button type="button" class="ptoggle intSpotSide" data-side="off" ' +
               'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
               TEAMS[computeState().possession].name + '</button>' +
@@ -8228,7 +8255,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // stopped tracking.
           '<div id="pp_kofielded_wrap" style="margin-top:10px;">' +
             '<p style="font-size:13px; color:#888; margin:0 0 4px;">Or enter fielded at</p>' +
-            '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+            '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
               '<button type="button" class="ptoggle kofieldedSide" data-side="own" ' +
                 'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
                 TEAMS[off].name + '</button>' +
@@ -8241,7 +8268,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_koretto_wrap" style="margin-top:6px; margin-left:22px; ' +
             'padding-left:22px; border-left:1px solid #d8d8d8;">' +
             '<p style="font-size:13px; color:#888; margin:0 0 4px;">Or enter returned to</p>' +
-            '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+            '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
               '<button type="button" class="ptoggle koretSide" data-side="own" ' +
                 'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
                 TEAMS[off].name + '</button>' +
@@ -8271,7 +8298,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '</div>' +
           // closes .opt-body and #pp_ko_return_group
           '</div>' + '</div>' +
-        '<div style="display:flex; gap:8px; flex-wrap:nowrap; margin-bottom:6px;">' +
+        '<div style="display:flex; gap:10px; flex-wrap:nowrap; margin-bottom:6px;">' +
           ['pp_ko_touchback|Touchback', 'pp_ko_muffed|Muff / Fumble',
            'pp_ko_onside|Onside kick', 'pp_ko_oob|Out of bounds']
             .map(spec => {
@@ -8347,7 +8374,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             // into the label. It explained the field above it and cost a
             // row on every punt to prevent a mistake made occasionally.
             fieldLabel('Or enter returned to \u2014 fielded spot first') +
-            '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+            '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
               '<button type="button" class="ptoggle rettoSide" data-side="own" ' +
                 'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
                 TEAMS[off].name + '</button>' +
@@ -8430,7 +8457,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_fgtee_wrap" style="margin-bottom:6px; margin-left:4px; padding-left:18px; ' +
           'border-left:1px solid #d8d8d8;">' +
           fieldLabel('Or tee placed on') +
-          '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+          '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
             '<button type="button" class="ptoggle fgTeeSide" data-side="own" ' +
               'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
               TEAMS[computeState().possession].name + '</button>' +
@@ -8450,7 +8477,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // Fake wrapped to a second, awkward one. Same pattern as the
         // kickoff panel's own outcome row (Touchback/Muffed/Onside/OOB) --
         // a dedicated row, nowrap, each button sharing the space equally.
-        '<div style="display:flex; gap:8px; flex-wrap:nowrap; margin-bottom:6px;">' +
+        '<div style="display:flex; gap:10px; flex-wrap:nowrap; margin-bottom:6px;">' +
           ['pp_fg_blocked_cb|Blocked', 'pp_fg_muffhold|Muffed hold', 'pp_fg_fake|Fake']
             .map(spec => {
               const [id, label] = spec.split('|');
@@ -12368,7 +12395,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // about twenty lines rather than a refactor of four hundred.
         '<div style="margin-left:22px; padding-left:22px; border-left:1px solid #d8d8d8;">' +
           '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Or enter recovered on</p>' +
-          '<span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+          '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
             '<button type="button" class="ptoggle bsCalcSide" data-side="own" ' +
               'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
               TEAMS[computeState().possession].name + '</button>' +
