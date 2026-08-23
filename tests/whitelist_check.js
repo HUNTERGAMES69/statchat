@@ -836,6 +836,31 @@ async function run() {
       await new Promise(r => setTimeout(r, 100));
     }, 'pp_spot_wrap');
 
+    await check('rush fumble', async (h, doc, win) => {
+      setDrive(h, { down: 2, distance: 7, side: 'own', yardline: 30 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="rush"]'));
+      click(win, doc.getElementById('pp_rush_fumbled_toggle'));
+      await new Promise(r => setTimeout(r, 110));
+    }, 'pp_rushfum_spot_wrap');
+
+    await check('pass fumble', async (h, doc, win) => {
+      setDrive(h, { down: 2, distance: 7, side: 'own', yardline: 30 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+      click(win, doc.getElementById('pp_pass_fumbled_toggle'));
+      await new Promise(r => setTimeout(r, 110));
+    }, 'pp_passfum_spot_wrap');
+
+    await check('sack fumble', async (h, doc, win) => {
+      setDrive(h, { down: 2, distance: 7, side: 'own', yardline: 30 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+      const sb = [...doc.querySelectorAll('#playPanel button')]
+        .find(b => /^Sacked$/.test(b.textContent.trim()));
+      if (sb) click(win, sb);
+      await new Promise(r => setTimeout(r, 70));
+      click(win, doc.getElementById('pp_sack_fumbled_toggle'));
+      await new Promise(r => setTimeout(r, 110));
+    }, 'pp_sackfum_spot_wrap');
+
     await check('guided ball spot', async (h, doc, win) => {
       click(win, doc.getElementById('startGameBtn'));
       await new Promise(r => setTimeout(r, 80));
@@ -847,6 +872,100 @@ async function run() {
       click(win, doc.getElementById('guidedKickoffSave'));
       await new Promise(r => setTimeout(r, 250));
     }, 'gr_spot_wrap');
+
+    // CATCH-ALL. The four reported cases were one rule with four
+    // symptoms, and two more (rush and pass fumble) turned up after the
+    // fix that had already covered them. Rather than keep adding panels
+    // by hand, walk every tree and assert that NO visible spot row
+    // anywhere pushes its yard box to the right.
+    {
+      const h = await bootGamePage();
+      const doc = h.window.document, win = h.window;
+      setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+      for (const type of ['rush', 'pass', 'punt', 'kickoff', 'fg', 'pat', 'fumble', 'safety']) {
+        const clr = doc.getElementById('phaseClearBtn');
+        if (clr) click(win, clr);
+        const b = doc.querySelector('.ptypeBtn[data-type="' + type + '"]');
+        if (!b) continue;
+        click(win, b);
+        await new Promise(r => setTimeout(r, 90));
+        [...doc.querySelectorAll('#playPanel .spot-row > input')].forEach(i => {
+          if (win.getComputedStyle(i).marginLeft === 'auto') {
+            fail('spotgap:' + type, i.id + ' is pushed right instead of following its buttons');
+          }
+        });
+      }
+      h.close();
+    }
+  }
+
+  // THE SPOT LABEL KEEPS ITS OWN SPACE. Rule 4. It carried flex:0 0 auto,
+  // which sized it to its text but reserved no room on a crowded row, so
+  // the side buttons rode straight over the word "Spot". Reported with a
+  // screenshot of exactly that.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="punt"]'));
+    click(win, doc.getElementById('pp_blocked_toggle'));
+    await new Promise(r => setTimeout(r, 110));
+    const lab = doc.querySelector('#playPanel .spot-label');
+    if (!lab) fail('spotlabel', 'no spot label found');
+    else {
+      const c = win.getComputedStyle(lab);
+      if (c.whiteSpace !== 'nowrap') fail('spotlabel:wrap', 'the label must not wrap, got ' + c.whiteSpace);
+      // LONGHAND CHECKED IN THE SOURCE, not via getComputedStyle. jsdom
+      // does not expand the `flex` shorthand, so `flex:0 0 auto` and the
+      // longhand form both report the same computed shrink -- reverting
+      // the rule left this assertion passing. The codebase already warns
+      // about this trap a few rules up; I walked into it anyway.
+      const src = require('fs').readFileSync(__dirname + '/../game.html', 'utf8');
+      const m = src.match(/\.spot-label[^{]*\{([^}]*)\}/);
+      if (!m) fail('spotlabel:rule', 'no .spot-label rule found in the stylesheet');
+      else if (!/flex-shrink:\s*0/.test(m[1])) {
+        fail('spotlabel:shrink', 'the label needs an explicit flex-shrink:0 so buttons cannot ride over it');
+      }
+    }
+    h.close();
+  }
+
+  // FUMBLED AFTER AN INTERCEPTION. The panel offered only "downed in the
+  // end zone" and "touchdown", so a returner putting it on the ground --
+  // an ordinary loose ball -- could not be recorded at all.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 2, distance: 7, side: 'own', yardline: 30 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="pass"]'));
+    const ib = [...doc.querySelectorAll('#playPanel button')]
+      .find(b => /^Intercepted$/.test(b.textContent.trim()));
+    if (!ib) { fail('intfum', 'no Intercepted switch'); h.close(); return failures; }
+    click(win, ib);
+    await new Promise(r => setTimeout(r, 110));
+    const tog = doc.getElementById('pp_int_fumbled_toggle');
+    if (!tog) { fail('intfum:toggle', 'no fumble option on the interception panel'); h.close(); return failures; }
+    click(win, tog);
+    await new Promise(r => setTimeout(r, 100));
+    const fields = doc.getElementById('pp_int_fum_fields');
+    if (!fields || win.getComputedStyle(fields).display === 'none') {
+      fail('intfum:fields', 'the recovery question should appear');
+    }
+    // RULE 2 on the new block.
+    const m = doc.getElementById('pp_credit_manual_intfum');
+    if (m && !m.parentElement.classList.contains('grid-inline-manual')) {
+      fail('intfum:manual', 'the manual box should sit inside its grid');
+    }
+    // MUTUALLY EXCLUSIVE with the touchback -- a ball downed in the end
+    // zone was not fumbled. This needed the touchback's own handler to
+    // dispatch `change`; setting .checked directly fires nothing, so
+    // wireExclusiveToggles never heard it.
+    click(win, doc.getElementById('pp_int_tb_toggle'));
+    await new Promise(r => setTimeout(r, 100));
+    if (doc.getElementById('pp_int_fumbled').checked) {
+      fail('intfum:exclusive', 'a touchback should clear the fumble');
+    }
+    h.close();
   }
 
   return failures;
