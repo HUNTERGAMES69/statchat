@@ -379,6 +379,68 @@ async function run() {
     h.close();
   }
 
+  // THE KICKOFF RETURN GROUP COLLAPSES TOO, same as the punt tree. The
+  // returner, return yards, both calculators and the fumble toggle are
+  // one question -- what happened to the return -- and on a touchback,
+  // onside kick, muff or kick out of bounds there is no return at all.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="kickoff"]'));
+    const grp = doc.getElementById('pp_ko_return_group');
+    if (!grp) { fail('ko:group', 'no kickoff return group'); h.close(); return failures; }
+    const body = grp.querySelector('.opt-body'), toggle = grp.querySelector('.opt-toggle');
+    if (!body || !toggle) { fail('ko:parts', 'the group needs a toggle and a body'); h.close(); return failures; }
+    // CLOSED BY DEFAULT. It auto-opened at first: the seeded test matched
+    // any button.picked, and this group holds a spot calculator whose
+    // side is pre-selected -- so the collapse never took effect.
+    if (win.getComputedStyle(body).display !== 'none') {
+      fail('ko:closed', 'the kickoff return group should start closed');
+    }
+    ['pp_ko_ret_wrap', 'pp_ret_yds_wrap'].forEach(id => {
+      const el = doc.getElementById(id);
+      if (el && !grp.contains(el)) fail('ko:outside:' + id, id + ' should be inside the group');
+    });
+    click(win, toggle);
+    await new Promise(r => setTimeout(r, 80));
+    if (win.getComputedStyle(body).display === 'none') fail('ko:opens', 'the group did not open');
+
+    // A touchback hides the whole group -- refreshKoMode drives the outer
+    // wrapper, not the two blocks inside it, or the two would disagree.
+    click(win, doc.getElementById('pp_ko_touchback_toggle'));
+    await new Promise(r => setTimeout(r, 80));
+    if (win.getComputedStyle(grp).display !== 'none') {
+      fail('ko:touchback', 'a touchback should hide the return group entirely');
+    }
+    h.close();
+  }
+
+  // AND THE GUIDED KICKOFF IS UNTOUCHED. It builds its own panel and
+  // shares none of this markup; Andy asked specifically that it not
+  // change.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    click(win, doc.getElementById('startGameBtn'));
+    await new Promise(r => setTimeout(r, 80));
+    click(win, doc.getElementById('pickA'));
+    await new Promise(r => setTimeout(r, 80));
+    click(win, doc.querySelector('.gk_kicker_pick'));
+    const dir = doc.querySelector('.gk_dir_btn');
+    if (dir) click(win, dir);
+    click(win, doc.getElementById('guidedKickoffSave'));
+    await new Promise(r => setTimeout(r, 250));
+    if (doc.querySelectorAll('#guidedPanel .opt-block').length) {
+      fail('guided:collapsed', 'the guided kickoff should have no collapsed groups');
+    }
+    const rg = doc.getElementById('gr_returner_grid');
+    if (!rg || win.getComputedStyle(rg).display === 'none') {
+      fail('guided:returner', 'the guided returner picker should stay visible');
+    }
+    h.close();
+  }
+
   return failures;
 }
 

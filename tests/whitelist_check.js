@@ -291,7 +291,21 @@ async function run() {
     if (!side || side.dataset.side !== 'own'){
       fail('kickoff out of bounds', 'the spot side should be the receiving team\'s own half');
     }
-    const shown = (id) => { const e = doc.getElementById(id); return e && e.style.display !== 'none'; };
+    // WALKS THE ANCESTORS. This used to read one element's INLINE style,
+    // which was a proxy for "is it on screen" that held only while every
+    // hide was set directly on that element. Since 22 Aug the kickoff
+    // return fields are hidden by a collapsed parent group instead, so
+    // the inline test called them visible when nothing was on screen.
+    // The assertion's intent never changed; the way it measured did.
+    const shown = (id) => {
+      let e = doc.getElementById(id);
+      if (!e) return false;
+      while (e && e !== doc.body) {
+        if (win.getComputedStyle(e).display === 'none') return false;
+        e = e.parentElement;
+      }
+      return true;
+    };
     if (shown('pp_ko_ret_wrap') || shown('pp_ret_yds_wrap')){
       fail('kickoff out of bounds', 'returner or return-yards fields are still on screen — ' +
            'nobody touched the ball, so there is no return to record');
