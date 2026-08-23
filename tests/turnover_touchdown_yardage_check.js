@@ -140,6 +140,87 @@ async function run() {
     h.close();
   }
 
+  // FALLING ON YOUR OWN FUMBLE: the ball, the down, and the stat sheet.
+  // ---------------------------------------------------------------------
+  // Two faults, found together on 23 Aug.
+  //
+  // 1. There was no way to say WHERE the ball was recovered. A runner's
+  //    yardage is measured to the spot of the FUMBLE, not to where his
+  //    team fell on it, so gain 8, fumble, recover 3 back and the rusher
+  //    is still credited 8 while the ball sits 5 ahead of the snap. Two
+  //    numbers, and the entry layer had one.
+  //
+  // 2. The effect never set `converts`, so the engine advanced the down
+  //    but could not award a first down. 2nd & 7 at own 30, rush for 8,
+  //    own recovery came out 3rd & 1 instead of 1st & 10 -- verified
+  //    against the live build, so it long predated the spot work.
+  {
+    const run = async (down, dist, yl, yards, spot) => {
+      const h = await bootGamePage();
+      const doc = h.window.document, win = h.window;
+      setDrive(h, { down: down, distance: dist, side: 'own', yardline: yl });
+      click(win, doc.querySelector('.ptypeBtn[data-type="rush"]'));
+      click(win, doc.querySelector('.pp_carrier_pick'));
+      typeInto(win, doc.getElementById('pp_yards'), String(yards));
+      click(win, doc.getElementById('pp_rush_fumbled_toggle'));
+      await new Promise(r => setTimeout(r, 80));
+      const own = doc.querySelector('input[name=pp_rush_fumrec][value=own]');
+      own.checked = true;
+      own.dispatchEvent(new win.Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 80));
+      if (spot) {
+        const side = doc.querySelector('.pp_rushfum_ownspot_side[data-side="own"]');
+        if (!side) { h.close(); return null; }
+        click(win, side);
+        typeInto(win, doc.getElementById('pp_rushfum_ownspot_yardline'), String(spot));
+      }
+      click(win, doc.getElementById('pp_review'));
+      await new Promise(r => setTimeout(r, 150));
+      click(win, doc.getElementById('saveBtn'));
+      await new Promise(r => setTimeout(r, 200));
+      const out = {
+        st: JSON.parse(h.evalIn('JSON.stringify((({down,distance,fieldPos,possession})=>({down,distance,fieldPos,possession}))(computeState()))')),
+        rush: JSON.parse(h.evalIn('JSON.stringify(computeBoxScore(plays).teamA.rushing)')),
+        text: h.evalIn('plays[plays.length-1].text')
+      };
+      h.close();
+      return out;
+    };
+    const eq = (got, want, area, detail) => {
+      if (JSON.stringify(got) !== JSON.stringify(want)) {
+        fail(area, detail + ' -- got ' + JSON.stringify(got) + ', wanted ' + JSON.stringify(want));
+      }
+    };
+
+    // Reaching the line to gain awards the first down.
+    let r = await run(2, 7, 30, 8, null);
+    eq([r.st.down, r.st.distance, r.st.fieldPos], [1, 10, 38],
+       'ownfum:converts', '2nd & 7 at own 30, rush 8 recovered on the spot');
+
+    // Recovered BEHIND the fumble: the ball goes back, the rusher does not.
+    r = await run(2, 7, 30, 8, 35);
+    if (r === null) fail('ownfum:spot', 'no own-recovery spot control on the rush tree');
+    else {
+      eq([r.st.down, r.st.distance, r.st.fieldPos], [3, 2, 35],
+         'ownfum:spot-ball', 'recovered at own 35 should leave 3rd & 2 there');
+      // THE WHOLE POINT: yardage to the fumble, ball to the recovery.
+      const yds = (r.rush['N Quarterback'] || r.rush['N Runningback'] || {}).yds;
+      if (yds !== 8) {
+        fail('ownfum:credit', 'the runner is credited to the spot of the fumble, expected 8, got ' + yds);
+      }
+    }
+
+    // Short of the marker on fourth down is a turnover on downs, and the
+    // other team takes over at the recovery spot (mirrored).
+    r = await run(4, 3, 40, 5, 38);
+    if (r && !/turnover on downs/.test(r.text)) {
+      fail('ownfum:downs', 'fourth down short should turn the ball over: ' + r.text);
+    }
+    if (r && r.st.possession !== 'teamB') {
+      fail('ownfum:possession', 'possession should change, got ' + r.st.possession);
+    }
+  }
+
   return failures;
 }
 
