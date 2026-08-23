@@ -470,7 +470,16 @@
      above it rather than wherever the two side buttons happen to end. */
   #entryStage #playPanel .spot-row, #guidedPanel .spot-row { display:flex; align-items:center; gap:8px;
                                      flex-wrap:wrap; margin-top:9px; }
-  #entryStage #playPanel .spot-row > button, #guidedPanel .spot-row > button { flex:0 1 auto; margin:0; }
+  #entryStage #playPanel .spot-row > button, #guidedPanel .spot-row > button {
+    flex:0 1 auto; margin:0; }
+  /* THE TWO SIDES NEED SEPARATING. The row's 8px gap applies between every
+     child, so the label, the two side buttons and the yard-line box were
+     all equally spaced -- and the pair read as one wide control rather
+     than a choice between two. Reported as "spot buttons running
+     together". The extra margin goes only between adjacent BUTTONS, so
+     the label and the input keep the row spacing. */
+  #entryStage #playPanel .spot-row > button + button,
+  #guidedPanel .spot-row > button + button { margin-left:6px; }
   #entryStage #playPanel .spot-row > input, #guidedPanel .spot-row > input { flex:0 0 96px; width:96px; margin-left:auto; }
   #entryStage #playPanel .spot-label, #guidedPanel .spot-label { flex:0 0 auto; line-height:normal; }
   /* The row that is missing something, and the words saying what. */
@@ -5470,7 +5479,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // Found by actually running this through the real UI, not by
         // reading the code: the ReferenceError only shows up once the
         // button is clicked.
-        '<div style="margin-top:10px;">' +
+        // The wrapper is IDENTIFIED so the outcome handlers can hide it.
+        // Without an id there was no handle on it, which is why "Fumbled
+        // during the return" stayed live on a touchback -- offering to
+        // record a fumble during a return that never happened.
+        '<div id="gr_ko_ret_fumbled_wrap" style="margin-top:10px;">' +
           '<input autocomplete="off" type="checkbox" id="gr_ko_ret_fumbled" style="display:none;">' +
           '<button type="button" id="gr_ko_ret_fumbled_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#fff; color:#555; font-size:13px; font-weight:600; cursor:pointer;">Fumbled during the return</button>' +
         '</div>' +
@@ -5680,8 +5693,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (w) w.style.display = e.target.value.trim() ? 'none' : 'block';
       });
       const grTbBtn = document.getElementById('gr_touchback_toggle'), grTbCb = document.getElementById('gr_touchback');
+      // EVERYTHING THAT DESCRIBES A RETURN. Touchback, out of bounds, muff
+      // and onside all mean there was no ordinary return, so none of these
+      // apply -- but the list held only the returner and the yards box, so
+      // the returned-to calculator and the fumble toggle stayed on screen.
+      // Reported: on a touchback the panel still offered to record a
+      // fumble during the return.
+      //
+      // Anything added to the return flow in future belongs in this list;
+      // that is the whole point of it being a list.
       const grReturnFields = () => [document.getElementById('gr_returner_grid'),
-        document.getElementById('gr_returner_manual'), document.getElementById('gr_yards').parentElement];
+        document.getElementById('gr_returner_manual'),
+        document.getElementById('gr_yards').parentElement,
+        document.getElementById('gr_retto_wrap'),
+        document.getElementById('gr_ko_ret_fumbled_wrap'),
+        // The fumble sub-panel too: hiding only its toggle would leave the
+        // recovery radios behind if it had already been opened.
+        document.getElementById('gr_ko_ret_fum_wrap')];
       const refreshGrTb = () => {
         const tb = grTbCb.checked;
         if (tb) prefillTouchbackClock('guidedReturnClock');
@@ -9791,6 +9819,32 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           (blocked || muffed || touchback || fake) ? 'none' : 'block';
         if (touchback) prefillTouchbackSpot(panel, 'pp_spot');
         document.getElementById('pp_punt_blocked').style.display = blocked ? 'block' : 'none';
+        // A BLOCKED PUNT HAS NO DISTANCE. The kick never got away, so the
+        // yardage box is a question with no answer -- and it was left
+        // open and empty, which reads as something the scorer forgot.
+        //
+        // GREYED rather than hidden, on Andy's instruction. Note the
+        // contrary precedent a few lines down: the fake branch hides its
+        // kick fields, with a comment arguing a greyed box still reads as
+        // something you were supposed to fill in. The difference here is
+        // that a blocked punt is still a punt and the row is expected to
+        // be there; a fake is not a kick at all.
+        const puntYards = document.getElementById('pp_yards');
+        if (puntYards){
+          puntYards.disabled = blocked;
+          puntYards.style.opacity = blocked ? '0.45' : '';
+          puntYards.style.background = blocked ? '#f0f0f0' : '';
+          if (blocked) puntYards.value = '';
+        }
+        const puntLoss = panel.querySelector('.lossToggle[data-for="pp_yards"]');
+        if (puntLoss){
+          puntLoss.disabled = blocked;
+          puntLoss.style.opacity = blocked ? '0.45' : '';
+        }
+        panel.querySelectorAll('.quickYardsBtn[data-for="pp_yards"]').forEach(b => {
+          b.disabled = blocked;
+          b.style.opacity = blocked ? '0.45' : '';
+        });
         document.getElementById('pp_punt_muffed').style.display = muffed ? 'block' : 'none';
         const kickingRecovers = muffed &&
           document.querySelector('input[name=pp_punt_muffrec]:checked').value === 'k';
