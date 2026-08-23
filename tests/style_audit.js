@@ -117,7 +117,14 @@ function report() {
 const ALLOWED_BREAKPOINTS = [
   '@media (max-width: 767px)',    // phone
   '@media (min-width: 768px)',    // tablet and up
-  '@media (max-width: 1219px)'    // tablet and below
+  '@media (max-width: 1219px)',   // tablet and below
+  // SAME EDGE, plus touch. Not a fourth breakpoint -- it introduces no new
+  // width. The touch arm exists because an iPad in Safari's "Request
+  // Desktop Website" mode reports a desktop-class width and silently
+  // fails the width test, which is why a run of tablet fixes on 23 Aug
+  // tested correct and did nothing on the device. A mouse-driven desktop
+  // matches neither arm.
+  '@media (max-width: 1219px), (hover: none) and (pointer: coarse)'
 ];
 
 function checkBreakpoints() {
