@@ -20,7 +20,23 @@
 <title>StatChat — Game Entry</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
-  .wrap { max-width:760px; margin:0 auto; }
+  /* THE ENTRY CARD'S WIDTH, AND THE RAILS THAT MEASURE OFF IT.
+     ---------------------------------------------------------------------
+     One number, in one place. The rails position themselves at
+     `50% + half the card + a gutter`, and that half was written out as a
+     literal 380 in four separate rules -- so widening the card meant
+     finding all four and halving by hand, and missing one would put a
+     rail on top of the card.
+
+     760 -> 860 on desktop. At 1600px that still leaves 336px per rail,
+     against 386 before: comfortably wide, and the entry trees get 100px
+     they can use. The rails are reference; the card is the thing being
+     worked in.
+
+     Below 1220 the rails stack, so nothing competes for the width and the
+     card can take much more -- see the tablet rule further down. */
+  :root { --sc-card-w: 860px; --sc-card-half: 430px; }
+  .wrap { max-width:var(--sc-card-w, 860px); margin:0 auto; }
   .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:20px; margin:0; }
   h2 { font-size:16px; margin:0 0 10px; color:#444; }
@@ -218,14 +234,17 @@
      row, ON AIR to the left margin, CREW VIEW to the top-right border --
      so the row itself is now empty and would only contribute margin. */
   #entryHeaderRow { display:none !important; }
-  #metaRow { display:flex; align-items:center; gap:12px; margin:6px 0; }
-  #metaRow #topText { flex:1 1 auto; min-width:0; }
+  /* Dashboard and ON AIR share the top-left block. ON AIR sizes to its
+     own label now rather than stretching -- it was a wide bar with a short
+     word in the middle, and that width buys nothing. */
+  #headerLeft { display:flex; align-items:center; gap:10px; margin:6px 0; }
+  #headerLeft #onAirBanner { width:auto; flex:0 0 auto; }
 
   /* ON AIR in the LEFT margin, level with the banner and the same height
      as it. Height is set by script from the banner rather than written
      here: the banner's height depends on its own content and font, and a
      hardcoded value would drift. */
-  #onAirBanner { position:absolute; left:16px; right:calc(50% + 380px + 18px);
+  #onAirBanner { position:absolute; left:16px; right:calc(50% + var(--sc-card-half, 430px) + 18px);
                  background:#b00020; color:#fff; border-radius:10px;
                  font-size:13px; font-weight:800; letter-spacing:0.06em;
                  display:flex; align-items:center; justify-content:center;
@@ -276,19 +295,17 @@
        header. On a landscape iPad -- about 700px of usable height once
        Safari has taken its share -- neither is affordable.
 
-       Both are now pulled INTO #metaRow beside Dashboard and the
+       Both are now pulled INTO #headerLeft beside Dashboard, and
        timeouts, using order to place them: the row already exists, is
        already flex, and is already the place a scorer looks for this
        kind of control.
 
        Desktop never sees this block; #topActions stays pinned top-right
        and ON AIR keeps its own row. */
-    #metaRow { flex-wrap:wrap; row-gap:8px; }
-    #metaRow > .hdr-btn { order:0; }
-    #onAirBanner { order:1; margin:0 !important; }
-    #topActions  { order:2; position:static; margin:0;
+    #headerLeft { flex-wrap:wrap; row-gap:8px; }
+    #onAirBanner { margin:0 !important; }
+    #topActions  { position:static; margin:0;
                    align-items:center; justify-content:flex-end; }
-    #topText     { order:3; }
     #topActions a { padding:8px 14px; }
   }
   /* Under the dock breakpoint the margins vanish, so both come back into
@@ -307,7 +324,7 @@
      16px inset .floating-actions already uses.
      bottom:96px clears the Broadcast/Help buttons; the rail is not
      allowed to run under them. */
-  #rightRail { position:absolute; right:16px; left:calc(50% + 380px + 18px);
+  #rightRail { position:absolute; right:16px; left:calc(50% + var(--sc-card-half, 430px) + 18px);
                z-index:80; display:flex; flex-direction:column; gap:10px; }
   #rightRail .card { margin-bottom:0; padding:12px 14px; box-sizing:border-box;
                      display:flex; flex-direction:column; min-height:0; }
@@ -348,8 +365,18 @@
      the flow underneath everything else rather than overlapping the card. */
 
   @media (max-width: 1219px) {
+    /* WIDER, because nothing is competing for the space. Below 1220 the
+       rails stack instead of sitting beside the card, so the 860px cap
+       leaves 160px of empty margin on a 1180px iPad and 230px at 1219.
+       The card takes it: on a tablet the entry tree is the only thing on
+       screen and every pixel of width is one the buttons do not have to
+       wrap into.
+
+       98% rather than 100% so the card still reads as a card against the
+       page behind it, and the shadow has somewhere to fall. */
+    .wrap { max-width:98%; }
     #rightRail { position:static; left:auto; right:auto; height:auto !important;
-                 top:auto !important; margin:16px auto 0; max-width:760px; }
+                 top:auto !important; margin:16px auto 0; max-width:none; }
     #validationCard { max-height:none; }
   }
 
@@ -361,7 +388,7 @@
      on the other side. top and height come from the ladder, set by
      script: the ladder's height is whatever its buttons add up to, and
      a hardcoded value would drift the moment a label wraps. */
-  #driveDock { position:absolute; left:16px; right:calc(50% + 380px + 18px);
+  #driveDock { position:absolute; left:16px; right:calc(50% + var(--sc-card-half, 430px) + 18px);
                z-index:80; margin-bottom:0; padding:14px;
                box-sizing:border-box; display:flex; flex-direction:column; }
   /* Only the plays scroll; heading and buttons stay put. */
@@ -691,13 +718,23 @@
       <span class="finalTag" id="notStartedTag" style="display:none;">NOT STARTED</span>
       <span class="finalTag" id="halftimeTag" style="display:none;">HALFTIME</span>
     </div>
-    <!-- topText and the Dashboard link share one line: the strip was
-         right-aligned text with empty space to its left, and Dashboard
-         had a row of its own. -->
-    <div id="metaRow">
-      <a class="hdr-btn" href="dashboard.html">&larr; Dashboard</a>
-      <div id="topText" style="text-align:right; font-size:14px; font-weight:600; color:#333; margin:0;"></div>
-    </div>
+    <!-- THE META ROW IS GONE, 23 Aug. It held two things and neither
+         earned a row of its own:
+
+           Timeouts -- already in the Live totals tile, which is on screen
+           the whole time and shows both teams. Two places to keep in
+           agreement for no gain.
+
+           Last entered -- moved into the Checks tile, which is where a
+           scorer looks when something needs attention anyway.
+
+         Dashboard moved up beside ON AIR. On a landscape iPad the header
+         was three rows deep before any football happened; it is now one.
+
+         #topText is deleted outright rather than hidden -- renderTopText
+         wrote timeouts into it on every render, and a hidden element
+         still being written to is a thing that looks alive in the source
+         and is not. -->
 
     <div id="clockPromptCard" style="display:none; background:#fff3cd; border-radius:8px; padding:12px 14px; margin-bottom:10px;">
       <div id="clockPromptLabel" style="font-size:15px; font-weight:600; margin-bottom:8px;"></div>
@@ -716,7 +753,13 @@
          off air with the same warnings the dashboard asks, so a scorer
          who forgot to set it does not have to leave the game to fix it.
          Always rendered: off air it is the light-grey "SET AS ON AIR". -->
-    <button type="button" id="onAirBanner" style="display:none;">&#9679; ON AIR</button>
+    <!-- Dashboard rides with ON AIR in the top-left block. ON AIR is no
+         longer full-width: it was a wide bar with a short label in the
+         middle, and that width is height everywhere else. -->
+    <div id="headerLeft">
+      <a class="hdr-btn" href="dashboard.html">&larr; Dashboard</a>
+      <button type="button" id="onAirBanner" style="display:none;">&#9679; ON AIR</button>
+    </div>
 
     <!-- RIGHT MARGIN RAIL. The mirror of #driveDock on the left, in the
          viewport space outside the 760px card that .floating-actions has
@@ -960,6 +1003,13 @@
       <div class="card compact" id="validationCard">
         <h2 style="margin:0 0 6px; font-size:15px;">Checks <span id="validationCount"></span></h2>
         <div id="validationBody"></div>
+        <!-- LAST ENTERED, moved here from the deleted meta row. It belongs
+             with the checks: it is the same question -- is the record
+             current -- and this tile is where a scorer already looks. -->
+        <div id="lastClockRow" style="margin-top:8px; padding-top:8px;
+             border-top:1px solid var(--sc-rule, #e6e6e6); font-size:13px;">
+          <span id="lastClockText"></span>
+        </div>
       </div>
       <div class="card compact" id="liveBoxCard">
         <h2 style="margin:0 0 6px; font-size:15px;">Live totals</h2>
@@ -4323,33 +4373,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // number and only crowded the banner.
     document.getElementById('quarterText').textContent =
       quarterLabel(state);
-    document.getElementById('topText').innerHTML =
-      // Labels greyed, values in full contrast. The whole line used to be
-      // one flat #888 at 12px, so the numbers a coach actually reads --
-      // possession time and timeouts left -- were the same weight as the
-      // words around them and washed out against the page.
-      // TIME OF POSSESSION REMOVED, 22 Aug. Both teams' TOP now sits in
-      // the Live totals tile in the right margin, which is on screen the
-      // whole time and gives it more room than this line ever did.
-      // Carrying it in two places meant two things to keep agreeing for
-      // no gain, and it was the longest item here.
-      '<span style="color:#777; font-weight:400;">Timeouts</span> ' +
-      TEAMS.teamA.name + ' ' + state.timeouts.teamA +
-      ' <span style="color:#aaa;">·</span> ' +
-      TEAMS.teamB.name + ' ' + state.timeouts.teamB +
-      // AMBIENT, not a fourth conditional card. The same hint already
-      // exists in the clock prompt, the guided kickoff-return flow, the
-      // confirm card and Set Clock -- but every one of those only shows
-      // up sometimes. This is the same information, reusing the same
-      // function, in the one place that is on screen the whole time --
-      // renderAll() runs it after every play, so it is never more than
-      // one save behind. See renderLastClockHint() for the quarter-
-      // staleness colouring; nothing about that logic changes here.
-      // WIDER GAP before the clock hint. With TOP gone these two are the
-      // only items on the line, and at the old single-space spacing the
-      // timeout counts ran straight into "Last entered" as though they
-      // were one reading.
-      ' <span style="color:#ccc; margin:0 14px 0 18px;">|</span> <span id="lastClockText"></span>';
+    // TIMEOUTS AND THE META ROW ARE GONE, 23 Aug. Timeouts live in the
+    // Live totals tile, which shows both teams and is on screen the whole
+    // time; carrying them here too meant two things to keep agreeing for
+    // no gain. Last entered moved into the Checks tile.
+    //
+    // renderLastClockHint still runs -- only its target moved. The hint
+    // element is now inside #validationCard.
     renderLastClockHint('lastClockText');
     const banner = document.getElementById('banner');
     const c = TEAMS[state.possession];
@@ -7069,13 +7099,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   //
   // CSS `order` cannot fix that: it only sorts SIBLINGS, and these three
   // live in three different parents. So they are physically moved into
-  // #metaRow, and moved back above 1220.
+  // #headerLeft, and moved back above 1220.
   //
   // Their original position is remembered on first move, so going back is
   // exact rather than an append -- the same approach the fake-kick
   // calculator uses, and for the same reason.
   function layoutHeaderForWidth(){
-    const meta = document.getElementById('metaRow');
+    const meta = document.getElementById('headerLeft');
     if (!meta) return;
     const tablet = window.innerWidth <= 1219;
     ['onAirBanner', 'topActions'].forEach(id => {
@@ -7090,10 +7120,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         el.__home.parent.insertBefore(el, el.__home.next);
       }
     });
-    // topText last, so the timeouts sit at the right-hand end of the row
-    // rather than between two clumps of buttons.
-    const tt = document.getElementById('topText');
-    if (tablet && tt && tt !== meta.lastElementChild) meta.appendChild(tt);
   }
   window.addEventListener('resize', layoutHeaderForWidth);
   layoutHeaderForWidth();
