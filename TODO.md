@@ -2120,6 +2120,65 @@ watch for.
     than on the player. Reports already show targeted-with-no-catch
     receivers correctly, so capturing it is the whole fix.
   - Check the **sack** path for the same omission while in there.
+## Shared stylesheet rollout (started 22 Aug)
+
+Run `node tests/style_audit.js` to see progress. Baseline was 118 distinct
+hex colours, 6 breakpoints, 0 pages on a shared sheet.
+
+- [x] `statchat.css` created -- 26 tokens, every value taken from what the
+  app already uses (chosen because it appears on 4+ separate pages).
+- [x] Converted: reports, index, customize, broadcast_setup, dashboard,
+  account, roster, help, create_game, player_report. **10 of 18.**
+- [ ] Remaining: view, recap, season_report, stat_package, broadcast,
+  broadcast_leaders, broadcast_stats, game. **Do `game.html` LAST** -- 439
+  inline styles, and it is the page a mistake costs most.
+
+### THE VERIFICATION GAP -- read before continuing
+
+The conversion is a same-value swap (`#1a7a4c` -> `var(--sc-green,
+#1a7a4c)`) and cannot change rendering in a browser. But **it cannot be
+verified in the test harness**: jsdom does not fetch external stylesheets
+AND does not implement `var()` at all -- it returns the literal string
+`var(--sc-green, #1a7a4c)` as the computed value rather than a colour.
+
+So the usual before/after comparison reports every converted element as
+changed, and there is no way to tell a real break from the tooling gap.
+Ten pages were converted on that basis and are UNVERIFIED BY TEST. They
+were syntax-checked and each still loads; that is all that was proven.
+
+Two things follow:
+
+- **Every conversion carries a FALLBACK** -- `var(--sc-navy, #1a1a2e)`,
+  not `var(--sc-navy)`. If `statchat.css` ever fails to load, the original
+  colour still applies. Without it, one missing file strips the colour off
+  every converted page: a single point of failure for 18 files. The four
+  delivered before this was understood have been re-issued with fallbacks.
+- **Spot-check each converted page in a real browser** before trusting it.
+  A glance is enough; the failure mode would be obvious, not subtle.
+
+- [ ] **Teach the harness to load `statchat.css`** so this becomes
+  verifiable -- jsdom takes `resources: 'usable'`, and the var() gap can be
+  closed by inlining the sheet into the page under test. Worth doing
+  before converting `game.html`, which is the one page where an unverified
+  change is not acceptable.
+
+### Near-duplicate colours awaiting a decision
+Collapsing these IS a visual change, however small, so none were touched:
+- page background `#f4f3ef` vs `#f4f4f2` `#f7f7f5`
+- hairline `#e6e6e6` vs `#e0e0e0` `#dde1e6` `#f0f0f0`
+- error tint `#fdecea` (13 pages) vs `#fde8e8` (4 report pages)
+- amber soft `#fff8e6` vs `#fff8e1`
+- KEEP SEPARATE: `#b00020` is the ON AIR red, deliberately hotter than
+  `--sc-red`, which means destructive. Live and dangerous are different.
+
+- [ ] Settle on 3 breakpoints (phone <=767, tablet 768-1219, desktop
+  1220+) and replace 640/700/899/1100 as pages are touched.
+- [ ] `broadcast.html` and `broadcast_stats.html` have no viewport meta.
+  Probably CORRECT -- they render in vMix, not on a phone. Confirm, then
+  either fix or mark as intentional so the audit stops reporting it.
+
+---
+
 - [ ] **Remove the `<script src="team-icon.js">` tag from all 21 pages.**
   The script was neutered to an empty file on 22 Aug -- the browser tab
   now shows the StatChat logo, which is what every page already declares
@@ -2130,10 +2189,13 @@ watch for.
   MULTI_TENANT_PLAN.md step 0). Nothing reads it now. Left in place
   because dropping a column is a migration and there is no migration
   mechanism yet.
-- [ ] **Delete `gametest3.html` from the repo** — it is now a byte-level
-  duplicate of `game.html` and will drift the moment either is edited.
-  `gametest.html` and `gametest2.html` stay, marked DEAD PROTOTYPE;
-  `gametest2` still holds the field strip.
+- [x] **Delete `gametest3.html` from the repo** — DONE. Verified 22 Aug:
+  `gametest3.html`, `gametest.html`, `gametest2.html` and the three
+  `layout_mockup*.html` files all return 404 from GitHub. They were never
+  committed, or were removed earlier; they lingered only in a working
+  copy. Nothing in the app links to any of them — the mentions in
+  `game.html` are comments recording where the rail layout came from, and
+  those stay accurate as history.
 - [ ] **Duplicate SURNAMES on a roster** now collide on picker buttons,
   which show the surname only. Two Robinsons read the same at a glance and
   are told apart by jersey number and the hover title. Worth a look at the

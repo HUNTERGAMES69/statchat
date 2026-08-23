@@ -6,6 +6,10 @@
      Harmless, but a red console error should MEAN something. -->
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <!-- Apple renamed this; the old tag warns in the console on every
@@ -15,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="StatChat">
 <title>StatChat — Account</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
   .wrap { max-width:600px; margin:0 auto; }
   .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:20px; margin:0; }
@@ -23,14 +27,14 @@
   p.sub { color:#888; margin:0 0 14px; font-size:13px; }
   label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
   input { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
-  button { padding:9px 16px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+  button { padding:9px 16px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
-  button.danger { background:#a32d2d; }
+  button.danger { background:var(--sc-red, #a32d2d); }
   button:disabled { opacity:0.5; cursor:default; }
   .row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
-  .msg.error { background:#fdecea; color:#a32d2d; }
-  .msg.success { background:#e8f5e9; color:#1a7a4c; }
+  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
+  .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
   .hidden { display:none; }
   #avatarPreview { width:64px; height:64px; border-radius:50%; object-fit:cover; background:#eee; }
   .danger-zone { border:1px solid #f0d0a0; background:#fffaf0; border-radius:10px; padding:16px; margin-top:8px; }
@@ -43,11 +47,11 @@
   .user-row-actions button { font-size:12px; padding:6px 10px; }
   .set-password-inline { display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap; }
   .set-password-inline input { width:auto; flex:1; min-width:140px; }
-  .badge-admin { display:inline-block; font-size:10px; font-weight:700; color:#a37a00; background:#fff3cd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
-  .badge-gameentry { display:inline-block; font-size:10px; font-weight:700; color:#1a7a4c; background:#e3f7ec; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+  .badge-admin { display:inline-block; font-size:10px; font-weight:700; color:var(--sc-amber-text, #a37a00); background:var(--sc-amber-tint, #fff3cd); padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+  .badge-gameentry { display:inline-block; font-size:10px; font-weight:700; color:var(--sc-green, #1a7a4c); background:#e3f7ec; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
 .badge-disabled { display:inline-block; margin-left:8px; padding:2px 7px; border-radius:4px;
                     background:#8a3a12; color:#fff; font-size:11px; font-weight:700; letter-spacing:0.04em; }
-    .badge-invited { display:inline-block; font-size:10px; font-weight:700; color:#1565c0; background:#e3f2fd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+    .badge-invited { display:inline-block; font-size:10px; font-weight:700; color:var(--sc-blue, #1565c0); background:#e3f2fd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
   @media (min-width: 640px) { body { padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); } .card { padding:24px; } }
 </style>
 </head>
@@ -64,7 +68,7 @@
           <h1>Account</h1>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
-          <button id="signOutBtn" style="background:#fff; color:#a32d2d; border:1px solid #a32d2d; padding:8px 14px; font-size:13px; font-weight:600; border-radius:6px;">Sign out</button>
+          <button id="signOutBtn" style="background:#fff; color:var(--sc-red, #a32d2d); border:1px solid var(--sc-red, #a32d2d); padding:8px 14px; font-size:13px; font-weight:600; border-radius:6px;">Sign out</button>
           <a href="dashboard.html" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600;">← Dashboard</a>
         </div>
       </div>
@@ -117,7 +121,7 @@
       </p>
 
       <div id="mfaEnrolled" style="display:none;">
-        <p style="font-weight:700; color:#0f6e56; margin:0 0 10px;">
+        <p style="font-weight:700; color:var(--sc-green-dark, #0f6e56); margin:0 0 10px;">
           &#10003; Two-factor is set up on this account.</p>
         <p style="color:#666; font-size:13px; margin:0 0 10px;">
           You will be asked for a code next time you sign in.</p>
@@ -183,7 +187,7 @@
       <div id="resetStep3" class="hidden danger-zone">
         <p style="font-weight:600; margin:0 0 6px;">This cannot be undone</p>
         <p class="sub" style="margin:0 0 10px;">Every game, every play, every roster snapshot, every player on your roster, and the current season year — gone permanently. There is no export and no undo. Type <strong>I agree</strong> exactly to confirm.</p>
-        <div id="resetPreflight" class="sub" style="margin:0 0 10px; font-weight:600; color:#a32d2d;"></div>
+        <div id="resetPreflight" class="sub" style="margin:0 0 10px; font-weight:600; color:var(--sc-red, #a32d2d);"></div>
         <input type="text" id="resetAgreeInput" placeholder="I agree">
         <div class="row" style="margin-top:10px;">
           <button class="danger" id="resetFinalBtn">Delete everything</button>

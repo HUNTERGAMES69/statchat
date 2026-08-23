@@ -4,22 +4,26 @@
 <meta charset="UTF-8">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StatChat — Player Report</title>
 <style>
   html, body { margin:0; padding:0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-         background:#f4f3ef; color:#1a1a1a; }
+         background:var(--sc-page, #f4f3ef); color:var(--sc-ink, #1a1a1a); }
   .wrap { max-width:960px; margin:0 auto; padding:24px 24px 60px; box-sizing:border-box; }
   .hidden { display:none !important; }
   .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
   .topbar a { color:#555; text-decoration:none; font-size:14px; font-weight:600; }
   .topbar button { border:none; border-radius:8px; padding:10px 18px; font-size:14px;
-                   font-weight:700; cursor:pointer; background:#1a7a4c; color:#fff; }
+                   font-weight:700; cursor:pointer; background:var(--sc-green, #1a7a4c); color:#fff; }
   .card { background:#fff; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,0.06);
           padding:20px 22px; margin-bottom:18px; }
   .msg { padding:12px 14px; border-radius:8px; font-size:14px; }
-  .msg.error { background:#fdecea; color:#a32d2d; }
+  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
 
   .pickers { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:18px; }
   .picker { display:flex; flex-direction:column; gap:5px; }
@@ -31,7 +35,7 @@
   /* Section headers, matching the other reports. */
   .sec-head { margin:0 0 14px; }
   .sec-eyebrow { display:none; font-size:10.5px; font-weight:700; letter-spacing:0.16em;
-                 text-transform:uppercase; color:#9aa3b2; margin:0 0 3px; }
+                 text-transform:uppercase; color:var(--sc-ink-muted, #9aa3b2); margin:0 0 3px; }
   .sec-title { font-size:21px; font-weight:700; letter-spacing:-0.02em; color:#12161c;
                margin:0; line-height:1.1; }
   .sec-sub { font-size:12px; color:#7c8794; margin:4px 0 0; font-variant-numeric:tabular-nums; }
@@ -58,16 +62,16 @@
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th, td { text-align:left; padding:7px 9px; }
   thead th { font-size:11px; text-transform:uppercase; letter-spacing:0.04em;
-             color:#888; font-weight:600; border-bottom:1.5px solid #e6e6e6; }
+             color:#888; font-weight:600; border-bottom:1.5px solid var(--sc-rule, #e6e6e6); }
   tbody tr:nth-child(odd) { background:#f7f8f9; }
   td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
-  tfoot td { font-weight:700; border-top:1.5px solid #e6e6e6; }
+  tfoot td { font-weight:700; border-top:1.5px solid var(--sc-rule, #e6e6e6); }
 
   /* THE TREND CHART. Plain divs rather than a charting library: one
      series per category does not justify a dependency that has to keep
      loading, and a percentage width cannot fail to render. */
   .cols { display:flex; align-items:flex-end; gap:14px; height:190px;
-          padding:0 4px; border-bottom:2px solid #e6e6e6;
+          padding:0 4px; border-bottom:2px solid var(--sc-rule, #e6e6e6);
           justify-content:flex-start; }
   /* CAPPED, not stretched. flex:1 alone divided the full width between
      however many games there were, so a three-game season produced three
@@ -92,7 +96,7 @@
   .col-labels { display:flex; gap:14px; padding:9px 4px 0; justify-content:flex-start; }
   .col-labels div { flex:1 1 0; max-width:76px; text-align:center; font-size:11.5px;
                     color:#7c8794; line-height:1.35; overflow:hidden; }
-  .col-labels div b { display:block; color:#1a1a1a; font-weight:700; font-size:12.5px; }
+  .col-labels div b { display:block; color:var(--sc-ink, #1a1a1a); font-weight:700; font-size:12.5px; }
 
   /* The narrow-screen form. Both are in the DOM and CSS picks one --
      measuring the viewport in JavaScript and re-rendering on resize is
@@ -146,7 +150,7 @@
       -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     @page { margin-bottom: 16mm; }
     .print-footer { display:block; position:fixed; bottom:6mm; left:0; right:0;
-                    text-align:center; font-size:9px; color:#9aa3b2;
+                    text-align:center; font-size:9px; color:var(--sc-ink-muted, #9aa3b2);
                     letter-spacing:0.04em; }
     /* A SHORT MARGIN HERE, unlike the game recap.
        42mm pushed the logo onto a sheet of its own -- a third page
@@ -157,7 +161,7 @@
        it stays with the content it belongs to. */
     .print-endmark { display:flex; align-items:center; justify-content:center;
                      margin:24px 0 0; padding-top:16px;
-                     border-top:1px solid #e6e6e6;
+                     border-top:1px solid var(--sc-rule, #e6e6e6);
                      page-break-before:avoid; break-before:avoid;
                      page-break-inside:avoid; break-inside:avoid; }
     .print-endmark img { width:38px; height:38px; border-radius:7px; }
@@ -192,8 +196,8 @@
         <button id="downloadPdfBtn" type="button">Download PDF</button>
       </div>
       <p id="printFallback" class="no-print hidden"
-         style="margin:0 0 12px; padding:10px 12px; background:#fff8e6;
-                border:1px solid #e0b400; border-radius:6px; font-size:13px; color:#5a4300;"></p>
+         style="margin:0 0 12px; padding:10px 12px; background:var(--sc-amber-soft, #fff8e6);
+                border:1px solid var(--sc-amber, #e0b400); border-radius:6px; font-size:13px; color:#5a4300;"></p>
 
       <div class="pickers no-print">
         <div class="picker">
@@ -272,12 +276,12 @@
   function buildTeams(game, rosterRows, branding){
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
     const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
-    TEAMS.teamA = { name: ourName, bg: branding.primary_color || '#1a1a2e',
-      text: branding.secondary_color || '#ffffff',
+    TEAMS.teamA = { name: ourName, bg: branding.primary_color || 'var(--sc-navy, #1a1a2e)',
+      text: branding.secondary_color || 'var(--sc-card, #ffffff)',
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{},
       logo: branding.logo_url || null, isHome: !!game.our_team_is_home };
-    TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#8B0000',
-      text: game.opponent_secondary_color || '#ffffff',
+    TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || 'var(--sc-red-deep, #8b0000)',
+      text: game.opponent_secondary_color || 'var(--sc-card, #ffffff)',
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{},
       logo: game.opponent_logo_url || null, isHome: !game.our_team_is_home };
     (rosterRows || []).forEach(r => {
@@ -497,8 +501,8 @@
   }
 
   function teamBand(label, subtitle){
-    const bg = (TEAMS.teamA && TEAMS.teamA.bg) || '#1a1a2e';
-    const fg = (typeof safeTextColor === 'function') ? safeTextColor(bg) : '#ffffff';
+    const bg = (TEAMS.teamA && TEAMS.teamA.bg) || 'var(--sc-navy, #1a1a2e)';
+    const fg = (typeof safeTextColor === 'function') ? safeTextColor(bg) : 'var(--sc-card, #ffffff)';
     const dot = fg === '#000000' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.85)';
     return '<div class="team-band" style="background:' + bg + '; color:' + fg + ';">' +
       '<span class="tb-dot" style="background:' + dot + ';"></span>' + label +
@@ -667,7 +671,7 @@
     // so those fall back to a darkened shade of the team colour instead
     // of a bar nobody can see.
     const secondary = TEAMS.teamA && TEAMS.teamA.text;
-    const usable = secondary && secondary.toLowerCase() !== '#ffffff' &&
+    const usable = secondary && secondary.toLowerCase() !== 'var(--sc-card, #ffffff)' &&
                    secondary.toLowerCase() !== '#fff';
     const best = usable ? secondary
       : ((typeof mixHex === 'function') ? mixHex(accent, '#000000', 0.45) : accent);

@@ -6,6 +6,10 @@
      Harmless, but a red console error should MEAN something. -->
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <!-- Apple renamed this; the old tag warns in the console on every
@@ -15,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="StatChat">
 <title>StatChat — New Game</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
   .wrap { max-width:760px; margin:0 auto; }
   .card { background:#fff; border-radius:12px; padding:28px; margin-bottom:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:22px; margin:0 0 6px; }
@@ -25,17 +29,17 @@
   input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; }
   input[type="color"] { width:64px; height:40px; padding:2px; cursor:pointer; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
-  button { padding:9px 16px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+  button { padding:9px 16px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
   button:disabled { opacity:0.5; cursor:default; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
-  .msg.error { background:#fdecea; color:#a32d2d; }
-  .msg.success { background:#e8f5e9; color:#1a7a4c; }
+  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
+  .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
   .hidden { display:none; }
-  .conflict-block { background:#fff3cd; border-radius:8px; padding:12px 14px; margin-top:12px; }
+  .conflict-block { background:var(--sc-amber-tint, #fff3cd); border-radius:8px; padding:12px 14px; margin-top:12px; }
   .conflict-row { font-size:13px; margin-bottom:6px; }
   .conflict-status { font-size:12px; color:#7a6a2a; margin-top:2px; }
-  .roster-summary { font-size:14px; color:#1a7a4c; margin-top:8px; }
+  .roster-summary { font-size:14px; color:var(--sc-green, #1a7a4c); margin-top:8px; }
 </style>
 </head>
 <body>
@@ -46,7 +50,7 @@
   <div id="mainView" class="hidden">
     <div class="card">
       <h1 id="pageHeading">New Game</h1>
-      <div id="finalLockBanner" class="hidden" style="background:#fff3cd; border:1px solid #e0b400; border-radius:8px; padding:12px 14px; margin-bottom:16px;">
+      <div id="finalLockBanner" class="hidden" style="background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400); border-radius:8px; padding:12px 14px; margin-bottom:16px;">
         <div style="font-weight:600; color:#7a5c00; margin-bottom:4px;">This game is finalized</div>
         <div style="font-size:13px; color:#7a5c00; margin-bottom:10px;">Setup is locked to prevent accidental changes to a completed game's record. Unlock only if something genuinely needs correcting.</div>
         <button type="button" id="unlockFinalBtn" class="secondary" style="background:#fff;">Unlock to edit</button>
@@ -71,7 +75,7 @@
       <label style="display:flex; align-items:center; gap:8px; margin:12px 0 0; font-weight:400; cursor:pointer;">
         <input type="checkbox" id="isPreseason" style="width:auto; margin:0;"> This is a preseason game
       </label>
-      <div id="preseasonWarning" class="hidden" style="background:#fff3cd; border:1px solid #e0b400; border-radius:8px; padding:10px 12px; margin-top:8px; font-size:13px; color:#7a5c00;">
+      <div id="preseasonWarning" class="hidden" style="background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400); border-radius:8px; padding:10px 12px; margin-top:8px; font-size:13px; color:#7a5c00;">
         Excluded from Season Report and Player Report — every other total for the season stays exactly what it would be without this game. The game itself, its recap, and its own stat package are unaffected; this only pulls it out of season-wide aggregation.
       </div>
     </div>
@@ -139,11 +143,11 @@
         </div>
         <div>
           <label style="font-size:12px;">Primary color</label>
-          <input type="color" id="oppPrimaryColorInput" value="#8B0000">
+          <input type="color" id="oppPrimaryColorInput" value="var(--sc-red-deep, #8b0000)">
         </div>
         <div>
           <label style="font-size:12px;">Secondary color</label>
-          <input type="color" id="oppSecondaryColorInput" value="#ffffff">
+          <input type="color" id="oppSecondaryColorInput" value="var(--sc-card, #ffffff)">
         </div>
       </div>
     </div>
@@ -290,7 +294,7 @@
       }
       if (cands.length === 1){
         seedChoice[side][role] = cands[0];
-        lines.push('<div style="font-size:13px; color:#1a7a4c; margin-bottom:4px;">' +
+        lines.push('<div style="font-size:13px; color:var(--sc-green, #1a7a4c); margin-bottom:4px;">' +
           '✓ ' + role + ' #' + num + ' — ' + cands[0] + '</div>');
         return;
       }
@@ -298,13 +302,13 @@
       // default here would be indistinguishable from a decision.
       const chosen = seedChoice[side][role];
       lines.push('<div style="font-size:13px; margin-bottom:6px; padding:6px 8px; ' +
-        'background:#fff8e6; border:1px solid #e0b400; border-radius:6px;">' +
+        'background:var(--sc-amber-soft, #fff8e6); border:1px solid var(--sc-amber, #e0b400); border-radius:6px;">' +
         '<strong>' + role + ' #' + num + '</strong> is shared — which player?<br>' +
         cands.map(n =>
           '<button type="button" class="seedPick" data-side="' + side + '" data-role="' + role +
           '" data-name="' + n.replace(/"/g, '&quot;') + '" style="margin:4px 6px 0 0; padding:4px 10px; ' +
-          'font-size:13px; border-radius:6px; border:2px solid ' + (chosen === n ? '#1a7a4c' : '#ccc') +
-          '; background:' + (chosen === n ? '#1a7a4c' : '#fff') + '; color:' + (chosen === n ? '#fff' : '#555') +
+          'font-size:13px; border-radius:6px; border:2px solid ' + (chosen === n ? 'var(--sc-green, #1a7a4c)' : '#ccc') +
+          '; background:' + (chosen === n ? 'var(--sc-green, #1a7a4c)' : '#fff') + '; color:' + (chosen === n ? '#fff' : '#555') +
           '; cursor:pointer;">' + (chosen === n ? '✓ ' : '') + n + '</button>').join('') +
         '</div>');
     });
@@ -894,7 +898,7 @@
     document.getElementById('opponentAssignments').innerHTML = '';
     document.getElementById('opponentConflicts').innerHTML = '';
     document.getElementById('opponentRosterStatus').innerHTML =
-      '<div class="roster-summary" style="color:#a37a00;">No roster — entry for the opponent will be manual (numbers only) for this game.</div>';
+      '<div class="roster-summary" style="color:var(--sc-amber-text, #a37a00);">No roster — entry for the opponent will be manual (numbers only) for this game.</div>';
   });
 
   document.getElementById('opponentFile').addEventListener('change', (e) => {
@@ -1194,7 +1198,7 @@
   // Near-black only when white genuinely fails: a pale primary (gold,
   // silver, white-and-something) cannot carry white text at all.
   function contrastingColor(hex){
-    return contrastRatioOf(hex, '#ffffff') >= 4.5 ? '#ffffff' : '#1a1a1a';
+    return contrastRatioOf(hex, 'var(--sc-card, #ffffff)') >= 4.5 ? 'var(--sc-card, #ffffff)' : 'var(--sc-ink, #1a1a1a)';
   }
 
   document.getElementById('oppLogoInput').addEventListener('change', async (e) => {

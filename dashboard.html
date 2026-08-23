@@ -6,6 +6,10 @@
      Harmless, but a red console error should MEAN something. -->
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <!-- Apple renamed this; the old tag warns in the console on every
@@ -16,7 +20,7 @@
 <link rel="apple-touch-icon" id="appleTouchIcon" href="">
 <title>StatChat — Dashboard</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
   .wrap { max-width:760px; margin:0 auto; }
   .card { background:#fff; border-radius:12px; padding:20px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:22px; margin:0; line-height:1.15; }
@@ -60,12 +64,12 @@
     #newGameLink { display:block !important; text-align:center; }
   }
   p.sub { color:#888; margin:0 0 20px; font-size:15px; }
-  button { padding:8px 10px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+  button { padding:8px 10px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
-  a.button-link { display:inline-block; text-decoration:none; padding:8px 10px; border-radius:6px; background:#1a1a2e; color:#fff; font-size:13px; font-weight:600; }
+  a.button-link { display:inline-block; text-decoration:none; padding:8px 10px; border-radius:6px; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:13px; font-weight:600; }
   a.button-link.secondary { background:#fff; color:#444; border:1px solid #ccc; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
-  .msg.error { background:#fdecea; color:#a32d2d; }
+  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
   .hidden { display:none; }
   a.button-link.hidden { display:none; }
   .game-list { border-top:0.5px solid #e5e3dc; }
@@ -117,9 +121,9 @@
        entirely, or the gap set above still reserves space for it. */
     .game-num { display:none; }
   }
-  .status-win { color:#1a7a4c; font-size:13px; }
-  .status-loss { color:#a32d2d; font-size:13px; }
-  .status-live { color:#a37a00; font-size:13px; }
+  .status-win { color:var(--sc-green, #1a7a4c); font-size:13px; }
+  .status-loss { color:var(--sc-red, #a32d2d); font-size:13px; }
+  .status-live { color:var(--sc-amber-text, #a37a00); font-size:13px; }
   /* Loud on purpose. The likeliest accident is somebody not realising
      which game is flagged, so this sits on the row rather than in a
      menu, and pulses so it reads at a glance. */
@@ -133,7 +137,7 @@
      Amber to match the warning shown at setup time, so the two read as
      the same idea in two places. */
   .preseason-badge { display:inline-block; margin-left:8px; padding:2px 8px; border-radius:4px;
-                      background:#fff3cd; color:#7a5c00; font-size:11px; font-weight:700;
+                      background:var(--sc-amber-tint, #fff3cd); color:#7a5c00; font-size:11px; font-weight:700;
                       letter-spacing:0.06em; vertical-align:middle; }
   .onair-badge { display:inline-block; margin-left:10px; padding:2px 9px; border-radius:4px;
                  background:#b00020; color:#fff; font-size:11px; font-weight:800;
@@ -144,7 +148,7 @@
      because a season record belongs to the team -- and because it has to
      follow the season selector, which is easier to reason about as one
      element than as a row inside a list. */
-  .season-record { background:#1a1a2e; color:#fff; border-radius:10px; padding:14px 18px;
+  .season-record { background:var(--sc-navy, #1a1a2e); color:#fff; border-radius:10px; padding:14px 18px;
                    display:flex; align-items:center; margin:14px 0 0; }
   /* The stats moved one level deeper in the DOM (see renderSeasonRecord)
      so the mobile rule below can force this one container to full width
@@ -156,7 +160,7 @@
   .season-record .rec-val { font-size:16px; font-weight:700; line-height:1.2;
                             font-variant-numeric:tabular-nums; }
   .season-record .rec-lbl { font-size:10.5px; text-transform:uppercase;
-                            letter-spacing:0.05em; color:#9aa3b2; }
+                            letter-spacing:0.05em; color:var(--sc-ink-muted, #9aa3b2); }
   .season-record .rec-item { display:flex; flex-direction:column; gap:2px; }
   .season-record .rec-empty { font-size:14px; color:#c7ccd6; }
   /* Pushed to the far edge of the flex row regardless of how many
@@ -201,7 +205,7 @@
   /* Amber and permanent. The risk it warns about -- creating a game into
      the wrong season -- lasts as long as the season is wrong, so a toast
      that fades would be the wrong shape. */
-  .season-notice { background:#fff8e6; border:1px solid #e0b400; border-radius:6px;
+  .season-notice { background:var(--sc-amber-soft, #fff8e6); border:1px solid var(--sc-amber, #e0b400); border-radius:6px;
                    padding:9px 12px; margin:0 0 12px; font-size:13px; color:#5a4300;
                    line-height:1.5; }
   .status-notstarted { color:#999; font-weight:600; }
@@ -245,7 +249,7 @@
             <div id="accountMenu" class="hidden" style="position:absolute; right:0; top:110%; background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:20; min-width:200px; padding:6px 0;">
               <div id="accountMenuEmail" style="padding:8px 14px; font-size:12px; color:#888; border-bottom:1px solid #f0f0f0;"></div>
               <a href="account.html" class="accountMenuItem" style="display:block; padding:9px 14px; color:#333; font-size:14px; text-decoration:none;">Account settings</a>
-              <button id="signOutBtn" class="accountMenuItem" style="display:block; width:100%; text-align:left; padding:9px 14px; color:#a32d2d; font-size:14px; background:none; border:none;">Sign out</button>
+              <button id="signOutBtn" class="accountMenuItem" style="display:block; width:100%; text-align:left; padding:9px 14px; color:var(--sc-red, #a32d2d); font-size:14px; background:none; border:none;">Sign out</button>
             </div>
           </div>
         </div>
@@ -300,8 +304,8 @@
 
   function applySplash(branding){
     const isLight = luminanceOf(branding.primary_color) > 0.6;
-    const bg = isLight ? '#000000' : '#ffffff';
-    const fg = isLight ? '#ffffff' : '#1a1a1a';
+    const bg = isLight ? '#000000' : 'var(--sc-card, #ffffff)';
+    const fg = isLight ? 'var(--sc-card, #ffffff)' : 'var(--sc-ink, #1a1a1a)';
     const splash = document.getElementById('appSplash');
     splash.style.background = bg;
     document.getElementById('splashTitle').style.color = fg;
@@ -675,8 +679,8 @@
     // rather than an unstyled/invisible button.
     const reportsBtn = document.getElementById('reportsLink');
     if (reportsBtn){
-      reportsBtn.style.background = teamPrimaryColor || '#ffffff';
-      reportsBtn.style.color = teamSecondaryColor || '#1a1a2e';
+      reportsBtn.style.background = teamPrimaryColor || 'var(--sc-card, #ffffff)';
+      reportsBtn.style.color = teamSecondaryColor || 'var(--sc-navy, #1a1a2e)';
     }
   }
 
@@ -731,10 +735,10 @@
             '<button class="secondary rowMenuBtn" data-id="' + g.id + '" style="padding:4px 10px; font-size:16px; line-height:1;">⋮</button>' +
             '<div class="rowMenu hidden" data-id="' + g.id + '" style="position:absolute; right:0; top:100%; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:10; min-width:140px;">' +
               (currentIsAdmin ? '<a href="create_game.html?edit=' + g.id + '" style="display:block; padding:8px 12px; color:#444; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game setup</a>' : '') +
-              (g.status === 'in_progress' ? '<a href="view.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:#1565c0; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Crew View</a>' : '') +
-              (g.status === 'final' ? '<a href="view.html?id=' + g.id + '&mode=results" style="display:block; padding:8px 12px; color:#1565c0; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Crew View</a>' : '') +
-              (g.status === 'final' ? '<a href="recap.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:#1a7a4c; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game recap</a>' : '') +
-              (g.status === 'final' ? '<a href="stat_package.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:#0f6e56; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Stat package</a>' : '') +
+              (g.status === 'in_progress' ? '<a href="view.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:var(--sc-blue, #1565c0); font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Crew View</a>' : '') +
+              (g.status === 'final' ? '<a href="view.html?id=' + g.id + '&mode=results" style="display:block; padding:8px 12px; color:var(--sc-blue, #1565c0); font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Crew View</a>' : '') +
+              (g.status === 'final' ? '<a href="recap.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:var(--sc-green, #1a7a4c); font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game recap</a>' : '') +
+              (g.status === 'final' ? '<a href="stat_package.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:var(--sc-green-dark, #0f6e56); font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Stat package</a>' : '') +
               // Admin and scorers only. A `view` account views -- Andy's
               // rule, 12 Aug. Exporting is technically a read, but a
               // backup file is the entire game in one download, and
@@ -754,12 +758,12 @@
                   '" style="display:block; width:100%; text-align:left; padding:8px 12px; ' +
                   'background:none; border:none; font-weight:700; font-size:13px; ' +
                   'border-bottom:1px solid #eee; color:' +
-                  (g.is_broadcast ? '#b00020' : '#0f6e56') + ';">' +
+                  (g.is_broadcast ? '#b00020' : 'var(--sc-green-dark, #0f6e56)') + ';">' +
                   (g.is_broadcast ? '\u25CF Take OFF AIR' : 'Set as ON AIR') + '</button>'
                 : '') +
               (currentCanEnterGames ? '<button class="exportGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#444; font-weight:600; font-size:13px; border-bottom:1px solid #eee;">Download backup</button>' : '') +
               (currentIsAdmin ? '<button class="resetGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a05a00; font-weight:600; font-size:13px; border-bottom:1px solid #eee;">Reset game</button>' : '') +
-              (currentIsAdmin ? '<button class="deleteGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a32d2d; font-weight:600; font-size:13px;">Delete game</button>' : '') +
+              (currentIsAdmin ? '<button class="deleteGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--sc-red, #a32d2d); font-weight:600; font-size:13px;">Delete game</button>' : '') +
             '</div>' +
             '</div>'
           : '') +
