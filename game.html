@@ -330,6 +330,33 @@
     #rightRail { position:static; left:auto; right:auto; height:auto !important;
                  top:auto !important; margin:16px auto 0; max-width:760px; }
     #validationCard { max-height:none; }
+    /* ORDER, because the source order is wrong for a stacked layout.
+       -----------------------------------------------------------------
+       #rightRail is written BEFORE #entryCard in the markup. On desktop
+       that is invisible -- the rail is position:absolute, so where it
+       sits in the source does not matter. Drop to static below 1220 and
+       it flows exactly where it is written: Checks and Live totals
+       ABOVE the entry card, which is what an iPad shows. Reported.
+
+       Fixed by ordering rather than by moving the markup: #rightRail is
+       positioned by 22 references to syncRail/syncDock that all assume
+       the current source order, and re-ordering the HTML to fix a
+       tablet-only symptom would put every one of those at risk.
+
+       mainView becomes a flex column only at this width, so `order`
+       has something to act on. Desktop is untouched -- it never sees
+       this block.
+
+       Entry card first: it is the thing being used. Current drive next,
+       because it is checked constantly while entering. Then the rest. */
+    #mainView { display:flex; flex-direction:column; }
+    #banner          { order:0; }
+    #metaRow         { order:1; }
+    #clockPromptCard { order:2; }
+    #onAirBanner     { order:3; }
+    #entryCard       { order:4; }
+    #driveDock       { order:5; }
+    #rightRail       { order:6; }
   }
 
   /* DRIVE LOG DOCKED IN THE LEFT MARGIN (prototype).
