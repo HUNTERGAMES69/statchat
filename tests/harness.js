@@ -479,6 +479,41 @@ async function bootPage(file, opts = {}) {
   html = html.replace('<script src="engine.js"></script>',
                       '<script>' + engineSrc + '</script>');
 
+  // Inline statchat.css in place of its <link>, for the same reason and
+  // in the same way. Without it the shared tokens are simply absent, and
+  // every converted page renders with no colour at all in the harness.
+  //
+  // AND RESOLVE var() BY HAND. Inlining alone is not enough: jsdom's CSS
+  // engine does not implement custom properties. It returns the literal
+  // string `var(--sc-navy, #1a1a2e)` as a computed value, or drops the
+  // declaration entirely, so any before/after rendering comparison
+  // reports every converted element as changed and a real break cannot be
+  // told from the tooling gap. That gap is what let a broken conversion
+  // reach GitHub on 22 Aug.
+  //
+  // Substituting each var(--x, #hex) with its fallback gives jsdom plain
+  // CSS to parse, and the fallback is BY CONSTRUCTION the same value the
+  // token holds -- so what the harness renders is what a browser renders.
+  if (html.indexOf('statchat.css') !== -1) {
+    let css = '';
+    try { css = fs.readFileSync(path.join(REPO, 'statchat.css'), 'utf8'); } catch (e) {}
+    if (css) {
+      // ANY value, not just hex -- the spacing and radius tokens are px
+      // and were left as literal var() by a hex-only pattern, so every
+      // rule using them was dropped by jsdom.
+      const tokens = {};
+      css.replace(/(--sc-[a-z-]+)\s*:\s*([^;]+);/g,
+                  (m, k, v) => { tokens[k] = v.trim(); return m; });
+      const resolve = text => text.replace(
+        /var\(\s*(--sc-[a-z-]+)\s*(?:,\s*([^)]*))?\)/g,
+        (m, name, fallback) => tokens[name] || (fallback || '').trim() || m);
+      html = html
+        .replace(/<link rel="stylesheet" href="statchat\.css">/,
+                 '<style>' + resolve(css) + '</style>');
+      html = resolve(html);
+    }
+  }
+
   const dom = new JSDOM(html, {
     url: 'https://nevillestatchat.vercel.app/' + file + query,
     runScripts: 'dangerously',
