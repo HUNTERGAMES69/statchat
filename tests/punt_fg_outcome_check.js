@@ -317,8 +317,17 @@ async function run() {
       if (!t) { fail('terminal:' + tog, 'toggle missing'); h.close(); continue; }
       click(win, t);
       await new Promise(r => setTimeout(r, 100));
-      ['gr_returner_grid', 'gr_returner_manual', 'gr_retto_wrap',
-       'gr_ko_ret_fumbled_wrap', 'gr_ko_ret_fum_wrap'].forEach(id => {
+      // EVERY id is checked to EXIST first. The first version of this
+      // listed 'gr_retto_wrap' -- the punt tree's name -- which is not in
+      // the guided panel at all, so onScreen returned false for a missing
+      // element and the assertion passed while both calculators sat there
+      // in plain sight. A test that cannot fail is worse than no test.
+      ['gr_returner_grid', 'gr_returner_manual', 'gr_kofielded_wrap',
+       'gr_koretto_wrap', 'gr_ko_ret_fumbled_wrap', 'gr_ko_ret_fum_wrap'].forEach(id => {
+        if (!doc.getElementById(id)) {
+          fail('terminal:' + tog + ':' + id, id + ' does not exist -- wrong id, so this check proves nothing');
+          return;
+        }
         if (onScreen(win, doc, id)) {
           fail('terminal:' + tog + ':' + id, id + ' should not survive a terminal outcome');
         }
