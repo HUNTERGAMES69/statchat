@@ -447,6 +447,72 @@ async function run() {
     h.close();
   }
 
+  // COLLAPSIBLE RAILS AND THE ASSEMBLED HEADER — landscape tablet only.
+  // ---------------------------------------------------------------------
+  // NOTE ON WHAT THIS CAN AND CANNOT PROVE. jsdom does not support
+  // matchMedia and ignores @media entirely, so the CSS half of this is
+  // NOT verified here -- the widths, the rotated strip, the padding all
+  // have to be looked at on a real iPad. What IS verified is the
+  // JavaScript: which classes are applied at which width, that only one
+  // rail is ever open in the band, and that the header elements are moved
+  // and moved back. That is the half that has broken twice.
+  {
+    const widths = [
+      [900,  'portrait tablet — stacked, no collapsing'],
+      [1180, 'landscape iPad — one rail at a time'],
+      [1600, 'desktop — both rails, header pinned']
+    ];
+    for (const [w, label] of widths) {
+      const h = await bootGamePage();
+      const doc = h.window.document, win = h.window;
+      Object.defineProperty(win, 'innerWidth', { value: w, configurable: true });
+      win.dispatchEvent(new win.Event('resize'));
+      await new Promise(r => setTimeout(r, 200));
+      const collapsed = id => doc.getElementById(id).classList.contains('rail-collapsed');
+      const band = w >= 1024 && w <= 1219;
+
+      if (band) {
+        // Exactly one open, and it is Current drive by default -- Andy
+        // checks it constantly while entering.
+        if (collapsed('driveDock')) fail('rails:' + w, 'Current drive should be open by default');
+        if (!collapsed('rightRail')) fail('rails:' + w, 'both rails open leaves ~176px each — too narrow to use');
+        // Tapping the shut one swaps them.
+        doc.querySelector('#rightRail > .rail-strip').click();
+        await new Promise(r => setTimeout(r, 80));
+        if (!collapsed('driveDock') || collapsed('rightRail')) {
+          fail('rails:' + w + ':swap', 'tapping a strip should open it and close the other');
+        }
+      } else {
+        // OUTSIDE the band nothing may be left collapsed, or a desktop
+        // user inherits a 34px strip.
+        if (collapsed('driveDock') || collapsed('rightRail')) {
+          fail('rails:' + w, label + ': rails must not be collapsed outside the band');
+        }
+      }
+
+      // The header elements move into #metaRow below 1220 and back above.
+      // #topActions is a child of <body> written at the FOOT of the file,
+      // so left alone it lands at the very bottom of the page.
+      const parentOf = id => {
+        const e = doc.getElementById(id);
+        return e ? (e.parentElement.id || e.parentElement.tagName) : 'absent';
+      };
+      if (w <= 1219) {
+        if (parentOf('topActions') !== 'metaRow') {
+          fail('header:' + w, 'the action links belong in the header row, found in ' + parentOf('topActions'));
+        }
+        if (parentOf('onAirBanner') !== 'metaRow') {
+          fail('header:' + w, 'ON AIR should share the header row rather than taking one of its own');
+        }
+      } else {
+        if (parentOf('topActions') === 'metaRow') {
+          fail('header:' + w, 'desktop should keep the action links pinned, not in the header row');
+        }
+      }
+      h.close();
+    }
+  }
+
   return failures;
 }
 

@@ -117,7 +117,13 @@ function report() {
 const ALLOWED_BREAKPOINTS = [
   '@media (max-width: 767px)',    // phone
   '@media (min-width: 768px)',    // tablet and up
-  '@media (max-width: 1219px)'    // tablet and below
+  '@media (max-width: 1219px)',   // tablet and below
+  // LANDSCAPE TABLET, a BAND between two agreed edges rather than a new
+  // threshold -- it introduces no number the other three do not already
+  // use. Added 23 Aug for the collapsible rails, which apply only where
+  // there is room for a rail beside the entry card (1024+) but not room
+  // for two (below 1220). Portrait tablet stacks and is left alone.
+  '@media (min-width: 1024px) and (max-width: 1219px)'
 ];
 
 function checkBreakpoints() {
