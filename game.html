@@ -254,17 +254,17 @@
      So #headerLeft takes the position and the two children lay out inside
      it normally. ON AIR sizes to its label rather than stretching, which
      is what leaves room for Dashboard next to it. */
+  /* The banner keeps a gap beneath it. #metaRow used to sit here with
+     margin:6px 0 and supplied that spacing as a side effect; deleting the
+     row took the gap with it and the banner ran straight into the entry
+     card. Reported as "the center header bunches too tight". */
+  #banner { margin-bottom:14px; }
+
   #headerLeft { position:absolute; left:16px;
                 right:calc(50% + var(--sc-card-half, 430px) + 18px);
                 display:flex; align-items:stretch; gap:10px; margin:0;
                 z-index:70; }
-  #headerLeft > .hdr-btn { flex:0 0 auto; display:flex; align-items:center; }
-  #onAirBanner { flex:0 0 auto;
-                 background:#b00020; color:#fff; border-radius:10px;
-                 font-size:13px; font-weight:800; letter-spacing:0.06em;
-                 display:flex; align-items:center; justify-content:center;
-                 box-sizing:border-box; padding:0 14px; margin:0;
-                 animation:none; }
+
 
   /* THE TOP ROW: BROADCAST, HELP, CREW VIEW. One rule, so the three are
      the same height and the gaps between them are equal -- they used to
@@ -437,6 +437,52 @@
   #onAirBanner.hdr-btn { border-color:#b00020 !important; letter-spacing:0.04em !important;
                          animation:none !important; }
   a#launchViewLink.hdr-btn { border-color:#b00020 !important; }
+
+  /* PLACED AFTER .hdr-btn deliberately. Both rule sets use !important
+     and the ids should win on specificity alone -- but source order
+     removes any doubt, and the harness cannot settle the question
+     because jsdom's cascade is not reliable enough to trust here. */
+  /* BOTH CHILDREN FILL THE BLOCK, and are the same height as each other
+     and as the banner.
+     ---------------------------------------------------------------------
+     syncAir writes the banner's height onto #headerLeft, so the block is
+     one banner tall. With `flex:1` each the two split its width; with
+     align-items:stretch they take its full height. That is what makes the
+     left side read as one deliberate pair rather than two loose controls
+     floating in a tall empty box.
+
+     The .hdr-btn metrics are overridden INSIDE this block. That class is
+     shared with the three links on the right, which sit in a short row and
+     want 12px text on 5px padding -- correct there, and wrong in a
+     64px-tall tile, where it produced a small pill with a lot of air
+     around it. Reported as "no colouring, doesn't fill the space, ON AIR
+     taller than every other button". */
+  #headerLeft > * {
+    flex:1 1 0; min-width:0;
+    display:flex; align-items:center; justify-content:center;
+    box-sizing:border-box; margin:0 !important;
+    height:auto !important;
+    font-size:13px !important; line-height:1.2 !important;
+    padding:0 12px !important; border-radius:10px !important;
+    /* 0.06em, matching the three links on the right. An existing check
+       asserts the whole top row is one set of controls -- same font,
+       weight and tracking -- and 0.04em here broke it. */
+    font-weight:800; letter-spacing:0.06em; white-space:nowrap;
+    text-decoration:none; }
+
+  /* Dashboard, filled like the buttons on the right rather than left as a
+     bare link -- it was inheriting only the browser's anchor colour. */
+  #headerLeft > .hdr-btn {
+    background:var(--sc-navy, #1a1a2e); color:#fff !important;
+    border:1px solid var(--sc-navy, #1a1a2e) !important; }
+  #headerLeft > .hdr-btn:hover { background:#2a2a40; }
+
+  /* 2px, not 1px. The off-air state carries a 2px outline so the control
+     reads as a button when it is not lit, and an existing check asserts
+     it -- a 1px border here made the two states different box sizes and
+     the button jumped by a pixel when it was armed. */
+  #onAirBanner { background:#b00020; color:#fff; border:2px solid #b00020;
+                 animation:none; }
   /* A seeded picker and its "or type #" box on one line: the grid takes
      the room it needs, the box keeps its fixed width at the right. */
   /* ONE HORIZONTAL GAP FOR EVERY ROW OF CONTROLS.
