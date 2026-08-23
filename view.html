@@ -2412,10 +2412,52 @@ function extractNameTag(rawName){
       } catch (e) { /* offline or asleep -- try again on the next tick */ }
     }, POLL_MS);
 
+    // BRANDING GOES STALE TOO, and nothing was re-reading it.
+    // -------------------------------------------------------------------
+    // This page reads the teams row ONCE, in init(). Everything else on
+    // it updates live -- plays, score, drives, the clock -- so it reads
+    // as a live page, and a new team logo uploaded on the customize
+    // screen quietly did not arrive here while every other page showed
+    // it. Reported directly: "updated everywhere but the view screen."
+    //
+    // Throttled hard. Branding changes a few times a season and the
+    // spectator page can sit open for hours: re-reading it on the play
+    // poll would be a query every couple of seconds to learn nothing.
+    // Ten minutes, and on waking the tab, is far more often than a logo
+    // actually changes.
+    let lastBrandingCheck = Date.now();
+    async function refreshBranding(force){
+      if (!force && Date.now() - lastBrandingCheck < 600000) return;
+      lastBrandingCheck = Date.now();
+      try {
+        const { data } = await supabaseClient
+          .from('teams').select('primary_color, secondary_color, logo_url')
+          .eq('is_our_team', true).limit(1);
+        const b = (data && data[0]) || {};
+        if (!TEAMS.teamA) return;
+        // Only repaint when something actually differs -- a re-render on
+        // every check would fight the drive tiles for no reason.
+        const changed = TEAMS.teamA.logo !== (b.logo_url || null) ||
+                        TEAMS.teamA.bg !== (b.primary_color || '#1a1a2e');
+        if (!changed) return;
+        TEAMS.teamA.logo = b.logo_url || null;
+        TEAMS.teamA.bg = b.primary_color || '#1a1a2e';
+        TEAMS.teamA.text = b.secondary_color || '#ffffff';
+        renderAll();
+      } catch (e) { /* offline -- the next wake will try again */ }
+    }
+    setInterval(() => { if (!document.hidden) refreshBranding(false); }, 60000);
+    // Exposed so the suite can drive it: it lives inside init()'s scope
+    // like everything else here, and a test cannot reach it otherwise.
+    window.__refreshBranding = refreshBranding;
+
     // Coming back to the tab is the most likely moment to be stale, so
     // reconcile immediately rather than waiting for the next tick.
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) reloadPlaysAndRender().catch(() => {});
+      if (!document.hidden){
+        reloadPlaysAndRender().catch(() => {});
+        refreshBranding(true);
+      }
     });
   }
 </script>
