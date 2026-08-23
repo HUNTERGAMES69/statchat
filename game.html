@@ -7256,126 +7256,110 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const acts = document.getElementById('topActions');
     const air  = document.getElementById('onAirBanner');
     const rail = document.getElementById('rightRail');
-    if (!acts) return;
+    if (!left || !acts) return;
+
+    // THE THREE LINKS MOVE INDIVIDUALLY, NOT THEIR WRAPPER.
+    // -------------------------------------------------------------------
+    // Moving #topActions itself put a nested flex CONTAINER inside the
+    // row. Squeezed for width it stacked its own three buttons into a
+    // column, and align-items:stretch then made Dashboard and ON AIR as
+    // tall as that column -- two huge tiles beside a narrow stack. That
+    // was the picture Andy sent.
+    //
+    // Moving the links themselves gives one flat row of five, which wraps
+    // as a row should. Each remembers where it came from so desktop is
+    // put back exactly.
+    // BY ID, not by reading acts.children.
+    // -------------------------------------------------------------------
+    // Reading the wrapper's children works once. After the touch branch
+    // has moved them out, the wrapper is EMPTY -- so on the way back to
+    // desktop the list came up empty and nothing was returned. The links
+    // stayed in the header row at every width.
+    const links = ['broadcastFab', 'helpFab', 'launchViewLink']
+      .map(id => document.getElementById(id)).filter(Boolean);
+    links.forEach(el => {
+      if (!el.__home) el.__home = { parent: acts, next: null };
+    });
+
+    // removeProperty on a SHORTHAND does not clear the longhands it
+    // expanded into -- `margin` set with setProperty leaves margin-top,
+    // -right, -bottom and -left behind, each still !important. They have
+    // to be named. This bit them on the way back to desktop: the row kept
+    // its tablet margins and flex.
+    const clear = (el, names) => {
+      if (!el) return;
+      const LONG = {
+        margin: ['margin-top','margin-right','margin-bottom','margin-left'],
+        flex: ['flex-grow','flex-shrink','flex-basis'],
+        inset: ['top','right','bottom','left']
+      };
+      names.forEach(n => {
+        el.style.removeProperty(n);
+        (LONG[n] || []).forEach(x => el.style.removeProperty(x));
+      });
+    };
 
     if (touch){
-      // ONE WRAPPING ROW. Everything static, so nothing can overlap, and
-      // wrap:wrap so a narrow screen gets a second line rather than
-      // controls sliding off the right edge.
-      [left, acts].forEach(el => {
-        if (!el) return;
-        el.style.position = 'static';
-        el.style.left = el.style.right = el.style.top = '';
-        el.style.height = 'auto';
-        el.style.width = 'auto';
-        el.style.display = 'flex';
-        el.style.flexWrap = 'wrap';
-        // STRETCH, not centre. Centring lets each control keep its own
-        // natural height, and Dashboard carries .hdr-btn's smaller padding
-        // (5px/12px) while ON AIR runs to two lines -- so the row came out
-        // ragged with Dashboard visibly short. Stretching makes every
-        // control match the tallest, whatever that happens to be, rather
-        // than hardcoding a height that would drift when a label changes.
-        // setProperty with 'important', because a plain inline style still
-        // loses to an !important stylesheet rule -- and this row has
-        // several. Belt and braces: whatever else is declared for these
-        // two elements, the row stretches.
-        el.style.setProperty('align-items', 'stretch', 'important');
-        el.style.gap = '8px';
-        el.style.margin = '0 0 8px';
-      });
-      if (air){
-        air.style.position = 'static';
-        air.style.left = air.style.right = air.style.top = '';
-        air.style.height = 'auto';
-      }
-      // Each control keeps its own width and may shrink before the row
-      // wraps. Explicitly NOT stretched: five stretched controls on a
-      // 768px screen is what produced the overlap.
-      [left, acts].forEach(el => {
-        if (!el) return;
-        [...el.children].forEach(c => {
-          c.style.position = 'static';
-          c.style.top = '';
-          c.style.height = 'auto';
-          c.style.flex = '0 1 auto';
-          c.style.margin = '0';
-          // The control is now as tall as the row, so its own label has to
-          // centre itself inside that height or it sits at the top.
-          c.style.display = 'flex';
-          c.style.flexDirection = 'column';
-          c.style.alignItems = 'center';
-          c.style.justifyContent = 'center';
-        });
+      links.forEach(el => { if (el.parentNode !== left) left.appendChild(el); });
+      // The wrapper is now empty; hidden so it cannot take a gap or a
+      // margin of its own in the flow.
+      acts.style.display = 'none';
+
+      left.style.setProperty('position', 'static', 'important');
+      ['left','right','top','height','width'].forEach(k => left.style.removeProperty(k));
+      left.style.setProperty('display', 'flex', 'important');
+      left.style.setProperty('flex-wrap', 'wrap', 'important');
+      // STRETCH so all five match the tallest -- ON AIR runs to two lines
+      // and Dashboard carries smaller padding, so centring left the row
+      // visibly ragged.
+      left.style.setProperty('align-items', 'stretch', 'important');
+      left.style.setProperty('gap', '8px', 'important');
+      left.style.setProperty('margin', '0 0 10px', 'important');
+
+      [...left.children].forEach(c => {
+        c.style.setProperty('position', 'static', 'important');
+        ['top','left','right','height','width'].forEach(k => c.style.removeProperty(k));
+        // Content-sized, shrinkable, never stretched to fill the row --
+        // five stretched controls on a 768px screen is what overlapped.
+        c.style.setProperty('flex', '0 1 auto', 'important');
+        c.style.setProperty('margin', '0', 'important');
+        // Its own label centred inside whatever height the row settles on.
+        c.style.setProperty('display', 'flex', 'important');
+        c.style.setProperty('flex-direction', 'column', 'important');
+        c.style.setProperty('align-items', 'center', 'important');
+        c.style.setProperty('justify-content', 'center', 'important');
       });
     } else {
-      // DESKTOP. Clear everything the touch branch may have set, then give
-      // the action row the same span as the rail beneath it so the two
-      // line up -- the thing the stylesheet was meant to do and did not.
-      [left, acts, air].forEach(el => {
-        if (!el) return;
-        ['position','left','right','top','height','width','display',
-         'flexWrap','alignItems','gap','margin'].forEach(k => { el.style[k] = ''; });
+      // DESKTOP. Put the links back, clear everything the touch branch set.
+      links.forEach(el => {
+        if (el.__home.parent && el.parentNode !== el.__home.parent){
+          el.__home.parent.insertBefore(el, el.__home.next);
+        }
       });
-      [left, acts].forEach(el => {
-        if (!el) return;
-        [...el.children].forEach(c => {
-          ['position','top','height','flex','margin','display',
-           'flexDirection','alignItems','justifyContent'].forEach(k => { c.style[k] = ''; });
-        });
-      });
+      acts.style.removeProperty('display');
+      const RESET = ['position','left','right','top','height','width','display',
+                     'flex-wrap','align-items','gap','margin','flex',
+                     'flex-direction','justify-content'];
+      [left, air, acts].forEach(el => clear(el, RESET));
+      [...left.children, ...acts.children].forEach(c => clear(c, RESET));
+      // The action row spans the rail beneath it, measured from the rail
+      // itself so the two cannot drift apart.
       if (rail){
-        // Measured from the rail itself rather than recomputed from the
-        // card width, so the two cannot drift apart.
         const r = rail.getBoundingClientRect();
-        acts.style.position = 'absolute';
-        acts.style.left = Math.round(r.left) + 'px';
-        acts.style.width = Math.round(r.width) + 'px';
-        acts.style.right = 'auto';
-        acts.style.display = 'flex';
-        acts.style.gap = '8px';
-        [...acts.children].forEach(c => { c.style.flex = '1 1 auto'; });
+        if (r.width > 0){
+          acts.style.position = 'absolute';
+          acts.style.left = Math.round(r.left) + 'px';
+          acts.style.width = Math.round(r.width) + 'px';
+          acts.style.right = 'auto';
+          acts.style.display = 'flex';
+          acts.style.gap = '8px';
+          [...acts.children].forEach(c => { c.style.flex = '1 1 auto'; });
+        }
       }
     }
   }
   window.addEventListener('resize', layoutHeader);
 
-  // THE HEADER ROW IS ASSEMBLED AT TABLET WIDTH.
-  // ---------------------------------------------------------------------
-  // #onAirBanner is a child of #mainView and #topActions is a child of
-  // <body>, written at the foot of the file. On desktop both are
-  // position:absolute so their source position is invisible -- but below
-  // 1220 they drop to static and flow where they are written, which put
-  // the Broadcast/Help/Crew view links at the very BOTTOM of the page and
-  // gave ON AIR a whole row of its own under the header.
-  //
-  // CSS `order` cannot fix that: it only sorts SIBLINGS, and these three
-  // live in three different parents. So they are physically moved into
-  // #headerLeft, and moved back above 1220.
-  //
-  // Their original position is remembered on first move, so going back is
-  // exact rather than an append -- the same approach the fake-kick
-  // calculator uses, and for the same reason.
-  function layoutHeaderForWidth(){
-    const meta = document.getElementById('headerLeft');
-    if (!meta) return;
-    const tablet = window.innerWidth <= 1219;
-    ['onAirBanner', 'topActions'].forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      if (!el.__home){
-        el.__home = { parent: el.parentNode, next: el.nextSibling };
-      }
-      if (tablet){
-        if (el.parentNode !== meta) meta.appendChild(el);
-      } else if (el.parentNode !== el.__home.parent && el.__home.parent){
-        el.__home.parent.insertBefore(el, el.__home.next);
-      }
-    });
-  }
-  window.addEventListener('resize', layoutHeaderForWidth);
-  window.addEventListener('resize', () => setTimeout(layoutHeader, 0));
-  layoutHeaderForWidth();
   layoutHeader();
 
   function wireExclusiveToggles(ids, afterChange){
