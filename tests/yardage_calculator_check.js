@@ -381,6 +381,26 @@ async function run() {
     if (kick !== '44') {
       fail('fgfakecalc:kick', 'the kick distance must not move, got ' + JSON.stringify(kick));
     }
+
+    // AND IT SITS BESIDE THE YARDS COLUMN, not under it. The row is
+    // authored flex-wrap:wrap and set to nowrap at runtime by the layout
+    // pass -- which walked up from #pp_yards only, so the FAKE panels
+    // (pp_fgfake_yards, pp_puntfake_yards) were never found and their
+    // calculator dropped onto its own line below the 0-9 pad. Every other
+    // tree had it on the right.
+    Object.defineProperty(win, 'innerWidth', { value: 1600, configurable: true });
+    win.dispatchEvent(new win.Event('resize'));
+    await new Promise(r => setTimeout(r, 150));
+    let row = doc.getElementById('pp_fgfake_yards').parentElement, found = null;
+    while (row && row.id !== 'playPanel') {
+      if (win.getComputedStyle(row).display === 'flex' && row.children.length > 1) { found = row; break; }
+      row = row.parentElement;
+    }
+    if (!found) fail('fgfakecalc:row', 'no flex row around the fake yards column');
+    else if (win.getComputedStyle(found).flexWrap !== 'nowrap') {
+      fail('fgfakecalc:wrap',
+        'the calculator should sit beside the yards column, not wrap below it');
+    }
     h.close();
   }
 

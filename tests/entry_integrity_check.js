@@ -584,9 +584,16 @@ async function run() {
     setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
     enterPlay(h, { type: 'rush', carrier: '22', yards: '6' });
 
-    // Nothing marked: all three later quarters named, and listed
-    // readably rather than as "Q2 and Q3 and Q4".
-    let issues = JSON.parse(h.evalIn('JSON.stringify(validateGame())'));
+    // AT FINALIZE the bar is all four quarters. Live it is only the
+    // quarter the game has reached -- the first version of this check
+    // warned "Q2, Q3 and Q4 were never started" one play into Q1, which
+    // is true and useless, and made the Checks panel cry wolf on every
+    // game from the first snap. right_rail_check caught it.
+    let live = JSON.parse(h.evalIn('JSON.stringify(validateGame())'));
+    if (live.some(i => /never started/.test(i))) {
+      fail('quarters:premature', 'a game still in Q1 should not warn about later quarters: ' + live.join(' | '));
+    }
+    let issues = JSON.parse(h.evalIn('JSON.stringify(validateGame(true))'));
     let q = issues.find(i => /never started/.test(i));
     if (!q) fail('quarters:none', 'a game with no quarter markers should warn');
     else if (!/Q2, Q3 and Q4/.test(q)) fail('quarters:list', 'expected "Q2, Q3 and Q4", got: ' + q);
@@ -613,7 +620,7 @@ async function run() {
       await new Promise(r => setTimeout(r, 150));
       click(win, doc.getElementById('saveBtn'));
       await new Promise(r => setTimeout(r, 220));
-      issues = JSON.parse(h.evalIn('JSON.stringify(validateGame())'));
+      issues = JSON.parse(h.evalIn('JSON.stringify(validateGame(true))'));
       q = issues.find(i => /never started/.test(i)) || '';
       if (/Q2/.test(q)) fail('quarters:stale', 'Q2 is marked now and should not be listed: ' + q);
       if (!/Q3 and Q4/.test(q)) fail('quarters:narrow', 'expected Q3 and Q4 to remain, got: ' + q);
