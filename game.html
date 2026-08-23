@@ -5834,7 +5834,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const on = grKoRetFumCb.checked;
           document.getElementById('gr_ko_ret_fum_wrap').style.display = on ? 'block' : 'none';
           const kickingRecoversFum = on && content.querySelector('input[name=gr_koret_fumrec]:checked').value === 'k';
-          document.getElementById('gr_koretfumspot_wrap').style.display = kickingRecoversFum ? 'block' : 'none';
+          document.getElementById('gr_koretfumspot_wrap').style.display = kickingRecoversFum ? '' : 'none';
           // AND HIDE THE GENERAL ONE. Two spot fields were on screen at
           // once when the kicking team recovered the fumble, and they
           // contradicted each other: this branch's own field asked where
@@ -10086,12 +10086,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('pp_ko_muff').style.display = muffed ? 'block' : 'none';
         const kickingRecovers = muffed &&
           document.querySelector('input[name=pp_ko_muffrec]:checked').value === 'k';
-        document.getElementById('pp_ko_muff_spot_wrap').style.display = kickingRecovers ? 'block' : 'none';
+        document.getElementById('pp_ko_muff_spot_wrap').style.display = kickingRecovers ? '' : 'none';
         // Hidden only when the KICKING team recovers -- that flow has its
         // own spot field. A receiving-team recovery is an ordinary change
         // of possession and still needs the general one.
         const genSpotKo = document.getElementById('pp_spot_wrap');
-        if (genSpotKo) genSpotKo.style.display = (kickingRecovers || onside) ? 'none' : 'block';
+        if (genSpotKo) genSpotKo.style.display = (kickingRecovers || onside) ? 'none' : '';
         if (tb) prefillTouchbackSpot(panel, 'pp_spot');
         // NFHS: a free kick out of bounds untouched gives the receiving
         // team the ball at their own 35. Pre-filled rather than merely
@@ -10112,11 +10112,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('pp_ko_ret_fum_wrap').style.display = retFumbled ? 'block' : 'none';
         const retFumKickingRecovers = retFumbled &&
           document.querySelector('input[name=pp_koret_fumrec]:checked').value === 'k';
-        document.getElementById('pp_koretfumspot_wrap').style.display = retFumKickingRecovers ? 'block' : 'none';
+        document.getElementById('pp_koretfumspot_wrap').style.display = retFumKickingRecovers ? '' : 'none';
         // Receiving-team recovery reuses the panel's OWN takeover-spot
         // field -- it is already exactly this question, in their frame,
         // for the same reason it exists on an unfumbled return.
-        if (genSpotKo && retFumbled) genSpotKo.style.display = retFumKickingRecovers ? 'none' : 'block';
+        if (genSpotKo && retFumbled) genSpotKo.style.display = retFumKickingRecovers ? 'none' : '';
         currentSpotGetter = onside ? koOnsideSpotGetter
           : kickingRecovers ? koMuffSpotGetter
           : retFumKickingRecovers ? koFumSpotGetter
@@ -10250,17 +10250,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('pp_punt_muffed').style.display = muffed ? 'block' : 'none';
         const kickingRecovers = muffed &&
           document.querySelector('input[name=pp_punt_muffrec]:checked').value === 'k';
-        document.getElementById('pp_muff_spot_wrap').style.display = kickingRecovers ? 'block' : 'none';
+        document.getElementById('pp_muff_spot_wrap').style.display = kickingRecovers ? '' : 'none';
         // The muff section carries its own spot field, so the panel's
         // general one would be a second request for the same yard line.
         // Hidden only when the KICKING team recovers -- that flow has its
         // own spot field. A receiving-team recovery is an ordinary change
         // of possession and still needs the general one.
-        const genSpot = document.getElementById('pp_spot_wrap');
+        // '' not 'block' -- see the note on the spot rows below.
+      const genSpot = document.getElementById('pp_spot_wrap');
         // Hidden on a FAKE as well: a fake is a scrimmage play, so it ends
         // where the run or pass ended and there is no takeover spot to
         // ask for. The fake panel collects its own yardage.
-        if (genSpot) genSpot.style.display = (kickingRecovers || fake) ? 'none' : 'block';
+        // '' NOT 'block'. pp_spot_wrap is a .spot-row, which the
+        // stylesheet makes display:flex -- an inline 'block' replaces
+        // that, the row stops being a flex container, and `gap` is
+        // ignored entirely. That is why the punt spot buttons sat
+        // flush against each other and against the label while every
+        // other row on the same panel was correctly spaced. Reported
+        // three times before it was found, because the CSS was right
+        // and only the inline override was wrong.
+        if (genSpot) genSpot.style.display = (kickingRecovers || fake) ? 'none' : '';
         // A fumble during the return is independent of the muff branch
         // above -- the ball was fielded cleanly here, which is the whole
         // difference -- so it is checked and wired the same way, wholly
@@ -10270,12 +10279,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('pp_ret_fum_wrap').style.display = retFumbled ? 'block' : 'none';
         const retFumKickingRecovers = retFumbled &&
           document.querySelector('input[name=pp_puntret_fumrec]:checked').value === 'k';
-        document.getElementById('pp_retfumspot_wrap').style.display = retFumKickingRecovers ? 'block' : 'none';
+        document.getElementById('pp_retfumspot_wrap').style.display = retFumKickingRecovers ? '' : 'none';
         // Receiving-team recovery reuses the panel's OWN takeover-spot
         // field (pp_spot) -- it is already exactly this question, in
         // their frame, for the same reason it exists on a clean return.
         // Only the kicking-team-recovers case needs a field of its own.
-        if (genSpot && retFumbled) genSpot.style.display = retFumKickingRecovers ? 'none' : 'block';
+        if (genSpot && retFumbled) genSpot.style.display = retFumKickingRecovers ? 'none' : '';
         currentSpotGetter = kickingRecovers ? muffSpotGetter
           : retFumKickingRecovers ? retFumSpotGetter
           : puntSpotGetter;
@@ -10298,7 +10307,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // spot to give, because the next thing is a free kick.
         const muffSafetyOn = !!(muffSafetyCb && muffSafetyCb.checked);
         const mSpot = document.getElementById('pp_muff_spot_wrap');
-        if (mSpot) mSpot.style.display = (kickingRecovers && !muffSafetyOn) ? 'block' : 'none';
+        if (mSpot) mSpot.style.display = (kickingRecovers && !muffSafetyOn) ? '' : 'none';
         // Either safety hides the general takeover spot as well. A free
         // kick follows, so asking where the next drive starts is asking
         // about a play that has not happened yet.
