@@ -234,21 +234,36 @@
      row, ON AIR to the left margin, CREW VIEW to the top-right border --
      so the row itself is now empty and would only contribute margin. */
   #entryHeaderRow { display:none !important; }
-  /* Dashboard and ON AIR share the top-left block. ON AIR sizes to its
-     own label now rather than stretching -- it was a wide bar with a short
-     word in the middle, and that width buys nothing. */
-  #headerLeft { display:flex; align-items:center; gap:10px; margin:6px 0; }
-  #headerLeft #onAirBanner { width:auto; flex:0 0 auto; }
+  /* Dashboard and ON AIR share the top-left block. The positioned rule
+     for #headerLeft is further down, beside the banner geometry it is
+     measured against. */
 
   /* ON AIR in the LEFT margin, level with the banner and the same height
      as it. Height is set by script from the banner rather than written
      here: the banner's height depends on its own content and font, and a
      hardcoded value would drift. */
-  #onAirBanner { position:absolute; left:16px; right:calc(50% + var(--sc-card-half, 430px) + 18px);
+  /* THE BLOCK IS POSITIONED, NOT THE BUTTON.
+     ---------------------------------------------------------------------
+     #onAirBanner used to carry the absolute position itself and stretch
+     from the page edge to the banner. Wrapping it in #headerLeft to sit
+     Dashboard beside it therefore changed nothing -- an absolutely
+     positioned child ignores its parent's flex layout, so ON AIR stayed
+     where it was and Dashboard dropped into the flow on a row of its own.
+     Reported: "top bar is a jumbled mess, and dashboard didn't move".
+
+     So #headerLeft takes the position and the two children lay out inside
+     it normally. ON AIR sizes to its label rather than stretching, which
+     is what leaves room for Dashboard next to it. */
+  #headerLeft { position:absolute; left:16px;
+                right:calc(50% + var(--sc-card-half, 430px) + 18px);
+                display:flex; align-items:stretch; gap:10px; margin:0;
+                z-index:70; }
+  #headerLeft > .hdr-btn { flex:0 0 auto; display:flex; align-items:center; }
+  #onAirBanner { flex:0 0 auto;
                  background:#b00020; color:#fff; border-radius:10px;
                  font-size:13px; font-weight:800; letter-spacing:0.06em;
                  display:flex; align-items:center; justify-content:center;
-                 box-sizing:border-box; padding:0 10px; margin:0; z-index:70;
+                 box-sizing:border-box; padding:0 14px; margin:0;
                  animation:none; }
 
   /* THE TOP ROW: BROADCAST, HELP, CREW VIEW. One rule, so the three are
@@ -311,6 +326,7 @@
   /* Under the dock breakpoint the margins vanish, so both come back into
      the flow rather than overlapping the card. */
   @media (max-width: 1219px) {
+    #headerLeft { position:static !important; left:auto; right:auto; }
     #onAirBanner { position:static !important; left:auto; right:auto;
                    height:auto !important; top:auto !important;
                    padding:6px 12px; margin:0 0 8px; }
