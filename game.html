@@ -7705,7 +7705,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Which way is ' + TEAMS[off].name + ' kicking?</p>' +
         '<button type="button" class="koDirBtn" data-dir="left">&#8592; left</button> ' +
         '<button type="button" class="koDirBtn" data-dir="right">right &#8594;</button>' +
-        '<div id="pp_ko_ret_wrap">' + retBlock('Returned by (optional)') + '</div>' +
+        // THE WHOLE RETURN GROUP COLLAPSES, as on the punt tree.
+        // ----------------------------------------------------------------
+        // The returner picker, return yards, the fielded/returned-to
+        // calculators and the fumble toggle are all one question: what
+        // happened to the return. On a touchback, an onside kick, a muff
+        // or a kick out of bounds there IS no return, and none of them
+        // apply -- but they were all open regardless.
+        //
+        // Wrapped as ONE collapsible group rather than two, because
+        // refreshKoMode below drives visibility by id and two wrappers
+        // would give it two things to keep in step with the toggle.
+        //
+        // The GUIDED kickoff is untouched: it builds its own panel from
+        // renderGuided and shares none of this markup.
+        '<div id="pp_ko_return_group" class="opt-block">' +
+          '<button type="button" class="opt-toggle">+ Returned</button>' +
+          '<div class="opt-body">' +
+        '<div id="pp_ko_ret_wrap">' + retBlock('Returned by') + '</div>' +
         // Touchback and Muffed sit beside the return-yards box, because
         // they are the two answers to "what happened to the return" --
         // Touchback used to live up beside the returner picker, a whole
@@ -7776,6 +7793,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             '<div id="pp_koretfumspot_wrap" style="display:none;">' + startingSpotFieldsHtml('pp_koretfumspot', 'Spot where the kicking team took over (required)', off) + '</div>' +
           '</div>' +
         '</div>' +
+          // closes .opt-body and #pp_ko_return_group
+          '</div>' + '</div>' +
         '<div style="display:flex; gap:8px; flex-wrap:nowrap; margin-bottom:6px;">' +
           ['pp_ko_touchback|Touchback', 'pp_ko_muffed|Muff / Fumble',
            'pp_ko_onside|Onside kick', 'pp_ko_oob|Out of bounds']
@@ -9356,8 +9375,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (oBox) oBox.style.display = onside ? 'block' : 'none';
         // Out of bounds has no returner and no return yardage for the
         // same reason a touchback does not: nobody touched the ball.
-        document.getElementById('pp_ko_ret_wrap').style.display = (tb || muffed || onside || oob) ? 'none' : 'block';
-        document.getElementById('pp_ret_yds_wrap').style.display = (tb || muffed || onside || oob) ? 'none' : 'block';
+        // THE GROUP, not the two blocks inside it. Setting display on the
+        // inner wrappers fought the collapse: the toggle hides the body
+        // and this would show the children inside a hidden parent, or
+        // reveal them when the group was meant to be shut.
+        const koRetGroup = document.getElementById('pp_ko_return_group');
+        if (koRetGroup) koRetGroup.style.display = (tb || muffed || onside || oob) ? 'none' : 'block';
         document.getElementById('pp_ko_muff').style.display = muffed ? 'block' : 'none';
         const kickingRecovers = muffed &&
           document.querySelector('input[name=pp_ko_muffrec]:checked').value === 'k';
@@ -9977,7 +10000,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       panel.querySelectorAll('.opt-block').forEach(block => {
         const btn = block.querySelector('.opt-toggle');
         const label = btn ? btn.textContent.replace(/^\+\s*/, '') : '';
-        const seeded = block.querySelector('button.picked, button.suggested') ||
+        // A PICKED PLAYER, not any picked button. The test used to match
+        // button.picked anywhere in the block, and the kickoff return
+        // group contains a spot calculator whose side button is
+        // pre-selected by default -- so the group auto-opened on every
+        // kickoff, which is the opposite of collapsing it.
+        //
+        // A side button is a default the app chose; a credit is something
+        // the scorer or a re-entry chose, and only the second is worth
+        // opening a collapsed block to reveal.
+        const seeded = block.querySelector('button[class*="_pick"].picked, ' +
+                                           'button[class*="_pick"].suggested') ||
                        (block.querySelector('input') || {}).value;
         if (seeded) block.classList.add('open');
         if (btn) btn.addEventListener('click', () => {
