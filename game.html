@@ -7956,6 +7956,36 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
               '<button type="button" class="lossToggle ptoggle" data-for="' + idPrefix + '_yards" ' +
                 'style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">LOSS</button>' +
             '</span>' +
+            // THE 0-9 PAD. A fake is a rush or a pass, so it gets the same
+            // yardage entry as one -- it had the box and the LOSS toggle
+            // and nothing else, which is the one tree where a scorer had
+            // to reach for a keyboard.
+            //
+            // Nested INSIDE the yards column, not appended after the flex
+            // row: same reason as the rush tree, so it hugs the box it
+            // belongs to instead of dropping to the bottom of whichever
+            // column happens to be tallest.
+            quickYardageHtml(idPrefix + '_yards') +
+            // NO CALCULATOR ON A FAKE FIELD GOAL, unlike the fake punt.
+            // -----------------------------------------------------------
+            // The punt panel owns a pp_calc_wrap already ("Or enter
+            // downed/received on") and its fake borrows it. The field
+            // goal panel has none, because a kick that is not faked has
+            // nothing to calculate.
+            //
+            // Giving it a hidden one so the fake could borrow it was
+            // tried on 23 Aug and REVERTED: the calculator's resting
+            // target is pp_yards, which on this panel is the KICK
+            // DISTANCE, and merely wiring it there overwrote a blocked
+            // kick's 44 yards with the 60-yard return. The golden
+            // snapshot caught it. Scoping the target was not enough --
+            // the value still moved, and the cause was not fully
+            // understood, so the change came out rather than shipping
+            // half-diagnosed.
+            //
+            // Whoever picks this up: the fix is to give the fake its OWN
+            // calculator with its own ids, not to retarget the shared
+            // one. Two controls that cannot collide.
           '</div>' +
           '<div id="' + idPrefix + '_calc_slot"></div>' +
         '</div>' +
