@@ -7685,52 +7685,32 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // need a container to disambiguate it.
       document.querySelectorAll('.quickYardsBtn[data-for="' + forId + '"]').forEach(btn => {
         const on = btn.dataset.yds === val;
-        // LITERAL COLOURS, not var(). A custom property in a JS-set inline
-        // style is one more thing that can quietly resolve to nothing, and
-        // when it does the assignment fails silently and the key stays
-        // white -- indistinguishable from the feature not working. There
-        // is no theming to inherit here; the value is the value.
-        //
-        // setProperty with 'important' for the same reason: these keys
-        // carry their colours inline from the markup, and anything that
-        // re-renders or re-styles them must not quietly win.
-        btn.style.setProperty('background', on ? '#1a1a2e' : '#ffffff', 'important');
-        btn.style.setProperty('color', on ? '#ffffff' : '#1a1a2e', 'important');
-        // A HEAVIER BORDER as well as the fill. Colour alone is a weak
-        // signal on a glare-washed sideline screen, and it is the only
-        // signal a colour-blind scorer would have.
-        btn.style.setProperty('border',
-          on ? '2px solid #1a1a2e' : '1px solid #cccccc', 'important');
-        btn.style.setProperty('font-weight', on ? '800' : '700', 'important');
-        // SIZE AS WELL AS COLOUR, and the size is the part that carries.
+        // THE STANDARD GOLD, exactly as every other selected control.
         // -----------------------------------------------------------
-        // Three colour-only versions were reported as "no change" -- each
-        // verified deployed, unopposed by any CSS, and confirmed setting
-        // the style. The code was right every time; a navy fill on a 36px
-        // key simply is not legible as feedback on a sideline screen. The
-        // moment it also changed size it read instantly.
+        // `button.picked` is #ffc72c with an inset 2px #8a6a00 ring, and
+        // that is what a scorer already reads as "this one is chosen"
+        // everywhere else on the page. Earlier versions of this used a
+        // navy fill and a size change; both were wrong -- the navy did
+        // not match anything, and growing the key made it the only
+        // control on the page that moves when pressed.
         //
-        // Keep both. Colour alone is weak in glare and is the only signal
-        // a colour-blind scorer would have; size alone loses the match
-        // with every other selected control on the page.
-        //
-        // 1.12, not more. The grid is 36px keys on a 4px gap, so a scaled
-        // key eats into that gap: 1.12 grows it 2.2px a side and stays
-        // clear, where 1.18 was 3.2px and all but touching its
-        // neighbours.
-        //
-        // position/z-index because a transformed grid item is otherwise
-        // painted in source order -- the keys after it would clip the
-        // corners of the one that just grew.
-        btn.style.setProperty('transform', on ? 'scale(1.12)' : 'none', 'important');
-        btn.style.setProperty('position', on ? 'relative' : 'static', 'important');
-        btn.style.setProperty('z-index', on ? '2' : 'auto', 'important');
+        // Values repeated here rather than toggling the class, because
+        // these keys carry their colours as INLINE styles from the markup
+        // and an inline style beats any class. Same colours, so they stay
+        // in step: if the shared gold ever changes, this changes with it.
+        btn.style.setProperty('background', on ? '#ffc72c' : '#ffffff', 'important');
+        btn.style.setProperty('color', '#1a1a2e', 'important');
         btn.style.setProperty('box-shadow',
-          on ? '0 0 0 2px #1a1a2e' : 'none', 'important');
-        // A short ease so the change is perceived as a response to the
-        // tap rather than a redraw. Cheap, and it is the difference
-        // between "it lit up" and "something moved".
-        btn.style.setProperty('transition', 'transform 90ms ease-out', 'important');
+          on ? 'inset 0 0 0 2px #8a6a00' : 'none', 'important');
+        btn.style.setProperty('border',
+          on ? '1px solid #8a6a00' : '1px solid #cccccc', 'important');
+        btn.style.setProperty('font-weight', on ? '800' : '700', 'important');
+        // NO SIZE CHANGE. Explicitly cleared rather than merely not set,
+        // so a key enlarged by the earlier version cannot stay that way.
+        btn.style.setProperty('transform', 'none', 'important');
+        btn.style.removeProperty('position');
+        btn.style.removeProperty('z-index');
+        btn.style.removeProperty('transition');
       });
     };
     panel.querySelectorAll('.quickYardsBtn').forEach(b => b.addEventListener('click', () => {

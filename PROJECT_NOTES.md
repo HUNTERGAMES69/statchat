@@ -2446,16 +2446,24 @@ inline style. The code was right every time. A navy fill on a 36px key
 simply was not legible as feedback on that screen; the moment it also
 changed SIZE it read instantly.
 
-Final form: navy fill, white text, a 2px ring, and `scale(1.12)`. Not
-1.18 -- the grid is 36px keys on a 4px gap, so a scaled key eats into
-that gap, and 1.18 grew it 3.2px a side and all but touched its
-neighbours. The lit key also takes `position:relative; z-index:2`,
-because a transformed grid item is otherwise painted in source order and
-the keys after it clip the corners of the one that grew.
+**Final form: the standard gold, and no size change.** `button.picked` is
+#ffc72c with an inset 2px #8a6a00 ring, and that is what a scorer already
+reads as "chosen" everywhere else on the page.
 
-The scale is asserted in the tests, not left as a nicety: it is the part
-that actually communicates, and colour alone has now been demonstrated
-insufficient three times.
+Two intermediate versions were wrong and are worth naming. A NAVY fill
+matched nothing else on the page -- it was reached by asking "what will
+be visible" instead of "what does selected already look like here". And
+GROWING the key made it the only control in the app that moves when
+pressed; it read as an animation rather than a state, and on a 36px grid
+with a 4px gap it crowded its neighbours.
+
+The values are repeated in script rather than toggling the class, because
+these keys carry their colours as inline styles from the markup and an
+inline style beats any class. Same colours as the shared rule, so they
+stay in step.
+
+Asserted in the tests: the gold, the inset ring, and that the key does
+NOT change size.
 
 Two real bugs did surface on the way, both worth remembering:
 
