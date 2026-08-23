@@ -7300,6 +7300,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // stayed in the header row at every width.
     const links = ['broadcastFab', 'helpFab', 'launchViewLink']
       .map(id => document.getElementById(id)).filter(Boolean);
+
+    // COLOUR SET FROM SCRIPT, at every width.
+    // -------------------------------------------------------------------
+    // These are plain <a> elements, so with no author rule winning they
+    // fall back to the browser's default link colours -- purple once
+    // visited, which is what Andy kept seeing on Help and Crew view.
+    //
+    // The stylesheet rule for them looks correct and is not overridden by
+    // anything I can find, yet the browser disagrees. Rather than keep
+    // guessing at a cascade I cannot observe, it is set here: an inline
+    // !important beats every stylesheet, so this holds whatever else is
+    // declared. Cheap, and it removes a whole class of doubt.
+    links.forEach(el => {
+      el.style.setProperty('color', '#fff', 'important');
+      el.style.setProperty('text-decoration', 'none', 'important');
+    });
     links.forEach(el => {
       if (!el.__home) el.__home = { parent: acts, next: null };
     });
@@ -7641,12 +7657,53 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   }
 
   function wireQuickYardageButtons(panel){
+    // THE PRESSED DIGIT LIGHTS UP.
+    // ---------------------------------------------------------------------
+    // Reported: pressing a number gave no feedback beyond the value
+    // appearing in the box, which on a touchscreen leaves a scorer unsure
+    // whether the tap registered at all -- and the box is not always where
+    // they are looking.
+    //
+    // A LIT STATE rather than a flash, because a press REPLACES the value
+    // rather than appending to it: the box holds exactly one digit, so the
+    // lit button is an accurate picture of what is entered, not just an
+    // acknowledgement that something happened.
+    //
+    // Painted from script, not by toggling a class: these buttons carry
+    // their colours as INLINE styles, and an inline style beats any class.
+    // Repainting inline is the only thing that reliably wins.
+    const paintQuickYards = (forId) => {
+      const input = document.getElementById(forId);
+      if (!input) return;
+      // A leading minus is the LOSS toggle's doing -- "-7" is still a 7 on
+      // the pad, so it lights.
+      const val = String(input.value || '').trim().replace(/^-/, '');
+      panel.querySelectorAll('.quickYardsBtn[data-for="' + forId + '"]').forEach(btn => {
+        const on = btn.dataset.yds === val;
+        btn.style.background = on ? 'var(--sc-navy, #1a1a2e)' : '#fff';
+        btn.style.color = on ? '#fff' : '#1a1a2e';
+        btn.style.borderColor = on ? 'var(--sc-navy, #1a1a2e)' : '#ccc';
+        btn.style.fontWeight = on ? '800' : '700';
+      });
+    };
     panel.querySelectorAll('.quickYardsBtn').forEach(b => b.addEventListener('click', () => {
       const input = document.getElementById(b.dataset.for);
       if (!input) return;
       input.value = b.dataset.yds;
       input.dispatchEvent(new Event('input', { bubbles: true }));
+      paintQuickYards(b.dataset.for);
     }));
+    // AND IT FOLLOWS THE BOX, however the box changes -- typed by hand,
+    // filled by the yardage calculator, cleared on collapse, or flipped by
+    // LOSS. A lit digit that disagreed with the value would be worse than
+    // no indicator at all.
+    [...new Set([...panel.querySelectorAll('.quickYardsBtn')].map(b => b.dataset.for))]
+      .forEach(forId => {
+        const input = document.getElementById(forId);
+        if (!input) return;
+        input.addEventListener('input', () => paintQuickYards(forId));
+        paintQuickYards(forId);
+      });
   }
 
     // WHAT KIND OF PASS PLAY WAS IT -- shown on all three panels.
