@@ -2127,11 +2127,20 @@ hex colours, 6 breakpoints, 0 pages on a shared sheet.
 
 - [x] `statchat.css` created -- 26 tokens, every value taken from what the
   app already uses (chosen because it appears on 4+ separate pages).
-- [x] Converted: reports, index, customize, broadcast_setup, dashboard,
-  account, roster, help, create_game, player_report. **10 of 18.**
-- [ ] Remaining: view, recap, season_report, stat_package, broadcast,
-  broadcast_leaders, broadcast_stats, game. **Do `game.html` LAST** -- 439
-  inline styles, and it is the page a mistake costs most.
+- [x] Converted and VERIFIED LIVE ON GITHUB (22 Aug): reports, index,
+  customize, broadcast_setup, dashboard, account, roster, help,
+  create_game, player_report, recap, season_report, stat_package.
+  **13 of 18.** Each proven by reversing the substitution and diffing
+  against the pristine file, then re-checked against raw.githubusercontent
+  after upload -- not assumed from the delivery.
+- [ ] Remaining: view, broadcast, broadcast_leaders, broadcast_stats,
+  game. **Do `game.html` LAST** -- 439 inline styles, and it is the page a
+  mistake costs most. Close the harness gap below before starting it.
+
+**Uploads silently failed three times on 22 Aug**, always on files
+delivered more than once (a stale duplicate in Downloads winning). Always
+re-check the live file after an upload rather than trusting that it took;
+a byte count against the staged copy is the quickest tell.
 
 ### A REAL BREAK THIS CAUSED, 22 Aug -- read this first
 
