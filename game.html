@@ -6644,6 +6644,46 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // {down:1,...} because every other spot widget marks a change of
   // possession. Falling on your own fumble is not one, and reusing that
   // widget would quietly award a first down.
+  // ONE OUTCOME AT A TIME.
+  // ---------------------------------------------------------------------
+  // A kick is touchbacked OR blocked OR muffed OR faked -- never two at
+  // once. The kickoff tree enforced that from the start; punt and field
+  // goal did not, so both could be held down together and the play was
+  // built from whichever branch the code happened to test first.
+  //
+  // Unchecking is done through the CHECKBOX, and the button's own label
+  // and picked class are restored by hand. The toggles are button/checkbox
+  // pairs: the checkbox carries the state, the button carries the
+  // appearance, and clearing one without the other leaves a control that
+  // looks pressed and is not.
+  //
+  // `change` is dispatched on the ones being cleared so any panel logic
+  // watching them -- field visibility, spot prefills -- unwinds too.
+  function wireExclusiveToggles(ids, afterChange){
+    const clearOthers = (keepId) => {
+      ids.forEach(id => {
+        if (id === keepId) return;
+        const cb = document.getElementById(id);
+        if (!cb || !cb.checked) return;
+        cb.checked = false;
+        const btn = document.getElementById(id + '_toggle');
+        if (btn){
+          btn.classList.remove('picked');
+          if (btn.dataset.label) btn.textContent = btn.dataset.label;
+        }
+        cb.dispatchEvent(new Event('change'));
+      });
+    };
+    ids.forEach(id => {
+      const cb = document.getElementById(id);
+      if (!cb) return;
+      cb.addEventListener('change', (e) => {
+        if (e.target.checked) clearOthers(id);
+        if (afterChange) afterChange();
+      });
+    });
+  }
+
   function wireOwnRecSpot(panel, idPrefix){
     let side = null;
     panel.querySelectorAll('.' + idPrefix + '_side').forEach(b => b.addEventListener('click', () => {
@@ -9623,28 +9663,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // after Touchback left "✓ Touchback" lit in gold next to
       // "✓ Onside kick": two outcomes apparently selected, one of them a
       // lie, and the saved play silently followed the checkbox.
+      // The kickoff tree has had this since it was written; punt and field
+      // goal never did, and let a scorer hold Touchback and Blocked at the
+      // same time. Now the same helper for all three -- see
+      // wireExclusiveToggles.
       const KO_OUTCOMES = ['pp_ko_touchback', 'pp_ko_muffed', 'pp_ko_onside', 'pp_ko_oob'];
-      const koClearOthers = (keepId) => {
-        KO_OUTCOMES.forEach(id => {
-          if (id === keepId) return;
-          const cb = document.getElementById(id);
-          if (!cb || !cb.checked) return;
-          cb.checked = false;
-          const btn = document.getElementById(id + '_toggle');
-          if (btn){
-            btn.classList.remove('picked');
-            btn.textContent = btn.dataset.label || 'Blocked';
-          }
-        });
-      };
-      KO_OUTCOMES.forEach(id => {
-        const cb = document.getElementById(id);
-        if (!cb) return;
-        cb.addEventListener('change', (e) => {
-          if (e.target.checked) koClearOthers(id);
-          refreshKoMode();
-        });
-      });
+      wireExclusiveToggles(KO_OUTCOMES, refreshKoMode);
       panel.querySelectorAll('input[name=pp_ko_onsiderec]').forEach(r =>
         r.addEventListener('change', refreshKoMode));
       panel.querySelectorAll('input[name=pp_ko_muffrec]').forEach(r =>
@@ -9713,7 +9737,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const blocked = document.getElementById('pp_blocked').checked;
         const muffed = document.getElementById('pp_muffed').checked;
         const touchback = document.getElementById('pp_punt_touchback').checked;
-        document.getElementById('pp_punt_normal').style.display = (blocked || muffed || touchback) ? 'none' : 'block';
+        // FAKE COUNTS TOO. A fake is not a kick, so there is no return to
+        // describe -- but this only read blocked/muffed/touchback, and the
+        // return group stayed live behind the fake panel. It went
+        // unnoticed because nothing else cleared Fake, so the two were
+        // rarely on screen in that order; making the outcomes mutually
+        // exclusive is what surfaced it, and fake_kick_check caught it.
+        const fake = isChecked('pp_punt_fake');
+        document.getElementById('pp_punt_normal').style.display =
+          (blocked || muffed || touchback || fake) ? 'none' : 'block';
         if (touchback) prefillTouchbackSpot(panel, 'pp_spot');
         document.getElementById('pp_punt_blocked').style.display = blocked ? 'block' : 'none';
         document.getElementById('pp_punt_muffed').style.display = muffed ? 'block' : 'none';
@@ -9726,12 +9758,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // own spot field. A receiving-team recovery is an ordinary change
         // of possession and still needs the general one.
         const genSpot = document.getElementById('pp_spot_wrap');
-        if (genSpot) genSpot.style.display = kickingRecovers ? 'none' : 'block';
+        // Hidden on a FAKE as well: a fake is a scrimmage play, so it ends
+        // where the run or pass ended and there is no takeover spot to
+        // ask for. The fake panel collects its own yardage.
+        if (genSpot) genSpot.style.display = (kickingRecovers || fake) ? 'none' : 'block';
         // A fumble during the return is independent of the muff branch
         // above -- the ball was fielded cleanly here, which is the whole
         // difference -- so it is checked and wired the same way, wholly
         // separately.
-        const retFumbled = !blocked && !muffed && !touchback &&
+        const retFumbled = !blocked && !muffed && !touchback && !fake &&
           document.getElementById('pp_ret_fumbled').checked;
         document.getElementById('pp_ret_fum_wrap').style.display = retFumbled ? 'block' : 'none';
         const retFumKickingRecovers = retFumbled &&
@@ -9775,29 +9810,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
         updatePuntTdVisibility();
       };
-      document.getElementById('pp_punt_touchback').addEventListener('change', (e) => {
-        refreshSpotCalcContext(panel);
-        if (e.target.checked){
-          ['pp_blocked', 'pp_muffed'].forEach(clearOther);
-        }
-        refreshPuntMode();
-      });
-      document.getElementById('pp_blocked').addEventListener('change', (e) => {
-        refreshSpotCalcContext(panel);
-        // Blocked and muffed are different plays; turning one on clears
-        // the other rather than leaving both claiming the panel.
-        if (e.target.checked){
-          clearOther('pp_muffed');
-        }
-        refreshPuntMode();
-      });
-      document.getElementById('pp_muffed').addEventListener('change', (e) => {
-        refreshSpotCalcContext(panel);
-        if (e.target.checked){
-          clearOther('pp_blocked');
-        }
-        refreshPuntMode();
-      });
+      // ONE OUTCOME AT A TIME, all four of them.
+      // -------------------------------------------------------------
+      // These were three hand-written handlers with an incomplete web of
+      // clearing: Touchback cleared Blocked and Muffed, and Blocked and
+      // Muffed cleared each other -- but NOTHING cleared Touchback. So
+      // Touchback + Blocked could both be held, and the play was built
+      // from whichever branch the builder happened to test first.
+      // Reported from real use.
+      //
+      // Fake is in the set too. It already cleared the others from its
+      // own handler; being in the group means the others now clear IT,
+      // which is the half that was missing.
+      wireExclusiveToggles(
+        ['pp_punt_touchback', 'pp_blocked', 'pp_muffed', 'pp_punt_fake'],
+        () => { refreshSpotCalcContext(panel); refreshPuntMode(); });
       panel.querySelectorAll('input[name=pp_punt_muffrec]').forEach(r =>
         r.addEventListener('change', refreshPuntMode));
       // Which team the recoverer belongs to depends on the radio, so the
@@ -9848,8 +9875,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
     }
     if (type === 'fg'){
+      // ONE OUTCOME AT A TIME. Blocked and Muffed hold already cleared
+      // each other by hand, but FAKE was in neither pair -- so a fake
+      // could be held together with a blocked kick, two plays claiming
+      // one panel. Wired first so the group's listener runs before the
+      // per-toggle handlers below and they see settled state.
+      //
+      // The per-toggle clearOther calls that used to sit inside those
+      // handlers are gone: the group does it, and doing it twice meant
+      // two places to keep in step.
+      wireExclusiveToggles(['pp_fg_blocked_cb', 'pp_fg_muffhold', 'pp_fg_fake']);
       document.getElementById('pp_fg_blocked_cb').addEventListener('change', (e) => {
-        if (e.target.checked) clearOther('pp_fg_muffhold');
         document.getElementById('pp_fg_blocked').style.display = e.target.checked ? 'block' : 'none';
         setKickResultLocked('pp_fgres', e.target.checked || isChecked('pp_fg_muffhold'));
         if (e.target.checked) prefillMissedFgSpot();
@@ -9859,7 +9895,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // so the result pair is locked out entirely, and Blocked cannot be
       // true at the same time.
       document.getElementById('pp_fg_muffhold').addEventListener('change', (e) => {
-        if (e.target.checked) clearOther('pp_fg_blocked_cb');
         // MUFFED HOLD RECOVERY sub-panel, added 19 Aug 2026 alongside the
         // parseInput change of the same name -- the muffed-hold branch
         // gains the same return/recovery/TD capability the blocked branch
