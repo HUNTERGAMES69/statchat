@@ -2096,8 +2096,14 @@ watch for.
   written alongside it, unchanged, so nothing existing counts differently.
 
   `computeBoxScore` adds `returns`, `retYds`, `retLong`, `retTd` to the
-  `specialTeams` bucket. Shown in: the Live totals RET leader line,
-  recap, stat package, season report, view and player report.
+  `specialTeams` bucket. Shown in: recap, stat package, season report,
+  view and player report.
+
+  NOT in the Live totals tile. A RET leader line was added there while
+  the feature was being built, purely so the new stat was visible enough
+  to verify -- and removed once the reports carried it, on Andy's call:
+  that rail is read at a glance during entry and did not need a sixth
+  line.
 
   **No backfill, by design and by nature.** Roles are stored with each
   play in the database rather than re-derived on load, so anything

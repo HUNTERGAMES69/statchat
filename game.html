@@ -4370,35 +4370,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // RETURNS, kickoff and punt combined -- from specialTeams, where
       // kickers and punters also live, so `top` has to pick on a key only
       // a returner has rather than on raw yardage.
-      // RETURNS PICK ON COUNT, NOT ON YARDAGE.
-      // -----------------------------------------------------------
-      // `top` only accepts a value above zero, which is right for rushing
-      // and receiving -- a leader with 0 yards is not a leader. It is
-      // wrong for returns: a punt returned for a LOSS still happened, and
-      // filtering it out meant the line vanished entirely. Reported from
-      // a real entry, "returned by Connor Ajlani for -39", where the stat
-      // recorded correctly and simply never displayed.
-      //
-      // So: pick among players who actually have a return, and rank by
-      // yardage including negative. `specialTeams` also holds kickers and
-      // punters, hence the `returns` guard rather than a bare max.
-      const ret = (() => {
-        const bucket = b.specialTeams || {};
-        let best = null;
-        Object.keys(bucket).forEach(n => {
-          const d = bucket[n] || {};
-          if (!d.returns) return;
-          if (best === null || (d.retYds || 0) > (best.d.retYds || 0)) best = { n: n, d: d };
-        });
-        return best;
-      })();
       // A defence can have done something before anyone on offence has --
       // a three-and-out with a sack in it. Bail only when BOTH are empty.
-      // `ret` counts too. Without it a team whose only contribution so far
-      // is a kick return -- which is every receiving team after the
-      // opening kickoff -- rendered no leaders block at all, so the RET
-      // line could never appear no matter what the box score held.
-      if (!rush && !pass && !rec && !ret && !defLine(t)) return '';
+      if (!rush && !pass && !rec && !defLine(t)) return '';
       const line = (tag, best, detail) => best
         ? '<div class="ld-row"><span class="ld-tag">' + tag + '</span>' +
           '<span class="ld-name">' + shortPickerName(best.n) + '</span>' +
@@ -4421,14 +4395,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           tds(d) + ints(d)) +
         line('RUSH', rush, d => (d.att || 0) + ' att, ' + (d.yds || 0) + ' yds' + tds(d)) +
         line('REC',  rec,  d => (d.rec || 0) + ' rec, ' + (d.yds || 0) + ' yds' + tds(d)) +
-        // Only when there has BEEN a return -- an empty RET line on every
-        // game before the first kickoff is noise, and this rail is read at
-        // a glance.
-        (ret
-          ? line('RET', ret, d => (d.returns || 0) + ' ret, ' + (d.retYds || 0) + ' yds' +
-              (d.retLong ? ' · long ' + d.retLong : '') +
-              (d.retTd ? ' · ' + d.retTd + ' TD' : ''))
-          : '') +
         defLine(t) +
         '</div>';
     }
