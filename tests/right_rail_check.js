@@ -510,6 +510,19 @@ async function run() {
         // came along too.
         const n = doc.getElementById('headerLeft').children.length;
         if (n !== 5) fail('header:' + w, 'expected 5 controls in the row, got ' + n);
+        // STYLING TRAVELS WITH THEM. The rule was `#topActions a`, so
+        // moving the links out stripped their white text and they fell
+        // back to the browser's default link colour -- purple. Named by
+        // id now, so their appearance follows them.
+        ['broadcastFab', 'helpFab', 'launchViewLink'].forEach(id => {
+          const c = win.getComputedStyle(doc.getElementById(id));
+          if (c.color !== 'rgb(255, 255, 255)') {
+            fail('header:' + w + ':colour', id + ' lost its white text in the header row, got ' + c.color);
+          }
+          if (c.fontSize !== '13px') {
+            fail('header:' + w + ':size', id + ' lost its size, got ' + c.fontSize);
+          }
+        });
         if (parentOf('onAirBanner') !== 'headerLeft') {
           fail('header:' + w, 'ON AIR should share the header row rather than taking one of its own');
         }
