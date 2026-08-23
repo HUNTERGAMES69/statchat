@@ -913,6 +913,10 @@ function isAdminMarker(p){
 
       const koNums = Object.keys(box[teamKey].specialTeams).filter(n => box[teamKey].specialTeams[n].kickoffs);
       const puntNums = Object.keys(box[teamKey].specialTeams).filter(n => box[teamKey].specialTeams[n].punts);
+      // RETURNS, kickoff and punt combined into one line (Andy's call).
+      // Filtered on `returns` rather than on yardage: a return for a loss
+      // or no gain still happened, and a filter on retYds would drop it.
+      const retNums = Object.keys(box[teamKey].specialTeams).filter(n => box[teamKey].specialTeams[n].returns);
       const kickNums = Object.keys(box[teamKey].specialTeams).filter(n => box[teamKey].specialTeams[n].fgAtt || box[teamKey].specialTeams[n].patAtt);
       const stSubsection = (label, tableHtml) => tableHtml
         ? '<div class="st-subsection"><div class="st-subsection-label">' + label + '</div>' + tableHtml + '</div>'
@@ -930,6 +934,13 @@ function isAdminMarker(p){
           (obj) => { const p=sumStat(obj,'punts'), yds=sumStat(obj,'puntYds'), wy=sumStat(obj,'puntsWithYards');
             return [p, yds, wy?(yds/wy).toFixed(1):'0.0', maxStat(obj,'puntLong'), sumStat(obj,'blocked')]; },
           'puntYds', 'special'));
+      }
+      if (retNums.length){
+        stHtml += stSubsection('Returns', playerTable(teamKey, Object.fromEntries(retNums.map(n=>[n,box[teamKey].specialTeams[n]])), ['Ret','Yds','Avg','Long','TD'],
+          d => [d.returns||0, d.retYds||0, d.returns ? (d.retYds/d.returns).toFixed(1) : '0.0', d.retLong||0, d.retTd||0],
+          (obj) => { const r=sumStat(obj,'returns'), yds=sumStat(obj,'retYds');
+            return [r, yds, r?(yds/r).toFixed(1):'0.0', maxStat(obj,'retLong'), sumStat(obj,'retTd')]; },
+          'retYds', 'special'));
       }
       if (kickNums.length){
         stHtml += stSubsection('Kicking', playerTable(teamKey, Object.fromEntries(kickNums.map(n=>[n,box[teamKey].specialTeams[n]])), ['FG Att','FG Made','Long FG','FG Blk','XP Att','XP Made','XP Blk'],

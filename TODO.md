@@ -2081,45 +2081,47 @@ watch for.
   `game.html` and delete the other two test files. DONE 22 Aug 2026: the
   rail layout in `gametest3.html` won and is now `game.html`; the previous
   page is the frozen fallback `game_legacy.html`. See PROJECT_NOTES.
-- [ ] **RETURN STATS — the agreed next feature.** Kickoff and punt returns
-  COMBINED, and yes to a broadcast leader overlay (Andy's calls, 22 Aug).
-  The blocker is that `roles` does not persist return yardage at all — it
-  exists only inside the play text — so step one is writing it there at
-  entry time, across all five paths that credit a returner (kickoff, punt,
-  blocked-kick return, muffed-kick recovery, guided kickoff return). Then
-  `computeBoxScore`, then recap / stat package / season report / view /
-  overlay. History will not backfill.
+- [x] **RETURN STATS — BUILT 23 Aug.** Kickoff and punt returns combined
+  into one line, per Andy's call, across the entry layer, the engine and
+  all five reporting surfaces.
 
-  **The role key is the other half of this, and it is now the bigger
-  half.** A returner is written as `r.defense` — the returning side is the
-  defence at the moment of the kick — which is the same key the tackler,
-  the interceptor and the fumble recoverer use. Nothing downstream can
-  tell them apart except by play type.
+  Scope, narrowed by Andy on the day: kickoff, GUIDED kickoff and punt
+  only. NOT muffed-kick or blocked-kick recoveries -- those are loose
+  balls, not returns, and counting them would inflate the average that
+  makes the stat worth having.
 
-  That surfaced on 22 Aug as a real report: a man who had only returned a
-  kickoff was being offered in the "Tackled by" picker for the rest of the
-  game, and because he wore a shared number, every player on that number
-  came with him. Fixed for now by gating `computePlayerStats` on the same
-  play types `computeBoxScore` already gates on, so the picker offers
-  exactly who the engine would credit. **The stats were never wrong** —
-  `computeBoxScore` has always gated on play type, so a returner never
-  received a tackle.
+  `roles.returner` is a role of its own -- `{team, num, name, yards,
+  kind}` -- rather than the `defense` key returners used to share with
+  tacklers, interceptors and fumble recoverers. `defense` is still
+  written alongside it, unchanged, so nothing existing counts differently.
 
-  The gate is a correct fix, not a workaround, but it leaves the returner
-  with no identity of his own. Giving him a real `returner` role is what
-  this feature needs anyway, since the yardage has to be persisted
-  alongside him — do the two together rather than touching the same five
-  entry paths twice.
+  `computeBoxScore` adds `returns`, `retYds`, `retLong`, `retTd` to the
+  `specialTeams` bucket. Shown in: the Live totals RET leader line,
+  recap, stat package, season report, view and player report.
 
-  Two adjacent gaps found the same night, worth doing in the same pass
-  because they are the same fault — the entry layer collecting a fact and
-  the data layer dropping it:
-  - **An interception does not record the intended receiver.** The panel
-    collects it; `roles` comes out as `{passer, playType:'int', defense}`
-    with no receiver, so the target lands in the `Unknown` bucket rather
-    than on the player. Reports already show targeted-with-no-catch
-    receivers correctly, so capturing it is the whole fix.
-  - Check the **sack** path for the same omission while in there.
+  **No backfill, by design and by nature.** Roles are stored with each
+  play in the database rather than re-derived on load, so anything
+  recorded before this shipped has no returner role and never will.
+  Returns count from 23 Aug forward.
+
+  Two things found while building it, both worth remembering:
+  - The leaders helper `top` only accepts a value above zero, which is
+    right for rushing and wrong for returns -- a punt returned for a LOSS
+    still happened, and the line vanished entirely. Found by Andy
+    entering -39 on his first real test; a kinder fixture would have
+    missed it.
+  - `mergeInto` in season_report and view kept a hardcoded list of
+    "long" keys to take the max of. `retLong` was not on it, so a season
+    would have SUMMED the longs -- three 20-yard returns reporting a long
+    of 60. Both now use a `/Long$/` suffix test, as player_report already
+    did.
+
+- [x] **Interception intended receiver — was ALREADY FIXED.** Listed as
+  an open bug; re-checked 23 Aug and the app records it correctly. The
+  gap was in `ui_driver`, which never filled the field, so no test could
+  see it either way and the entry stayed open long after the code was
+  right. Now pinned in tackles_check.
+
 ## WHERE THINGS STAND — end of 23 Aug
 
 **Desktop is done and confirmed working.** iPad portrait is usable and
