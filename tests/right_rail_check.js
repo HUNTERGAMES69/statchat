@@ -159,6 +159,11 @@ async function run() {
       }
     }
     h.evalIn("var b=document.getElementById('broadcastFab'); if (b) b.style.display='flex';");
+    // DESKTOP EXPLICITLY -- jsdom defaults to 1024px, which is the touch
+    // layout, where these three sit in the header row by design.
+    Object.defineProperty(win, 'innerWidth', { value: 1600, configurable: true });
+    win.dispatchEvent(new win.Event('resize'));
+    await new Promise(r => setTimeout(r, 150));
     const ref = win.getComputedStyle(doc.getElementById('onAirBanner'));
     ['broadcastFab', 'helpFab', 'launchViewLink'].forEach(id => {
       const c = win.getComputedStyle(doc.getElementById(id));
@@ -275,6 +280,14 @@ async function run() {
   {
     const h = await bootGamePage();
     const doc = h.window.document, win = h.window;
+    // DESKTOP EXPLICITLY. jsdom defaults to 1024px, which is inside the
+    // touch layout -- where these three deliberately live in the header
+    // row instead. This block is about the desktop arrangement, so it has
+    // to say so rather than rely on whatever width the harness happens to
+    // start at.
+    Object.defineProperty(win, 'innerWidth', { value: 1600, configurable: true });
+    win.dispatchEvent(new win.Event('resize'));
+    await new Promise(r => setTimeout(r, 150));
     const ta = doc.getElementById('topActions');
     if (!ta) { fail('toprow:missing', 'the top action row is gone'); h.close(); return failures; }
     const ids = [...ta.children].map(c => c.id);
@@ -642,6 +655,38 @@ async function run() {
     if (doc.getElementById('headerLeft').children.length !== 5) {
       fail('roundtrip:back', 'the flat row did not rebuild, got ' +
         doc.getElementById('headerLeft').children.length + ' controls');
+    }
+    h.close();
+  }
+
+  // THE HEADER SURVIVES THE ASYNC LOAD.
+  // ---------------------------------------------------------------------
+  // Broadcast setup is revealed only after the game row is fetched and
+  // the user's role resolved. layoutHeader() runs before that, so on a
+  // tablet the first visit showed just Dashboard and ON AIR -- the other
+  // three appeared on a refresh, because the second load was warm enough
+  // to win the race. Reported from a real iPad.
+  //
+  // Asserted on a page that has finished loading, which is what the
+  // harness gives us: if the re-run after the role check were removed,
+  // the row would be short.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    Object.defineProperty(win, 'innerWidth', { value: 768, configurable: true });
+    win.dispatchEvent(new win.Event('resize'));
+    await new Promise(r => setTimeout(r, 200));
+    const left = doc.getElementById('headerLeft');
+    const shown = [...left.children]
+      .filter(c => win.getComputedStyle(c).display !== 'none')
+      .map(c => c.id || 'dashboard');
+    ['broadcastFab', 'helpFab', 'launchViewLink'].forEach(id => {
+      if (shown.indexOf(id) === -1) {
+        fail('asyncload', id + ' is missing from the header row after load — got [' + shown.join(', ') + ']');
+      }
+    });
+    if (shown.length !== 5) {
+      fail('asyncload:count', 'expected 5 visible controls, got ' + shown.length + ': ' + shown.join(', '));
     }
     h.close();
   }
