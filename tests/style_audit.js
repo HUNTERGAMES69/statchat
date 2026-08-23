@@ -108,8 +108,46 @@ function report() {
   console.log('');
 }
 
+// THE BREAKPOINT SET IS FIXED AT THREE. Unlike the rest of this file,
+// which only measures, this one FAILS -- because the five it replaced
+// included two that contradicted each other, and that is the kind of
+// fault nobody sees until a page looks wrong at one particular width.
+//
+//   node tests/style_audit.js --check
+const ALLOWED_BREAKPOINTS = [
+  '@media (max-width: 767px)',    // phone
+  '@media (min-width: 768px)',    // tablet and up
+  '@media (max-width: 1219px)'    // tablet and below
+];
+
+function checkBreakpoints() {
+  const a = audit();
+  const failures = [];
+  Object.keys(a.breakpoints).forEach(m => {
+    if (/print/.test(m)) return;
+    if (ALLOWED_BREAKPOINTS.indexOf(m) === -1) {
+      failures.push(m + ' is not one of the three agreed breakpoints');
+    }
+  });
+  console.log('=== Breakpoints ===\n');
+  ALLOWED_BREAKPOINTS.forEach(m =>
+    console.log('  allowed  ' + m + (a.breakpoints[m] ? '   x' + a.breakpoints[m] : '   (unused)')));
+  if (failures.length) {
+    console.log('');
+    failures.forEach(f => console.log('  [breakpoint] ' + f));
+  }
+  console.log('\nFailures: ' + failures.length);
+  if (!failures.length) {
+    console.log('  three breakpoints, no contradictions.');
+  }
+  return failures;
+}
+
+
 if (require.main === module) {
-  if (process.argv.indexOf('--json') !== -1) {
+  if (process.argv.indexOf('--check') !== -1) {
+    process.exitCode = checkBreakpoints().length ? 1 : 0;
+  } else if (process.argv.indexOf('--json') !== -1) {
     const a = audit();
     console.log(JSON.stringify({
       colours: Object.keys(a.colours).length,
@@ -123,4 +161,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { audit };
+module.exports = { audit, checkBreakpoints, ALLOWED_BREAKPOINTS };
