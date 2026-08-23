@@ -414,6 +414,40 @@ async function run() {
     h.close();
   }
 
+  // AN INTERCEPTION CREDITS THE INTENDED RECEIVER with a target.
+  // ---------------------------------------------------------------------
+  // Listed in TODO as an open bug -- "the panel collects it, roles comes
+  // out without a receiver, the target lands in Unknown". Re-checked on
+  // 23 Aug and the APP was already correct; the ui_driver simply never
+  // filled the field, so no test could see it either way and the entry
+  // stayed open long after it was fixed.
+  //
+  // Pinned now so it cannot regress unnoticed a second time.
+  {
+    const h = await bootGamePage();
+    D.setDrive(h, { down: 2, distance: 7, side: 'own', yardline: 30 });
+    D.enterPlay(h, { type: 'int', passer: '7', receiver: '80', credit: '55',
+                   yards: '12', spot: { side: 'own', yardline: 42 } });
+    await new Promise(r => setTimeout(r, 320));
+    const roles = JSON.parse(h.evalIn(
+      'JSON.stringify(plays.filter(p=>p.roles&&p.roles.playType==="int").map(p=>p.roles)[0] || null)'));
+    if (!roles || !roles.receiver) {
+      fail('int:receiver', 'the intended receiver was not recorded on the interception');
+    } else if (roles.receiver.num !== '80') {
+      fail('int:receiver', 'wrong receiver recorded: ' + JSON.stringify(roles.receiver));
+    }
+    const rec = JSON.parse(h.evalIn('JSON.stringify(computeBoxScore(plays).teamA.receiving)'));
+    if (rec.Unknown) {
+      fail('int:unknown', 'the target fell into the Unknown bucket: ' + JSON.stringify(rec));
+    }
+    // No yardage -- the throw was not caught.
+    const named = Object.keys(rec).find(n => n !== 'Unknown');
+    if (named && (rec[named].yds || 0) !== 0) {
+      fail('int:yards', 'an intercepted throw must credit no receiving yards, got ' + rec[named].yds);
+    }
+    h.close();
+  }
+
   return failures;
 }
 

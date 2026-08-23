@@ -252,6 +252,10 @@ function enterPlay(h, spec) {
     }
   } else if (t === 'int') {
     P('passer', spec.passer);
+    // THE INTENDED RECEIVER. Optional on the panel, and the driver did not
+    // fill it -- so no test could tell whether the target was being
+    // recorded, and the box score quietly bucketed it under "Unknown".
+    if (spec.receiver !== undefined) P('receiver', spec.receiver);
     P('credit', spec.credit);
     // Downed in the end zone. Checked FIRST because it hides the return
     // and spot fields, and driving a hidden field is how a test comes to
