@@ -8508,19 +8508,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<button type="button" class="secondary" id="pp_2pt_rush_btn">Rush</button>' +
         '<button type="button" class="secondary" id="pp_2pt_pass_btn">Pass</button>' +
         '</div></div>' +
+        // TURNOVER REMOVED, 23 Aug. Andy's call, and it follows the NFHS
+        // rule the note above already states: a try ends the moment the
+        // defence gains possession -- no return, no score, no change of
+        // possession. There is nothing to record beyond "no good", so a
+        // third outcome invited a scorer to describe something the rule
+        // book says does not happen.
+        //
+        // The PARSER still understands value 'b'. Games already stored
+        // with it must keep rendering; only the way in is gone.
         '<div id="pp_2pt_rush_fields">' +
           offBlock('carrier','Ball carrier') +
           '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_rush_res" value="g" checked> Good (scored)</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_rush_res" value="x"> No good, stopped short</label>' +
-          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_rush_res" value="b"> Fumbled, turned over</label></div>' +
-          '<div id="pp_2pt_rush_def" style="display:none;">' + defBlock('Recovered by (optional)', '_2ptRush') + '<p style="font-size:12px; color:#888; margin:6px 0 0;">NFHS: the try ends when the defense gains possession — no return, and the defense cannot score.</p>' + '</div>' +
+          '</div>' +
         '</div>' +
         '<div id="pp_2pt_pass_fields" style="display:none;">' +
           offBlock('passer','Passer') + offBlock('receiver','Receiver') +
           '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_pass_res" value="g" checked> Good (caught for the score)</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_pass_res" value="x"> Incomplete</label>' +
-          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_pass_res" value="b"> Intercepted, turned over</label></div>' +
-          '<div id="pp_2pt_pass_def" style="display:none;">' + defBlock('Intercepted by (optional)', '_2ptPass') + '<p style="font-size:12px; color:#888; margin:6px 0 0;">NFHS: the try ends when the defense gains possession — no return, and the defense cannot score.</p>' + '</div>' +
+          '</div>' +
         '</div>';
 
     // A message slot BESIDE REVIEW. The refusal used to be reported at
@@ -10418,12 +10425,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       rushBtn.addEventListener('click', () => setSubType('rush'));
       passBtn.addEventListener('click', () => setSubType('pass'));
       setSubType('rush');
-      panel.querySelectorAll('input[name=pp_2pt_rush_res]').forEach(r => r.addEventListener('change', () => {
-        document.getElementById('pp_2pt_rush_def').style.display = (document.querySelector('input[name=pp_2pt_rush_res]:checked').value === 'b') ? 'block' : 'none';
-      }));
-      panel.querySelectorAll('input[name=pp_2pt_pass_res]').forEach(r => r.addEventListener('change', () => {
-        document.getElementById('pp_2pt_pass_def').style.display = (document.querySelector('input[name=pp_2pt_pass_res]:checked').value === 'b') ? 'block' : 'none';
-      }));
+      // The two show/hide handlers that lived here are gone with the
+      // turnover options they revealed. Left in place they would have
+      // thrown on every outcome change -- getElementById returns null
+      // for a block that is no longer built.
     }
     if (type === 'pass'){
       document.getElementById('pp_incomplete').addEventListener('change', (e) => {
