@@ -1,0 +1,139 @@
+/* StatChat — shared stylesheet
+   =====================================================================
+   Created 22 Aug 2026. Before this, all 18 live pages carried their own
+   <style> block and nothing was shared: 118 distinct hex colours and six
+   different breakpoints for one product. `node tests/style_audit.js`
+   prints those numbers and will show them falling as pages move over.
+
+   HOW TO USE THIS FILE
+   --------------------
+   1. Add this to a page's <head>, AFTER the favicon links and BEFORE the
+      page's own <style> block:
+
+          <link rel="stylesheet" href="statchat.css">
+
+      Order matters: the page's own <style> comes second so it still wins
+      any argument. That is deliberate — a page can be converted without
+      having to be perfect, and nothing breaks on the way.
+
+   2. Then delete rules from that page's <style> that this file already
+      provides, and replace hardcoded colours with the variables below.
+      One page at a time; the audit shows the progress.
+
+   WHY VARIABLES RATHER THAN CLASSES FIRST
+   ---------------------------------------
+   Changing #1a7a4c to var(--sc-green) is a find-and-replace that cannot
+   alter the rendering — the value is identical. Rewriting markup into
+   shared classes can. Do the safe half first, measure, then the rest.
+
+   The values are not new. Every one was taken from what the app already
+   uses, chosen because it appears on four or more separate pages. */
+
+:root {
+  /* Brand ------------------------------------------------------------ */
+  --sc-navy:        #1a1a2e;   /* headers, primary buttons, dark chrome */
+  --sc-green:       #1a7a4c;   /* the action colour: save, confirm, go  */
+  --sc-green-dark:  #0f6e56;
+  --sc-green-tint:  #e8f5e9;
+  --sc-red:         #a32d2d;   /* destructive, and the ON AIR state     */
+  --sc-red-deep:    #8b0000;
+  --sc-red-tint:    #fdecea;   /* NOTE: the four report pages use #fde8e8
+                                  for the same thing -- a near-twin
+                                  nobody chose. Converting them means
+                                  accepting that small shift; left alone
+                                  until someone says so. */
+  --sc-amber:       #e0b400;   /* warnings, and "needs attention"       */
+  --sc-amber-tint:  #fff3cd;
+  --sc-amber-soft:  #fff8e6;
+  --sc-amber-text:  #a37a00;
+  --sc-blue:        #1565c0;   /* informational only                    */
+
+  /* Surfaces --------------------------------------------------------- */
+  --sc-page:        #f4f3ef;   /* the page behind every card            */
+  --sc-card:        #ffffff;
+  --sc-rule:        #e6e6e6;   /* hairlines and table borders           */
+  --sc-rule-strong: #c8c8c8;
+
+  /* Text ------------------------------------------------------------- */
+  --sc-ink:         #1a1a1a;   /* body                                  */
+  --sc-ink-soft:    #3a3a3a;   /* secondary                             */
+  --sc-ink-muted:   #9aa3b2;   /* labels, hints, placeholders           */
+
+  /* Spacing and shape ------------------------------------------------ */
+  --sc-gap-xs: 4px;
+  --sc-gap-sm: 8px;
+  --sc-gap:    12px;
+  --sc-gap-lg: 18px;
+  --sc-radius-sm: 6px;
+  --sc-radius:    10px;
+  --sc-radius-lg: 14px;
+}
+
+/* BREAKPOINTS
+   ---------------------------------------------------------------------
+   Three, not six. The app currently uses 640, 700, 899, 1100 and 1219 --
+   five thresholds that mean roughly the same two things, spelled
+   inconsistently (`max-width: 700px` and `max-width:1219px` both appear).
+
+       phone    up to  767px
+       tablet   768px to 1219px      -- iPad portrait lands here
+       desktop  1220px and up        -- where the three-column entry
+                                        layout is already gated
+
+   1220 is kept because game.html's rail layout already switches there and
+   that number is load-bearing; the other two are new and should replace
+   640/700/899/1100 as pages are converted.
+
+   Media queries cannot use var(), so these are written out. The comment
+   is the single source of truth for what the numbers mean. */
+
+/* Shared primitives ---------------------------------------------------
+   Deliberately few. These are the shapes every page already draws by
+   hand; anything used on one page only stays on that page. */
+
+.sc-card {
+  background: var(--sc-card);
+  border-radius: var(--sc-radius);
+  padding: var(--sc-gap-lg);
+  margin-bottom: var(--sc-gap);
+}
+
+.sc-muted { color: var(--sc-ink-muted); }
+.sc-hint  { color: var(--sc-ink-muted); font-size: 13px; }
+
+.sc-btn {
+  padding: 8px 14px;
+  border-radius: var(--sc-radius-sm);
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sc-btn-primary   { background: var(--sc-green); color: #fff; }
+.sc-btn-secondary { background: #fff; color: var(--sc-ink-soft);
+                    border-color: var(--sc-rule-strong); }
+.sc-btn-danger    { background: var(--sc-red); color: #fff; }
+
+/* Messages. The same three states appear on every page that saves
+   anything, drawn slightly differently on each. */
+.sc-msg { padding: 10px 14px; border-radius: var(--sc-radius-sm);
+          font-size: 14px; margin: var(--sc-gap-sm) 0; }
+.sc-msg-error   { background: var(--sc-red-tint);   color: var(--sc-red); }
+.sc-msg-warn    { background: var(--sc-amber-tint); color: var(--sc-amber-text); }
+.sc-msg-success { background: var(--sc-green-tint); color: var(--sc-green); }
+
+/* Tables. Reports, rosters and stat packages each define their own; the
+   differences between them are accidental rather than intended. */
+.sc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.sc-table th, .sc-table td {
+  padding: 6px 10px; border-bottom: 1px solid var(--sc-rule); text-align: left;
+}
+.sc-table th { color: var(--sc-ink-muted); font-weight: 600; }
+
+/* Phone -------------------------------------------------------------- */
+@media (max-width: 767px) {
+  .sc-card { padding: var(--sc-gap); border-radius: var(--sc-radius-sm); }
+  .sc-btn  { padding: 10px 14px; }   /* a bigger target, not a smaller one */
+  .sc-table { font-size: 13px; }
+  .sc-table th, .sc-table td { padding: 5px 6px; }
+}
