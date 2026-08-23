@@ -6473,6 +6473,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         pushAndPersist({ id: nextId++, text, effect, team: takingOver, quarter: guided.quarter,
           roles: Object.assign({ playType: 'kickoff_return' },
             (!muffed && !onside && returnerNum) ? { defense: { team: guided.receivingTeam, num: returnerNum } } : {},
+            // The returner role, matching the two entry paths in
+            // buildAndReview. Guarded on exactly the same conditions as
+            // `defense` above -- a muff or an onside recovery is not a
+            // return, so it must not add return yardage to anyone.
+            (!muffed && !onside && returnerNum)
+              ? { returner: { team: guided.receivingTeam, num: returnerNum,
+                              yards: parseInt(yds, 10) || 0, kind: 'kick' } } : {},
             touchbackRole ? { kickoffTouchback: touchbackRole } : {}) });
         const receivingName = TEAMS[takingOver].name;
         const receivingTeamKey = takingOver;
@@ -11782,7 +11789,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const retTok = sel.credit || ((retyds || td) ? '?' : null);
         const koRetFumbled = document.getElementById('pp_ko_ret_fumbled').checked;
         roles = { kicker: { team: off, num: sel.kicker, yards: parseInt(yds)||0 } };
-        if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
+        // A RETURNER ROLE OF HIS OWN, carrying the yardage.
+        // -------------------------------------------------------------
+        // Two problems solved by one field. The return YARDAGE was never
+        // persisted -- it lived only in the play text, so no report could
+        // count it. And the returner was written as `roles.defense`,
+        // which is the same key the tackler, the interceptor and the
+        // fumble recoverer use, so nothing downstream could tell them
+        // apart except by play type. That is what put a kick returner in
+        // the "Tackled by" picker for the rest of a game.
+        //
+        // `defense` is kept ALONGSIDE it, unchanged. Dropping it would
+        // change what every existing report counts, and the point here is
+        // to add a stat, not to move one.
+        if (sel.credit){
+          roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
+          roles.returner = { team: def, num: sel.credit, name: sel.creditName || undefined,
+                             yards: parseInt(retyds, 10) || 0, kind: 'kick' };
+        }
         if (koRetFumbled){
           // RETURN YARDAGE IS UNTOUCHED by the fumble -- measured to
           // where the ball was lost, not to where it came to rest. Only
@@ -11905,7 +11929,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const retTok = sel.credit || ((retyds || td) ? '?' : null);
         const retFumbled = document.getElementById('pp_ret_fumbled').checked;
         roles = { punter: { team: off, num: sel.punter, yards: parseInt(yds)||0, blocked: false } };
-        if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
+        // The returner role, same shape as the kickoff path above -- see
+        // the note there. kind:'punt' so the two can be reported together
+        // or apart without guessing from the play type.
+        if (sel.credit){
+          roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
+          roles.returner = { team: def, num: sel.credit, name: sel.creditName || undefined,
+                             yards: parseInt(retyds, 10) || 0, kind: 'punt' };
+        }
         if (retFumbled){
           // RETURN YARDAGE IS UNTOUCHED by the fumble -- it is measured to
           // where the ball was lost, not to where it came to rest. Only

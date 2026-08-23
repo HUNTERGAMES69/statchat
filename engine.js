@@ -1224,6 +1224,39 @@ function computeBoxScore(playsList){
         if (r.kicker.result === 'b') s.patBlocked = (s.patBlocked||0) + 1;
       }
     }
+    // RETURNS — kickoff and punt COMBINED into one line (Andy's call).
+    // ---------------------------------------------------------------------
+    // Read from `roles.returner`, a role of its own rather than the
+    // `defense` key returners used to share with tacklers, interceptors
+    // and fumble recoverers. Sharing that key is why a kick returner
+    // turned up in the "Tackled by" picker for the rest of a game, and it
+    // meant return yardage could not be told apart from anything else a
+    // defender did.
+    //
+    // Only the three paths Andy asked for write this role: kickoff, punt
+    // and the guided kickoff. A muffed kick or a blocked kick recovered
+    // and advanced is deliberately NOT a return -- it is a loose ball, and
+    // counting it would inflate the average that makes the stat worth
+    // having.
+    //
+    // Nothing backfills. Returns recorded before this shipped carry no
+    // returner role, so they simply do not appear -- which is honest, and
+    // better than a partial season that looks complete.
+    if (r.returner){
+      const s = bucket(r.returner.team, 'specialTeams', r.returner.num, r.returner.name);
+      if (s){
+        s.returns = (s.returns||0) + 1;
+        s.retYds = (s.retYds||0) + (r.returner.yards||0);
+        s.retLong = Math.max(s.retLong||0, r.returner.yards||0);
+        // A return that scores. `effect.score` belongs to the returning
+        // side on these plays, so the team check keeps a kicking-team
+        // score (a muff recovered in the end zone) off the returner.
+        if (e.score && e.score.team === r.returner.team && e.score.points === 6){
+          s.retTd = (s.retTd||0) + 1;
+        }
+      }
+    }
+
     if (r.punter && type === 'punt'){
       const s = bucket(r.punter.team, 'specialTeams', r.punter.num);
       if (s){
