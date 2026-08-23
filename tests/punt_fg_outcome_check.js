@@ -21,10 +21,20 @@
 //      buttons could LOOK selected at once even though only one ever
 //      really was. Fixed in clearOther itself, once, rather than in each
 //      of the five places that called it or duplicated its logic inline.
-//   3. A field goal's own spot-value bug (return yards entered on a
-//      muffed hold silently discarded) is covered in
-//      tests/takeover_spot_check.js, alongside the identical, working
-//      case for a blocked kick -- not duplicated here.
+//   3. A field goal's muffed hold, no touchdown, must show the same
+//      starting-spot field that Blocked already shows. Twice fixed,
+//      twice wrong. First pass fixed a real bug (the submit code's
+//      early return skipped past the code that reads the spot into
+//      the save) and added a test in tests/takeover_spot_check.js that
+//      passed -- but that test never checked visibility, only whether
+//      a value typed into the field made it into the save, so it could
+//      not have caught the actual problem: the field's own inner
+//      wrapper was still being hidden by leftover code from before the
+//      return/recovery feature existed, so a coach saw an empty box
+//      with nothing in it. Second pass (below) removed that leftover
+//      code and added the test that checks the inner wrapper's own
+//      visibility directly, against the known-working Blocked branch
+//      as a control.
 
 const { bootGamePage } = require('./harness');
 const { click, setDrive } = require('./ui_driver');
@@ -172,6 +182,102 @@ async function run() {
       fail('punt-block-own-td', 'the pre-existing blocked+own-team case no longer hides Touchdown');
     }
     h.close();
+  }
+
+  // --- 3. Field goal, muffed hold, no touchdown: the starting-spot
+  // field's INNER wrapper must actually be visible, not just its outer
+  // shell. startingSpotFieldsHtml wraps its own label/buttons/input in
+  // a "pp_spot_wrap" div, specifically so a muffed-punt-style flow with
+  // its OWN dedicated spot field can hide this generic one rather than
+  // asking for the same yard line twice. Field goal's muffed hold has
+  // no such dedicated field of its own -- it was always meant to use
+  // this shared one, same as Blocked already does -- but leftover code
+  // from before the return/recovery feature existed still hid this
+  // inner wrapper unconditionally, while the OUTER wrapper
+  // (pp_fg_spot_wrap, which syncFgSpotVisibility correctly shows) sat
+  // there empty. Checking only the outer box, as an earlier version of
+  // this exact test did, passed throughout and never caught it: an
+  // empty visible box and a truly working field look identical from
+  // outside, and typing into a hidden input works fine in a script even
+  // though a coach could never see or reach it on a real screen.
+  // Reported directly, comparing the muffed-hold case against the
+  // already-working blocked one by name.
+  {
+    const h = await bootGamePage();
+    h.evalIn("renderPlayPanel('fg')");
+    click(h.window, h.document.querySelector('.pp_kicker_pick'));
+    click(h.window, h.document.getElementById('pp_fg_muffhold_toggle'));
+    const innerWrap = h.document.getElementById('pp_spot_wrap');
+    if (innerWrap.style.display === 'none') {
+      fail('fg-muff-spot-inner-hidden', 'the starting-spot field\'s own inner wrapper is hidden, even ' +
+        'though the outer box around it is visible -- a coach would see an empty box with nothing in it');
+    }
+    // The same check on the already-working Blocked branch, so a future
+    // change to this shared field is judged against a control that is
+    // known to work, not just against itself.
+    h.close();
+  }
+  {
+    const h = await bootGamePage();
+    h.evalIn("renderPlayPanel('fg')");
+    click(h.window, h.document.querySelector('.pp_kicker_pick'));
+    click(h.window, h.document.getElementById('pp_fg_blocked_cb_toggle'));
+    const innerWrapBlocked = h.document.getElementById('pp_spot_wrap');
+    if (innerWrapBlocked.style.display === 'none') {
+      fail('fg-blocked-spot-inner-hidden', 'sanity check failed: even the known-working Blocked branch ' +
+        'now hides the inner spot wrapper -- something upstream of this change broke it');
+    }
+    h.close();
+  }
+
+  // ONE OUTCOME AT A TIME, on every kicking tree.
+  // ---------------------------------------------------------------------
+  // A kick is touchbacked OR blocked OR muffed OR faked, never two at
+  // once. Kickoff enforced this from the start. Punt had a partial web --
+  // Touchback cleared Blocked and Muffed, and those two cleared each
+  // other, but NOTHING cleared Touchback -- so Touchback + Blocked could
+  // both be held and the play was built from whichever branch the builder
+  // tested first. Field goal had Blocked and Muffed hold clearing each
+  // other with Fake in neither pair. Both reported from real use.
+  {
+    const groups = {
+      punt:    ['pp_punt_touchback', 'pp_blocked', 'pp_muffed', 'pp_punt_fake'],
+      fg:      ['pp_fg_blocked_cb', 'pp_fg_muffhold', 'pp_fg_fake'],
+      kickoff: ['pp_ko_touchback', 'pp_ko_muffed', 'pp_ko_onside', 'pp_ko_oob']
+    };
+    for (const tree of Object.keys(groups)) {
+      const ids = groups[tree];
+      const h = await bootGamePage();
+      const doc = h.window.document, win = h.window;
+      setDrive(h, { down: 4, distance: 8, side: 'own', yardline: 30 });
+      click(win, doc.querySelector('.ptypeBtn[data-type="' + tree + '"]'));
+      await new Promise(r => setTimeout(r, 80));
+      const checked = () => ids.filter(i => {
+        const e = doc.getElementById(i); return e && e.checked;
+      });
+      let missing = false;
+      for (const id of ids) {
+        const btn = doc.getElementById(id + '_toggle');
+        if (!btn) { fail('exclusive:' + tree + ':' + id, 'no toggle for ' + id); missing = true; continue; }
+        click(win, btn);
+        await new Promise(r => setTimeout(r, 70));
+        const on = checked();
+        if (on.length !== 1 || on[0] !== id) {
+          fail('exclusive:' + tree,
+            'after clicking ' + id + ' exactly one should be set, got [' + on.join(', ') + ']');
+        }
+      }
+      if (!missing) {
+        // Turning the last one OFF should leave none set -- exclusivity
+        // must not make a toggle impossible to release.
+        click(win, doc.getElementById(ids[ids.length - 1] + '_toggle'));
+        await new Promise(r => setTimeout(r, 70));
+        if (checked().length) {
+          fail('exclusive:' + tree + ':release', 'unchecking should leave none set, got [' + checked().join(', ') + ']');
+        }
+      }
+      h.close();
+    }
   }
 
   return failures;
