@@ -180,6 +180,37 @@ async function run() {
     }
   }
 
+  // THE SPECTATOR PAGE PICKS UP A NEW LOGO WITHOUT A RELOAD.
+  // ---------------------------------------------------------------------
+  // view.html read the teams row ONCE, in init(). Everything else on it
+  // updates live -- plays, score, drives, clock -- so it reads as a live
+  // page, and a logo uploaded on the customize screen quietly never
+  // arrived while every other page showed it. Reported directly:
+  // "updated everywhere but the view screen."
+  {
+    const w = await bootPage('view.html', {
+      branding: { logo_url: 'https://x.co/logo.png?v=OLD' },
+      readyWhen: win => (win.document.getElementById('driveLogScroll') || {}).innerHTML !== undefined });
+    await new Promise(r => setTimeout(r, 300));
+    if (w.evalIn('TEAMS.teamA.logo') !== 'https://x.co/logo.png?v=OLD') {
+      failures.push({ area: 'branding:load', detail: 'the page did not take the logo at load' });
+    }
+    // The customize screen replaces it -- the stored URL carries a fresh
+    // version stamp, which is what makes the change visible at all.
+    w.db.branding.logo_url = 'https://x.co/logo.png?v=NEW';
+    if (typeof w.window.__refreshBranding !== 'function') {
+      failures.push({ area: 'branding:hook', detail: 'view.html should re-read branding while open' });
+    } else {
+      await w.evalIn('window.__refreshBranding(true)');
+      await new Promise(r => setTimeout(r, 300));
+      if (w.evalIn('TEAMS.teamA.logo') !== 'https://x.co/logo.png?v=NEW') {
+        failures.push({ area: 'branding:refresh',
+          detail: 'the new logo did not reach the page: ' + w.evalIn('TEAMS.teamA.logo') });
+      }
+    }
+    w.close();
+  }
+
   return { failures, notes, boxScores, gameState, dbRows, rendered };
 }
 
