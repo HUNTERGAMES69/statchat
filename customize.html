@@ -279,25 +279,45 @@
     }
   });
 
-  async function uploadIcon(file, teamId){
+  // Both uploads share this: the icon had the identical fault and would
+  // have been fixed twice, then drifted the first time only one of them
+  // was touched.
+  async function uploadImage(file, teamId, kind){
     const ext = file.name.split('.').pop();
-    const path = teamId + '/icon.' + ext;
+    const path = teamId + '/' + kind + '.' + ext;
     const { error: uploadError } = await supabaseClient.storage
-      .from('team-logos').upload(path, file, { upsert: true });
+      .from('team-logos').upload(path, file, {
+        upsert: true,
+        // A SHORT CACHE, not the default hour. This object is replaced in
+        // place, so a long max-age is a promise the file will not change
+        // when replacing it is the entire purpose of this screen.
+        cacheControl: '60'
+      });
     if (uploadError) throw uploadError;
     const { data } = supabaseClient.storage.from('team-logos').getPublicUrl(path);
-    return data.publicUrl;
+    // A VERSION STAMP ON THE URL.
+    // -------------------------------------------------------------------
+    // The upload overwrites a FIXED path -- teamId/logo.png -- so
+    // getPublicUrl returns the identical address every time. A new logo
+    // therefore changed nothing a browser could see: every page kept
+    // serving the old image out of cache. Reported directly: "I uploaded
+    // a new logo and it did not replace logos on any screen."
+    //
+    // The stamp goes in the STORED url rather than being added when each
+    // page renders, because sixteen files read logo_url and three API
+    // endpoints pass it on -- fixing it once at the source is one change
+    // instead of nineteen that have to agree.
+    //
+    // Nothing parses this value; every consumer uses it as an <img src>,
+    // so a query string is safe.
+    const sep = data.publicUrl.indexOf('?') === -1 ? '?' : '&';
+    return data.publicUrl + sep + 'v=' + Date.now();
   }
 
-  async function uploadLogo(file, teamId){
-    const ext = file.name.split('.').pop();
-    const path = teamId + '/logo.' + ext;
-    const { error: uploadError } = await supabaseClient.storage
-      .from('team-logos').upload(path, file, { upsert: true });
-    if (uploadError) throw uploadError;
-    const { data } = supabaseClient.storage.from('team-logos').getPublicUrl(path);
-    return data.publicUrl;
-  }
+  async function uploadIcon(file, teamId){ return uploadImage(file, teamId, 'icon'); }
+
+  async function uploadLogo(file, teamId){ return uploadImage(file, teamId, 'logo'); }
+
 
   document.getElementById('saveBtn').addEventListener('click', async () => {
     const name = document.getElementById('teamNameInput').value.trim();
