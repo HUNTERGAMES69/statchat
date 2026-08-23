@@ -13,7 +13,7 @@
 // existed -- this pins it down so it stays true.
 
 const { bootGamePage } = require('./harness');
-const { click, typeInto } = require('./ui_driver');
+const { click, typeInto, enterPlay, setDrive } = require('./ui_driver');
 
 async function startAndKickoff(h) {
   h.evalIn("startGuided(1, 'firstHalf')");
@@ -278,6 +278,47 @@ async function run() {
     if (!after.every(t => t === before)) {
       fail('margins:moved', 'the side tiles should stay put while the guided panel resizes: ' +
         before + ' -> ' + after.join(' , '));
+    }
+    h.close();
+  }
+
+  // HALFTIME LEAVES THE BANNER WHEN "Start 2nd half" IS PRESSED, not when
+  // the kickoff finally saves. startGuided(3) writes a Q3 marker at once,
+  // but derivePhase deliberately ignores admin markers -- so the phase
+  // stays 'halftime' and the banner went on saying HALFTIME while the
+  // scorer was already entering the kickoff. Reported directly.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    const tag = () => win.getComputedStyle(doc.getElementById('halftimeTag')).display;
+    h.evalIn('window.confirm = () => true;');
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '8' });
+    click(win, doc.getElementById('quarterUtilBtn'));
+    click(win, doc.getElementById('endFirstHalfBtn'));
+    await new Promise(r => setTimeout(r, 250));
+    if (tag() === 'none') fail('halftimeTag:at-half', 'the banner should say HALFTIME at the interval');
+
+    click(win, doc.getElementById('startHalfBtn'));
+    await new Promise(r => setTimeout(r, 250));
+    if (tag() !== 'none') fail('halftimeTag:started', 'HALFTIME should clear when the second half is started');
+    // The GATING is untouched: a marker alone is not the second half, so
+    // the ladder stays disabled and the stale first-half down stays
+    // hidden until a real play lands.
+    if (h.evalIn('derivePhase()') !== 'halftime') {
+      fail('halftimeTag:phase', 'the phase should still be halftime until a play is entered');
+    }
+    if (win.getComputedStyle(doc.getElementById('downText')).display !== 'none') {
+      fail('halftimeTag:downrow', 'the stale first-half down must stay hidden');
+    }
+
+    // BACKING OUT restores it. The Q3 marker is left behind deliberately,
+    // so a marker-only test left the banner blank while the game was
+    // plainly still at halftime with no kickoff entered.
+    click(win, doc.querySelector('#guidedPanel .guided-back'));
+    await new Promise(r => setTimeout(r, 300));
+    if (tag() === 'none') {
+      fail('halftimeTag:left', 'leaving the kickoff should bring HALFTIME back');
     }
     h.close();
   }
