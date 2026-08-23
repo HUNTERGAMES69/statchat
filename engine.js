@@ -717,7 +717,17 @@ function computeState(playsList){
           state.startSpot = state.fieldPos; state.statYards = 0;
         } else if (!e.turnoverOnDowns){
           state.down = (state.down || 1) + 1;
-          state.distance = Math.max((state.distance || 10) - e.statYds, 1);
+          // DISTANCE MEASURES THE BALL, NOT THE STAT SHEET.
+          // ----------------------------------------------------------
+          // These were the same number everywhere until an own-recovery
+          // fumble made them diverge: a runner's yardage is measured to
+          // the spot of the FUMBLE, while the ball ends where his team
+          // recovered it. Distance-to-go is a fact about the ball, so it
+          // has to follow fieldDelta. Behaviour is unchanged for every
+          // other play, where the two are equal by construction.
+          const moved = (e.fieldDelta !== undefined && e.fieldDelta !== null)
+            ? e.fieldDelta : e.statYds;
+          state.distance = Math.max((state.distance || 10) - moved, 1);
         }
       }
     }

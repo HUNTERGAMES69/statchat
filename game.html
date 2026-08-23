@@ -1877,6 +1877,27 @@ function parseInput(raw, state){
   if (td) rest.pop();
   const isSafety = rest[rest.length - 1] === 'sf';
   if (isSafety) rest.pop();
+  // OWN-RECOVERY SPOT, e.g. "orec:34".
+  // ---------------------------------------------------------------------
+  // Where the offence recovered its own fumble, as an absolute
+  // possession-relative field position. Optional: without it the ball
+  // simply ends where the run or catch ended, which is the common case --
+  // recovered right there.
+  //
+  // It exists because a runner's yardage is measured to the SPOT OF THE
+  // FUMBLE, not to where his team fell on it. Gain 8, fumble, recover 3
+  // back and the rusher is still credited 8 while the ball sits 5 ahead
+  // of the snap. Those are two different numbers and the entry layer had
+  // only one -- whatever went in "yards" did both jobs.
+  //
+  // The engine has always kept them apart: `statYds` credits the player,
+  // `fieldDelta` moves the ball, and they are separate fields on the same
+  // effect. Every caller had simply been passing the same value to both.
+  let ownRecSpot = null;
+  {
+    const m = rest.length && String(rest[rest.length - 1]).match(/^orec:(-?\d+)$/i);
+    if (m){ ownRecSpot = parseInt(m[1], 10); rest.pop(); }
+  }
   // Stripped before anything reads positional tokens, exactly as 'tb' is
   // below -- left in place it would be parsed as a returner number.
   const oobIdx = rest.indexOf('oob');
@@ -2101,10 +2122,45 @@ function parseInput(raw, state){
     // the separate rush play used to do before it was folded in here.
     // Without isStat the down would stall and the drive would never reach
     // fourth.
+    // fieldDelta and statYds DIVERGE here, the only place in the app where
+    // they do. statYds is the yardage the runner or receiver earned, to
+    // the spot of the fumble; fieldDelta is how far the ball actually
+    // finished from the snap, which is the recovery spot when one was
+    // given.
+    // THE LINE TO GAIN IS CHECKED HERE, and was not before.
+    // ---------------------------------------------------------------------
+    // This effect never set `converts`, so the engine advanced the down and
+    // shortened the distance but could never award a first down. 2nd & 7 at
+    // own 30, rush for 8, own recovery came out as 3rd & 1 instead of 1st &
+    // 10 -- the drive carried on with the wrong down, on a play that
+    // happens most weeks. Found while adding the recovery spot; verified
+    // against the live build first, so it long predates that work.
+    //
+    // Measured against where the BALL finished, not the yardage credited:
+    // recovering three yards behind the fumble does not make a first down
+    // out of a run that only reached the marker before it was dropped.
+    const ownMoved = (attempt
+      ? ((ownRecSpot !== null && state.fieldPos !== null)
+          ? (ownRecSpot - state.fieldPos)
+          : attempt.yards)
+      : 0);
+    const ownCurDist = state.distance || 10;
+    const ownConverts = attempt ? (ownMoved >= ownCurDist) : false;
+    const ownTurnover = attempt && !ownConverts && (state.down || 4) >= 4;
     const ownEffect = isSafety
       ? { score: { team: def, points: 2 }, endsDrive: true }
-      : (attempt ? { isStat: true, statYds: attempt.yards, fieldDelta: attempt.yards } : {});
-    return { text: lead + ' — recovered by own team' + (isSafety ? ', in the end zone — SAFETY' : ''),
+      : (attempt ? {
+          isStat: true,
+          statYds: attempt.yards,
+          fieldDelta: ownMoved,
+          converts: ownConverts,
+          turnoverOnDowns: ownTurnover,
+          flipApplied: ownTurnover
+        } : {});
+    return { text: lead + ' — recovered by own team' +
+        (isSafety ? ', in the end zone — SAFETY'
+                  : (ownConverts ? ' — 1st down'
+                                 : (ownTurnover ? ' — turnover on downs' : ''))),
       effect: ownEffect,
       flipEligible: false, team: off, quarter: state.quarter };
   }
@@ -6285,6 +6341,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     window.__railFit = fitPanel;
   })();
   let currentSpotGetter = null, rushFumSpotGetter = null, passFumSpotGetter = null, sackFumSpotGetter = null;
+  // Readers for the own-recovery spot on each fumble tree, rebuilt with
+  // the panel because the buttons are rebuilt with it.
+  let ownRecTok = {};
 
   function startingSpotFieldsHtml(idPrefix, label, driveTeamKey){
     const driveTeamLabel = driveTeamKey ? TEAMS[driveTeamKey].name + "'s side" : 'Our side';
@@ -6578,6 +6637,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // fieldPos is possession-relative and possession has flipped by the
   // time this is read, so 20 IS their own 20.
   function touchbackReset(){ return { down: 1, distance: 10, fieldPos: 20 }; }
+
+  // OWN-RECOVERY SPOT: absolute field position, no down reset.
+  // ---------------------------------------------------------------------
+  // Deliberately separate from wireStartingSpot, which returns
+  // {down:1,...} because every other spot widget marks a change of
+  // possession. Falling on your own fumble is not one, and reusing that
+  // widget would quietly award a first down.
+  function wireOwnRecSpot(panel, idPrefix){
+    let side = null;
+    panel.querySelectorAll('.' + idPrefix + '_side').forEach(b => b.addEventListener('click', () => {
+      side = b.dataset.side;
+      panel.querySelectorAll('.' + idPrefix + '_side').forEach(x => x.classList.remove('picked'));
+      b.classList.add('picked');
+    }));
+    return function token(){
+      const el = document.getElementById(idPrefix + '_yardline');
+      const raw = el ? el.value.trim() : '';
+      if (!side || !raw) return '';
+      const n = parseInt(raw, 10);
+      if (isNaN(n) || n < 0 || n > 50) return '';
+      // Possession-relative, matching the engine's fieldPos.
+      return ' orec:' + (side === 'own' ? n : (100 - n));
+    };
+  }
 
   function wireStartingSpot(container, idPrefix){
     let side = null;
@@ -7590,6 +7673,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             startingSpotFieldsHtml('pp_rushfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
             '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_rushfum_td" style="display:none;">' +
             '<button type="button" id="pp_rushfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
+          
+          // WHERE THEY RECOVERED IT. Optional -- blank means the ball
+          // ended where the play ended, which is the common case.
+          // Deliberately NOT the startingSpotFields widget used for a
+          // change of possession: that one returns {down:1,...} and
+          // would hand out a first down for falling on your own
+          // fumble.
+          '<div id="pp_rushfum_ownspot_wrap" style="margin-top:10px;">' +
+            fieldLabel('Recovered at (optional \u2014 leave blank if recovered where the play ended)') +
+            '<div class="pick-row">' +
+              '<button type="button" class="ptoggle pp_rushfum_ownspot_side" data-side="own" '  +
+                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+                TEAMS[computeState().possession].name + "'s side" + '</button>' +
+              '<button type="button" class="ptoggle pp_rushfum_ownspot_side" data-side="opp" ' +
+                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+                TEAMS[otherTeam(computeState().possession)].name + "'s side" + '</button>' +
+              '<input autocomplete="off" type="text" id="pp_rushfum_ownspot_yardline" placeholder="yard line" style="width:90px;">' +
+            '</div>' +
+          '</div>' +
           '</div>' +
         '</div>';
     else if (type === 'pass') html = outcomeSwitchRow('pass') +
@@ -7619,6 +7721,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             startingSpotFieldsHtml('pp_passfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
             '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_passfum_td" style="display:none;">' +
             '<button type="button" id="pp_passfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
+          
+          // WHERE THEY RECOVERED IT. Optional -- blank means the ball
+          // ended where the play ended, which is the common case.
+          // Deliberately NOT the startingSpotFields widget used for a
+          // change of possession: that one returns {down:1,...} and
+          // would hand out a first down for falling on your own
+          // fumble.
+          '<div id="pp_passfum_ownspot_wrap" style="margin-top:10px;">' +
+            fieldLabel('Recovered at (optional \u2014 leave blank if recovered where the play ended)') +
+            '<div class="pick-row">' +
+              '<button type="button" class="ptoggle pp_passfum_ownspot_side" data-side="own" '  +
+                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+                TEAMS[computeState().possession].name + "'s side" + '</button>' +
+              '<button type="button" class="ptoggle pp_passfum_ownspot_side" data-side="opp" ' +
+                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+                TEAMS[otherTeam(computeState().possession)].name + "'s side" + '</button>' +
+              '<input autocomplete="off" type="text" id="pp_passfum_ownspot_yardline" placeholder="yard line" style="width:90px;">' +
+            '</div>' +
+          '</div>' +
           '</div>' +
         '</div>';
     else if (type === 'sack') html = outcomeSwitchRow('sack') + offBlock('passer','Passer') +
@@ -7661,6 +7782,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             startingSpotFieldsHtml('pp_sackfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
             '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_sackfum_td" style="display:none;">' +
             '<button type="button" id="pp_sackfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
+          
+          // WHERE THEY RECOVERED IT. Optional -- blank means the ball
+          // ended where the play ended, which is the common case.
+          // Deliberately NOT the startingSpotFields widget used for a
+          // change of possession: that one returns {down:1,...} and
+          // would hand out a first down for falling on your own
+          // fumble.
+          '<div id="pp_sackfum_ownspot_wrap" style="margin-top:10px;">' +
+            fieldLabel('Recovered at (optional \u2014 leave blank if recovered where the play ended)') +
+            '<div class="pick-row">' +
+              '<button type="button" class="ptoggle pp_sackfum_ownspot_side" data-side="own" '  +
+                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+                TEAMS[computeState().possession].name + "'s side" + '</button>' +
+              '<button type="button" class="ptoggle pp_sackfum_ownspot_side" data-side="opp" ' +
+                'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
+                TEAMS[otherTeam(computeState().possession)].name + "'s side" + '</button>' +
+              '<input autocomplete="off" type="text" id="pp_sackfum_ownspot_yardline" placeholder="yard line" style="width:90px;">' +
+            '</div>' +
+          '</div>' +
           '</div>' +
         '</div>';
     // The intended receiver is asked for here so the throw counts as a
@@ -8844,6 +8984,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // so the getter is swapped in by the fumble toggle rather than set for
     // the whole panel.
     if (type === 'rush') rushFumSpotGetter = wireStartingSpot(panel, 'pp_rushfum_spot');
+    ownRecTok = { rush: wireOwnRecSpot(panel, 'pp_rushfum_ownspot'),
+                  pass: wireOwnRecSpot(panel, 'pp_passfum_ownspot'),
+                  sack: wireOwnRecSpot(panel, 'pp_sackfum_ownspot') };
     if (type === 'pass'){
       passFumSpotGetter = wireStartingSpot(panel, 'pp_passfum_spot');
       // The sack fields live on the pass panel too.
@@ -10174,7 +10317,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           roles = Object.assign({ carrier: { team: off, num: sel.carrier, yards: parseInt(yds, 10) || 0, name: sel.carrierName || undefined }, playType: 'fumble', lost: true }, attRole);
         } else if (rec === 'own'){
           const isRushFumSafety = document.getElementById('pp_rushfum_safety').checked;
-          code = sel.carrier + 'f' + att + (isRushFumSafety ? ' sf' : '');
+          // orec BEFORE sf: the parser pops the safety flag first, then
+          // looks for the spot, so the order here has to mirror that.
+          code = sel.carrier + 'f' + att + (ownRecTok.rush ? ownRecTok.rush() : '') +
+                 (isRushFumSafety ? ' sf' : '');
           roles = Object.assign({ carrier: { team: off, num: sel.carrier, yards: parseInt(yds, 10) || 0, name: sel.carrierName || undefined }, playType: 'fumble' }, attRole);
         } else {
           const fumCredit = sel.credit;
@@ -10223,7 +10369,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             roles = Object.assign({ carrier: { team: off, num: sel.receiver, yards: parseInt(yds, 10) || 0, name: sel.receiverName || undefined }, playType: 'fumble', lost: true }, attRole);
           } else if (rec === 'own'){
             const isPassFumSafety = document.getElementById('pp_passfum_safety').checked;
-            code = recTok + 'f' + att + (isPassFumSafety ? ' sf' : '');
+            code = recTok + 'f' + att + (ownRecTok.pass ? ownRecTok.pass() : '') +
+                   (isPassFumSafety ? ' sf' : '');
             roles = Object.assign({ carrier: { team: off, num: sel.receiver, yards: parseInt(yds, 10) || 0, name: sel.receiverName || undefined }, playType: 'fumble' }, attRole);
           } else {
             const fumCredit = sel.credit;
@@ -10264,7 +10411,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           roles = Object.assign({ carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble', lost: true }, attRole);
         } else if (rec === 'own'){
           const isSackFumSafety = document.getElementById('pp_sackfum_safety').checked;
-          code = sel.passer + 'f' + att + (isSackFumSafety ? ' sf' : '');
+          code = sel.passer + 'f' + att + (ownRecTok.sack ? ownRecTok.sack() : '') +
+                 (isSackFumSafety ? ' sf' : '');
           roles = Object.assign({ carrier: { team: off, num: sel.passer, name: sel.passerName || undefined }, playType: 'fumble' }, attRole);
         } else {
           const fumCredit = sel.credit;
