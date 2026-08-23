@@ -1953,12 +1953,36 @@ function parseInput(raw, state){
       // centre would misstate both their lines.
       const bsY = parseInt(rest[0], 10);
       netYards = -Math.abs(isNaN(bsY) ? 0 : bsY);
-      const bsRec = rest[1];
+      // A bad snap can end in the end zone either way: recovered by the
+      // offence there it is a SAFETY -- the commonest way one actually
+      // happens -- and recovered by the defence and run in it is their
+      // TOUCHDOWN. The tree asked who recovered and then stopped, so
+      // neither could be recorded. Reported 23 Aug.
+      // `sf` is already stripped by the shared isSafety at the head of
+      // this function -- it pops the token before any branch sees it, so
+      // scanning `rest` for it found nothing and the safety silently
+      // logged as an ordinary bad snap. Use the flag it set.
+      const bsSafety = isSafety;
+      // Same again for `td`: a shared flag at the head of the function
+      // pops it before any branch runs, so scanning `rest` found nothing.
+      // Two tokens, two flags, both already parsed for us.
+      const bsTd = td;
+      const bsRec = rest[1] || null;
       if (bsRec){
         // Recovered by the defense: the yardage is still a TEAM rushing
         // loss for the offense, but the ball changes hands, so this has
         // to end the drive and flip rather than just advance the down.
         const recName = bsRec === '?' ? TEAMS[def].name : D(bsRec);
+        if (bsTd){
+          // Their touchdown. The yardage stays a TEAM rushing loss for the
+          // offence -- the snap still went backwards -- but the drive is
+          // over and the score belongs to the recovering side.
+          return { text: TEAMS[off].name + ' — bad snap ' + gainPhrase(netYards) +
+              ', fumble — recovered by ' + recName + ' — TOUCHDOWN',
+            effect: { score: { team: def, points: 6 }, endsDrive: true },
+            flipEligible: false, team: off, quarter: state.quarter,
+            roles: { carrier: { team: off, num: 'TEAM', yards: netYards }, playType: 'rush' } };
+        }
         // "fumble" said out loud. Reported directly, 22 Aug 2026: the log
         // read "bad snap for no gain, recovered by Neville" -- which
         // never states that the ball was on the ground, so a line that is
@@ -1978,6 +2002,15 @@ function parseInput(raw, state){
           // a turnover. It left the banner asking for a kickoff instead
           // of handing the ball straight to the recovering team.
           effect: { fieldDelta: netYards, flip: true, flipApplied: true, flipTo: def },
+          flipEligible: false, team: off, quarter: state.quarter,
+          roles: { carrier: { team: off, num: 'TEAM', yards: netYards }, playType: 'rush' } };
+      }
+      if (bsSafety){
+        // Recovered by the offence in their own end zone: two points to
+        // the defence, and the drive ends with a free kick to follow.
+        return { text: TEAMS[off].name + ' — bad snap ' + gainPhrase(netYards) +
+            ', recovered in the end zone — SAFETY',
+          effect: { score: { team: def, points: 2 }, endsDrive: true },
           flipEligible: false, team: off, quarter: state.quarter,
           roles: { carrier: { team: off, num: 'TEAM', yards: netYards }, playType: 'rush' } };
       }
@@ -12108,9 +12141,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="bs_rec" value="o" checked> Recovered by ' + TEAMS[computeState().possession].name + ' (keeps the ball)</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="bs_rec" value="d"> Recovered by ' + TEAMS[otherTeam(computeState().possession)].name + ' (change of possession)</label>' +
       '</div>' +
+      // OWN RECOVERY IN THE END ZONE IS A SAFETY.
+      // -----------------------------------------------------------------
+      // A snap over the punter's head that he falls on in his own end zone
+      // is two points for the defence, and it is one of the commonest ways
+      // a safety actually happens. The tree asked who recovered and then
+      // stopped, so there was no way to record it.
+      '<div id="bs_own_box" style="margin-top:8px;">' +
+        '<input autocomplete="off" type="checkbox" id="bs_safety" style="display:none;">' +
+        '<button type="button" id="bs_safety_toggle" style="width:100%; padding:12px; ' +
+          'border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; ' +
+          'font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button>' +
+      '</div>' +
       '<div id="bs_def_box" style="display:none; margin-top:8px;">' +
         '<p style="font-size:13px; color:#888; margin:0 0 4px;">Recovered by (optional)</p>' +
         '<input autocomplete="off" type="text" id="bs_recoverer" placeholder="type #" style="width:100px;">' +
+        // AND THE DEFENCE CAN SCORE ON IT. They recovered a loose ball
+        // behind the line; running it in is a defensive touchdown, and the
+        // spot field below is meaningless once they have.
+        '<div style="margin-top:10px;">' +
+          '<input autocomplete="off" type="checkbox" id="bs_def_td" style="display:none;">' +
+          '<button type="button" id="bs_def_td_toggle" style="width:100%; padding:12px; ' +
+            'border-radius:8px; border:2px solid #ccc; background:#fff; color:#555; ' +
+            'font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown</button>' +
+        '</div>' +
         startingSpotFieldsHtml('bs_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
       '</div>' +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="badsnap_review">Review play</button>' +
@@ -12122,9 +12176,38 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     currentSpotGetter = wireStartingSpot(panel, 'bs_spot');
     const bsSpot = currentSpotGetter;
     panel.querySelectorAll('input[name=bs_rec]').forEach(r => r.addEventListener('change', () => {
-      document.getElementById('bs_def_box').style.display =
-        panel.querySelector('input[name=bs_rec]:checked').value === 'd' ? 'block' : 'none';
+      const byDef = panel.querySelector('input[name=bs_rec]:checked').value === 'd';
+      document.getElementById('bs_def_box').style.display = byDef ? 'block' : 'none';
+      // The safety question belongs to the OWN-recovery branch only: if
+      // the defence fell on it in the end zone that is their touchdown,
+      // not a safety, and that is the toggle in the other box.
+      const ownBox = document.getElementById('bs_own_box');
+      if (ownBox) ownBox.style.display = byDef ? 'none' : 'block';
+      // Clear the one being hidden so a switch cannot leave a stale
+      // answer attached to a branch nobody can see.
+      const stale = byDef ? 'bs_safety' : 'bs_def_td';
+      const cb = document.getElementById(stale);
+      if (cb && cb.checked){ cb.checked = false; cb.dispatchEvent(new Event('change')); }
     }));
+    // Both toggles are button/checkbox pairs like every other on the page.
+    [['bs_safety', 'In the end zone — safety'],
+     ['bs_def_td', 'Returned for touchdown']].forEach(([id, label]) => {
+      const btn = document.getElementById(id + '_toggle'), cb = document.getElementById(id);
+      if (!btn || !cb) return;
+      const paint = () => {
+        btn.textContent = (cb.checked ? '\u2713 ' : '') + label;
+        btn.style.background = cb.checked ? '#1a7a4c' : '#fff';
+        btn.style.color = cb.checked ? '#fff' : '#555';
+        btn.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
+        // A score settles where the ball is, so the takeover spot stops
+        // being a question.
+        const sw = document.getElementById('bs_spot_wrap');
+        if (sw && id === 'bs_def_td') sw.style.display = cb.checked ? 'none' : '';
+      };
+      btn.addEventListener('click', () => { cb.checked = !cb.checked; paint(); });
+      cb.addEventListener('change', paint);
+      paint();
+    });
     // Wire the calculator. A bad snap loses ground from the current spot,
     // so the arithmetic is one subtraction -- but it is the subtraction a
     // scorer gets wrong, because fieldPos is possession-relative and the
@@ -12202,8 +12285,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const n = parseInt((document.getElementById('badsnap_yds').value || '').trim(), 10);
       const byDef = panel.querySelector('input[name=bs_rec]:checked').value === 'd';
       const rec = (document.getElementById('bs_recoverer').value || '').trim();
+      // Read directly: isChecked is not in scope in this panel's closure,
+      // and calling it threw before the code string was ever built -- so
+      // Review silently did nothing at all.
+      const bsSafetyEl = document.getElementById('bs_safety');
+      const bsDefTdEl = document.getElementById('bs_def_td');
+      const bsSafety = !byDef && !!(bsSafetyEl && bsSafetyEl.checked);
+      const bsDefTd = byDef && !!(bsDefTdEl && bsDefTdEl.checked);
       document.getElementById('code').value = '0bs ' + (isNaN(n) ? 0 : Math.abs(n)) +
-        (byDef ? ' ' + (rec || '?') : '');
+        (byDef ? ' ' + (rec || '?') : '') +
+        (bsDefTd ? ' td' : '') + (bsSafety ? ' sf' : '');
       showConfirm();
       if (pending){
         pending.roles = pending.roles || {
