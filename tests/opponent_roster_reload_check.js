@@ -101,6 +101,62 @@ async function run() {
     w.close();
   }
 
+  // OUR ROSTER FOLLOWS THE SEASON YEAR, and re-follows it when the year
+  // is changed on the form.
+  // ---------------------------------------------------------------------
+  // Reported directly, entering a game in the 2025 season: it used the
+  // 2026 roster. The query always filtered by season_year correctly --
+  // but it ran ONCE inside init(), reading the field at that moment,
+  // which on a new game is the team's CURRENT season. Change the year
+  // afterwards and nothing re-fetched, so the current roster was
+  // snapshotted into game_rosters and the game was scored against
+  // players who were not on that team that year.
+  //
+  // The stakes are why this is asserted rather than eyeballed: the
+  // snapshot is what game.html reads for the rest of that game's life,
+  // so a wrong roster at creation is wrong in every report afterwards.
+  {
+    const w = await bootPage('create_game.html',
+      { readyWhen: win => !!win.document.getElementById('seasonYear') });
+    await new Promise(r => setTimeout(r, 300));
+    const doc = w.document, win = w.window;
+
+    // Record the season_year each players query filters on.
+    w.evalIn(`window.__years = [];
+      const _from = supabaseClient.from.bind(supabaseClient);
+      supabaseClient.from = function(t){
+        const q = _from(t);
+        if (t === 'players'){
+          const _eq = q.eq.bind(q);
+          q.eq = function(col, val){
+            if (col === 'season_year') window.__years.push(val);
+            return _eq(col, val);
+          };
+        }
+        return q;
+      };`);
+
+    const y = doc.getElementById('seasonYear');
+    if (!y) { fail('season:field', 'no season year field'); w.close(); return failures; }
+    for (const yr of ['2025', '2024']) {
+      y.value = yr;
+      y.dispatchEvent(new win.Event('change', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 300));
+    }
+    const years = JSON.parse(w.evalIn('JSON.stringify(window.__years)'));
+    if (!years.length) {
+      fail('season:noreload', 'changing the season year did not reload the roster at all');
+    } else {
+      if (years.indexOf(2025) === -1) fail('season:2025', 'no query for 2025, got ' + JSON.stringify(years));
+      if (years.indexOf(2024) === -1) fail('season:2024', 'no query for 2024, got ' + JSON.stringify(years));
+      // Each fetch must use the year on the form, not a remembered one.
+      if (years[years.length - 1] !== 2024) {
+        fail('season:stale', 'the last fetch should use the current field value, got ' + years[years.length - 1]);
+      }
+    }
+    w.close();
+  }
+
   return failures;
 }
 
