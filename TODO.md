@@ -2120,6 +2120,110 @@ watch for.
     than on the player. Reports already show targeted-with-no-catch
     receivers correctly, so capturing it is the whole fix.
   - Check the **sack** path for the same omission while in there.
+## ORDER OF WORK — decided 23 Aug
+
+    1. iPad          <- NEXT
+    2. Multi-tenant
+    3. Everything else
+
+**PC is considered DONE.** Andy's call. The entry app on a laptop is the
+product as intended; further work there is polish, not readiness.
+
+Why iPad before multi-tenancy, given neither technically blocks the
+other: iPad decides how BIG the addressable market is, multi-tenancy
+decides whether any of it can be served. For the stated target -- crewed
+streaming broadcast crews -- a laptop is a given, so laptop-only sells
+today. Beyond that core it does not: SnapStat is $179/year and
+mobile-first, and "you need a laptop at the table" is an objection they
+have an answer to and StatChat does not.
+
+Doing iPad first also means the first outside school sees a finished
+product rather than one being finished around them.
+
+The one piece of multi-tenant prep worth doing ALONGSIDE the iPad work is
+folding five breakpoints into three -- new tenant pages (the school list,
+the subscription view) would otherwise inherit the current mess and need
+retrofitting. That is a tidy-up, not a feature.
+
+Everything else multi-tenant waits, including Step 0 (versioning the
+schema). Step 0 remains the real gate on tenancy and is a standalone risk
+regardless -- if the Supabase project were lost today the application
+code would survive and the shape of the data would not.
+
+---
+
+## iPad / responsive plan — DECIDED 23 Aug, not yet built
+
+**Scope of support, Andy's call:**
+- **Phone: game entry NOT supported.** A phone opening game.html as an
+  entry user is told so plainly, rather than left to struggle. A scorer
+  whose iPad dies and reaches for a phone must find out immediately, not
+  mid-drive.
+- **iPad: LANDSCAPE only**, and no Android. Safari on iPadOS cannot lock
+  orientation from a web page, so this is a rotate prompt over the
+  screen, not enforcement. Verify that browser limitation before relying
+  on it -- it is the sort of thing that changes.
+- **Viewing pages** (view, recap, reports) stay phone-first: that is where
+  parents and students read them.
+
+**Breakpoints -- three, replacing five.** The app currently carries 640,
+700, 899, 1100 and 1219, and the first two contradict: anything between
+640 and 700 matches both a "small" and a "large" rule.
+
+    phone            up to 767      entry unsupported
+    tablet portrait  768 - 1023     rotate prompt
+    landscape+       1024 and up    full three-column entry
+
+1024 rather than the current 1220 is the important change. **Almost no
+iPad reaches 1220 in landscape** -- mini 1133, iPad 10th/Air 1180, Pro 11"
+1194; only the 13" Pro at 1366 clears it. So today the three-column layout
+never engages on the iPad you would actually use, and the rails silently
+fall back to stacked.
+
+**Collapsible rails -- TABLET ONLY, desktop untouched.**
+
+The arithmetic is why. The entry card is fixed at 760px, so on an 1180px
+iPad the rails split what is left:
+
+    both rails open   ~176px each   -- too narrow: "possessions" alone is
+                                       about that wide, and drive lines
+                                       wrap three deep
+    one rail open     ~386px        -- comparable to desktop
+
+So either/or is not a preference, it is what makes a rail usable at all.
+
+Spec:
+- Collapsed rail = a thin strip down the side, not a header bar.
+- Tapping a collapsed strip expands it AND collapses the other. Both open
+  at once is not a state.
+- **Current drive open by default** -- Andy checks it constantly while
+  entering.
+- Desktop keeps both rails open side by side, exactly as now.
+
+Cheap because it reuses two things already built: the
+`.opt-block`/`.opt-toggle`/`.opt-body` collapse from the entry trees, and
+`wireExclusiveToggles` for the either/or. And because it applies only
+below 1220, none of the 22 syncDock/syncRail absolute-positioning
+references are involved -- the rails are already `position:static` at
+that width.
+
+**The Checks warning needs somewhere to live** once its rail is usually
+shut: on the centre status line, beside Timeouts and the last clock.
+Andy suggested a blinking light -- see the open question below.
+
+### Checks indicator — DECIDED: a solid dot that changes colour
+Grey when clear, amber when something is flagged. NOT a permanent blink:
+once it is on and cannot be fixed mid-drive it blinks for the rest of the
+game and becomes noise a scorer learns to look past -- the alarm is spent
+and only the distraction is left. Flashing content is also the one thing
+accessibility guidance is unambiguous about.
+
+It may blink briefly when the count first RISES, then go solid: that
+catches the eye at the moment that matters, which is the change, and
+stops nagging afterwards.
+
+---
+
 ## Shared stylesheet rollout (started 22 Aug)
 
 Run `node tests/style_audit.js` to see progress. Baseline was 118 distinct
