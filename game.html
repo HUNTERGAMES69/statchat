@@ -4009,7 +4009,37 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const atHalf = gamePhase === 'halftime';
     document.getElementById('finalTag').style.display = isFinal ? 'inline' : 'none';
     document.getElementById('notStartedTag').style.display = notStarted ? 'inline' : 'none';
-    document.getElementById('halftimeTag').style.display = atHalf ? 'inline' : 'none';
+    // HALFTIME COMES OFF THE BANNER THE MOMENT "Start 2nd half" IS
+    // PRESSED, not when the kickoff finally saves.
+    // -----------------------------------------------------------------
+    // startGuided(3) writes a Q3 quarter marker immediately, but
+    // derivePhase deliberately ignores admin markers -- so the phase
+    // stays 'halftime' until a real play lands, and the banner went on
+    // saying HALFTIME while the scorer was already entering the kickoff.
+    // Reported directly.
+    //
+    // Only the TAG changes. gamePhase is left alone because it gates the
+    // ladder, Undo and End game, and a marker on its own genuinely is not
+    // the second half -- no kickoff has been entered yet. view.html draws
+    // the same distinction and for the same reason: it ends its HALFTIME
+    // card on this marker and shows "Start of Q3" until the kickoff.
+    //
+    // The live row stays hidden either way (see hideLive below), so the
+    // banner does not fall back to a stale first-half down and distance.
+    // AND the flow is still open. The marker alone is not enough: Back
+    // out of the guided kickoff and the Q3 marker stays behind (it is
+    // left deliberately -- see guidedBack), so a marker-only test left
+    // the banner blank while the game was plainly still at halftime with
+    // no kickoff entered.
+    //
+    // guided.active survives a reload, because the flow is persisted with
+    // the rest of the UI state -- so this does not un-hide itself if the
+    // scorer refreshes mid-kickoff.
+    const secondHalfPending = atHalf && guided.active &&
+      guided.targetPhase === 'secondHalf' &&
+      plays.some(p => p.effect && p.effect.setQuarter >= 3);
+    document.getElementById('halftimeTag').style.display =
+      (atHalf && !secondHalfPending) ? 'inline' : 'none';
     // Down, distance and quarter describe a game in progress. Before
     // kickoff there is nothing to describe.
     const hideLive = isFinal || notStarted || atHalf;
