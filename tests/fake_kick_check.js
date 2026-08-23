@@ -236,11 +236,14 @@ async function run() {
       '.pp_receiver_pick', 'pp_receiver_manual',
       'pp_fgfake_yards', '.lossToggle',
       'pp_fgfake_incomplete_toggle', 'pp_fgfake_td_toggle',
-      // The 0-9 pad, live on a fake since 23 Aug. NOT the calculator: the
-      // field goal panel has no pp_calc_wrap to borrow, and adding a
-      // hidden one silently broke the kick distance -- see the note in
-      // game.html beside the fake block.
-      '.quickYardsBtn',
+      // The 0-9 pad and the fake's OWN calculator, both live since 23 Aug.
+      //
+      // Its own -- pp_fgcalc_*, not the shared pp_calc_*. Sharing the
+      // panel's calculator was tried first and reverted: pp_yards on a
+      // field goal panel is the KICK DISTANCE, and the shared control
+      // overwrote a blocked kick's 44 yards with the 60-yard return. The
+      // separate one writes only to pp_fgfake_yards and cannot collide.
+      '.quickYardsBtn', 'pp_fgcalc_yardline', '.calcSide', '.ptoggle',
       'pp_review', 'pp_clear'
     ]
   };

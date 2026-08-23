@@ -341,6 +341,49 @@ async function run() {
     h.close();
   }
 
+  // THE FAKE FIELD GOAL HAS ITS OWN CALCULATOR, and it must not touch the
+  // kick distance.
+  // ---------------------------------------------------------------------
+  // A fake is a rush or a pass, so working out "tackled on the 18" is as
+  // useful here as anywhere -- but the field goal panel had no calculator
+  // at all, because a kick that is not faked has nothing to calculate.
+  //
+  // Sharing the panel's pp_calc_wrap was tried first and reverted the same
+  // day: its resting target is pp_yards, which on THIS panel is the kick
+  // distance, and merely wiring it there turned a blocked kick's 44 yards
+  // into the 60-yard return. The golden snapshot caught it. This asserts
+  // both halves -- the calculator works, and the kick distance does not
+  // move.
+  {
+    const h = await bootGamePage();
+    const doc = h.window.document, win = h.window;
+    setDrive(h, { down: 4, distance: 3, side: 'opp', yardline: 25 });
+    click(win, doc.querySelector('.ptypeBtn[data-type="fg"]'));
+    click(win, doc.querySelector('.pp_kicker_pick'));
+    typeInto(win, doc.getElementById('pp_yards'), '44');
+    click(win, doc.getElementById('pp_fg_fake_toggle'));
+    await new Promise(r => setTimeout(r, 150));
+
+    const calc = doc.getElementById('pp_fgcalc_wrap');
+    if (!calc) { fail('fgfakecalc', 'the fake field goal has no calculator'); h.close(); return failures; }
+    // ITS OWN, not the shared one. If pp_calc_wrap appears on this panel
+    // the old collision is back.
+    if (doc.getElementById('pp_calc_wrap')) {
+      fail('fgfakecalc:shared', 'the fake must not use the shared calculator on a field goal panel');
+    }
+    click(win, doc.querySelector('#pp_fgcalc_wrap .calcSide[data-side="opp"]'));
+    typeInto(win, doc.getElementById('pp_fgcalc_yardline'), '18');
+    await new Promise(r => setTimeout(r, 150));
+    const got = (doc.getElementById('pp_fgfake_yards') || {}).value;
+    if (got !== '7') fail('fgfakecalc:value', 'opp 25 to opp 18 is +7, got ' + JSON.stringify(got));
+    // THE ONE THAT MATTERS.
+    const kick = (doc.getElementById('pp_yards') || {}).value;
+    if (kick !== '44') {
+      fail('fgfakecalc:kick', 'the kick distance must not move, got ' + JSON.stringify(kick));
+    }
+    h.close();
+  }
+
   return failures;
 }
 
