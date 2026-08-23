@@ -691,6 +691,16 @@ async function run() {
     h.close();
   }
 
+  // The RET leader line was removed from Live totals on 23 Aug -- Andy's
+  // call. It was added to make the new return stat verifiable while it
+  // was being built, and once returns appeared in the reports it was one
+  // more line competing for space in a rail read at a glance. The stat
+  // itself is untouched; only this tile stopped showing it.
+  //
+  // The bug it exposed is worth keeping in mind if it ever comes back:
+  // the shared `top` helper only accepts a value above zero, so a return
+  // for a LOSS vanished entirely.
+
   return failures;
 }
 
