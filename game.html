@@ -346,6 +346,22 @@
              padding:3px 8px; border-radius:5px; display:inline-block; margin:8px 0 4px; }
   /* Below the dock breakpoint the margins are gone, so it comes back into
      the flow underneath everything else rather than overlapping the card. */
+  /* THE RAIL STRIP IS HIDDEN BY DEFAULT, EVERYWHERE.
+     ---------------------------------------------------------------------
+     It is created unconditionally by setupRails() -- built once and kept,
+     because rebuilding it on resize would drop its listener with it. So
+     the element exists at every width, and only the media query below
+     ever showed it.
+
+     The hide rule used to live INSIDE that query, which meant desktop had
+     no rule hiding it at all: the button simply rendered, as a black box
+     at the foot of each rail. Reported with a screenshot.
+
+     Hidden here, shown only by the collapsed state inside the band. A
+     default that holds everywhere beats a rule that has to be repeated in
+     every context that does not want it. */
+  #driveDock > .rail-strip, #rightRail > .rail-strip { display:none; }
+
   /* COLLAPSIBLE RAILS — LANDSCAPE TABLET ONLY (1024-1219px).
      ---------------------------------------------------------------------
      The entry card is fixed at 760px, so the rails split what is left. On
@@ -384,8 +400,6 @@
       color:var(--sc-ink-soft, #555); white-space:nowrap;
       background:none; border:0; padding:14px 0; cursor:pointer;
     }
-    /* Open rails hide their own strip. */
-    #driveDock .rail-strip, #rightRail .rail-strip { display:none; }
     /* The open one takes the room the collapsed one gave up. */
     #driveDock:not(.rail-collapsed) { right:calc(50% + 380px + 18px); }
     #rightRail:not(.rail-collapsed) { left:calc(50% + 380px + 18px); }
