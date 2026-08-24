@@ -22,9 +22,18 @@
   :root{
     --ink:#10141a; --panel:#191f27; --raise:#20272f; --edge:#2b333d;
     --paper:#eef1f4; --mute:#8d99a6;
-    --program:#b00020;   /* ON AIR. Same red as the app. */
-    --preview:#7cb518;   /* The flyer's green. */
-    --data:#ffc72c;      /* Numbers only. The app's "selected". */
+    /* THREE COLOURS, THREE MEANINGS. Keeping them separate is what
+       stops the page turning into decoration:
+         GREEN  the brand, and anything affirmative — section labels,
+                the primary call to action, ticks, the price.
+         GOLD   data and selection, carried over from the app, where a
+                scorer already reads gold as "this is the chosen one".
+         RED    on air, and nothing else. Same red as the app. */
+    --brand:#7cb518;     /* the logo's green */
+    --brand-hi:#a3d93f;  /* lifted, for hovers */
+    --brand-dk:#5e8f0f;  /* for text on light */
+    --program:#b00020;
+    --data:#ffc72c;
     --label:'Barlow Condensed',ui-sans-serif,system-ui,sans-serif;
     --body:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
     --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
@@ -37,7 +46,7 @@
   a{color:inherit}
   :focus-visible{outline:2px solid var(--data);outline-offset:3px;border-radius:2px}
   .strip{font-family:var(--label);text-transform:uppercase;letter-spacing:.16em;
-         font-weight:600;font-size:12px;color:var(--mute)}
+         font-weight:600;font-size:12px;color:var(--brand)}
 
   header{position:sticky;top:0;z-index:50;background:rgba(16,20,26,.93);
          backdrop-filter:blur(8px);border-bottom:1px solid var(--edge)}
@@ -48,7 +57,7 @@
   nav{margin-left:auto;display:flex;align-items:center;gap:24px}
   nav a{font-family:var(--label);text-transform:uppercase;letter-spacing:.12em;
         font-size:13px;font-weight:600;color:var(--mute);text-decoration:none}
-  nav a:hover{color:var(--paper)}
+  nav a:hover{color:var(--brand-hi)}
   .login{font-family:var(--label);text-transform:uppercase;letter-spacing:.12em;font-size:13px;
          font-weight:700;color:var(--ink)!important;background:var(--data);
          padding:9px 20px;border-radius:3px;text-decoration:none}
@@ -58,14 +67,14 @@
   .hero{padding:70px 0 84px;border-bottom:1px solid var(--edge)}
   .hero h1{font-family:var(--label);font-weight:700;text-transform:uppercase;
            font-size:clamp(36px,6.4vw,70px);line-height:.96;margin:14px 0 0}
-  .hero h1 em{font-style:normal;color:var(--data)}
+  .hero h1 em{font-style:normal;color:var(--brand)}
   .lede{max-width:58ch;color:#c3ccd5;font-size:18px;margin:22px 0 0}
   .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px;align-items:center}
   .btn{font-family:var(--label);text-transform:uppercase;letter-spacing:.12em;font-size:13px;
        font-weight:700;padding:13px 26px;border-radius:3px;text-decoration:none;
        border:1px solid transparent;display:inline-block}
-  .btn-a{background:var(--data);color:var(--ink)}
-  .btn-a:hover{background:#ffd558}
+  .btn-a{background:var(--brand);color:#0e1408}
+  .btn-a:hover{background:var(--brand-hi)}
   .btn-b{border-color:var(--edge);color:var(--paper)}
   .btn-b:hover{border-color:var(--mute)}
   .pricetag{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;
@@ -81,7 +90,7 @@
         text-transform:uppercase;letter-spacing:.14em;font-size:11px;font-weight:700}
   .dot{width:9px;height:9px;border-radius:50%;background:#39424d}
   .lamp.on .dot{background:var(--program);box-shadow:0 0 0 3px rgba(176,0,32,.22)}
-  .lamp.pv.on .dot{background:var(--preview);box-shadow:0 0 0 3px rgba(124,181,24,.22)}
+  .lamp.pv.on .dot{background:var(--brand);box-shadow:0 0 0 3px rgba(124,181,24,.22)}
   .lamp.off{color:#5c6773}
   .rigbar .src{margin-left:auto;font-family:var(--mono);font-size:11px;color:#5c6773}
   .stage{padding:26px 20px 22px;background:linear-gradient(160deg,#1b2530,#121820 60%,#0d1218)}
@@ -91,7 +100,7 @@
   .bug .team.us{background:var(--data);color:#20180a}
   .bug .abbr{font-weight:700;letter-spacing:.1em;font-size:16px}
   .bug .score{font-family:var(--mono);font-weight:700;font-size:20px;line-height:1}
-  .bug .clock{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:8px 16px;
+  .bug .period{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:8px 16px;
               background:#0a0e13;border-left:1px solid #222b35;border-right:1px solid #222b35}
   .bug .q{font-size:10px;letter-spacing:.16em;color:var(--mute)}
   .bug .t{font-family:var(--mono);font-weight:700;font-size:16px;line-height:1}
@@ -104,7 +113,11 @@
   .third .what{font-size:15px;color:#e6ebf0;margin-top:3px;min-height:1.6em}
   .caption{margin-top:16px;font-size:13px;color:#6f7b88;max-width:64ch}
 
-  section{padding:78px 0;border-bottom:1px solid var(--edge)}
+  section{padding:78px 0;border-bottom:1px solid var(--edge);position:relative}
+  /* A short green rule above each section eyebrow: enough brand to read
+     down the page as a rhythm, not enough to compete with the content. */
+  section > .strip:first-child::before{content:"";display:block;width:34px;height:3px;
+     background:var(--brand);border-radius:2px;margin-bottom:14px}
   h2{font-family:var(--label);text-transform:uppercase;font-weight:700;
      font-size:clamp(27px,4.2vw,42px);line-height:1.03;margin:12px 0 0}
   .sub{color:#b6c0cb;max-width:64ch;margin:18px 0 0;font-size:17px}
@@ -118,7 +131,7 @@
   .cell h3{font-family:var(--label);text-transform:uppercase;letter-spacing:.05em;
            font-size:18px;font-weight:700;margin:10px 0 0;line-height:1.15}
   .cell p{color:#adb8c4;font-size:15px;margin:10px 0 0}
-  .tick{width:13px;height:13px;border-radius:2px;background:var(--preview);display:block}
+  .tick{width:13px;height:13px;border-radius:2px;background:var(--brand);display:block}
 
   /* ---- three taps ---- */
   .taps{display:grid;gap:1px;background:var(--edge);border:1px solid var(--edge);
@@ -140,7 +153,7 @@
   .tab{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;font-size:12px;
        font-weight:700;padding:9px 16px;border-radius:3px;background:var(--panel);
        border:1px solid var(--edge);color:var(--mute);cursor:pointer}
-  .tab[aria-selected="true"]{background:var(--data);color:#20180a;border-color:var(--data)}
+  .tab[aria-selected="true"]{background:var(--brand);color:#0e1408;border-color:var(--brand)}
   .code{margin-top:12px;background:#0b0f14;border:1px solid var(--edge);border-radius:6px;
         overflow:auto}
   .code pre{margin:0;padding:20px;font-family:var(--mono);font-size:12.5px;line-height:1.75;
@@ -157,15 +170,15 @@
                   vertical-align:top}
   .cmp thead th{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;
                 font-size:12px;color:var(--mute);background:var(--raise)}
-  .cmp thead th.me{color:#20180a;background:var(--data)}
+  .cmp thead th.me{color:#0e1408;background:var(--brand)}
   .cmp tbody th{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em;
                 font-size:13px;font-weight:600;color:var(--paper);width:150px}
-  .cmp td.me{background:rgba(255,199,44,.06);color:var(--paper)}
+  .cmp td.me{background:rgba(124,181,24,.09);color:var(--paper)}
   .cmp td{color:#9aa5b1}
   .note{font-size:13px;color:#6f7b88;margin-top:16px;max-width:76ch;font-style:italic}
   .scroller{overflow-x:auto}
 
-  .callout{margin-top:40px;background:rgba(124,181,24,.07);border-left:3px solid var(--preview);
+  .callout{margin-top:40px;background:rgba(124,181,24,.07);border-left:3px solid var(--brand);
            padding:22px 24px;border-radius:0 5px 5px 0}
   .callout h3{font-family:var(--label);text-transform:uppercase;letter-spacing:.05em;
               font-size:18px;margin:0}
@@ -173,9 +186,10 @@
 
   /* ---- pricing ---- */
   .pricebox{margin-top:40px;background:var(--panel);border:1px solid var(--edge);
-            border-radius:6px;padding:38px 30px;text-align:center}
+            border-top:3px solid var(--brand);border-radius:6px;padding:38px 30px;
+            text-align:center}
   .big{font-family:var(--mono);font-weight:700;font-size:clamp(46px,9vw,76px);
-       color:var(--data);line-height:1}
+       color:var(--brand);line-height:1}
   .per{font-family:var(--label);text-transform:uppercase;letter-spacing:.14em;
        font-size:13px;color:var(--mute);margin-top:6px}
   .incl{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:26px 0 0}
@@ -242,7 +256,7 @@
       <div class="bug">
         <div class="team us"><span class="abbr">RVS</span><span class="score" id="sUs">21</span></div>
         <div class="team"><span class="abbr">NGT</span><span class="score" id="sThem">14</span></div>
-        <div class="clock"><span class="q" id="qtr">3rd</span><span class="t" id="clk">7:42</span></div>
+        <div class="period"><span class="q">Quarter</span><span class="t" id="qtr">3rd</span></div>
         <div class="dd" id="dd">1st &amp; 10 &middot; NGT 34</div>
       </div>
       <div class="third">
@@ -508,17 +522,21 @@
      INVENTED NAMES ONLY. Riverside and Northgate are not real schools
      and these are not real players. */
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // NO GAME CLOCK. StatChat does not track one -- the `score` view has
+  // quarter, down, distance, ball-on and timeouts and no time remaining.
+  // Showing a clock here would advertise a field a crew could not bind
+  // to, and they would find out while building templates.
   var seq = [
-    { who:'Play 41', what:'Whitfield pass complete to Brooks for 12 yards.',   dd:'1st &amp; 10 &middot; NGT 34', clk:'7:42', us:21, them:14, air:false },
-    { who:'Play 42', what:'Delgado rush up the middle for 6 yards.',            dd:'2nd &amp; 4 &middot; NGT 28',  clk:'7:11', us:21, them:14, air:true  },
-    { who:'Play 43', what:'Delgado rush right for 9 yards. First down.',        dd:'1st &amp; 10 &middot; NGT 19', clk:'6:33', us:21, them:14, air:true  },
-    { who:'Play 44', what:'Whitfield pass complete to Ellis for 19 yards. Touchdown.', dd:'Try &middot; NGT 3', clk:'6:02', us:27, them:14, air:true },
-    { who:'Play 45', what:'Nakamura extra point is good.',                      dd:'Kickoff &middot; RVS 40', clk:'6:02', us:28, them:14, air:true }
+    { who:'Play 41', what:'Whitfield pass complete to Brooks for 12 yards.',   dd:'1st &amp; 10 &middot; NGT 34', q:'3rd', us:21, them:14, air:false },
+    { who:'Play 42', what:'Delgado rush up the middle for 6 yards.',            dd:'2nd &amp; 4 &middot; NGT 28',  q:'3rd', us:21, them:14, air:true  },
+    { who:'Play 43', what:'Delgado rush right for 9 yards. First down.',        dd:'1st &amp; 10 &middot; NGT 19', q:'3rd', us:21, them:14, air:true  },
+    { who:'Play 44', what:'Whitfield pass complete to Ellis for 19 yards. Touchdown.', dd:'Try &middot; NGT 3', q:'3rd', us:27, them:14, air:true },
+    { who:'Play 45', what:'Nakamura extra point is good.',                      dd:'Kickoff &middot; RVS 40', q:'4th', us:28, them:14, air:true }
   ];
   var i = 0;
   function paint(s){
     $('who').textContent = s.who;  $('what').textContent = s.what;
-    $('dd').innerHTML = s.dd;      $('clk').textContent = s.clk;
+    $('dd').innerHTML = s.dd;      $('qtr').textContent = s.q;
     $('sUs').textContent = s.us;   $('sThem').textContent = s.them;
     $('lampPg').className = 'lamp ' + (s.air ? 'on' : 'off');
     $('lampPv').className = 'lamp pv ' + (s.air ? 'off' : 'on');
@@ -542,22 +560,28 @@
     score: { url: 'GET /api/feed?view=score&format=json',
       body:
 '{\n' +
-'  "home":        "Riverside",\n' +
-'  "away":        "Northgate",\n' +
-'  "homeScore":   21,\n' +
-'  "awayScore":   14,\n' +
-'  "quarter":     "3rd",\n' +
-'  "clock":       "7:42",\n' +
-'  "possession":  "Riverside",\n' +
-'  "down":        1,\n' +
-'  "distance":    10,\n' +
-'  "ballOn":      "opp 34",\n' +
-'  "lastPlay":    "Whitfield pass complete to Brooks for 12 yards."\n' +
+'  "homeTeam":        "Riverside",\n' +
+'  "homeScore":       21,\n' +
+'  "awayTeam":        "Northgate",\n' +
+'  "awayScore":       14,\n' +
+'  "quarter":         "3rd",\n' +
+'  "quarterNumber":   3,\n' +
+'  "overtimeRound":   0,\n' +
+'  "down":            1,\n' +
+'  "downOrdinal":     "1st",\n' +
+'  "distance":        10,\n' +
+'  "downAndDistance": "1st & 10",\n' +
+'  "ballOn":          "opp 34",\n' +
+'  "possession":      "Riverside",\n' +
+'  "homeHasBall":     "true",\n' +
+'  "awayHasBall":     "false",\n' +
+'  "homeTimeouts":    2,\n' +
+'  "awayTimeouts":    1\n' +
 '}' },
     team: { url: 'GET /api/feed?view=team&format=xml',
       body:
 '&lt;?xml version="1.0" encoding="UTF-8"?&gt;\n' +
-'&lt;feed quarter="3rd" clock="7:42"&gt;\n' +
+'&lt;feed quarter="3rd" quarterNumber="3"&gt;\n' +
 '  &lt;team team="Riverside" score="21" totalYards="284" rushYards="96"\n' +
 '        passYards="188" rushAtt="21" passComp="14" passAtt="19"\n' +
 '        firstDowns="15" thirdDownConv="6" thirdDownAtt="11"\n' +
