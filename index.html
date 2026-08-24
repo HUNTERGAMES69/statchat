@@ -1,321 +1,383 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<!-- Without this every page load logs a 404 for /favicon.ico.
-     Harmless, but a red console error should MEAN something. -->
-<link rel="icon" href="favicon.ico" sizes="any">
-<link rel="icon" href="logo.png" type="image/png">
-<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
-     below still wins -- that ordering is what lets a page be converted
-     a bit at a time without breaking on the way. -->
-<link rel="stylesheet" href="statchat.css">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<!-- Apple renamed this; the old tag warns in the console on every
-     page load. Both are kept so older iOS still honours it. -->
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="StatChat">
-<title>StatChat — Sign in</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StatChat — live football stats and broadcast overlays</title>
+<meta name="description" content="Live high-school football statistics and vMix broadcast overlays, entered from a browser. No capture card, no desktop install.">
+
+<!-- SELF-CONTAINED, and deliberately NOT loading statchat.css.
+     Same reasoning already recorded for the three broadcast overlays: a
+     surface with a different medium and a different job carries its own
+     palette. This page is read cold by a stranger on a phone; the app is
+     read by someone who is already signed in. Sharing a stylesheet would
+     mean overriding almost every token, which is worse than not sharing
+     one. The two colours that DO carry over are the ones that mean
+     something: #b00020 is the app's ON AIR red, and #ffc72c is what a
+     scorer already reads as "selected". -->
+
+<link rel="icon" href="favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); display:flex; align-items:center; justify-content:center; min-height:100vh; }
-  .card { background:#fff; border-radius:12px; padding:120px 32px 32px; max-width:380px; width:100%; box-shadow:0 2px 12px rgba(0,0,0,0.08); position:relative; }
-  #loginLogo { position:absolute; top:16px; right:16px; width:90px; height:auto; border-radius:8px; }
-  h1 { font-size:22px; margin:0 0 6px; }
-  p.sub { color:#888; margin:0 0 20px; font-size:14px; }
-  label { display:block; font-size:14px; margin-bottom:6px; color:#444; }
-  input { width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:15px; margin-bottom:14px; box-sizing:border-box; }
-  button { width:100%; padding:11px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:15px; font-weight:600; cursor:pointer; }
-  button:disabled { opacity:0.6; cursor:default; }
-  .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
-  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
-  .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
-  .hidden { display:none; }
+  :root{
+    /* A vision-mixer console, not a dark theme. Graphite rather than
+       black, because a switcher surface is grey and its lamps are the
+       only saturated things on it. */
+    --ink:#10141a; --panel:#191f27; --raise:#20272f; --edge:#2b333d;
+    --paper:#eef1f4; --mute:#8d99a6;
+    --program:#b00020;   /* ON AIR. Same red as the app. */
+    --preview:#1a7a4c;   /* Preview bus. The app's green. */
+    --data:#ffc72c;      /* Numbers only. The app's "selected". */
+    --label:'Barlow Condensed',ui-sans-serif,system-ui,sans-serif;
+    --body:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--body);
+       font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{width:100%;max-width:1080px;margin:0 auto;padding:0 24px}
+  a{color:inherit}
+  :focus-visible{outline:2px solid var(--data);outline-offset:3px;border-radius:2px}
+
+  /* Channel-strip label. Used for every eyebrow and button on the page,
+     because uppercase condensed IS the vernacular of broadcast graphics
+     — it is what a lower third looks like everywhere. */
+  .strip{font-family:var(--label);text-transform:uppercase;letter-spacing:.16em;
+         font-weight:600;font-size:12px;color:var(--mute)}
+
+  /* ---------- header ---------- */
+  header{position:sticky;top:0;z-index:50;background:rgba(16,20,26,.92);
+         backdrop-filter:blur(8px);border-bottom:1px solid var(--edge)}
+  .bar{display:flex;align-items:center;gap:18px;height:62px}
+  .mark{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:var(--label);
+        font-weight:700;font-size:22px;letter-spacing:.04em;text-transform:uppercase}
+  .mark img{width:26px;height:26px;border-radius:5px}
+  nav{margin-left:auto;display:flex;align-items:center;gap:26px}
+  nav a{font-family:var(--label);text-transform:uppercase;letter-spacing:.12em;
+        font-size:13px;font-weight:600;color:var(--mute);text-decoration:none}
+  nav a:hover{color:var(--paper)}
+  .login{font-family:var(--label);text-transform:uppercase;letter-spacing:.12em;font-size:13px;
+         font-weight:700;color:var(--ink)!important;background:var(--data);
+         padding:9px 20px;border-radius:3px;text-decoration:none}
+  .login:hover{background:#ffd558}
+  @media (max-width:720px){ nav a:not(.login){display:none} }
+
+  /* ---------- hero ---------- */
+  .hero{padding:76px 0 88px;border-bottom:1px solid var(--edge)}
+  .hero h1{font-family:var(--label);font-weight:700;text-transform:uppercase;
+           font-size:clamp(40px,7vw,78px);line-height:.94;letter-spacing:-.005em;margin:14px 0 0}
+  .hero h1 em{font-style:normal;color:var(--data)}
+  .lede{max-width:56ch;color:#c3ccd5;font-size:18px;margin:22px 0 0}
+  .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+  .btn{font-family:var(--label);text-transform:uppercase;letter-spacing:.12em;font-size:13px;
+       font-weight:700;padding:13px 26px;border-radius:3px;text-decoration:none;border:1px solid transparent}
+  .btn-a{background:var(--data);color:var(--ink)}
+  .btn-a:hover{background:#ffd558}
+  .btn-b{border-color:var(--edge);color:var(--paper)}
+  .btn-b:hover{border-color:var(--mute)}
+
+  /* ---------- the scorebug: the signature ----------
+     This is not a screenshot. It is the same kind of markup that
+     composites over the programme feed in vMix, running live on the
+     page, because the overlay IS the product and describing it would be
+     weaker than showing it. */
+  .rig{margin-top:52px;background:var(--panel);border:1px solid var(--edge);
+       border-radius:6px;overflow:hidden}
+  .rigbar{display:flex;align-items:center;gap:12px;padding:10px 14px;
+          background:var(--raise);border-bottom:1px solid var(--edge)}
+  .lamp{display:inline-flex;align-items:center;gap:7px;font-family:var(--label);
+        text-transform:uppercase;letter-spacing:.14em;font-size:11px;font-weight:700}
+  .dot{width:9px;height:9px;border-radius:50%;background:#39424d}
+  .lamp.on .dot{background:var(--program);box-shadow:0 0 0 3px rgba(176,0,32,.22)}
+  .lamp.pv.on .dot{background:var(--preview);box-shadow:0 0 0 3px rgba(26,122,76,.22)}
+  .lamp.off{color:#5c6773}
+  .rigbar .src{margin-left:auto;font-family:var(--mono);font-size:11px;color:#5c6773}
+  .stage{position:relative;padding:28px 20px 22px;
+         background:linear-gradient(160deg,#1b2530,#121820 60%,#0d1218)}
+
+  .bug{display:flex;align-items:stretch;font-family:var(--label);text-transform:uppercase;
+       border-radius:4px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.45);max-width:520px}
+  .bug .team{display:flex;align-items:center;gap:10px;padding:11px 15px;background:#12171e}
+  .bug .team.us{background:var(--data);color:#20180a}
+  .bug .abbr{font-weight:700;letter-spacing:.1em;font-size:16px}
+  .bug .score{font-family:var(--mono);font-weight:700;font-size:20px;line-height:1}
+  .bug .clock{display:flex;flex-direction:column;justify-content:center;gap:2px;
+              padding:8px 16px;background:#0a0e13;border-left:1px solid #222b35;border-right:1px solid #222b35}
+  .bug .q{font-size:10px;letter-spacing:.16em;color:var(--mute)}
+  .bug .t{font-family:var(--mono);font-weight:700;font-size:16px;line-height:1}
+  .bug .dd{display:flex;align-items:center;padding:11px 16px;background:#12171e;
+           font-size:13px;letter-spacing:.08em;color:#cfd7df}
+
+  .third{margin-top:14px;max-width:640px;background:rgba(10,14,19,.94);
+         border-left:3px solid var(--data);padding:11px 16px;border-radius:0 4px 4px 0}
+  .third .who{font-family:var(--label);text-transform:uppercase;letter-spacing:.14em;
+              font-size:11px;color:var(--data)}
+  .third .what{font-size:15px;color:#e6ebf0;margin-top:3px;min-height:1.6em}
+  .caption{margin-top:18px;font-size:13px;color:#6f7b88;max-width:60ch}
+
+  /* ---------- generic section ---------- */
+  section{padding:82px 0;border-bottom:1px solid var(--edge)}
+  h2{font-family:var(--label);text-transform:uppercase;font-weight:700;
+     font-size:clamp(28px,4.4vw,44px);line-height:1.02;margin:12px 0 0;letter-spacing:.01em}
+  .sub{color:#b6c0cb;max-width:62ch;margin:18px 0 0;font-size:17px}
+
+  .grid{display:grid;gap:1px;background:var(--edge);border:1px solid var(--edge);
+        border-radius:6px;overflow:hidden;margin-top:42px}
+  @media (min-width:820px){ .grid.three{grid-template-columns:repeat(3,1fr)} }
+  .cell{background:var(--panel);padding:28px 24px}
+  .cell h3{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em;
+           font-size:19px;font-weight:700;margin:10px 0 0}
+  .cell p{color:#adb8c4;font-size:15px;margin:10px 0 0}
+
+  /* ---------- the run of a game: a real sequence, so it is numbered ---------- */
+  .steps{margin-top:42px;border-top:1px solid var(--edge)}
+  .step{display:grid;gap:6px 26px;padding:24px 0;border-bottom:1px solid var(--edge)}
+  @media (min-width:760px){ .step{grid-template-columns:64px 220px 1fr;align-items:baseline} }
+  .num{font-family:var(--mono);font-weight:700;font-size:13px;color:var(--data)}
+  .step h3{font-family:var(--label);text-transform:uppercase;letter-spacing:.08em;
+           font-size:17px;font-weight:600;margin:0}
+  .step p{color:#adb8c4;font-size:15px;margin:0}
+
+  /* ---------- pricing ---------- */
+  .tier{background:var(--panel);padding:30px 26px;display:flex;flex-direction:column}
+  .tier.feature{background:var(--raise);box-shadow:inset 3px 0 0 var(--data)}
+  .price{font-family:var(--mono);font-weight:700;font-size:38px;color:var(--data);margin:14px 0 2px}
+  .per{font-size:13px;color:var(--mute)}
+  .tier ul{list-style:none;padding:0;margin:20px 0 0}
+  .tier li{position:relative;padding-left:20px;font-size:15px;color:#adb8c4;margin-bottom:9px}
+  .tier li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;
+                   border-radius:50%;background:var(--preview)}
+  .tier .btn{margin-top:auto;text-align:center}
+  .tier .spacer{height:24px}
+
+  /* ---------- close ---------- */
+  .close{text-align:center;padding:92px 0}
+  .close h2{max-width:20ch;margin-inline:auto}
+  footer{padding:34px 0 46px;color:#5c6773;font-size:13px}
+  .foot{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .foot .src{margin-left:auto;font-family:var(--mono);font-size:11px}
+
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *{transition:none!important;animation:none!important}
+  }
 </style>
 </head>
 <body>
-<div class="card">
-  <img id="loginLogo" src="logo.png" alt="StatChat logo">
-  <div id="loading">
-    <h1>Loading…</h1>
+
+<header>
+  <div class="wrap bar">
+    <a class="mark" href="#top"><img src="logo.png" alt="">StatChat</a>
+    <nav>
+      <a href="#what">What it does</a>
+      <a href="#run">A game</a>
+      <a href="#pricing">Pricing</a>
+      <a class="login" href="/login.html">Log in</a>
+    </nav>
+  </div>
+</header>
+
+<div id="top" class="wrap hero">
+  <p class="strip">Live football stats &middot; Broadcast overlays</p>
+  <h1>The stat sheet<br>and the <em>lower third</em><br>are the same job.</h1>
+  <p class="lede">StatChat is live high-school football statistics entered from a browser,
+     feeding graphics straight into vMix. One person at the table keeps the score, the
+     play-by-play and every overlay on your programme feed in step — because they are
+     all reading the same game.</p>
+  <div class="cta">
+    <a class="btn btn-a" href="#pricing">See pricing</a>
+    <a class="btn btn-b" href="#run">How a game runs</a>
   </div>
 
-  <div id="enterCodeView" class="hidden">
-    <h1>Enter your invite code</h1>
-    <p class="sub">Enter the email address you were invited with, along with the 6-digit code from your invite email.</p>
-    <div id="enterCodeMsg"></div>
-    <label>Email<input type="email" id="codeEmailInput"></label>
-    <label>Invite code<input type="text" id="codeInput" inputmode="numeric" placeholder="Code from your invite email"></label>
-    <p class="sub" style="margin-top:-8px; margin-bottom:14px; font-size:12px;">Enter the full code exactly as it appears in the email — the number of digits can vary.</p>
-    <button id="verifyCodeBtn">Verify code</button>
-    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="backToLoginLink" style="color:#1565c0;">Back to sign in</a></p>
-  </div>
-
-  <div id="setPasswordView" class="hidden">
-    <h1>Set your password</h1>
-    <p class="sub">You're accepting an invite. Choose a password to finish setting up your account.</p>
-    <div id="setPasswordMsg"></div>
-    <label>New password<input type="password" id="newPassword" minlength="6"></label>
-    <button id="setPasswordBtn">Set password</button>
-  </div>
-
-  <div id="loginView" class="hidden">
-    <h1>StatChat</h1>
-    <div id="loginMsg"></div>
-    <label>Email<input type="email" id="loginEmail"></label>
-    <label>Password<input type="password" id="loginPassword"></label>
-    <button id="loginBtn">Sign in</button>
-
-    <!-- Shown only when the account has two-factor enabled. Supabase
-         accepts the password first and returns a session at aal1; the
-         code below raises it to aal2. Until that happens the session is
-         signed in but not fully authenticated. -->
-    <div id="mfaChallenge" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid #e0e0e0;">
-      <p style="margin:0 0 10px; font-weight:600;">Two-factor code</p>
-      <p class="sub" style="margin:0 0 10px;">Open your authenticator app and enter the six digits.</p>
-      <label>Code<input type="text" id="mfaLoginCode" inputmode="numeric" maxlength="6"
-             autocomplete="one-time-code" style="width:140px;"></label>
-      <button id="mfaLoginBtn" style="margin-top:10px;">Verify</button>
-      <button id="mfaCancelBtn" class="secondary" style="margin-top:10px; margin-left:8px;">Cancel</button>
+  <div class="rig" aria-hidden="true">
+    <div class="rigbar">
+      <span class="lamp pv on" id="lampPv"><span class="dot"></span>Preview</span>
+      <span class="lamp off" id="lampPg"><span class="dot"></span>On air</span>
+      <span class="src">vMix &middot; browser input &middot; 1920&times;1080</span>
     </div>
-    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="haveCodeLink" style="color:#1565c0;">Have an invite code?</a></p>
+    <div class="stage">
+      <div class="bug">
+        <div class="team us"><span class="abbr">NEV</span><span class="score" id="sUs">21</span></div>
+        <div class="team"><span class="abbr">OPP</span><span class="score" id="sThem">14</span></div>
+        <div class="clock"><span class="q" id="qtr">3rd</span><span class="t" id="clk">7:42</span></div>
+        <div class="dd" id="dd">1st &amp; 10 &middot; OPP 34</div>
+      </div>
+      <div class="third">
+        <div class="who" id="who">Play 41</div>
+        <div class="what" id="what">Robinson pass complete to Young for 12 yards.</div>
+      </div>
+    </div>
   </div>
-
-  <div id="loggedInView" class="hidden">
-    <h1>You're signed in</h1>
-    <p class="sub" id="loggedInAs"></p>
-    <p style="font-size:13px; color:#999;">The real dashboard isn't built yet — this confirms login itself is working end to end.</p>
-    <button id="signOutBtn" style="background:#fff; color:#a32d2d; border:1px solid #a32d2d;">Sign out</button>
-  </div>
+  <p class="caption">That is not a picture of the overlay. It is the overlay — the same
+     kind of page vMix loads as a browser input, running here.</p>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="team-icon.js"></script>
+<section id="what" class="wrap">
+  <p class="strip">What it does</p>
+  <h2>Built for the crew,<br>not the clipboard</h2>
+  <p class="sub">Most stat software assumes the numbers are the point and the broadcast is
+     somebody else's problem. If you are running a camera, a switcher and a commentator,
+     that is backwards.</p>
+
+  <div class="grid three">
+    <div class="cell">
+      <p class="strip">Overlays</p>
+      <h3>Graphics that composite</h3>
+      <p>Score bug, team stats, season leaders and a full play-by-play, each a browser
+         input in vMix. No capture card, no key and fill, no desktop install. Add the URL
+         and it is on your programme feed.</p>
+    </div>
+    <div class="cell">
+      <p class="strip">Entry</p>
+      <h3>One pass, not two</h3>
+      <p>A guided flow for kickoffs, punts, field goals and every ordinary snap. The scorer
+         enters the play once; the overlays, the live spectator page and the box score all
+         update from it.</p>
+    </div>
+    <div class="cell">
+      <p class="strip">Reports</p>
+      <h3>NFHS, not NFL</h3>
+      <p>Sack yardage charged to team rushing. Kneels and bad snaps as team rushes. No
+         defensive score on a try. The conventions your state association actually uses,
+         exported to PDF and Excel.</p>
+    </div>
+  </div>
+</section>
+
+<section id="run" class="wrap">
+  <p class="strip">A game, start to finish</p>
+  <h2>How a Friday runs</h2>
+  <p class="sub">The order below is the order it happens in. Nothing here needs a second
+     operator or a second machine.</p>
+
+  <div class="steps">
+    <div class="step">
+      <span class="num">01</span>
+      <h3>Set up, midweek</h3>
+      <p>Build the game, import the roster and pick your starters. Paste the opponent's
+         colours in and every graphic takes them automatically.</p>
+    </div>
+    <div class="step">
+      <span class="num">02</span>
+      <h3>Add the inputs</h3>
+      <p>Point vMix at the overlay URLs once. They stay pointed. Going on air is a toggle
+         in the app, not a change to your switcher.</p>
+    </div>
+    <div class="step">
+      <span class="num">03</span>
+      <h3>Enter the game</h3>
+      <p>Play by play, from a laptop or an iPad at the table. Undo works. So does a
+         correction three drives later, without renumbering anything.</p>
+    </div>
+    <div class="step">
+      <span class="num">04</span>
+      <h3>Hand it over</h3>
+      <p>A single-game stat package or a full season report, as PDF or Excel, plus a public
+         recap link a parent can open without an account.</p>
+    </div>
+  </div>
+</section>
+
+<section id="pricing" class="wrap">
+  <p class="strip">Pricing</p>
+  <h2>Per season, per team</h2>
+  <p class="sub">A season, not a subscription that renews while nobody is playing. If you
+     produce for more than one school, the producer tiers are one conversation instead of
+     eight.</p>
+
+  <div class="grid three">
+    <div class="tier">
+      <p class="strip">Program</p>
+      <div class="price">$399</div>
+      <div class="per">per season &middot; one school</div>
+      <ul>
+        <li>Every overlay and every report</li>
+        <li>Unlimited games and users</li>
+        <li>Public recap links</li>
+      </ul>
+      <div class="spacer"></div>
+      <a class="btn btn-b" href="#contact">Get started</a>
+    </div>
+    <div class="tier feature">
+      <p class="strip">Producer</p>
+      <div class="price">$999</div>
+      <div class="per">per season &middot; up to 8 schools</div>
+      <ul>
+        <li>Everything in Program</li>
+        <li>Eight schools under one account</li>
+        <li>One invoice, one setup</li>
+      </ul>
+      <div class="spacer"></div>
+      <a class="btn btn-a" href="#contact">Talk to us</a>
+    </div>
+    <div class="tier">
+      <p class="strip">Producer unlimited</p>
+      <div class="price">$2,500</div>
+      <div class="per">per season &middot; no school limit</div>
+      <ul>
+        <li>Everything in Producer</li>
+        <li>No cap on schools</li>
+        <li>Setup help for your crew</li>
+      </ul>
+      <div class="spacer"></div>
+      <a class="btn btn-b" href="#contact">Talk to us</a>
+    </div>
+  </div>
+</section>
+
+<section id="contact" class="wrap close">
+  <p class="strip">Get in touch</p>
+  <h2>Tell us about your Friday night</h2>
+  <p class="sub" style="margin-inline:auto">How many cameras, what you switch on, and what
+     you do with the numbers afterwards. We will tell you honestly whether StatChat fits.</p>
+  <div class="cta" style="justify-content:center">
+    <a class="btn btn-a" href="mailto:hello@statchat.co">Email us</a>
+    <a class="btn btn-b" href="/login.html">Log in</a>
+  </div>
+</section>
+
+<footer class="wrap">
+  <div class="foot">
+    <span>&copy; 2026 StatChat</span>
+    <span class="src">statchat.co</span>
+  </div>
+</footer>
+
 <script>
-  // --- Your real project credentials ---
-  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
-  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
-  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-
-  const views = ['loading', 'enterCodeView', 'setPasswordView', 'loginView', 'loggedInView'];
-  function showView(name){
-    views.forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+(function(){
+  // The scorebug runs a short loop of real plays. It exists because the
+  // overlay is the product: a still picture of it would be a weaker
+  // claim than the thing itself.
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var seq = [
+    { who:'Play 41', what:'Robinson pass complete to Young for 12 yards.', dd:'1st &amp; 10 &middot; OPP 34', clk:'7:42', us:21, them:14, air:false },
+    { who:'Play 42', what:'Blackston rush up the middle for 6 yards.',     dd:'2nd &amp; 4 &middot; OPP 28',  clk:'7:11', us:21, them:14, air:true  },
+    { who:'Play 43', what:'Roberson rush right for 9 yards. First down.',  dd:'1st &amp; 10 &middot; OPP 19', clk:'6:33', us:21, them:14, air:true  },
+    { who:'Play 44', what:'Robinson pass complete to Sledge for 19 yards. Touchdown.', dd:'Try &middot; OPP 3', clk:'6:02', us:27, them:14, air:true },
+    { who:'Play 45', what:'Yerger extra point is good.',                   dd:'Kickoff &middot; NEV 40', clk:'6:02', us:28, them:14, air:true }
+  ];
+  var i = 0;
+  var $ = function(id){ return document.getElementById(id); };
+  function paint(s){
+    $('who').textContent = s.who;
+    $('what').textContent = s.what;
+    $('dd').innerHTML = s.dd;
+    $('clk').textContent = s.clk;
+    $('sUs').textContent = s.us;
+    $('sThem').textContent = s.them;
+    // The tally lamps are exclusive, the way a switcher's buses are:
+    // a source is on preview or on programme, never both.
+    $('lampPg').className = 'lamp ' + (s.air ? 'on' : 'off');
+    $('lampPv').className = 'lamp pv ' + (s.air ? 'off' : 'on');
   }
-  function showMsg(elId, text, type){
-    document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
-  }
-
-  // Supabase's JS client automatically parses invite/recovery tokens out of
-  // the URL on load and fires this event -- no manual token handling needed.
-  // Supabase's invite links don't fire a PASSWORD_RECOVERY event the way
-  // password-reset links do -- an accepted invite looks like an ordinary
-  // sign-in to onAuthStateChange (INITIAL_SESSION or SIGNED_IN with a
-  // valid session). The only reliable way to tell "this session was just
-  // established from an invite/recovery link" is the type= marker
-  // Supabase includes in the URL hash itself, so check that directly
-  // rather than trusting the event name alone.
-  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  const linkType = hashParams.get('type');
-  const isInviteOrRecovery = linkType === 'invite' || linkType === 'recovery';
-  // The OTP-code flow (verifyOtp below) establishes a session the exact
-  // same way a normal sign-in does, with nothing in the URL hash to mark
-  // it as special -- so isInviteOrRecovery above can never be true for
-  // it. This flag exists purely to give onAuthStateChange's SIGNED_IN
-  // handler the same "this needs a password, not a dashboard redirect"
-  // signal for this flow that the hash already provides for the
-  // original link-based one.
-  let justVerifiedInviteCode = false;
-
-  // Declared before onAuthStateChange, which can call showLoggedIn
-  // immediately on page load.
-  let pendingFactorId = null;
-
-  supabaseClient.auth.onAuthStateChange((event, session) => {
-    if (event === 'PASSWORD_RECOVERY' || (isInviteOrRecovery && session)){
-      showView('setPasswordView');
-    } else if (event === 'INITIAL_SESSION'){
-      // Fires once automatically right after the client loads and finishes
-      // parsing whatever was in the URL (an invite/recovery token, or
-      // nothing at all). This is the ONLY place we check "is anyone
-      // already logged in" -- deliberately never calling getSession()
-      // separately, since doing so around this same moment is a known
-      // supabase-js deadlock trigger that can hang forever with no error.
-      if (session && !isInviteOrRecovery){
-        showLoggedIn(session);
-      } else if (!session && document.getElementById('setPasswordView').classList.contains('hidden') && document.getElementById('enterCodeView').classList.contains('hidden')){
-        showView('loginView');
-      }
-    } else if (event === 'SIGNED_IN' && session && !isInviteOrRecovery && !justVerifiedInviteCode){
-      if (!document.getElementById('setPasswordView').classList.contains('hidden')) return;
-      showLoggedIn(session);
-    } else if (event === 'SIGNED_OUT'){
-      showView('loginView');
-    }
-  });
-
-  function init(){
-    // Ultimate safety net only -- if onAuthStateChange never fires at all
-    // for some reason, fall back to the login form. Deliberately makes NO
-    // Supabase calls here, to avoid re-triggering the same deadlock class
-    // this whole rewrite exists to avoid.
-    setTimeout(() => {
-      if (!document.getElementById('loading').classList.contains('hidden')){
-        showView('loginView');
-      }
-    }, 3000);
-  }
-
-  // THE MFA CHECK LIVES HERE, not in the sign-in handler.
-  //
-  // First attempt put it after signInWithPassword resolved, which never
-  // ran: onAuthStateChange fires SIGNED_IN the moment the password is
-  // accepted and calls this function straight away, so the browser had
-  // already navigated to the dashboard before the check happened.
-  //
-  // Putting it here covers every route in -- a fresh sign-in, a restored
-  // session on page load, anything added later. A session that needs a
-  // second factor cannot get past this point.
-  async function showLoggedIn(session){
-    try {
-      const { data: aal } = await supabaseClient.auth.mfa
-        .getAuthenticatorAssuranceLevel();
-      // nextLevel above currentLevel means a verified factor exists and
-      // this session has not satisfied it yet.
-      if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2'){
-        const { data: factors } = await supabaseClient.auth.mfa.listFactors();
-        const totp = (factors && factors.totp || []).find(f => f.status === 'verified');
-        if (totp){
-          pendingFactorId = totp.id;
-          showView('loginView');
-          document.getElementById('mfaChallenge').style.display = 'block';
-          const box = document.getElementById('mfaLoginCode');
-          box.value = '';
-          box.focus();
-          return;
-        }
-      }
-    } catch (e) {
-      // A failure to CHECK must not bar the owner of the account. Two
-      // factor guards against a stolen password, not against a network
-      // blip on the way to reading the assurance level.
-    }
-    window.location.href = 'dashboard.html';
-  }
-
-  document.getElementById('haveCodeLink').addEventListener('click', (e) => {
-    e.preventDefault();
-    showView('enterCodeView');
-  });
-
-  document.getElementById('backToLoginLink').addEventListener('click', (e) => {
-    e.preventDefault();
-    showView('loginView');
-  });
-
-  document.getElementById('verifyCodeBtn').addEventListener('click', async () => {
-    const email = document.getElementById('codeEmailInput').value.trim();
-    const token = document.getElementById('codeInput').value.trim();
-    if (!email || !token){
-      showMsg('enterCodeMsg', 'Enter both your email and the 6-digit code.', 'error');
-      return;
-    }
-    justVerifiedInviteCode = true;
-    // type: 'invite' specifically, confirmed against Supabase's own API
-    // reference -- this is the value meant for verifying a code sent as
-    // part of an invitation, as distinct from signup/recovery/etc codes.
-    const { data, error } = await supabaseClient.auth.verifyOtp({ email, token, type: 'invite' });
-    if (error){
-      justVerifiedInviteCode = false;
-      showMsg('enterCodeMsg', error.message, 'error');
-    } else {
-      showView('setPasswordView');
-    }
-  });
-
-  document.getElementById('setPasswordBtn').addEventListener('click', async () => {
-    const pw = document.getElementById('newPassword').value;
-    if (pw.length < 6){
-      showMsg('setPasswordMsg', 'Password needs to be at least 6 characters.', 'error');
-      return;
-    }
-    const { data, error } = await supabaseClient.auth.updateUser({ password: pw });
-    if (error){
-      showMsg('setPasswordMsg', error.message, 'error');
-    } else {
-      showMsg('setPasswordMsg', 'Password set. You\'re all set.', 'success');
-      // Build the logged-in view straight from what updateUser already
-      // returned -- deliberately not making a second, separate Supabase
-      // call here for the same deadlock-avoidance reason as above.
-      setTimeout(() => showLoggedIn({ user: data.user }), 800);
-    }
-  });
-
-  document.getElementById('loginBtn').addEventListener('click', async () => {
-    const email = document.getElementById('loginEmail').value.trim();
-    const password = document.getElementById('loginPassword').value;
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-    if (error){
-      showMsg('loginMsg', error.message, 'error');
-      return;
-    }
-    // No MFA check here: onAuthStateChange fires SIGNED_IN as soon as the
-    // password is accepted, so showLoggedIn has already run by the time
-    // this line is reached. The check lives there instead.
-    showLoggedIn(data.session);
-  });
-
-  // ---- the two-factor challenge ---------------------------------------
-
-  async function submitMfaCode(){
-    const code = (document.getElementById('mfaLoginCode').value || '').trim();
-    if (!/^\d{6}$/.test(code)){
-      showMsg('loginMsg', 'Enter the six-digit code from your authenticator app.', 'error');
-      return;
-    }
-    const btn = document.getElementById('mfaLoginBtn');
-    btn.disabled = true;
-    try {
-      const { data: ch, error: chErr } =
-        await supabaseClient.auth.mfa.challenge({ factorId: pendingFactorId });
-      if (chErr) throw chErr;
-      const { data, error } = await supabaseClient.auth.mfa.verify({
-        factorId: pendingFactorId, challengeId: ch.id, code
-      });
-      if (error) throw error;
-      document.getElementById('mfaChallenge').style.display = 'none';
-      document.getElementById('mfaLoginCode').value = '';
-      showLoggedIn(data);
-    } catch (e) {
-      // Codes rotate every 30 seconds, so a stale one is the usual
-      // reason. Say so rather than implying the account is wrong.
-      showMsg('loginMsg', 'That code was not accepted. Codes change every ' +
-        '30 seconds \u2014 try the current one.', 'error');
-      btn.disabled = false;
-      document.getElementById('mfaLoginCode').select();
-    }
-  }
-
-  document.getElementById('mfaLoginBtn').addEventListener('click', submitMfaCode);
-  document.getElementById('mfaLoginCode').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter'){ e.preventDefault(); submitMfaCode(); }
-  });
-  document.getElementById('mfaCancelBtn').addEventListener('click', async () => {
-    // Half-signed-in is a confusing state to leave someone in, so drop
-    // the session entirely rather than pretending nothing happened.
-    await supabaseClient.auth.signOut();
-    document.getElementById('mfaChallenge').style.display = 'none';
-    document.getElementById('mfaLoginCode').value = '';
-    document.getElementById('mfaLoginBtn').disabled = false;
-    showMsg('loginMsg', 'Signed out. Sign in again when you have your code.', 'info');
-  });
-
-  document.getElementById('signOutBtn').addEventListener('click', async () => {
-    await supabaseClient.auth.signOut();
-    showView('loginView');
-  });
-
-  init();
+  paint(seq[0]);
+  if (reduce) return;            // one frame, no loop
+  setInterval(function(){ i = (i + 1) % seq.length; paint(seq[i]); }, 3200);
+})();
 </script>
 </body>
 </html>
