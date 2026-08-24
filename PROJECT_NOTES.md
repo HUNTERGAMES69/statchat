@@ -2999,3 +2999,92 @@ Two smaller adjustments for the medium: hairlines lightened from
 `#2b333d` to `#323c47` and labels brightened, because the site is read on
 a phone held close and the entry screen is read at arm's length in a lit
 press box, where the site's values disappear.
+
+
+## Two scorers in one game — what actually happens (24 August 2026)
+
+Asked whether a warning is needed when two people have the same game open
+in entry. Read the path rather than guessing, and the answer is in three
+parts.
+
+### The DATA is safe, and the database is what makes it safe
+
+`nextSequenceNumber++` in `game.html` is a LOCAL counter, seeded from the
+play log when the page loads. Two scorers on the same game therefore
+compute the same next number, and the second insert is rejected by
+`plays_game_seq_unique UNIQUE (game_id, sequence_number)` — captured in
+`000_baseline.sql`. No play silently overwrites another and the log
+cannot interleave into nonsense.
+
+Worth noticing that this protection is a database constraint nobody wrote
+for this purpose. It exists to keep the log ordered, and it happens to be
+the only thing standing between two scorers and a corrupted game.
+
+### The MESSAGE is wrong, and that is the real defect
+
+`persistPlay` catches any insert failure and calls `enqueuePlay`, then
+shows:
+
+    "No connection to the server — this play is saved on this device and
+     will upload automatically when the connection comes back. Keep
+     entering plays as normal."
+
+For a unique violation every clause of that is false. The connection is
+fine. The play will never upload, because the sequence number stays taken
+and the retry hits the same constraint forever. And "keep entering plays
+as normal" is the worst possible advice: the scorer works through a
+quarter accumulating a queue that can never land.
+
+**A catch-all error handler that names ONE cause will eventually be wrong
+about a different one.** The offline path was written when connectivity
+was the only plausible failure; the unique violation arrives through the
+same door wearing the same coat. The fix is to read the error code and
+say something true — Postgres returns `23505` for a unique violation —
+and it is small.
+
+### Nothing detects a second scorer
+
+`game.html` contains no realtime subscription, no presence channel and no
+locking: zero matches for `.channel(`, `presence`, `postgres_changes` or
+`subscribe(`. So the first anyone knows is a failed save.
+
+A presence warning is a genuinely useful feature and a bigger piece of
+work — it needs Supabase Realtime, a decision about what to do when two
+people are present (warn both? lock the second to read-only?), and a
+story for what happens when a laptop sleeps mid-game and the channel
+drops.
+
+### NOT a barrier to multi-tenancy
+
+Deliberately recorded rather than fixed. Multi-tenancy is about isolating
+one school from another; this is two people inside one school's single
+game, which is the same problem before and after tenancy and no harder to
+fix later. Nothing in the tenancy plan depends on it.
+
+The one thing tenancy DOES change is the blast radius: today a bad
+concurrent-entry experience is Andy's own crew and Andy can explain it.
+With paying customers it is a support call from a school mid-game.
+
+## The icon that was working as designed (24 August 2026)
+
+An iPhone home-screen icon showing the team's logo instead of StatChat's
+was reported as a bug. It was not: `team-icon.js` set both `icon` and
+`apple-touch-icon` from `teams.icon_url`, deliberately, on eighteen
+pages. It was right when StatChat was one school's tool.
+
+Two lessons came out of a five-line change.
+
+**The obvious fix would not have worked.** Removing the
+`apple-touch-icon` line looks like the whole job — but no page declares a
+static one, so iOS falls back to the `icon` link, which the same file
+points at the team logo. The symptom would have survived. The fix had to
+SET the StatChat mark, not stop setting the team's.
+
+**And a TODO entry was simply false.** "Drop `teams.icon_url`. Nothing
+reads it." appeared twice in TODO.md. `team-icon.js` reads it on every
+page that loads it, and dropping the column would have taken the favicon
+out across the whole app. The claim had been copied forward without ever
+being checked against the code. Corrected in place with the reason, so
+the next person does not re-derive it — **a stale TODO item is more
+dangerous than a missing one, because it reads as a decision already
+made.**
