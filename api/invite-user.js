@@ -49,17 +49,54 @@ module.exports = async function handler(req, res) {
   // check bypasses RLS entirely and cannot be tricked by anything sent
   // from the browser -- it only trusts what's actually in the database.
   const { data: profileRows, error: profileError } = await adminClient
-    .from('profiles').select('role').eq('id', userData.user.id).limit(1);
+    .from('profiles').select('role, tenant_id, is_super_admin').eq('id', userData.user.id).limit(1);
   if (profileError){
     res.status(500).json({ error: profileError.message });
     return;
   }
-  if (!profileRows || profileRows.length === 0 || profileRows[0].role !== 'admin') {
+  const caller = (profileRows || [])[0];
+  const isSuper = !!(caller && caller.is_super_admin);
+  if (!caller || (caller.role !== 'admin' && !isSuper)) {
     res.status(403).json({ error: 'Only an admin can invite new users' });
     return;
   }
 
-  const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email);
+  // WHICH SCHOOL IS THIS AN INVITE TO?
+  // ---------------------------------------------------------------------
+  // A tenant admin can only invite into their OWN school -- the tenant is
+  // taken from the CALLER and never from the request body, so there is no
+  // field a browser could set to invite somebody into another customer.
+  //
+  // The super admin has no tenant of its own, so it must say which school
+  // it is inviting into. That is the one case where a tenant arrives in
+  // the body, and it is gated on is_super_admin above.
+  const targetTenantId = isSuper ? (req.body && req.body.tenantId) || null : caller.tenant_id;
+  if (!targetTenantId) {
+    res.status(400).json({
+      error: isSuper
+        ? 'Choose which school this invite is for.'
+        : 'Your account is not attached to a school yet.'
+    });
+    return;
+  }
+
+  // THE TENANT AND THE NAME TRAVEL WITH THE INVITE, in user metadata.
+  // `create_profile_for_new_user` reads both when it builds the profile
+  // row, so the school is attached from the instant the row exists
+  // rather than patched afterwards -- there is no window in which a
+  // user has a profile and no tenant.
+  //
+  // It also fixes something that was already wrong: display_name was set
+  // to the email address, so every user in the system displayed as an
+  // email, including on the screen an admin reads to decide who to
+  // remove.
+  const { data: inviteData, error: inviteError } = await adminClient.auth.admin
+    .inviteUserByEmail(email, {
+      data: {
+        tenant_id: targetTenantId,
+        ...(fullName ? { display_name: fullName } : {})
+      }
+    });
   if (inviteError) {
     res.status(400).json({ error: inviteError.message });
     return;
