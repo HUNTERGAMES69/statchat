@@ -15,7 +15,19 @@
 <style>
   html, body { margin:0; padding:0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); color:var(--sc-ink, #1a1a1a); }
-  .wrap { max-width:960px; margin:0 auto; padding:24px 24px 60px; box-sizing:border-box; }
+  /* THE REPORT IS RENDERED AT PRINTED-PAGE WIDTH, ON SCREEN TOO.
+     Chart.js sizes a canvas from its container when the chart is BUILT and
+     re-measures only on a resize event. A print pass generates no such
+     event, so a canvas built against a 912px screen column kept that width
+     while the print stylesheet gave its container ~700px -- which is why
+     every chart in the 10-game PDF sat in the left part of its slot with
+     dead space to the right.
+     Making the screen content width equal the printable width removes the
+     mismatch at its source rather than trying to re-measure mid-print.
+     732px here (780 less 2x24 padding) is just inside the NARROWER of the
+     two paper sizes -- A4 at 8mm margins is 733px, US Letter 755px -- so
+     the canvas fits on either without overflowing. */
+  .wrap { max-width:780px; margin:0 auto; padding:24px 24px 60px; box-sizing:border-box; }
   .hidden { display:none !important; }
   .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
   .topbar a { color:#555; text-decoration:none; font-size:14px; font-weight:600; }
@@ -36,15 +48,33 @@
   .metric-tile { text-align:center; padding:8px 4px; }
   .metric-tile .metric-val { font-size:22px; font-weight:700; }
   .metric-tile .metric-label { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.02em; margin-top:2px; }
-  .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:40px 40px; margin-bottom:14px; align-items:start; }
-  .chart-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:32px 32px; margin-bottom:14px; align-items:start; }
-  .chart-row > :nth-child(even) { border-left:1px solid #eee; padding-left:40px; margin-left:-1px; }
-  .chart-row-3 > :nth-child(3n+2) { border-left:1px solid #eee; padding-left:32px; margin-left:-1px; }
-  .chart-row-3 > :nth-child(3n+3) { border-left:1px solid #eee; padding-left:32px; margin-left:-1px; }
-  .chart-col-metrics { display:flex; justify-content:space-around; gap:8px; flex-wrap:wrap; align-content:flex-start; min-width:0; }
+  /* ===== CHARTS: ONE COLUMN, AT EVERY WIDTH ======================
+     Eleven of the fifteen charts gain a bar or a point per game and run
+     from one game to fifteen over a season. A chart that must carry
+     fifteen labelled games cannot do it in a third of a page, so the
+     per-game charts each get a full-width row of their own -- the
+     arrangement `chartYardsByGame` already used and the only one that
+     holds across that whole range.
+     The two- and three-column grids that used to hold them are GONE, not
+     merely overridden. They brought a second layout with them: their
+     children were flat siblings (all metric groups, then all charts)
+     paired by grid COLUMN, so a phone had to put the visual order back
+     with `order` on :nth-child(1) through (4). A row with FIVE children
+     -- which Efficiency has -- left the fifth at the default order:0 and
+     threw the 4th-down chart above its own heading. The DOM now emits
+     each metric group immediately before the chart it describes, so the
+     pairing is structural and no rule has to restore it.
+     `.compact` is for the four charts whose bar count never changes --
+     two quarters/halves and two donuts. They are capped rather than
+     stretched: a two-bar chart nine inches wide reads as a mistake. */
+  .chart-unit { margin-bottom:24px; }
+  .chart-unit:last-child { margin-bottom:0; }
+  .chart-col-metrics { display:flex; justify-content:space-around; gap:8px; flex-wrap:wrap; align-content:flex-start; min-width:0; margin-bottom:4px; }
   .chart-col-metrics .metric-tile { flex:1; min-width:70px; }
-  .chart-box { position:relative; height:220px; min-width:0; }
-  .chart-box.wide { height:260px; }
+  .chart-box { position:relative; height:240px; min-width:0; }
+  .chart-box.compact { height:220px; max-width:430px; }
+  /* Four series plus their point labels; 240px letterboxes it. */
+  .chart-box.tall { height:285px; }
 
   @media (max-width: 767px) {
     .wrap { padding:14px 12px 40px; }
@@ -57,27 +87,13 @@
     .metric-grid { grid-template-columns:repeat(auto-fit, minmax(88px, 1fr)); gap:8px; }
     .metric-tile .metric-val { font-size:19px; }
 
-    /* Collapse 2- and 3-column chart rows to one column. The DOM is
-       flat siblings (all metric-groups, then all charts) relying on
-       grid column position to pair each metric-group with its chart
-       -- naively stacking in DOM order would put every metric-group
-       together, then every chart together, losing that pairing. CSS
-       order fixes the visual sequence back to metrics-then-chart,
-       metrics-then-chart, without touching the DOM or the JS that
-       generates it. */
-    .chart-row, .chart-row-3 { grid-template-columns:1fr; gap:0; }
-    .chart-row > *, .chart-row-3 > * { border-left:none !important; padding-left:0 !important; margin-left:0 !important; margin-bottom:14px; }
-    .chart-row > :last-child, .chart-row-3 > :last-child { margin-bottom:0; }
-
-    .chart-row > :nth-child(1){ order:0; } .chart-row > :nth-child(3){ order:1; }
-    .chart-row > :nth-child(2){ order:2; } .chart-row > :nth-child(4){ order:3; }
-
-    .chart-row-3 > :nth-child(1){ order:0; } .chart-row-3 > :nth-child(4){ order:1; }
-    .chart-row-3 > :nth-child(2){ order:2; } .chart-row-3 > :nth-child(5){ order:3; }
-    .chart-row-3 > :nth-child(3){ order:4; } .chart-row-3 > :nth-child(6){ order:5; }
-
-    .chart-box { height:200px; }
-    .chart-box.wide { height:220px; }
+    /* Nothing to collapse any more -- the layout is one column at every
+       width, so a phone differs from paper only in scale. The `order`
+       rules that used to restore metric/chart pairing here are gone with
+       the grids that needed them. */
+    .chart-box { height:210px; }
+    .chart-box.compact { height:200px; max-width:none; }
+    .chart-box.tall { height:250px; }
     .chart-col-metrics { justify-content:space-between; }
 
     .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -12px; padding:0 12px; }
@@ -134,8 +150,13 @@
      no CSS selector for "the final sheet", so this is the mechanism. */
   .print-endmark { display:none; }
   @media print {
-    /* Room for the running footer, so it never sits on top of a table. */
-    @page { margin-bottom: 16mm; }
+    /* Room for the running footer, so it never sits on top of a table.
+       The side margins are now declared rather than left to the browser:
+       they are what fixes the printable width, and the canvases are built
+       against that width. Leaving them to the print dialog's default let
+       the printable area fall under 767px, which silently switched the
+       whole report into the phone layout. */
+    @page { margin: 10mm 8mm 16mm; }
     .print-footer { display:block; position:fixed; bottom:6mm; left:0; right:0;
                     text-align:center; font-size:9px; color:var(--sc-ink-muted, #9aa3b2);
                     letter-spacing:0.04em; }
@@ -169,9 +190,35 @@
     .team-band { padding:7px 11px; }
 
     body { background:#fff; }
-    .wrap { max-width:none; padding:0 20px; }
+    /* No side padding: the @page margin below is the page margin, and
+       adding a second one here would make the printable width -- which
+       the canvases were sized against -- narrower than the screen's. */
+    .wrap { max-width:none; padding:0; }
     .no-print { display:none !important; }
-    .section, .report-header { page-break-inside:avoid; break-inside:avoid; }
+    .report-header { page-break-inside:avoid; break-inside:avoid; }
+
+    /* A SECTION THAT CANNOT FIT MUST BE ALLOWED TO BREAK.
+       `break-inside: avoid` is a hope about space, not a rule about a
+       boundary (see PROJECT_NOTES, 15 Aug). Once a chart section holds
+       three or four full-width per-game charts it is taller than a sheet,
+       the hope is unsatisfiable, and the browser breaks it wherever it
+       likes -- which on page 5 of the 10-game PDF meant half an empty
+       page and a heading stranded from its chart.
+       So the avoid moves DOWN to the units that can honour it: a metric
+       strip never parts from the chart it describes, and a heading never
+       parts from what follows it. The section then breaks between charts,
+       which is the only place a break reads as deliberate.
+       Table sections still fit, and keep the old behaviour. */
+    .section { page-break-inside:avoid; break-inside:avoid; }
+    .section.chart-section { page-break-inside:auto; break-inside:auto; }
+    .chart-unit { page-break-inside:avoid; break-inside:avoid; }
+    .sec-head { page-break-after:avoid; break-after:avoid; }
+
+    /* Last-ditch guard on paper narrower than the canvases were built
+       for. A few per cent of horizontal squash is invisible; a canvas
+       running off the right edge is not. */
+    .chart-box canvas { max-width:100% !important; }
+
     .page-break { page-break-before:always; break-before:always; }
   }
 </style>
@@ -740,60 +787,60 @@ function isAdminMarker(p){
       '<div class="record">' + seasonAgg.wins + '-' + seasonAgg.losses + (seasonAgg.ties ? '-' + seasonAgg.ties : '') +
       ' &middot; ' + gamesPlayed + ' games</div></div>';
 
-    html += '<div class="section">' + sectionHead('Season totals') +
-      '<div class="chart-row">' +
-      '<div class="chart-col-metrics">' +
-        [[t.pointsScored,'Points scored'],[per(t.pointsScored),'Scored/game'],[t.pointsAllowed,'Points allowed'],[per(t.pointsAllowed),'Allowed/game']]
-          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div>' +
-      '<div class="chart-col-metrics">' +
-        [[totalYds,'Total yards'],[per(totalYds),'Yards/game'],[oppTotalYds,'Yards allowed'],[per(oppTotalYds),'Allowed/game']]
-          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div>' +
-      '<div class="chart-box"><canvas id="chartPointsByQuarter"></canvas></div>' +
-      '<div class="chart-box"><canvas id="chartHalfYards"></canvas></div>' +
-      '</div></div>';
-
-    html += '<div class="section">' + sectionHead('Run / pass mix') +
-      '<div class="chart-row">' +
-      '<div class="chart-col-metrics">' +
-        [[t.rushAtt,'Rush att'],[t.passAtt,'Pass att']]
-          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div>' +
-      '<div class="chart-col-metrics">' +
-        [[t.rushYds,'Rush yds'],[t.rushAtt?+(t.rushYds/t.rushAtt).toFixed(1):0,'Yds/rush'],
-         [t.passYds,'Pass yds'],[t.passAtt?+(t.passYds/t.passAtt).toFixed(1):0,'Yds/pass']]
-          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div>' +
-      '<div class="chart-box"><canvas id="chartRunPassAtt"></canvas></div>' +
-      '<div class="chart-box"><canvas id="chartRunPassYds"></canvas></div>' +
-      '</div></div>';
-
-    html += '<div class="section page-break">' + sectionHead('Yards by game') +
-      '<div class="chart-box wide"><canvas id="chartYardsByGame"></canvas></div>' +
-      '<div class="chart-box wide" style="margin-top:14px;"><canvas id="chartPassRushByGame"></canvas></div>' +
-      '<div class="chart-box wide" style="margin-top:14px;"><canvas id="chartPassByHalf"></canvas></div>' +
-      '<div class="chart-box wide" style="margin-top:14px;"><canvas id="chartRushByHalf"></canvas></div>' +
+    // Each metric group sits immediately above the chart it summarizes --
+    // the standing convention (see PROJECT_NOTES, "Season report chart/
+    // metric layout"). It used to be achieved by grid column position with
+    // CSS `order` restoring it on narrow screens; now it is just the DOM
+    // order, which is what the convention described in the first place.
+    const tiles = (rows) => '<div class="chart-col-metrics">' + rows
+      .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
+      '</div>';
+    const unit = (metricRows, canvasId, boxClass) =>
+      '<div class="chart-unit">' +
+      (metricRows ? tiles(metricRows) : '') +
+      (canvasId ? '<div class="chart-box' + (boxClass ? ' ' + boxClass : '') + '">' +
+        '<canvas id="' + canvasId + '"></canvas></div>' : '') +
       '</div>';
 
-    html += '<div class="section">' + sectionHead('Discipline') +
-      '<div class="chart-row-3">' +
-      '<div class="chart-col-metrics">' +
-        [[t.turnovers,'Turnovers'],[per(t.turnovers),'Per game']]
-          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div>' +
-      '<div class="chart-col-metrics">' +
-        [[t.sacked,'Sacks allowed'],[per(t.sacked),'Per game']]
-          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div>' +
-      '<div class="chart-col-metrics">' +
-        [[t.penCount,'Penalties'],[per(t.penCount),'Pen/game'],[t.penYds,'Penalty yds'],[per(t.penYds),'Pen yds/game']]
-          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div>' +
-      '<div class="chart-box"><canvas id="chartTurnoversByGame"></canvas></div>' +
-      '<div class="chart-box"><canvas id="chartSacksByGame"></canvas></div>' +
-      '<div class="chart-box"><canvas id="chartPenaltiesByGame"></canvas></div>' +
-      '</div></div>';
+    html += '<div class="section chart-section">' + sectionHead('Season totals') +
+      unit([[t.pointsScored,'Points scored'],[per(t.pointsScored),'Scored/game'],
+            [t.pointsAllowed,'Points allowed'],[per(t.pointsAllowed),'Allowed/game']],
+           'chartPointsByQuarter', 'compact') +
+      unit([[totalYds,'Total yards'],[per(totalYds),'Yards/game'],
+            [oppTotalYds,'Yards allowed'],[per(oppTotalYds),'Allowed/game']],
+           'chartHalfYards', 'compact') +
+      '</div>';
+
+    html += '<div class="section chart-section">' + sectionHead('Run / pass mix') +
+      unit([[t.rushAtt,'Rush att'],[t.passAtt,'Pass att']],
+           'chartRunPassAtt', 'compact') +
+      unit([[t.rushYds,'Rush yds'],[t.rushAtt?+(t.rushYds/t.rushAtt).toFixed(1):0,'Yds/rush'],
+            [t.passYds,'Pass yds'],[t.passAtt?+(t.passYds/t.passAtt).toFixed(1):0,'Yds/pass']],
+           'chartRunPassYds', 'compact') +
+      '</div>';
+
+    // chartPassByHalf and chartRushByHalf are PER-GAME charts, not season
+    // aggregates -- both plot G1..Gn with four series. TODO.md listed them
+    // among the six "leave them alone" aggregates and suggested reclaiming
+    // their full width; the 10-game PDF shows they are two of the densest
+    // charts in the report. `tall` because four lines and their point
+    // labels do not fit the standard height.
+    html += '<div class="section chart-section page-break">' + sectionHead('Yards by game') +
+      unit(null, 'chartYardsByGame') +
+      unit(null, 'chartPassRushByGame') +
+      unit(null, 'chartPassByHalf', 'tall') +
+      unit(null, 'chartRushByHalf', 'tall') +
+      '</div>';
+
+    html += '<div class="section chart-section">' + sectionHead('Discipline') +
+      unit([[t.turnovers,'Turnovers'],[per(t.turnovers),'Per game']],
+           'chartTurnoversByGame') +
+      unit([[t.sacked,'Sacks allowed'],[per(t.sacked),'Per game']],
+           'chartSacksByGame') +
+      unit([[t.penCount,'Penalties'],[per(t.penCount),'Pen/game'],
+            [t.penYds,'Penalty yds'],[per(t.penYds),'Pen yds/game']],
+           'chartPenaltiesByGame') +
+      '</div>';
 
     // TIME OF POSSESSION SITS WITH EFFICIENCY, not with penalties.
     // Keeping the ball is a description of how a team controlled a game,
@@ -804,37 +851,24 @@ function isAdminMarker(p){
     // The per-game figure is over the games that actually recorded a
     // clock, and says how many. Em dash rather than 0:00 when none did:
     // zero would claim they never had the ball.
-    html += '<div class="section">' + sectionHead('Efficiency') +
-      '<div class="chart-row">' +
-      '<div class="chart-col-metrics">' +
-        [[t.topGames ? formatDuration(t.topSec) : '—','Time of poss.'],
-         [t.topGames ? formatDuration(t.topSec / t.topGames) : '—',
-          t.topGames ? 'TOP/game (' + t.topGames + ' game' + (t.topGames === 1 ? '' : 's') + ')' : 'TOP/game']]
-          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div>' +
-      '<div class="chart-col-metrics">' +
-        [[t.oppD3att?pct(t.oppD3conv,t.oppD3att)+'%':'—','3rd down %']]
-          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div>' +
-      '<div class="chart-col-metrics">' +
-        [[t.oppD4att?pct(t.oppD4conv,t.oppD4att)+'%':'—','4th down %']]
-          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div>' +
-      '<div class="chart-box"><canvas id="chart3rdDownByGame"></canvas></div>' +
-      '<div class="chart-box"><canvas id="chart4thDownByGame"></canvas></div>' +
-      '</div>' +
-      '<div class="chart-row" style="margin-top:24px;">' +
-      '<div class="chart-col-metrics">' +
-        [[t.explosiveFor,'20yd+ plays'],[t.explosiveAgainst,'20yd+ allowed']]
-          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div>' +
-      '<div class="chart-col-metrics">' +
-        [[t.possessions,'Possessions'],[per(t.possessions),'Poss/game'],[per(t.totalPlays),'Plays/game']]
-          .map(([v,l]) => '<div class="metric-tile"><div class="metric-val">'+v+'</div><div class="metric-label">'+l+'</div></div>').join('') +
-        '</div>' +
-      '<div class="chart-box"><canvas id="chartExplosiveByGame"></canvas></div>' +
-      '<div class="chart-box"><canvas id="chartPossPlaysByGame"></canvas></div>' +
-      '</div></div>';
+    // Time of possession has no chart of its own, so it leads the section
+    // as a metric strip. In the grid it was the first cell of a FIVE-child
+    // row, which is what pushed the 4th-down chart above its own heading.
+    html += '<div class="section chart-section">' + sectionHead('Efficiency') +
+      unit([[t.topGames ? formatDuration(t.topSec) : '—','Time of poss.'],
+            [t.topGames ? formatDuration(t.topSec / t.topGames) : '—',
+             t.topGames ? 'TOP/game (' + t.topGames + ' game' + (t.topGames === 1 ? '' : 's') + ')' : 'TOP/game']],
+           null) +
+      unit([[t.oppD3att?pct(t.oppD3conv,t.oppD3att)+'%':'—','3rd down %']],
+           'chart3rdDownByGame') +
+      unit([[t.oppD4att?pct(t.oppD4conv,t.oppD4att)+'%':'—','4th down %']],
+           'chart4thDownByGame') +
+      unit([[t.explosiveFor,'20yd+ plays'],[t.explosiveAgainst,'20yd+ allowed']],
+           'chartExplosiveByGame') +
+      unit([[t.possessions,'Possessions'],[per(t.possessions),'Poss/game'],
+            [per(t.totalPlays),'Plays/game']],
+           'chartPossPlaysByGame') +
+      '</div>';
 
     const seasonStatTable = (bucketObj, headers, rowFn, totalFn, sortKey) => {
       const names = Object.keys(bucketObj);
@@ -960,7 +994,30 @@ function isAdminMarker(p){
   }
 
   function chartOpts(extra){
-    return Object.assign({ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ font:{ size:11 } } } } }, extra || {});
+    return Object.assign({ responsive:true, maintainAspectRatio:false,
+      // A CAP, NOT A WIDTH. Per-game charts are full width so that fifteen
+      // games fit; at one game the same chart would otherwise draw a single
+      // bar a third of a page wide. Capping the bar leaves the axis full
+      // width and the bar a normal size, so game 1 and game 15 are the same
+      // chart with more or fewer bars. Applied to every bar chart: the
+      // fixed-bar-count ones are capped at 430px and four fat bars there
+      // looked no better.
+      datasets:{ bar:{ maxBarThickness:46 } },
+      plugins:{ legend:{ labels:{ font:{ size:11 } } } } }, extra || {});
+  }
+
+  // PER-GAME X AXIS. Chart.js drops tick labels it cannot fit, silently:
+  // in the 10-game PDF "Sacks allowed by game" printed G1 G3 G5 G7 G9 and
+  // gave no sign the even games were still plotted. A reader counting bars
+  // against labels would misread every one of them. autoSkip:false makes a
+  // cramped axis LOOK cramped instead of looking wrong, which at full width
+  // it should no longer be -- fifteen "G15" labels need about 450px and
+  // have 732. maxRotation:0 for the same reason: rotated labels were the
+  // reported wrapping, and horizontal ones now fit.
+  function gameAxis(scales){
+    const s = Object.assign({}, scales || {});
+    s.x = Object.assign({ ticks:{ autoSkip:false, maxRotation:0, minRotation:0, font:{ size:10 } } }, s.x || {});
+    return s;
   }
 
   function lighten(hex, amt){
@@ -1024,53 +1081,53 @@ function isAdminMarker(p){
     new Chart(document.getElementById('chartTurnoversByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'Turnovers', data:games.map(g=>g.turnovers), backgroundColor:primary }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Turnovers by game', font:{size:12} }, legend:{ display:false }, datalabels:showVal },
-        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.turnovers)) } } }) });
+        scales: gameAxis({ y:{ suggestedMax: headroom(games.map(g=>g.turnovers)) } }) }) });
 
     new Chart(document.getElementById('chartSacksByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'Sacks allowed', data:games.map(g=>g.sacked), backgroundColor:secondary }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Sacks allowed by game', font:{size:12} }, legend:{ display:false }, datalabels:showVal },
-        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.sacked)) } } }) });
+        scales: gameAxis({ y:{ suggestedMax: headroom(games.map(g=>g.sacked)) } }) }) });
 
     new Chart(document.getElementById('chartPenaltiesByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'Penalties', data:games.map(g=>g.penCount), backgroundColor:primary, yAxisID:'y' },
         { label:'Yards', data:games.map(g=>g.penYds), backgroundColor:secondary, yAxisID:'y1' }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Penalties by game', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal },
-        scales:{ y:{ position:'left', suggestedMax: headroom(games.map(g=>g.penCount)) },
-          y1:{ position:'right', grid:{ drawOnChartArea:false }, suggestedMax: headroom(games.map(g=>g.penYds)) } } }) });
+        scales: gameAxis({ y:{ position:'left', suggestedMax: headroom(games.map(g=>g.penCount)) },
+          y1:{ position:'right', grid:{ drawOnChartArea:false }, suggestedMax: headroom(games.map(g=>g.penYds)) } }) }) });
 
     new Chart(document.getElementById('chart3rdDownByGame'), { type:'line', data:{ labels,
       datasets:[{ label:'Offense 3rd down %', data:games.map(g=>g.d3Pct), borderColor:primary, backgroundColor:primary, tension:0.2 },
         { label:'Opponent 3rd down %', data:games.map(g=>g.oppD3Pct), borderColor:secondary, backgroundColor:secondary, tension:0.2 }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'3rd down % by game', font:{size:12} }, legend:{ position:'bottom' },
         datalabels:{ color:'#000', align:'top', font:{size:9}, formatter:(v) => (v===null||v===undefined) ? '' : v+'%' } },
-        scales:{ y:{ suggestedMax: Math.min(100, headroom(games.map(g=>g.d3Pct), games.map(g=>g.oppD3Pct)) || 20) } } }) });
+        scales: gameAxis({ y:{ suggestedMax: Math.min(100, headroom(games.map(g=>g.d3Pct), games.map(g=>g.oppD3Pct)) || 20) } }) }) });
 
     new Chart(document.getElementById('chart4thDownByGame'), { type:'line', data:{ labels,
       datasets:[{ label:'Offense 4th down %', data:games.map(g=>g.d4Pct), borderColor:primary, backgroundColor:primary, tension:0.2 },
         { label:'Opponent 4th down %', data:games.map(g=>g.oppD4Pct), borderColor:secondary, backgroundColor:secondary, tension:0.2 }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'4th down % by game', font:{size:12} }, legend:{ position:'bottom' },
         datalabels:{ color:'#000', align:'top', font:{size:9}, formatter:(v) => (v===null||v===undefined) ? '' : v+'%' } },
-        scales:{ y:{ suggestedMax: Math.min(100, headroom(games.map(g=>g.d4Pct), games.map(g=>g.oppD4Pct)) || 20) } } }) });
+        scales: gameAxis({ y:{ suggestedMax: Math.min(100, headroom(games.map(g=>g.d4Pct), games.map(g=>g.oppD4Pct)) || 20) } }) }) });
 
     new Chart(document.getElementById('chartExplosiveByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'20yd+ plays', data:games.map(g=>g.explosiveFor), backgroundColor:primary },
         { label:'20yd+ allowed', data:games.map(g=>g.explosiveAgainst), backgroundColor:secondary }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'20yd+ plays by game', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal },
-        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.explosiveFor), games.map(g=>g.explosiveAgainst)) } } }) });
+        scales: gameAxis({ y:{ suggestedMax: headroom(games.map(g=>g.explosiveFor), games.map(g=>g.explosiveAgainst)) } }) }) });
 
     new Chart(document.getElementById('chartPossPlaysByGame'), { type:'line', data:{ labels,
       datasets:[{ label:'Possessions', data:games.map(g=>g.possessions), borderColor:primary, backgroundColor:primary, tension:0.2 },
         { label:'Plays', data:games.map(g=>g.totalPlays), borderColor:secondary, backgroundColor:secondary, tension:0.2 }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Possessions & plays by game', font:{size:12} }, legend:{ position:'bottom' },
         datalabels:{ color:'#000', align:'top', font:{size:9}, formatter:(v) => v ? v : '' } },
-        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.possessions), games.map(g=>g.totalPlays)) } } }) });
+        scales: gameAxis({ y:{ suggestedMax: headroom(games.map(g=>g.possessions), games.map(g=>g.totalPlays)) } }) }) });
 
     new Chart(document.getElementById('chartYardsByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'1st half', data:games.map(g=>g.h1Yds), backgroundColor:primaryLight, stack:'a' },
         { label:'2nd half', data:games.map(g=>g.h2Yds), backgroundColor:primary, stack:'a' }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Total yards by game', font:{size:12} }, legend:{ position:'bottom' },
         datalabels:{ color:(ctx) => readableOn(ctx.dataset.backgroundColor), anchor:'center', align:'center', font:{size:9,weight:'bold'}, formatter:(v) => v ? v : '' } },
-        scales:{ x:{ stacked:true }, y:{ stacked:true } } }) });
+        scales: gameAxis({ x:{ stacked:true }, y:{ stacked:true } }) }) });
 
     new Chart(document.getElementById('chartPassByHalf'), { type:'line', data:{ labels,
       datasets:[{ label:'1st half', data:games.map(g=>g.h1Pass), borderColor:primary, backgroundColor:primary, tension:0.2 },
@@ -1079,7 +1136,7 @@ function isAdminMarker(p){
         { label:'2nd half allowed', data:games.map(g=>g.oppH2Pass), borderColor:secondary, backgroundColor:secondary, borderDash:[5,3], tension:0.2 }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Passing yards by half', font:{size:12} }, legend:{ position:'bottom' },
         datalabels:{ color:'#000', align:'top', font:{size:8}, formatter:(v) => v ? v : '' } },
-        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.h1Pass), games.map(g=>g.h2Pass), games.map(g=>g.oppH1Pass), games.map(g=>g.oppH2Pass)) } } }) });
+        scales: gameAxis({ y:{ suggestedMax: headroom(games.map(g=>g.h1Pass), games.map(g=>g.h2Pass), games.map(g=>g.oppH1Pass), games.map(g=>g.oppH2Pass)) } }) }) });
 
     new Chart(document.getElementById('chartRushByHalf'), { type:'line', data:{ labels,
       datasets:[{ label:'1st half', data:games.map(g=>g.h1Rush), borderColor:primary, backgroundColor:primary, tension:0.2 },
@@ -1088,16 +1145,32 @@ function isAdminMarker(p){
         { label:'2nd half allowed', data:games.map(g=>g.oppH2Rush), borderColor:secondary, backgroundColor:secondary, borderDash:[5,3], tension:0.2 }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Rushing yards by half', font:{size:12} }, legend:{ position:'bottom' },
         datalabels:{ color:'#000', align:'top', font:{size:8}, formatter:(v) => v ? v : '' } },
-        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.h1Rush), games.map(g=>g.h2Rush), games.map(g=>g.oppH1Rush), games.map(g=>g.oppH2Rush)) } } }) });
+        scales: gameAxis({ y:{ suggestedMax: headroom(games.map(g=>g.h1Rush), games.map(g=>g.h2Rush), games.map(g=>g.oppH1Rush), games.map(g=>g.oppH2Rush)) } }) }) });
 
     new Chart(document.getElementById('chartPassRushByGame'), { type:'bar', data:{ labels,
       datasets:[{ label:'Pass yds', data:games.map(g=>g.passYds), backgroundColor:secondary },
         { label:'Rush yds', data:games.map(g=>g.rushYds), backgroundColor:primary }] },
       options: chartOpts({ plugins:{ title:{ display:true, text:'Pass / rush yards by game', font:{size:12} }, legend:{ position:'bottom' }, datalabels:showVal },
-        scales:{ y:{ suggestedMax: headroom(games.map(g=>g.passYds), games.map(g=>g.rushYds)) } } }) });
+        scales: gameAxis({ y:{ suggestedMax: headroom(games.map(g=>g.passYds), games.map(g=>g.rushYds)) } }) }) });
   }
 
   if (window.Chart && window.ChartDataLabels) Chart.register(ChartDataLabels);
+  // A SAFETY NET, not the mechanism. Screen and printable widths are now
+  // made equal (see the .wrap comment), so on Letter or A4 there is nothing
+  // to re-measure and this is a no-op. It exists for the paper sizes and
+  // margin settings nobody predicted: a canvas built too wide for the sheet
+  // would otherwise run off the right edge, and Chart.js re-measures only on
+  // a resize event, which a print pass does not fire.
+  // Browsers differ on whether print styles are applied before beforeprint,
+  // so this cannot be relied on to produce the right width -- only to stop a
+  // badly wrong one. The width matching is what does the real work.
+  window.addEventListener('beforeprint', () => {
+    document.querySelectorAll('.chart-box canvas').forEach((cv) => {
+      const c = window.Chart && Chart.getChart ? Chart.getChart(cv) : null;
+      if (c) { try { c.resize(); } catch (e) {} }
+    });
+  });
+
   // Shared shape with recap.html: window.print() is a silent no-op in
   // some mobile contexts (iOS in-app browsers, installed web apps), so
   // the click watches for the browser telling us a dialog opened and

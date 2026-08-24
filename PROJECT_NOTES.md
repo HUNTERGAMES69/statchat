@@ -2541,3 +2541,116 @@ was in `ui_driver`, which never filled the field -- so no test could see
 it either way and the entry stayed open long after the code was right.
 Now pinned in tackles_check. Worth a general lesson: an untested feature
 and a broken one look identical from the outside.
+
+## The season report had two layouts and only half of it knew (23 August 2026)
+
+A 10-game PDF was the first look at the season report at real length. The
+reported symptoms were wrapping and charts too small. The cause underneath
+them was that the report was being laid out one way and drawn another.
+
+**The printed report was running the PHONE stylesheet.** `.chart-row` is a
+two-column grid holding metrics, metrics, chart, chart -- side by side that
+is metrics|metrics over chart|chart. The PDF instead showed metrics, chart,
+metrics, chart, stacked. Exactly one thing in the file produces that
+interleaving: the `order` rules inside `@media (max-width: 767px)`. US
+Letter is 816 CSS px and the print dialog's default side margins take the
+layout width under 767, so every grid in the document collapsed. Nothing
+in eight pages was side by side.
+
+**But the canvases did not follow.** Chart.js measures a canvas from its
+container when the chart is CONSTRUCTED and re-measures only on a resize
+event. A print pass fires none. So the containers became full width while
+the bitmaps kept the widths they were given against a 912px screen column,
+which is why every chart sat in the left part of its slot with dead space
+to the right -- worst in Discipline, frozen at a third of 912.
+
+The fix is not to re-measure mid-print; browsers disagree about whether
+print styles are applied before `beforeprint`, so that cannot be relied on
+to produce the right width. The fix is to **make the screen content width
+equal the printable width** so there is nothing to re-measure. `.wrap` is
+now 780px (732px of content), just inside A4 at 8mm margins (733px) as well
+as Letter (755px), and `@page` declares its own side margins rather than
+leaving the printable width to the print dialog. A `beforeprint` resize
+remains as a guard against unforeseen paper, explicitly labelled a safety
+net rather than the mechanism.
+
+### The lesson worth carrying: a document should render at document width
+
+A report is paper that happens to be viewable in a browser. Showing it at
+960px on screen and then printing it at 740 guaranteed a mismatch in every
+element whose size is computed once, and a canvas is exactly that. Matching
+the two widths removes the whole class of bug rather than the instance of
+it, and it makes the screen an honest preview.
+
+### A five-child row in a four-child rule
+
+The phone rules set `order` on `.chart-row > :nth-child(1)` through `(4)`.
+The first Efficiency row had FIVE children -- three metric groups then two
+charts. The fifth got no `order`, defaulted to 0, and jumped to the front:
+the printed report showed the 4th-down chart sitting above the "3rd down %"
+heading with its own number stranded underneath it.
+
+This is the `#mainView` bug of the previous day repeating exactly -- `order`
+applies to ALL children and the ones without it go to the top. It survived
+because the rule and the markup it describes were far apart, and because
+nothing counted the children. The rules are gone now: the DOM emits each
+metric group immediately before the chart it describes, so the pairing is
+structural and no CSS has to restore it. **A layout that needs a rule per
+child is a layout waiting for one more child.**
+
+### TODO.md was wrong about two charts, and the output is what showed it
+
+`chartPassByHalf` and `chartRushByHalf` were listed among six "aggregate --
+leave them alone" charts, with a suggestion to reclaim their full width for
+a per-game chart that needed it. Both are built from the per-game `labels`
+array with four series each; they run G1..Gn and grow all season. They are
+two of the densest charts in the report and needed MORE room, not less.
+
+So it is eleven per-game charts, not nine, and four true aggregates. The
+brief was written from the id names -- `ByGame` marks a per-game chart --
+and these two are per-game without saying so in their names. **A naming
+convention is evidence, not proof; the two charts that broke the rule are
+the two the rule got wrong.** Worth the reminder that TODO entries written
+from reading code are hypotheses until output confirms them.
+
+### Autoskip was dropping games silently
+
+"Sacks allowed by game" printed G1 G3 G5 G7 G9. Chart.js drops tick labels
+that will not fit and gives no sign it has done so, and the even-numbered
+games were still plotted -- so a reader counting bars against labels would
+misread every one of them. `autoSkip:false` on the per-game axis makes a
+cramped axis look cramped instead of looking wrong. At full width fifteen
+labels need about 450px of the 732 available, so it should not arise; the
+point is that when it does it must be visible.
+
+### Bar thickness is capped, not chart width
+
+The layout has to hold from game 1 to game 15. Full width is what fifteen
+games need; at one game the same chart would draw a single bar a third of a
+page wide. Andy's call was to cap the BAR rather than shrink the chart, so
+the axis stays full width and game 1 and game 15 are the same chart with
+more or fewer bars, rather than two differently-shaped objects.
+
+### Page breaks: the avoid moved down to units that can honour it
+
+`.section { break-inside: avoid }` is a hope about space (see 15 August). A
+chart section holding four full-width per-game charts is taller than a
+sheet, so the hope is unsatisfiable and the browser broke it wherever it
+liked -- half an empty page and a heading parted from its chart. The avoid
+now sits on `.chart-unit`, which CAN be honoured: a metric strip never
+parts from the chart it describes, a heading never parts from what follows,
+and the section breaks between charts, which is the only boundary where a
+break reads as deliberate. Table sections still fit and keep the old rule.
+
+### What could not be verified here
+
+Structure was verified: 15 canvases, each in its own unit, metrics before
+chart in every one, every chart section marked breakable -- and each of
+those assertions was mutation-tested to confirm it can fail. The
+media-query and print rules were asserted from SOURCE TEXT, because jsdom
+ignores `@media` and `getComputedStyle` cannot fail those checks.
+
+None of that says how it LOOKS. Chart density at 15 games, whether 240px is
+tall enough, whether a section border cut by a page break is acceptable,
+and whether 732px feels too narrow on a desktop screen are all questions
+only a printed PDF can answer.

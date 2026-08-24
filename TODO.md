@@ -2140,6 +2140,59 @@ watch for.
 
 ## SEASON REPORT — formatting does not scale with the season
 
+**REBUILT 23 Aug — AWAITING ONE VISUAL CHECK.** Everything below the rule
+is the original brief, kept because the reasoning still reads true; two of
+its findings turned out to be wrong and are corrected here first.
+
+**Two corrections to the brief:**
+
+1. `chartPassByHalf` and `chartRushByHalf` are **per-game charts, not
+   aggregates.** Both plot G1..Gn with four series. The brief listed them
+   among the six "leave them alone" aggregates and proposed reclaiming
+   their full width; they are two of the densest charts in the report.
+   It is **eleven** per-game charts and **four** aggregates.
+2. The squeeze was not the whole story. The printed report was running the
+   **phone stylesheet** -- Letter minus default margins is under 767px --
+   so every grid collapsed to one column, while the canvases kept the
+   widths they were built at on a 912px screen. That mismatch, not the
+   grid columns, is why every chart had dead space to its right. See
+   PROJECT_NOTES, "The season report had two layouts".
+
+**What was done:**
+
+- One column at every width. `.chart-row`, `.chart-row-3`, both nth-child
+  border rules and all six `order` rules are gone. Each metric group is
+  emitted immediately before its own chart, so the pairing is structural.
+- Fixed a real ordering bug this exposed: the first Efficiency row had
+  five children and the `order` rules covered four, so the 4th-down chart
+  printed above the 3rd-down heading. Visible on page 5 of the 10-game PDF.
+- Screen width now equals printable width (`.wrap` 780px; `@page` declares
+  its own side margins), so canvases are built at the size they print at.
+  `beforeprint` resize kept as a guard, not as the mechanism.
+- `maxBarThickness:46` so game 1 does not draw one enormous bar.
+- `autoSkip:false, maxRotation:0` on per-game axes. "Sacks allowed by game"
+  was silently printing G1 G3 G5 G7 G9 with the even games still plotted.
+- Heights: 240px per-game, 285px for the two four-series line charts,
+  220px capped at 430px wide for the four fixed-bar-count charts.
+- Print breaks: `break-inside:avoid` moved off `.section` (unsatisfiable
+  once a section exceeds a sheet) onto `.chart-unit`, which can honour it.
+  Table sections keep the old rule.
+
+**Still needs Andy's eye — cannot be settled in the harness:**
+
+- Density at 15 games, and whether 240px is tall enough.
+- Whether a section border cut by a page break looks acceptable, or the
+  border should be dropped from chart sections in print.
+- Whether 732px feels too narrow on a desktop screen.
+- If 15 games is still tight, the lever not yet pulled is **landscape
+  paper** (`@page { size: Letter landscape }`), worth ~1010px instead of
+  755 -- a real option, not yet taken because it changes the character of
+  the document.
+
+---
+
+*Original brief, 23 Aug, before the rebuild:*
+
 Reported 23 Aug from a real PDF: wrapping, charts too small. NOT YET
 FIXED, and it is a design problem rather than a bug.
 
@@ -2268,8 +2321,14 @@ Still open, in rough order of value:
 ## ORDER OF WORK — decided 23 Aug
 
     1. iPad PORTRAIT   -- DONE 23 Aug (landscape/rails deferred, below)
-    2. Multi-tenant    <- NEXT, starting with Step 0 (schema versioning)
-    3. Everything else
+    2. SEASON REPORT   -- rebuilt 23 Aug, awaiting one visual check
+    3. Multi-tenant    <- NEXT, starting with Step 0 (schema versioning)
+    4. Everything else
+
+Season report jumped the queue by Andy's call on 23 Aug: it is the report a
+coach actually hands to someone, it was already flagged as worth doing
+before production, and it was blocked on nothing but a sample PDF. Schema
+versioning has no external dependency and lost nothing by waiting.
 
 Portrait stacks and already looks good enough for new users -- that is
 the bar, and it is met. Landscape rails are a refinement, not a blocker.

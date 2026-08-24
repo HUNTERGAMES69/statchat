@@ -1,106 +1,118 @@
-# StatChat — START HERE
+# StatChat — session handoff, 22 August 2026
 
-Read this first, then `TODO.md`, then `PROJECT_NOTES.md`.
+## The headline: the rail layout is now the live entry page
 
-Last updated **23 August 2026**. This file replaces a 22 Aug handoff
-that had gone stale; the detail it carried is in PROJECT_NOTES.
+`gametest3.html`'s rail prototype was promoted into `game.html`. The URL did
+not change — `dashboard.html` still navigates to `game.html?id=`, so
+bookmarks, open tabs and deep links keep working.
+
+`game_legacy.html` is the fallback: the previous entry page, verbatim, with
+a banner at the top saying so. It **replaced** an older `game_legacy.html`
+that predated the keypad and carried none of the recent fixes — a fallback
+that can itself deadlock is not a fallback. The older file is in git
+history.
+
+**`gametest3.html` should be deleted from the repo.** It is now a
+byte-level duplicate of `game.html` and will drift the moment either is
+edited. Tracked in `TODO.md`.
 
 ---
 
-## What StatChat is
+## What the entry page looks like now
 
-A web-based high-school football statistics and live-broadcast platform,
-built for the Neville program. Andy is the developer, owner and sole
-operator. He enters every play himself, from a laptop, during the game.
+- **Ladder** in a fixed left column. Every tree opens beside it and locks
+  to the top of the frame, so the panel never moves depending on which
+  button was pressed. Nothing open reads "Make a selection to begin".
+- **Left margin** holds the current drive with Undo/Redo.
+- **Right margin** holds two new panels: **Checks** (live `validateGame`,
+  debounced 400 ms because it is quadratic in play count) and **Live
+  totals** (both teams' figures, per-team leaders, team defence).
+- **Top row**: Dashboard, ON AIR, BROADCAST SETUP, HELP!, CREW VIEW — all
+  sized from the banner so the five blocks across the top match.
+- **Review** collapses the tree to just the confirm box; **Edit** restores
+  it with values intact. There is a Clear on the confirm box and another on
+  the phase row.
+- Kicker and punter collapse to one name plus `+N more`; the passer folds
+  to a chip once picked. No suggestion prefills a manual box any more — the
+  highlight says who is suggested.
+- Long picker lists (carrier, receiver, kicker, punter) run full width with
+  the `or type #` box at the end rather than in a reserved column.
 
-  Repo        github.com/HUNTERGAMES69/statchat  (public)
-  Deploy      GitHub -> Vercel, nevillestatchat.vercel.app
-  Backend     Supabase, project id pboushzlcyfkssojpuut
-  Stack       vanilla JS/HTML, serverless API endpoints, no framework
+## Spectator and broadcast
 
-**Not mid-season.** This is the time to make the design right rather
-than patch around it.
+- `view.html`: halftime ends on "Start 2nd half" rather than on the
+  kickoff; the scoring summary takes the quad at halftime and reads GAME
+  FINAL at the end; the second-half kicker is named under it; play text
+  breaks at its own clauses; the down line uses **team names** rather than
+  own/opp.
+- **New**: `broadcast_stats.html` — team stats plus leaders, landscape and
+  `?layout=portrait`, with the Nettech sponsor bar. Needs
+  `sponsor_nettech_white.png` in the repo root.
 
-## The documents, and what each is for
+## Engine and correctness fixes this session
 
-  HANDOFF.md            this file — orientation
-  TODO.md               open work, ordered. Start at the top.
-  PROJECT_NOTES.md      WHY past decisions were made. Read before
-                        changing anything they cover.
-  MULTI_TENANT_PLAN.md  the plan for selling to a second school
-  GO_TO_MARKET.md       market, competitors, pricing
+- Guided kickoff **return touchdown deadlock**: `awaitingKickoff` and
+  `awaitingTry` could both fire, disabling every play type. Resolved in
+  favour of the try.
+- **Quarter boundary off-by-one**: 0:00 at the end of a quarter read as
+  12:00 of the next one, so a finalized game reported "12:00 (Q5)" and
+  invented an overtime. Applied at every quarter end, not just the last.
+- Undo now removes a **stranded Q3 marker** so `game.html` and `view.html`
+  cannot disagree about halftime.
+- Penalties show in the Current Drive tile whoever they were called on.
+- Bad snap recovered by the defence says "fumble"; an incompletion reads
+  "pass incomplete".
+- Flip possession asks first.
+- Clear now closes the manual entry panel, which it never did.
 
-MULTI_TENANT_PLAN and GO_TO_MARKET were reconstructed on 23 Aug after
-being found missing from the repo. Andy's memory outranks both.
+---
 
-## Where things stand
+## Not yet done
 
-Desktop is **done** — the entry app on a laptop is the product as
-intended. iPad portrait is usable and is the bar for showing new users.
+**Return stats.** Agreed and scoped, not started. `roles` does not persist
+return yardage — it exists only inside the play text — so that is the
+blocker and the first step. Then count it in `computeBoxScore`, then
+display in recap, stat package, season report, view, and a leader overlay.
+Andy's calls: kickoff and punt returns **combined**, and **yes** to the
+broadcast overlay. History will not backfill.
 
-Order of work, decided 23 Aug:
+**Roster quick reference** — discussed, not designed.
 
-    1. iPad portrait      DONE
-    2. Multi-tenant       NEXT, starting with Step 0 (schema versioning)
-    3. Everything else
+**Duplicate surnames.** Picker buttons show surname only, so two players
+with the same surname read alike at a glance. Worth checking the real
+roster before the beta.
 
-Immediately outstanding, both in TODO with specifics:
+---
 
-  * **Season report formatting** does not scale from game 1 to game 15.
-    Nine per-game charts grow all season; six aggregates do not. TODO
-    lists exactly which. Do not start without seeing PDFs at 1, ~6 and
-    ~15 games.
-  * **Landscape iPad rails** — deferred after four failed attempts. The
-    failure notes matter more than the design; read them.
+## Resuming
 
-## How to work on this
+Pull from `raw.githubusercontent.com/HUNTERGAMES69/statchat/main/` first —
+do not assume the working copy is current.
 
-**Pull current files** from
-`raw.githubusercontent.com/HUNTERGAMES69/statchat/main/` at session
-start, and check against what Andy last uploaded — GitHub can lag and an
-upload can fail silently. It did so three times on 23 Aug. Confirm the
-destination path with every file delivered.
+**Do not run `tests/mutation_check.js` unless it can finish.** It
+deliberately breaks source files and restores them at the end; an
+interrupted run leaves `game.html` broken. This happened once this session
+and the stranded mutant looked like a real engine bug.
 
-**Read the code path before proposing a cause.** Guessing and testing is
-a known inefficiency here.
+---
 
-**THE TEST HARNESS CANNOT SEE ANYTHING VISUAL.** jsdom has no layout
-engine, ignores `@media` entirely, and cannot resolve `!important`
-conflicts. It reports styling changes as correct almost regardless. Most
-of an afternoon on 23 Aug went into iPad fixes that tested green and did
-nothing in the browser. For visual work: say so plainly, batch the
-changes, ask Andy to look ONCE. Anything scoped to a media query must be
-asserted from the SOURCE TEXT, not getComputedStyle, or the check cannot
-fail.
+## THIS FILE IS STALE — read `TODO.md` first (noted 23 August 2026)
 
-**Revert every fix and confirm the test fails.** A test that cannot fail
-is worse than no test — that has caught false greens repeatedly.
+Everything above is the 22 August picture. Three items in it were already
+overtaken the next day:
 
-**Do not create or edit files in `tests/` mid-session.** Verify ad hoc,
-then write all test changes as one batch at wrap-up.
+- **`gametest3.html` deletion** — done and verified; it, `gametest.html`,
+  `gametest2.html` and the three `layout_mockup*.html` files all 404 from
+  GitHub. The mentions left in `game.html` are comments recording where the
+  rail layout came from, and stay accurate as history.
+- **Return stats** — listed above as "not started". They were built the
+  same day and appear in recap, stat package, season report and player
+  report.
+- **Kickoff and punt returns are kept SEPARATE**, not combined as stated
+  above. Split later the same day; cheap because `roles.returner` carried
+  `kind: 'kick' | 'punt'` from the first commit.
 
-**`engine.js` changes require `tests/accuracy_check.js`.** Review every
-golden-snapshot difference before re-blessing, and deliver
-`accuracy.golden.json` alongside.
-
-**NFHS, not NFL.** Sack yardage is charged to team rushing; kneels and
-bad snaps are team rushes; the defence cannot score or take possession
-on a try; a missed FG reaching the end zone is a touchback at the 20.
-Verify rule applicability before implementing.
-
-## Andy
-
-Direct and decisive; makes design calls quickly and commits to them.
-Provides screenshots and live descriptions as evidence, and expects
-reasoning from actual code rather than assumptions. Flags UI regressions
-immediately from real use. Wants each architectural decision explained
-in plain terms BEFORE implementation, and the reasoning recorded in
-PROJECT_NOTES rather than left in chat.
-
-He is not a programmer. Do not ask him to read computed styles out of a
-browser inspector or run commands — that was tried on 23 Aug and was
-not a reasonable ask.
-
-He catches tests that are kinder than reality. On 23 Aug his first live
-test of return stats entered **-39 yards**, which found a display bug the
-fixtures (24 and 11) would never have surfaced.
+Nothing above covers the 23 August session: eleven play-through bugs, iPad
+portrait, `statchat.css` reaching 15 of 18 pages, or the season report
+rebuild. `TODO.md` is the current work list; `PROJECT_NOTES.md` carries the
+reasoning. Read those two and treat this file as background.
