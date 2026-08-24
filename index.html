@@ -109,13 +109,11 @@
               background:#0a0e13;border-left:1px solid #222b35;border-right:1px solid #222b35}
   .bug .q{font-size:10px;letter-spacing:.16em;color:var(--mute)}
   .bug .t{font-family:var(--mono);font-weight:700;font-size:16px;line-height:1}
-  .bug .dd{display:flex;align-items:center;padding:11px 16px;background:#12171e;
-           font-size:13px;letter-spacing:.08em;color:#cfd7df}
   .third{margin-top:14px;max-width:640px;background:rgba(10,14,19,.94);
          border-left:3px solid var(--data);padding:11px 16px;border-radius:0 4px 4px 0}
-  .third .who{font-family:var(--label);text-transform:uppercase;letter-spacing:.14em;
-              font-size:11px;color:var(--data)}
-  .third .what{font-size:15px;color:#e6ebf0;margin-top:3px;min-height:1.6em}
+  .third .what{font-size:15px;color:#e6ebf0;min-height:1.6em}
+  .third .who{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;
+              font-size:11.5px;color:var(--data);margin-top:4px}
   .caption{margin-top:16px;font-size:13px;color:#6f7b88;max-width:64ch}
 
   /* SPACING IS SYMMETRIC ABOUT THE RULE, not a margin on one side. The
@@ -224,6 +222,30 @@
        letter-spacing:.08em;font-size:8px;color:#5c6773}
   .lgd i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;
          vertical-align:middle}
+
+  /* the LADDER: each answer opens the next question, and one rung can be
+     answered two ways. The derived line is the point of the graphic. */
+  .rung{border-left:2px solid #2b333d;padding:0 0 0 11px;margin-bottom:9px;position:relative}
+  .rung::before{content:"";position:absolute;left:-5px;top:6px;width:8px;height:8px;
+                border-radius:50%;background:#2b333d}
+  .rung.done::before{background:var(--brand)}
+  .rung.now{border-left-color:var(--data)}
+  .rung.now::before{background:var(--data)}
+  .rung .q{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;font-size:8.5px;
+           color:#5c6773;display:block;margin-bottom:3px}
+  .orbar{display:flex;align-items:center;gap:8px;margin:2px 0}
+  .orbar .or{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;
+             font-size:8px;color:#5c6773}
+  .pill{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em;font-size:9px;
+        font-weight:600;padding:4px 8px;border-radius:3px;background:#12171e;
+        border:1px solid var(--edge);color:#9aa5b1}
+  .pill.on{background:var(--data);color:#20180a;border-color:var(--data)}
+  .fld{font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:3px;
+       background:#12171e;border:1px solid var(--edge);color:var(--paper);display:inline-block}
+  .derived{margin-top:6px;background:rgba(124,181,24,.12);border-left:2px solid var(--brand);
+           border-radius:0 3px 3px 0;padding:6px 9px;font-family:var(--mono);font-size:11px;
+           color:#cfe3ae}
+  .derived b{color:var(--brand);font-weight:700}
 
   /* 4 — the pass tree, as it really lays out */
   .tree{display:grid;grid-template-columns:52px 1fr;gap:7px}
@@ -432,7 +454,6 @@
     .bug{flex-wrap:wrap;max-width:none}
     .bug .team{flex:1 1 auto;padding:10px 12px}
     .bug .period{flex:1 1 auto}
-    .bug .dd{flex:1 1 100%;border-top:1px solid #222b35;justify-content:center}
 
     /* The input description is for a crew, not a first-time visitor, and
        it is the first thing worth losing when space is short. */
@@ -541,14 +562,13 @@
     </div>
     <div class="stage">
       <div class="bug">
-        <div class="team us"><span class="abbr">RVS</span><span class="score" id="sUs">21</span></div>
-        <div class="team"><span class="abbr">NGT</span><span class="score" id="sThem">14</span></div>
+        <div class="team us"><span class="abbr">Riverside</span><span class="score" id="sUs">21</span></div>
+        <div class="team"><span class="abbr">Northgate</span><span class="score" id="sThem">14</span></div>
         <div class="period"><span class="q">Quarter</span><span class="t" id="qtr">3rd</span></div>
-        <div class="dd" id="dd">1st &amp; 10 &middot; NGT 34</div>
       </div>
       <div class="third">
-        <div class="who" id="who">Play 41</div>
         <div class="what" id="what">Whitfield pass complete to Brooks for 12 yards.</div>
+        <div class="who" id="who">1st &amp; 10 at Northgate 34</div>
       </div>
     </div>
   </div>
@@ -803,10 +823,30 @@
     <div class="cell">
       <p class="strip">It follows the game</p>
       <h3>Entry flows with the play</h3>
-      <p>The next question is the one the game just asked. A touchdown offers the try, not
-         a punt. Fourth down offers the punt and the field goal. After a change of
-         possession the sides swap themselves. Nothing that cannot happen on this down is
-         on the screen, so there is less to read and less to get wrong.</p>
+      <p>Every play type opens a ladder — each answer reveals only the next question that
+         can follow it. Pick Pass and you are asked completed, sacked or intercepted; pick
+         completed and the passer and receiver pickers appear, already ordered by who has
+         been doing it tonight. A touchdown offers the try, not a punt. Fourth down offers
+         the punt and the field goal. After a change of possession the sides swap
+         themselves.</p>
+      <p>And a rung can be answered whichever way you saw it. Enter the yards, or enter the
+         yard line he was tackled on and StatChat works out the gain. Nothing that cannot
+         happen on this down is ever on the screen.</p>
+      <div class="shot" aria-hidden="true">
+        <div class="shot-t">Pass · 1st &amp; 10 at own 20</div>
+        <div class="rung done"><span class="q">Outcome</span>
+          <div class="tr"><b class="on">&check; Completed</b><b>Sacked</b><b>Intercepted</b></div></div>
+        <div class="rung done"><span class="q">Passer</span>
+          <div class="tr"><b class="on">15 Whitfield</b><b>8 Okafor</b></div></div>
+        <div class="rung done"><span class="q">Receiver</span>
+          <div class="tr"><b>13 Brooks</b><b class="on">3 Ellis</b><b>19 Reyes</b><b>22 Delgado</b></div></div>
+        <div class="rung now"><span class="q">How far</span>
+          <div class="orbar"><span class="fld">Enter yards</span><span class="or">or</span>
+            <span class="pill on">Riverside</span><span class="fld">tackled on 37</span></div>
+          <div class="derived">from own 20 to own 37 = <b>+17</b></div></div>
+        <div class="rung"><span class="q">Tackled by · optional</span>
+          <div class="tr"><b class="go">#55 Pike</b><b>&plus; add</b></div></div>
+      </div>
     </div>
     <div class="cell">
       <p class="strip">It learns as it goes</p>
@@ -1034,17 +1074,42 @@
   // quarter, down, distance, ball-on and timeouts and no time remaining.
   // Showing a clock here would advertise a field a crew could not bind
   // to, and they would find out while building templates.
+  // A REAL SEQUENCE OF PLAYS, not five unrelated snapshots. It runs a
+  // Riverside drive to a touchdown and the extra point, then hands over
+  // on a punt and follows Northgate down the field. The score, the down
+  // and the ball position all follow from the play before, because a
+  // crew reading this will notice if they do not.
   var seq = [
-    { who:'Play 41', what:'Whitfield pass complete to Brooks for 12 yards.',   dd:'1st &amp; 10 &middot; NGT 34', q:'3rd', us:21, them:14, air:false },
-    { who:'Play 42', what:'Delgado rush up the middle for 6 yards.',            dd:'2nd &amp; 4 &middot; NGT 28',  q:'3rd', us:21, them:14, air:true  },
-    { who:'Play 43', what:'Delgado rush right for 9 yards. First down.',        dd:'1st &amp; 10 &middot; NGT 19', q:'3rd', us:21, them:14, air:true  },
-    { who:'Play 44', what:'Whitfield pass complete to Ellis for 19 yards. Touchdown.', dd:'Try &middot; NGT 3', q:'3rd', us:27, them:14, air:true },
-    { who:'Play 45', what:'Nakamura extra point is good.',                      dd:'Kickoff &middot; RVS 40', q:'4th', us:28, them:14, air:true }
+    { what:'Whitfield pass complete to Brooks for 12 yards.',
+      dd:'1st &amp; 10 at Northgate 34', q:'3rd', us:21, them:14, air:false },
+    { what:'Delgado rush up the middle for 6 yards.',
+      dd:'2nd &amp; 4 at Northgate 28', q:'3rd', us:21, them:14, air:true },
+    { what:'Delgado rush right for 9 yards. First down.',
+      dd:'1st &amp; 10 at Northgate 19', q:'3rd', us:21, them:14, air:true },
+    { what:'Whitfield pass incomplete, intended for Okafor.',
+      dd:'2nd &amp; 10 at Northgate 19', q:'3rd', us:21, them:14, air:true },
+    { what:'Whitfield pass complete to Ellis for 19 yards. Touchdown.',
+      dd:'Try at Northgate 3', q:'3rd', us:27, them:14, air:true },
+    { what:'Nakamura extra point is good.',
+      dd:'Kickoff at Riverside 40', q:'3rd', us:28, them:14, air:true },
+    { what:'Reyes punt 41 yards, fair catch.',
+      dd:'1st &amp; 10 at Northgate 21', q:'4th', us:28, them:14, air:true },
+    { what:'Vance rush left for 4 yards.',
+      dd:'2nd &amp; 6 at Northgate 25', q:'4th', us:28, them:14, air:true },
+    { what:'Salter pass complete to Kaminski for 16 yards. First down.',
+      dd:'1st &amp; 10 at Northgate 41', q:'4th', us:28, them:14, air:true },
+    { what:'Salter sacked for a loss of 7 yards.',
+      dd:'2nd &amp; 17 at Northgate 34', q:'4th', us:28, them:14, air:true },
+    { what:'Salter pass complete to Vance for 11 yards.',
+      dd:'3rd &amp; 6 at Northgate 45', q:'4th', us:28, them:14, air:true },
+    { what:'Salter pass intercepted by Delgado, returned 8 yards.',
+      dd:'1st &amp; 10 at Riverside 47', q:'4th', us:28, them:14, air:true }
   ];
   var i = 0;
   function paint(s){
-    $('who').textContent = s.who;  $('what').textContent = s.what;
-    $('dd').innerHTML = s.dd;      $('qtr').textContent = s.q;
+    $('what').textContent = s.what;
+    $('who').innerHTML = s.dd;     // the situation the play leaves behind
+    $('qtr').textContent = s.q;
     $('sUs').textContent = s.us;   $('sThem').textContent = s.them;
     $('lampPg').className = 'lamp ' + (s.air ? 'on' : 'off');
     $('lampPv').className = 'lamp pv ' + (s.air ? 'off' : 'on');
