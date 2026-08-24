@@ -104,6 +104,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="team-icon.js"></script>
 <script>
+  // Mirrors the bucket settings in sql/011_storage_scoping, so a bad
+  // file is refused when it is chosen rather than when it is saved.
+  const LOGO_TYPES = ['image/png','image/jpeg','image/webp','image/svg+xml'];
+  const LOGO_MAX_BYTES = 2 * 1024 * 1024;
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
@@ -241,6 +245,28 @@
   document.getElementById('logoInput').addEventListener('change', async (e) => {
     pendingLogoFile = e.target.files[0] || null;
     if (!pendingLogoFile) return;
+
+    // CHECKED AT THE MOMENT OF CHOOSING, same reasoning as create_game.html.
+    // accept="image/*" is a picker FILTER, not a control -- "All files"
+    // walks past it. Storage refuses a non-image since 011, but that
+    // refusal arrives at save time, and a message at save time about a
+    // choice made minutes ago is a worse message.
+    if (!LOGO_TYPES.includes(pendingLogoFile.type)){
+      showMsg('That file is ' + (pendingLogoFile.type || 'of an unknown type') +
+        '. A logo has to be a PNG, JPEG, WebP or SVG.', 'error');
+      pendingLogoFile = null; e.target.value = '';
+      const lp0 = document.getElementById('logoPreview');
+      if (lp0) lp0.style.display = 'none';
+      return;
+    }
+    if (pendingLogoFile.size > LOGO_MAX_BYTES){
+      showMsg('That image is ' + (pendingLogoFile.size / 1048576).toFixed(1) +
+        'MB and the limit is 2MB. A crest is usually well under 100KB.', 'error');
+      pendingLogoFile = null; e.target.value = '';
+      const lp1 = document.getElementById('logoPreview');
+      if (lp1) lp1.style.display = 'none';
+      return;
+    }
     if (URL.createObjectURL){
       try {
         const img = document.getElementById('logoPreview');

@@ -164,6 +164,11 @@
 <script src="team-icon.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
+  // Logo limits, mirroring the bucket settings in sql/011_storage_scoping.
+  // Checked in the browser too so a refusal arrives when the file is
+  // chosen rather than minutes later at save time.
+  const LOGO_TYPES = ['image/png','image/jpeg','image/webp','image/svg+xml'];
+  const LOGO_MAX_BYTES = 2 * 1024 * 1024;
   // Roster import limits, matching roster.html. HARD caps: there is no
   // legitimate 200+ player football roster.
   const MAX_ROSTER_BYTES = 5 * 1024 * 1024;
@@ -1159,6 +1164,9 @@
   }
 
   let pendingOppLogoFile = null;
+  // Set when a logo upload is refused, so the save path reports a
+  // partial success as one rather than as a clean success.
+  let logoFailed = null;
   document.getElementById('chooseOppLogoBtn').addEventListener('click', () => document.getElementById('oppLogoInput').click());
 
   function readFileAsDataURL(file){
@@ -1255,7 +1263,33 @@
 
   document.getElementById('oppLogoInput').addEventListener('change', async (e) => {
     pendingOppLogoFile = e.target.files[0] || null;
-    if (!pendingOppLogoFile) return;
+      if (!pendingOppLogoFile) return;
+
+      // CHECKED AT THE MOMENT OF CHOOSING.
+      // ---------------------------------------------------------------
+      // accept="image/*" is only a picker FILTER -- switching the dialog
+      // to "All files" walks straight past it. It was never a control.
+      //
+      // Storage refuses a non-image (011 put an allowlist on the bucket),
+      // so a PDF never landed. But the refusal arrived at SAVE time, one
+      // filled-in form later, and was then overwritten by 'Game created.'
+      // and a redirect. Reported here it is a two-second correction.
+      if (!LOGO_TYPES.includes(pendingOppLogoFile.type)){
+        showMsg('setupMsg', 'That file is ' + (pendingOppLogoFile.type || 'of an unknown type') +
+          '. A logo has to be a PNG, JPEG, WebP or SVG.', 'error');
+        pendingOppLogoFile = null; e.target.value = '';
+        const pv0 = document.getElementById('oppLogoPreview');
+        if (pv0) pv0.style.display = 'none';
+        return;
+      }
+      if (pendingOppLogoFile.size > LOGO_MAX_BYTES){
+        showMsg('setupMsg', 'That image is ' + (pendingOppLogoFile.size / 1048576).toFixed(1) +
+          'MB and the limit is 2MB. A crest is usually well under 100KB.', 'error');
+        pendingOppLogoFile = null; e.target.value = '';
+        const pv1 = document.getElementById('oppLogoPreview');
+        if (pv1) pv1.style.display = 'none';
+        return;
+      }
     if (URL.createObjectURL){
       try {
         const img = document.getElementById('oppLogoPreview');
@@ -1391,7 +1425,8 @@
         const logoUrl = await uploadOppLogo(pendingOppLogoFile, gameId);
         await supabaseClient.from('games').update({ opponent_logo_url: logoUrl }).eq('id', gameId);
       } catch (logoErr){
-        showMsg('setupMsg', 'Game saved, but opponent logo upload failed: ' + logoErr.message, 'error');
+          // FLAGGED, not just shown -- see the save message below.
+          logoFailed = logoErr.message;
       }
     }
 
@@ -1424,11 +1459,24 @@
       }
     }
 
-    showMsg('setupMsg', editGameId ? 'Changes saved.' : 'Game created.', 'success');
+    // A PARTIAL SUCCESS IS NOT A SUCCESS. This line used to overwrite the
+    // logo failure below with a green tick, 800ms before redirecting --
+    // so a refused logo was reported for a fraction of a second and then
+    // contradicted. The game still saves; losing it over a crest would
+    // be worse. But it says what did not happen.
+    if (logoFailed){
+      showMsg('setupMsg', (editGameId ? 'Changes saved' : 'Game created') +
+        ', but the opponent logo was NOT uploaded: ' + logoFailed +
+        ' \u2014 this game has no opponent logo. Edit it to try another file.', 'error');
+    } else {
+      showMsg('setupMsg', editGameId ? 'Changes saved.' : 'Game created.', 'success');
+    }
     // Deliberately NOT re-enabled here. The page is about to navigate, and
     // a button that goes live again for 800ms at the end is an invitation
     // to press it once more.
-    setTimeout(() => { window.location.href = 'dashboard.html'; }, 800);
+    // 800ms is enough to register a green tick and nowhere near enough
+    // to read a failure. A message that cannot be read is not a message.
+    setTimeout(() => { window.location.href = 'dashboard.html'; }, logoFailed ? 6000 : 800);
     return 'navigating';
   }
 
