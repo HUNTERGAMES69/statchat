@@ -6,6 +6,10 @@
      Harmless, but a red console error should MEAN something. -->
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <!-- Apple renamed this; the old tag warns in the console on every
@@ -15,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="StatChat">
 <title>StatChat — New Game</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:#f4f3ef; margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
   .wrap { max-width:760px; margin:0 auto; }
   .card { background:#fff; border-radius:12px; padding:28px; margin-bottom:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:22px; margin:0 0 6px; }
@@ -25,17 +29,17 @@
   input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; }
   input[type="color"] { width:64px; height:40px; padding:2px; cursor:pointer; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
-  button { padding:9px 16px; border-radius:6px; border:none; background:#1a1a2e; color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+  button { padding:9px 16px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
   button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
   button:disabled { opacity:0.5; cursor:default; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
-  .msg.error { background:#fdecea; color:#a32d2d; }
-  .msg.success { background:#e8f5e9; color:#1a7a4c; }
+  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
+  .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
   .hidden { display:none; }
-  .conflict-block { background:#fff3cd; border-radius:8px; padding:12px 14px; margin-top:12px; }
+  .conflict-block { background:var(--sc-amber-tint, #fff3cd); border-radius:8px; padding:12px 14px; margin-top:12px; }
   .conflict-row { font-size:13px; margin-bottom:6px; }
   .conflict-status { font-size:12px; color:#7a6a2a; margin-top:2px; }
-  .roster-summary { font-size:14px; color:#1a7a4c; margin-top:8px; }
+  .roster-summary { font-size:14px; color:var(--sc-green, #1a7a4c); margin-top:8px; }
 </style>
 </head>
 <body>
@@ -46,7 +50,7 @@
   <div id="mainView" class="hidden">
     <div class="card">
       <h1 id="pageHeading">New Game</h1>
-      <div id="finalLockBanner" class="hidden" style="background:#fff3cd; border:1px solid #e0b400; border-radius:8px; padding:12px 14px; margin-bottom:16px;">
+      <div id="finalLockBanner" class="hidden" style="background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400); border-radius:8px; padding:12px 14px; margin-bottom:16px;">
         <div style="font-weight:600; color:#7a5c00; margin-bottom:4px;">This game is finalized</div>
         <div style="font-size:13px; color:#7a5c00; margin-bottom:10px;">Setup is locked to prevent accidental changes to a completed game's record. Unlock only if something genuinely needs correcting.</div>
         <button type="button" id="unlockFinalBtn" class="secondary" style="background:#fff;">Unlock to edit</button>
@@ -71,7 +75,7 @@
       <label style="display:flex; align-items:center; gap:8px; margin:12px 0 0; font-weight:400; cursor:pointer;">
         <input type="checkbox" id="isPreseason" style="width:auto; margin:0;"> This is a preseason game
       </label>
-      <div id="preseasonWarning" class="hidden" style="background:#fff3cd; border:1px solid #e0b400; border-radius:8px; padding:10px 12px; margin-top:8px; font-size:13px; color:#7a5c00;">
+      <div id="preseasonWarning" class="hidden" style="background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400); border-radius:8px; padding:10px 12px; margin-top:8px; font-size:13px; color:#7a5c00;">
         Excluded from Season Report and Player Report — every other total for the season stays exactly what it would be without this game. The game itself, its recap, and its own stat package are unaffected; this only pulls it out of season-wide aggregation.
       </div>
     </div>
@@ -139,7 +143,7 @@
         </div>
         <div>
           <label style="font-size:12px;">Primary color</label>
-          <input type="color" id="oppPrimaryColorInput" value="#8B0000">
+          <input type="color" id="oppPrimaryColorInput" value="#8b0000">
         </div>
         <div>
           <label style="font-size:12px;">Secondary color</label>
@@ -290,7 +294,7 @@
       }
       if (cands.length === 1){
         seedChoice[side][role] = cands[0];
-        lines.push('<div style="font-size:13px; color:#1a7a4c; margin-bottom:4px;">' +
+        lines.push('<div style="font-size:13px; color:var(--sc-green, #1a7a4c); margin-bottom:4px;">' +
           '✓ ' + role + ' #' + num + ' — ' + cands[0] + '</div>');
         return;
       }
@@ -298,7 +302,7 @@
       // default here would be indistinguishable from a decision.
       const chosen = seedChoice[side][role];
       lines.push('<div style="font-size:13px; margin-bottom:6px; padding:6px 8px; ' +
-        'background:#fff8e6; border:1px solid #e0b400; border-radius:6px;">' +
+        'background:var(--sc-amber-soft, #fff8e6); border:1px solid var(--sc-amber, #e0b400); border-radius:6px;">' +
         '<strong>' + role + ' #' + num + '</strong> is shared — which player?<br>' +
         cands.map(n =>
           '<button type="button" class="seedPick" data-side="' + side + '" data-role="' + role +
@@ -596,6 +600,13 @@
   let ourResolved = {}, ourConflictsList = [];
   let oppRosterSkipped = false;
   let oppResolved = {}, oppConflictsList = [];
+  // Requested directly: 94 players with no positions at all makes
+  // resolving every one of them to a unit genuinely impractical, and
+  // Andy should never have to. These track whichever players are
+  // still unresolved at save time, so buildGameRosterRows (below) can
+  // save them too -- unassigned, but present -- rather than silently
+  // dropping anyone who was never manually filed under a unit.
+  let ourNeedsAssignment = [], oppNeedsAssignment = [];
 
   function showView(name){
     ['loading', 'mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
@@ -729,6 +740,7 @@
         const { resolved, conflicts, needsAssignment } = resolveByNumber(oppEntries);
         oppResolved = resolved;
         oppConflictsList = conflicts;
+        oppNeedsAssignment = needsAssignment;
         renderAssignmentUI('opponentAssignments', 'opp', needsAssignment, oppResolved);
         renderConflictUI('opponentConflicts', 'opp', conflicts, oppResolved);
       }
@@ -767,64 +779,87 @@
     // empty string is NaN, and filtering by NaN would return zero
     // players rather than the whole roster, reading as an empty
     // roster rather than an unconfigured one.
-    const gameSeasonYear = parseInt(document.getElementById('seasonYear').value, 10) || new Date().getFullYear();
-    const { data: players, error: playersError } = await supabaseClient
-      .from('players').select('name, primary_position, default_jersey_number, id, unit_override')
-      .eq('team_id', ourTeamId).eq('season_year', gameSeasonYear);
-    if (playersError){
-      showView('mainView');
-      showMsg('setupMsg', 'Could not load your roster: ' + playersError.message, 'error');
-      return;
+    // THE ROSTER FOLLOWS THE SEASON YEAR, and re-follows it when the
+    // year is changed.
+    // -------------------------------------------------------------------
+    // This ran ONCE inside init(), reading the season field at that
+    // moment -- which on a new game is the team's CURRENT season. Change
+    // the year afterwards to enter a game from a past season and nothing
+    // re-fetched: the current roster was snapshotted into game_rosters
+    // and the game was scored against players who were not on that team
+    // that year. Reported directly, entering a 2025 game.
+    //
+    // The comment below already spelled out that an old game must resolve
+    // against its own historical roster. It was right about the rule and
+    // wrong about when the field is settled: the year is not final until
+    // the coach stops changing it.
+    async function loadOurRoster(){
+      const gameSeasonYear = parseInt(document.getElementById('seasonYear').value, 10) || new Date().getFullYear();
+      const { data: players, error: playersError } = await supabaseClient
+        .from('players').select('name, primary_position, default_jersey_number, id, unit_override')
+        .eq('team_id', ourTeamId).eq('season_year', gameSeasonYear);
+      if (playersError){
+        showView('mainView');
+        showMsg('setupMsg', 'Could not load your roster: ' + playersError.message, 'error');
+        return;
+      }
+
+      // Reported directly: resolving "our" team's needs-assignment radio
+      // (a player whose position isn't a recognized one) never stuck --
+      // every new game, or even reopening this same one, asked again for
+      // the same two players, since nothing about the choice was ever
+      // saved anywhere except THIS game's own game_rosters snapshot.
+      // unit_override is that missing, persistent home for it: read here
+      // and preferred over guessing from position, and written back the
+      // moment the radio is resolved, a few hundred lines down.
+      const entries = (players || [])
+        .filter(p => p.default_jersey_number)
+        .map(p => ({ number: p.default_jersey_number, name: p.name, position: p.primary_position, explicitUnit: p.unit_override || null, playerId: p.id }));
+      let { resolved, conflicts, needsAssignment, sharedInfo } = resolveByNumber(entries);
+
+      // In edit mode, resolveByNumber just re-picks a default (the first
+      // entry) for every conflict, since it has no memory of what was
+      // chosen last time. Load whatever was actually saved for this game
+      // and use it to override those defaults, so a coach's prior "quick
+      // check" choices are still there instead of silently resetting.
+      if (editGameId){
+        const { data: savedOurRows } = await supabaseClient
+          .from('game_rosters').select('jersey_number, unit, player_id, player_name').eq('game_id', editGameId).eq('team_side', 'teamA');
+        (savedOurRows || []).forEach(saved => {
+          const bucket = resolved[saved.jersey_number];
+          if (!bucket) return;
+          const match = entries.find(en =>
+            String(en.number).trim() === String(saved.jersey_number).trim() &&
+            (en.playerId === saved.player_id || en.name === saved.player_name)
+          );
+          if (match){
+            bucket[saved.unit] = (bucket[saved.unit] || []);
+            if (bucket[saved.unit].indexOf(match) === -1) bucket[saved.unit].push(match);
+          }
+        });
+        conflicts = filterUnresolvedConflicts(conflicts, savedOurRows);
+      }
+
+      ourResolved = resolved;
+      ourConflictsList = conflicts;
+      ourNeedsAssignment = needsAssignment;
+      document.getElementById('ourRosterStatus').innerHTML =
+        '<div class="roster-summary">' + entries.length + ' players loaded from your roster' +
+        (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>' +
+        sharedNumbersHtml(sharedInfo);
+      renderAssignmentUI('ourAssignments', 'our', needsAssignment, ourResolved);
+      renderConflictUI('ourConflicts', 'our', conflicts, ourResolved);
+      // A roster just became available, so any starter numbers already
+      // typed can now be resolved to actual players. Seeding before
+      // uploading is the normal order, not an edge case.
+      wireStarterResolve();
     }
-
-    // Reported directly: resolving "our" team's needs-assignment radio
-    // (a player whose position isn't a recognized one) never stuck --
-    // every new game, or even reopening this same one, asked again for
-    // the same two players, since nothing about the choice was ever
-    // saved anywhere except THIS game's own game_rosters snapshot.
-    // unit_override is that missing, persistent home for it: read here
-    // and preferred over guessing from position, and written back the
-    // moment the radio is resolved, a few hundred lines down.
-    const entries = (players || [])
-      .filter(p => p.default_jersey_number)
-      .map(p => ({ number: p.default_jersey_number, name: p.name, position: p.primary_position, explicitUnit: p.unit_override || null, playerId: p.id }));
-    let { resolved, conflicts, needsAssignment, sharedInfo } = resolveByNumber(entries);
-
-    // In edit mode, resolveByNumber just re-picks a default (the first
-    // entry) for every conflict, since it has no memory of what was
-    // chosen last time. Load whatever was actually saved for this game
-    // and use it to override those defaults, so a coach's prior "quick
-    // check" choices are still there instead of silently resetting.
-    if (editGameId){
-      const { data: savedOurRows } = await supabaseClient
-        .from('game_rosters').select('jersey_number, unit, player_id, player_name').eq('game_id', editGameId).eq('team_side', 'teamA');
-      (savedOurRows || []).forEach(saved => {
-        const bucket = resolved[saved.jersey_number];
-        if (!bucket) return;
-        const match = entries.find(en =>
-          String(en.number).trim() === String(saved.jersey_number).trim() &&
-          (en.playerId === saved.player_id || en.name === saved.player_name)
-        );
-        if (match){
-          bucket[saved.unit] = (bucket[saved.unit] || []);
-          if (bucket[saved.unit].indexOf(match) === -1) bucket[saved.unit].push(match);
-        }
-      });
-      conflicts = filterUnresolvedConflicts(conflicts, savedOurRows);
-    }
-
-    ourResolved = resolved;
-    ourConflictsList = conflicts;
-    document.getElementById('ourRosterStatus').innerHTML =
-      '<div class="roster-summary">' + entries.length + ' players loaded from your roster' +
-      (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>' +
-      sharedNumbersHtml(sharedInfo);
-    renderAssignmentUI('ourAssignments', 'our', needsAssignment, ourResolved);
-    renderConflictUI('ourConflicts', 'our', conflicts, ourResolved);
-    // A roster just became available, so any starter numbers already
-    // typed can now be resolved to actual players. Seeding before
-    // uploading is the normal order, not an edge case.
-    wireStarterResolve();
+    await loadOurRoster();
+    // Re-fetch on change. 'change' rather than 'input' so a number field
+    // does not fire a query per keystroke while 2025 is being typed.
+    document.getElementById('seasonYear').addEventListener('change', () => {
+      loadOurRoster().catch(() => {});
+    });
 
     if (editGameStatus === 'final'){
       setFormLocked(true);
@@ -885,7 +920,7 @@
     document.getElementById('opponentAssignments').innerHTML = '';
     document.getElementById('opponentConflicts').innerHTML = '';
     document.getElementById('opponentRosterStatus').innerHTML =
-      '<div class="roster-summary" style="color:#a37a00;">No roster — entry for the opponent will be manual (numbers only) for this game.</div>';
+      '<div class="roster-summary" style="color:var(--sc-amber-text, #a37a00);">No roster — entry for the opponent will be manual (numbers only) for this game.</div>';
   });
 
   document.getElementById('opponentFile').addEventListener('change', (e) => {
@@ -1002,6 +1037,7 @@
       }
       const { resolved, conflicts, needsAssignment, sharedInfo } = resolveByNumber(entries);
       oppResolved = resolved;
+      oppNeedsAssignment = needsAssignment;
       oppRosterTouched = true;
       oppRosterSkipped = false;
       oppConflictsList = conflicts;
@@ -1030,7 +1066,7 @@
     reader.readAsArrayBuffer(file);
   });
 
-  function buildGameRosterRows(resolved, teamSide){
+  function buildGameRosterRows(resolved, teamSide, needsAssignment){
     const rows = [];
     Object.keys(resolved).forEach(num => {
       ['offense','defense','special'].forEach(unit => {
@@ -1053,6 +1089,40 @@
             player_id: entry.playerId || null
           });
         });
+      });
+    });
+    // Requested directly: resolving every unrecognized-position player
+    // to a unit is genuinely impractical on a 94-player roster with no
+    // position column at all, and nobody should have to. A player left
+    // unresolved here used to get NO row at all -- invisible to
+    // game_rosters entirely, which is what made a manually-typed number
+    // during the game read as "not on the roster" even though the
+    // player genuinely was uploaded. Saved now with unit: null instead:
+    // still absent from the unit-specific picker lists (there is
+    // nothing to file them under), but present for the "is this number
+    // really on the roster" check that matters live -- see engine.js's
+    // rosterName/playerName and every buildTeams copy's rosterUnassigned
+    // bucket.
+    //
+    // Filtered by reference against what is already in `resolved`,
+    // not just skipped wholesale: a player who WAS resolved via the
+    // assignment radio this same session is moved into a real unit
+    // bucket above, but the needsAssignment array itself is never
+    // pruned when that happens -- so without this check, an already-
+    // resolved player would ALSO get a second, unit-less row here,
+    // duplicating him under his own number.
+    (needsAssignment || []).forEach(({ num, entry }) => {
+      const bucket = resolved[num] || { offense: [], defense: [], special: [] };
+      const alreadyResolved = ['offense', 'defense', 'special']
+        .some(u => (bucket[u] || []).indexOf(entry) !== -1);
+      if (alreadyResolved) return;
+      rows.push({
+        team_side: teamSide,
+        jersey_number: num,
+        player_name: entry.name,
+        unit: null,
+        position: firstPosOf(entry.position),
+        player_id: entry.playerId || null
       });
     });
     return rows;
@@ -1307,8 +1377,8 @@
     }
 
     const rosterRows = [
-      ...buildGameRosterRows(ourResolved, 'teamA'),
-      ...(!editGameId || oppRosterTouched ? buildGameRosterRows(oppResolved, 'teamB') : [])
+      ...buildGameRosterRows(ourResolved, 'teamA', ourNeedsAssignment),
+      ...(!editGameId || oppRosterTouched ? buildGameRosterRows(oppResolved, 'teamB', oppNeedsAssignment) : [])
     ].map(r => Object.assign({ game_id: gameId }, r));
 
     if (rosterRows.length > 0){
