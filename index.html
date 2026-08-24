@@ -42,7 +42,13 @@
   html{scroll-behavior:smooth}
   body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--body);
        font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
-  .wrap{width:100%;max-width:1080px;margin:0 auto;padding:0 24px}
+  /* HORIZONTAL ONLY. This used to be `padding:0 24px`, a shorthand that
+     also set top and bottom to zero — and because .wrap is a class and
+     `section` is an element, it beat every section padding rule written
+     against it. Sections had no vertical padding at all, which is why
+     three separate attempts to add space between them changed nothing.
+     Setting only the two sides it means to set removes the conflict. */
+  .wrap{width:100%;max-width:1080px;margin:0 auto;padding-inline:24px}
   a{color:inherit}
   :focus-visible{outline:2px solid var(--data);outline-offset:3px;border-radius:2px}
   .strip{font-family:var(--label);text-transform:uppercase;letter-spacing:.16em;
@@ -122,11 +128,14 @@
      one block crowding the start of the next.
      clamp() rather than a fixed value: 96px of air is right on a desktop
      and absurd on a phone, where the same gap costs a third of a screen. */
-  section{padding-block:clamp(66px,9vw,116px) clamp(52px,7vw,88px);
+  /* section.wrap, not bare `section`: every section on this page also
+     carries .wrap, and matching that specificity is what makes these
+     values survive. */
+  section.wrap{padding-block:clamp(66px,9vw,116px) clamp(52px,7vw,88px);
            border-bottom:1px solid var(--edge);position:relative}
   /* A short green rule above each section eyebrow: enough brand to read
      down the page as a rhythm, not enough to compete with the content. */
-  section > .strip:first-child::before{content:"";display:block;width:34px;height:3px;
+  section.wrap > .strip:first-child::before{content:"";display:block;width:34px;height:3px;
      background:var(--brand);border-radius:2px;margin-bottom:16px}
   h2{font-family:var(--label);text-transform:uppercase;font-weight:700;
      font-size:clamp(27px,4.2vw,42px);line-height:1.03;margin:14px 0 0}
@@ -166,6 +175,78 @@
             font-size:16px;font-weight:600;margin:6px 0 0}
   .sstep p{color:#adb8c4;font-size:14.5px;margin:6px 0 0}
 
+  /* ---- APP-STYLE GRAPHICS -------------------------------------------
+     Anything on this page depicting the APP is drawn in the app's own
+     values, taken from statchat.css: #f4f3ef page, white cards,
+     #1a1a2e navy chrome, #1a7a4c green, #e0b400 amber, 10px radius, the
+     system font stack. A visitor who sees a dark console here and a
+     light application after signing in has a moment of doubt at exactly
+     the wrong point.
+     They are deliberately SMALLER than the dark versions were. A light
+     card on a dark page carries a lot of contrast on its own, so it does
+     not also need to be large -- scaled down it reads as an inset
+     example rather than as the loudest thing in the section.
+     The broadcast overlays and the JSON sample stay dark: the overlays
+     genuinely composite over video, and a payload belongs in a code
+     block. */
+  :root{
+    --sc-page:#f4f3ef; --sc-card:#fff; --sc-rule:#e6e6e6; --sc-ink:#1a1a1a;
+    --sc-ink-soft:#3a3a3a; --sc-ink-muted:#9aa3b2; --sc-navy:#1a1a2e;
+    --sc-green:#1a7a4c; --sc-amber:#e0b400;
+    --sys:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+  }
+  .ashot{margin-top:16px;background:var(--sc-card);border-radius:8px;overflow:hidden;
+         font-family:var(--sys);font-size:12px;color:var(--sc-ink-soft);
+         box-shadow:0 2px 10px rgba(0,0,0,.35);max-width:330px}
+  .ashot .hd{background:var(--sc-navy);color:#fff;padding:6px 9px;display:flex;
+             align-items:center;gap:6px;font-size:10.5px;font-weight:600}
+  .ashot .hd .q{margin-left:auto;color:#9aa3b2;font-weight:400}
+  .ashot .bd{padding:9px}
+  .atiles{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+  .atile{background:#f7f7f4;border:1px solid var(--sc-rule);border-radius:5px;padding:6px;
+         text-align:center}
+  .atile b{display:block;font-size:14px;font-weight:700;color:var(--sc-ink);line-height:1.15}
+  .atile span{font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--sc-ink-muted)}
+  .adrive{margin-top:6px;border-left:3px solid var(--sc-amber);background:#fff8e6;
+          border-radius:0 5px 5px 0;padding:5px 8px}
+  .adrive .k{font-size:7.5px;letter-spacing:.09em;text-transform:uppercase;color:#a37a00;font-weight:700}
+  .adrive .p{font-size:10.5px;color:var(--sc-ink);margin-top:1px;line-height:1.3}
+  .adrive .p em{font-style:normal;font-weight:700;color:var(--sc-green)}
+  .atab{width:100%;border-collapse:collapse;font-size:10.5px;color:var(--sc-ink-soft)}
+  .atab th{color:var(--sc-ink-muted);font-weight:600;font-size:8.5px;text-align:right;
+           padding:0 0 4px;border-bottom:1px solid var(--sc-rule)}
+  .atab th:first-child{text-align:left}
+  .atab td{text-align:right;padding:4px 0;border-bottom:1px solid #f2f2f2}
+  .atab td:first-child{text-align:left;color:var(--sc-ink);font-weight:600}
+  .atab tr:last-child td{border-bottom:none}
+  .achip{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+  .achip b{font-size:9.5px;font-weight:600;padding:4px 7px;border-radius:5px;
+           background:var(--sc-navy);color:#fff;border:1px solid var(--sc-navy)}
+  .achip b.on{background:var(--sc-amber);color:#3a2f00;border-color:var(--sc-amber)}
+  .achip b.go{background:var(--sc-green);color:#fff;border-color:var(--sc-green)}
+  .achip b.act{border:2px solid var(--sc-green)}
+  .achip .lab{width:100%;background:none;border:none;padding:0;color:var(--sc-ink-muted);
+              font-size:8.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .atree{display:grid;grid-template-columns:48px 1fr;gap:6px}
+  .arail{display:flex;flex-direction:column;gap:3px}
+  .arail i{font-style:normal;font-size:9px;font-weight:600;text-align:center;padding:4px 0;
+           border-radius:5px;background:var(--sc-navy);color:#fff}
+  .arail i.act{border:2px solid var(--sc-green);padding:2px 0}
+  .arail i.util{background:var(--sc-amber);color:#3a2f00}
+  .ag2{display:flex;align-items:flex-end;gap:11px;height:52px;padding:0 3px}
+  .ag2 .grp{flex:1;display:flex;align-items:flex-end;gap:3px;height:100%}
+  .ag2 .grp i{flex:1;border-radius:2px 2px 0 0;position:relative}
+  .ag2 .us{background:var(--sc-amber)} .ag2 .them{background:var(--sc-navy)}
+  .ag2 .grp i b{position:absolute;top:-11px;left:0;right:0;text-align:center;font-size:8px;
+                font-weight:600;color:var(--sc-ink-soft)}
+  .ax{display:flex;gap:11px;margin-top:5px;padding:0 3px;font-size:8.5px;color:var(--sc-ink-muted)}
+  .ax span{flex:1;text-align:center}
+  .alg{display:flex;gap:10px;margin-top:7px;font-size:8.5px;color:var(--sc-ink-muted)}
+  .alg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
+  .aderived{margin-top:5px;background:#eaf5ee;border-left:3px solid var(--sc-green);
+            border-radius:0 5px 5px 0;padding:5px 8px;font-size:10px;color:#1c5c3d}
+  .aderived b{color:var(--sc-green);font-weight:700}
+
   /* ---- CELL GRAPHICS -------------------------------------------------
      RECREATIONS, NOT SCREENSHOTS, and the distinction is deliberate.
      A screenshot of the running app would carry real players' names --
@@ -175,11 +256,13 @@
      they show what the product looks like without claiming to BE a
      capture of it. Each is marked aria-hidden: they illustrate the text
      beside them and add nothing for a screen reader. */
-  .shot{margin-top:18px;background:#0b0f14;border:1px solid var(--edge);border-radius:5px;
-        padding:12px;overflow:hidden}
+  /* still used by the one graphic that stays dark: the feed payload,
+     which is a code sample and belongs in a code block. */
   .shot-t{font-family:var(--label);text-transform:uppercase;letter-spacing:.12em;
           font-size:9.5px;color:#5c6773;margin-bottom:9px;display:flex;gap:6px;align-items:center}
   .shot-t::before{content:"";width:5px;height:5px;border-radius:50%;background:#39424d}
+  .shot{margin-top:18px;background:#0b0f14;border:1px solid var(--edge);border-radius:5px;
+        padding:12px;overflow:hidden}
 
   /* 1 — CREW VIEW. The real screen is two team panels of stat tiles
      side by side, a live-drive strip and the last play. At a quarter of
@@ -188,97 +271,39 @@
   .cv-hd{display:flex;align-items:center;gap:8px;font-family:var(--label);text-transform:uppercase;
          letter-spacing:.06em;font-size:11px;font-weight:700;background:#12171e;margin:-12px -12px 9px;
          padding:7px 12px;border-bottom:1px solid var(--edge)}
-  .cv-hd .q{margin-left:auto;color:var(--mute)}
-  .cv-hd .us{color:var(--data)}
-  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:5px}
-  .tile{background:#12171e;border-radius:3px;padding:7px 8px;text-align:center}
-  .tile b{display:block;font-family:var(--mono);font-weight:700;font-size:15px;color:var(--paper);line-height:1.1}
-  .tile span{font-family:var(--label);text-transform:uppercase;letter-spacing:.09em;
-             font-size:8px;color:#5c6773}
-  .drive{margin-top:7px;background:rgba(255,199,44,.09);border-left:2px solid var(--data);
-         border-radius:0 3px 3px 0;padding:6px 8px}
-  .drive .k{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;font-size:8px;
-            color:var(--data);display:block}
-  .drive .p{font-size:11px;color:#dfe6ec;line-height:1.35;margin-top:2px}
-  .drive .p em{font-style:normal;color:var(--data);font-weight:600}
 
   /* the stats section is two columns, so these graphics get roughly
      twice the width of the four-across ones and can carry axis labels */
   .g2w{display:flex;align-items:flex-end;gap:26px;height:84px;padding:0 8px}
-  .g2w .grp{flex:1;display:flex;align-items:flex-end;gap:6px;height:100%}
-  .g2w .grp i{flex:1;border-radius:2px 2px 0 0;position:relative}
-  .g2w .grp i b{position:absolute;top:-13px;left:0;right:0;text-align:center;
-                font-family:var(--mono);font-size:9.5px;font-weight:500;color:#9aa5b1}
-  .g2w .us{background:var(--data)} .g2w .them{background:#4a5563}
 
   /* 3 — the season report's grouped bars, us against them */
   .g2{display:flex;align-items:flex-end;gap:9px;height:62px}
-  .g2 .grp{flex:1;display:flex;align-items:flex-end;gap:2px;height:100%}
-  .g2 .grp i{flex:1;border-radius:1px 1px 0 0;position:relative}
-  .g2 .us{background:var(--data)}
-  .g2 .them{background:#4a5563}
-  .g2 .grp i b{position:absolute;top:-11px;left:0;right:0;text-align:center;
-                font-family:var(--mono);font-size:8px;font-weight:500;color:#8d99a6}
-  .lgd{display:flex;gap:11px;margin-top:8px;font-family:var(--label);text-transform:uppercase;
-       letter-spacing:.08em;font-size:8px;color:#5c6773}
-  .lgd i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;
-         vertical-align:middle}
 
   /* the LADDER: each answer opens the next question, and one rung can be
      answered two ways. The derived line is the point of the graphic. */
-  .rung{border-left:2px solid #2b333d;padding:0 0 0 11px;margin-bottom:9px;position:relative}
-  .rung::before{content:"";position:absolute;left:-5px;top:6px;width:8px;height:8px;
-                border-radius:50%;background:#2b333d}
-  .rung.done::before{background:var(--brand)}
-  .rung.now{border-left-color:var(--data)}
-  .rung.now::before{background:var(--data)}
-  .rung .q{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;font-size:8.5px;
-           color:#5c6773;display:block;margin-bottom:3px}
-  .orbar{display:flex;align-items:center;gap:8px;margin:2px 0}
-  .orbar .or{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;
-             font-size:8px;color:#5c6773}
-  .pill{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em;font-size:9px;
-        font-weight:600;padding:4px 8px;border-radius:3px;background:#12171e;
-        border:1px solid var(--edge);color:#9aa5b1}
-  .pill.on{background:var(--data);color:#20180a;border-color:var(--data)}
-  .fld{font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:3px;
-       background:#12171e;border:1px solid var(--edge);color:var(--paper);display:inline-block}
-  .derived{margin-top:6px;background:rgba(124,181,24,.12);border-left:2px solid var(--brand);
-           border-radius:0 3px 3px 0;padding:6px 9px;font-family:var(--mono);font-size:11px;
-           color:#cfe3ae}
-  .derived b{color:var(--brand);font-weight:700}
+  /* on the app's white card now, so the rail and dots take the app's
+     values rather than the site's */
+  .rung{border-left:2px solid var(--sc-rule);padding:0 0 0 10px;margin-bottom:8px;position:relative}
+  .rung::before{content:"";position:absolute;left:-5px;top:5px;width:8px;height:8px;
+                border-radius:50%;background:var(--sc-rule-strong,#c8c8c8)}
+  .rung.done::before{background:var(--sc-green)}
+  .rung.now{border-left-color:var(--sc-amber)}
+  .rung.now::before{background:var(--sc-amber)}
+  .rung .q{text-transform:uppercase;letter-spacing:.08em;font-size:8px;font-weight:700;
+           color:var(--sc-ink-muted);display:block;margin-bottom:3px}
+  .achip .or{font-size:8.5px;text-transform:uppercase;letter-spacing:.08em;
+             color:var(--sc-ink-muted);align-self:center}
+  .achip b em{font-style:normal;font-size:8px;opacity:.75;font-weight:500}
 
   /* 4 — the pass tree, as it really lays out */
   .tree{display:grid;grid-template-columns:52px 1fr;gap:7px}
-  .rail{display:flex;flex-direction:column;gap:3px}
-  .rail i{font-family:var(--label);text-transform:uppercase;letter-spacing:.04em;font-size:9px;
-          font-weight:600;font-style:normal;text-align:center;padding:5px 0;border-radius:3px;
-          background:#12171e;border:1px solid var(--edge);color:#9aa5b1}
-  .rail i.on{border-color:var(--brand);box-shadow:inset 0 0 0 1px var(--brand);color:var(--paper)}
-  .rail i.util{background:rgba(255,199,44,.14);border-color:rgba(255,199,44,.3);color:var(--data)}
-  .tr{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
-  .tr b{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em;font-size:9px;
-        font-weight:600;padding:4px 7px;border-radius:3px;background:#12171e;
-        border:1px solid var(--edge);color:#9aa5b1}
-  .tr b.on{background:var(--data);color:#20180a;border-color:var(--data)}
-  .tr .lab{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;font-size:8px;
-           color:#5c6773;width:100%;margin-bottom:1px;padding:0;background:none;border:none}
-  .tr .go{background:var(--brand);color:#0e1408;border-color:var(--brand)}
 
   /* 1 — crew view */
   /* 2 — the entry card */
   .pt{display:flex;flex-wrap:wrap;gap:5px}
-  .pt span{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em;font-size:10px;
-           font-weight:600;padding:5px 9px;border-radius:3px;background:var(--raise);
-           border:1px solid var(--edge);color:#9aa5b1}
-  .pt span.on{background:var(--data);color:#20180a;border-color:var(--data)}
 
   /* 3 — season chart */
   .chart{display:flex;align-items:flex-end;gap:5px;height:64px}
-  .chart div{flex:1;background:var(--brand);border-radius:2px 2px 0 0;opacity:.85}
-  .chart div.hi{background:var(--data);opacity:1}
-  .chart-x{display:flex;gap:5px;margin-top:5px;font-family:var(--mono);font-size:8.5px;color:#5c6773}
-  .chart-x span{flex:1;text-align:center}
 
   /* 4 — feed */
   .feedline{font-family:var(--mono);font-size:10px;line-height:1.85;color:#8d99a6;
@@ -288,21 +313,9 @@
 
   /* the player picker, in usage order */
   .pk{display:flex;flex-wrap:wrap;gap:5px}
-  .pk span{font-family:var(--label);text-transform:uppercase;letter-spacing:.04em;font-size:10px;
-           font-weight:600;padding:5px 9px;border-radius:3px;background:var(--raise);
-           border:1px solid var(--edge);color:#9aa5b1;display:flex;gap:6px;align-items:baseline}
-  .pk span.on{background:var(--data);color:#20180a;border-color:var(--data)}
-  .pk em{font-family:var(--mono);font-style:normal;font-size:9px;opacity:.7;letter-spacing:0}
 
   /* stat-section tables */
   .mini{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px;color:#8d99a6}
-  .mini th{text-align:right;font-weight:500;color:#5c6773;padding:0 0 5px;
-           border-bottom:1px solid #161d25;font-size:9px}
-  .mini th:first-child{text-align:left}
-  .mini td{text-align:right;padding:4px 0;border-bottom:1px solid #161d25}
-  .mini td:first-child{text-align:left;color:var(--paper)}
-  .mini tr:last-child td{border-bottom:none}
-  .mini td.k{color:var(--data)}
 
   /* ---- setup, then a few taps ---- */
   .taps{display:grid;gap:1px;background:var(--edge);border:1px solid var(--edge);
@@ -417,10 +430,13 @@
             border-top:3px solid var(--brand);border-radius:6px;padding:30px 26px}
   .fields{display:grid;gap:18px}
   @media (min-width:700px){ .fields{grid-template-columns:1fr 1fr} .fld.wide{grid-column:1/-1} }
+  /* RESTORED. These were swept away with the dark-graphic rules because
+     the ladder graphic happened to reuse the class name `.fld` for its
+     read-only value boxes. Deleting by class name is only safe when the
+     name means one thing — this one meant two. */
   .fld{display:flex;flex-direction:column;gap:7px;font-family:var(--label);
        text-transform:uppercase;letter-spacing:.12em;font-size:12px;font-weight:600;
        color:var(--mute)}
-  .req{color:var(--brand)}
   .fld input,.fld textarea{font-family:var(--body);font-size:15.5px;letter-spacing:normal;
        text-transform:none;color:var(--paper);background:var(--ink);
        border:1px solid var(--edge);border-radius:4px;padding:11px 13px;width:100%;
@@ -429,6 +445,7 @@
        box-shadow:0 0 0 3px rgba(124,181,24,.18)}
   .fld input::placeholder,.fld textarea::placeholder{color:#5c6773}
   .fld input.bad,.fld textarea.bad{border-color:var(--program)}
+  .req{color:var(--brand)}
   /* Off-canvas rather than display:none — some bots skip hidden fields. */
   .trap{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
   #formMsg:empty{display:none}
@@ -451,7 +468,7 @@
        tightens further; sections keep the weighted-top rhythm at a size
        that still separates without costing a scroll. */
     .hero{padding-block:20px 44px}
-    section{padding-block:52px 40px}
+    section.wrap{padding-block:52px 40px}
 
     /* THE SCOREBUG WRAPS RATHER THAN OVERFLOWS. Four cells in a row need
        about 480px; a phone has 354px of content. Real broadcast bugs
@@ -597,17 +614,17 @@
          play, every team and individual stat — updating the instant a play is entered.
          Desktop stat software gives your commentator a printout; mobile apps give them
          nothing. Built for the broadcast team, by a broadcast team.</p>
-      <div class="shot" aria-hidden="true">
-        <div class="cv-hd"><span class="us">Riverside 31</span><span>— Northgate 7</span><span class="q">Q3</span></div>
-        <div class="tiles">
-          <div class="tile"><b>391</b><span>Total yards</span></div>
-          <div class="tile"><b>44</b><span>Total plays</span></div>
-          <div class="tile"><b>4 of 6</b><span>3rd down</span></div>
-          <div class="tile"><b>13:55</b><span>Time of poss.</span></div>
-        </div>
-        <div class="drive">
-          <span class="k">Live current drive · 8/80 · 2:37</span>
-          <div class="p">Whitfield pass to Brooks for 18 — <em>TOUCHDOWN</em></div>
+      <div class="ashot" aria-hidden="true">
+        <div class="hd"><span>Riverside 31 — Northgate 7</span><span class="q">Q3</span></div>
+        <div class="bd">
+          <div class="atiles">
+            <div class="atile"><b>391</b><span>Total yards</span></div>
+            <div class="atile"><b>44</b><span>Total plays</span></div>
+            <div class="atile"><b>4 of 6</b><span>3rd down</span></div>
+            <div class="atile"><b>13:55</b><span>Time of poss.</span></div>
+          </div>
+          <div class="adrive"><span class="k">Live drive · 8/80 · 2:37</span>
+            <div class="p">Whitfield pass to Brooks for 18 — <em>TOUCHDOWN</em></div></div>
         </div>
       </div>
     </div>
@@ -631,17 +648,19 @@
       <h3>Stats, stats and more stats</h3>
       <p>Nobody beats StatChat on stats. Team and individual, every unit, trends and
          analysis across the whole season — all included, not an upgrade.</p>
-      <div class="shot" aria-hidden="true">
-        <div class="shot-t">Points by quarter — season</div>
-        <div class="g2">
-          <div class="grp"><i class="us" style="height:88%"><b>121</b></i><i class="them" style="height:38%"><b>52</b></i></div>
-          <div class="grp"><i class="us" style="height:56%"><b>77</b></i><i class="them" style="height:50%"><b>69</b></i></div>
-          <div class="grp"><i class="us" style="height:43%"><b>59</b></i><i class="them" style="height:25%"><b>34</b></i></div>
-          <div class="grp"><i class="us" style="height:41%"><b>56</b></i><i class="them" style="height:67%"><b>92</b></i></div>
+      <div class="ashot" aria-hidden="true">
+        <div class="hd"><span>Season report — points by quarter</span></div>
+        <div class="bd">
+          <div class="ag2">
+            <div class="grp"><i class="us" style="height:88%"><b>121</b></i><i class="them" style="height:38%"><b>52</b></i></div>
+            <div class="grp"><i class="us" style="height:56%"><b>77</b></i><i class="them" style="height:50%"><b>69</b></i></div>
+            <div class="grp"><i class="us" style="height:43%"><b>59</b></i><i class="them" style="height:25%"><b>34</b></i></div>
+            <div class="grp"><i class="us" style="height:41%"><b>56</b></i><i class="them" style="height:67%"><b>92</b></i></div>
+          </div>
+          <div class="ax"><span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span></div>
+          <div class="alg"><span><i style="background:var(--sc-amber)"></i>Scored</span>
+            <span><i style="background:var(--sc-navy)"></i>Allowed</span></div>
         </div>
-        <div class="chart-x"><span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span></div>
-        <div class="lgd"><span><i style="background:var(--data)"></i>Scored</span>
-          <span><i style="background:#4a5563"></i>Allowed</span></div>
       </div>
     </div>
     <div class="cell">
@@ -650,20 +669,17 @@
       <p>Every play is a few taps: pick the play type, fill in what happened, review before
          you save. No stats department, no training class — one person, the sideline, and a
          device they already own.</p>
-      <div class="shot" aria-hidden="true">
-        <div class="shot-t">Play entry — 1st &amp; 10</div>
-        <div class="tree">
-          <div class="rail">
-            <i>Rush</i><i class="on">Pass</i><i>Punt</i><i>FG</i><i>PAT</i><i class="util">Penalty</i>
-          </div>
-          <div>
-            <div class="tr"><b class="on">&check; Completed</b><b>Sacked</b><b>Int</b></div>
-            <div class="tr"><span class="lab">Passer</span><b class="on">19 Whitfield</b></div>
-            <div class="tr"><span class="lab">Receiver</span><b>81 Brooks</b><b>18 Ellis</b>
-              <b>4 Okafor</b><b>7 Delgado</b></div>
-            <div class="tr"><span class="lab">Yards</span><b>0</b><b>1</b><b>2</b><b>3</b>
-              <b>4</b><b>5</b><b>Loss</b></div>
-            <div class="tr"><b class="go">Review play</b></div>
+      <div class="ashot" aria-hidden="true">
+        <div class="hd"><span>Riverside 31 — Northgate 7</span><span class="q">1st &amp; 10</span></div>
+        <div class="bd">
+          <div class="atree">
+            <div class="arail"><i>Rush</i><i class="act">Pass</i><i>Punt</i><i>FG</i><i class="util">Penalty</i></div>
+            <div>
+              <div class="achip"><b class="on">&check; Completed</b><b>Sacked</b><b>Int</b></div>
+              <div class="achip"><span class="lab">Passer</span><b class="on">19 Whitfield</b><b>8 Okafor</b></div>
+              <div class="achip"><span class="lab">Receiver</span><b>81 Brooks</b><b>18 Ellis</b><b>4 Okafor</b></div>
+              <div class="achip"><b class="go">Review play</b></div>
+            </div>
           </div>
         </div>
       </div>
@@ -685,15 +701,17 @@
          Explosive plays over twenty yards. Sacks, interceptions, fumble recoveries.
          Penalties and penalty yards. Time of possession, possessions, plays per game.
          Kept for your team <em>and</em> the opponent, from the same play log.</p>
-      <div class="shot" aria-hidden="true">
-        <div class="shot-t">Season report — total yardage by half</div>
-        <div class="g2w">
-          <div class="grp"><i class="us" style="height:92%"><b>2547</b></i><i class="them" style="height:71%"><b>1979</b></i></div>
-          <div class="grp"><i class="us" style="height:46%"><b>1278</b></i><i class="them" style="height:57%"><b>1589</b></i></div>
+      <div class="ashot" aria-hidden="true">
+        <div class="hd"><span>Season report — total yardage by half</span></div>
+        <div class="bd">
+          <div class="ag2" style="height:62px;gap:22px">
+            <div class="grp"><i class="us" style="height:92%"><b>2547</b></i><i class="them" style="height:71%"><b>1979</b></i></div>
+            <div class="grp"><i class="us" style="height:46%"><b>1278</b></i><i class="them" style="height:57%"><b>1589</b></i></div>
+          </div>
+          <div class="ax" style="gap:22px"><span>1st half</span><span>2nd half</span></div>
+          <div class="alg"><span><i style="background:var(--sc-amber)"></i>Riverside</span>
+            <span><i style="background:var(--sc-navy)"></i>Opponent</span></div>
         </div>
-        <div class="chart-x" style="padding:0 8px"><span>1st half</span><span>2nd half</span></div>
-        <div class="lgd" style="padding:0 8px"><span><i style="background:var(--data)"></i>Riverside</span>
-          <span><i style="background:#4a5563"></i>Opponent</span></div>
       </div>
     </div>
     <div class="cell">
@@ -704,15 +722,17 @@
          rate and yards per touch. Tackles, tackles for loss and takeaways on defense.
          Kickoffs, punts, field goals and extra points on special teams. Kick and punt
          returns kept separately.</p>
-      <div class="shot" aria-hidden="true">
-        <div class="shot-t">Receiving</div>
-        <table class="mini">
-          <tr><th>Player</th><th>Rec</th><th>Tgt</th><th>Yds</th><th>Y/C</th><th>TD</th></tr>
-          <tr><td>Brooks</td><td>7</td><td>9</td><td class="k">96</td><td>13.7</td><td>1</td></tr>
-          <tr><td>Ellis</td><td>4</td><td>6</td><td class="k">58</td><td>14.5</td><td>1</td></tr>
-          <tr><td>Okafor</td><td>2</td><td>2</td><td class="k">21</td><td>10.5</td><td>0</td></tr>
-          <tr><td>Delgado</td><td>1</td><td>2</td><td class="k">13</td><td>13.0</td><td>0</td></tr>
-        </table>
+      <div class="ashot" aria-hidden="true">
+        <div class="hd"><span>Riverside — receiving</span></div>
+        <div class="bd">
+          <table class="atab">
+            <tr><th>Player</th><th>Rec</th><th>Tgt</th><th>Yds</th><th>Y/C</th><th>TD</th></tr>
+            <tr><td>Brooks</td><td>7</td><td>9</td><td>96</td><td>13.7</td><td>1</td></tr>
+            <tr><td>Ellis</td><td>4</td><td>6</td><td>58</td><td>14.5</td><td>1</td></tr>
+            <tr><td>Okafor</td><td>2</td><td>2</td><td>21</td><td>10.5</td><td>0</td></tr>
+            <tr><td>Delgado</td><td>1</td><td>2</td><td>13</td><td>13.0</td><td>0</td></tr>
+          </table>
+        </div>
       </div>
     </div>
     <div class="cell">
@@ -723,31 +743,30 @@
          whole season, so a slide shows up as a slope rather than as a bad Friday.</p>
       <p>Charted, not tabulated, and in a season report a coach can actually hand to
          someone.</p>
-      <div class="shot" aria-hidden="true">
-        <div class="shot-t">Season report — 3rd down % by game</div>
-        <!-- A LINE, not bars. A trend is a shape over time, and bars make
-             the reader assemble it. The season report plots this the same
-             way, offense against opponent. -->
-        <svg viewBox="0 0 300 96" width="100%" height="96" preserveAspectRatio="none"
-             style="display:block;overflow:visible">
-          <line x1="0" y1="8"  x2="300" y2="8"  stroke="#1b232c" stroke-width="1"/>
-          <line x1="0" y1="44" x2="300" y2="44" stroke="#1b232c" stroke-width="1"/>
-          <line x1="0" y1="80" x2="300" y2="80" stroke="#262f39" stroke-width="1"/>
-          <polyline fill="none" stroke="#4a5563" stroke-width="2" stroke-linejoin="round"
-            points="6,62 38,56 71,56 104,68 137,53 170,66 203,58 236,52 269,68 294,64"/>
-          <polyline fill="none" stroke="#ffc72c" stroke-width="2.5" stroke-linejoin="round"
-            points="6,80 38,58 71,51 104,52 137,49 170,66 203,44 236,51 269,69 294,58"/>
-          <g fill="#ffc72c">
-            <circle cx="6" cy="80" r="2.5"/><circle cx="38" cy="58" r="2.5"/><circle cx="71" cy="51" r="2.5"/>
-            <circle cx="104" cy="52" r="2.5"/><circle cx="137" cy="49" r="2.5"/><circle cx="170" cy="66" r="2.5"/>
-            <circle cx="203" cy="44" r="2.5"/><circle cx="236" cy="51" r="2.5"/><circle cx="269" cy="69" r="2.5"/>
-            <circle cx="294" cy="58" r="2.5"/>
-          </g>
-        </svg>
-        <div class="chart-x"><span>G1</span><span>G2</span><span>G3</span><span>G4</span><span>G5</span>
-          <span>G6</span><span>G7</span><span>G8</span><span>G9</span><span>G10</span></div>
-        <div class="lgd"><span><i style="background:var(--data)"></i>Offense</span>
-          <span><i style="background:#4a5563"></i>Opponent</span></div>
+      <div class="ashot" aria-hidden="true">
+        <div class="hd"><span>Season report — 3rd down % by game</span></div>
+        <div class="bd">
+          <svg viewBox="0 0 300 88" width="100%" height="88" preserveAspectRatio="none"
+               style="display:block;overflow:visible">
+            <line x1="0" y1="8"  x2="300" y2="8"  stroke="#f0f0f0" stroke-width="1"/>
+            <line x1="0" y1="40" x2="300" y2="40" stroke="#f0f0f0" stroke-width="1"/>
+            <line x1="0" y1="74" x2="300" y2="74" stroke="#e6e6e6" stroke-width="1"/>
+            <polyline fill="none" stroke="#1a1a2e" stroke-width="2" stroke-linejoin="round"
+              points="6,58 38,52 71,52 104,63 137,49 170,61 203,54 236,48 269,63 294,59"/>
+            <polyline fill="none" stroke="#e0b400" stroke-width="2.5" stroke-linejoin="round"
+              points="6,74 38,54 71,47 104,48 137,45 170,61 203,41 236,47 269,64 294,54"/>
+            <g fill="#e0b400">
+              <circle cx="6" cy="74" r="2.5"/><circle cx="38" cy="54" r="2.5"/><circle cx="71" cy="47" r="2.5"/>
+              <circle cx="104" cy="48" r="2.5"/><circle cx="137" cy="45" r="2.5"/><circle cx="170" cy="61" r="2.5"/>
+              <circle cx="203" cy="41" r="2.5"/><circle cx="236" cy="47" r="2.5"/><circle cx="269" cy="64" r="2.5"/>
+              <circle cx="294" cy="54" r="2.5"/>
+            </g>
+          </svg>
+          <div class="ax" style="gap:0"><span>G1</span><span>G2</span><span>G3</span><span>G4</span><span>G5</span>
+            <span>G6</span><span>G7</span><span>G8</span><span>G9</span><span>G10</span></div>
+          <div class="alg"><span><i style="background:var(--sc-amber)"></i>Offense</span>
+            <span><i style="background:var(--sc-navy)"></i>Opponent</span></div>
+        </div>
       </div>
     </div>
     <div class="cell">
@@ -756,11 +775,13 @@
       <p>Single-game stat packages and full-season reports as PDF or Excel. A public recap
          link to send to local media. Live JSON and XML for your graphics.
          Nothing locked in a format only StatChat can read.</p>
-      <div class="shot" aria-hidden="true">
-        <div class="shot-t">Export</div>
-        <div class="pt"><span>Stat package · PDF</span><span>Stat package · XLS</span></div>
-        <div class="pt" style="margin-top:5px"><span>Season report · PDF</span><span>Season report · XLS</span></div>
-        <div class="pt" style="margin-top:5px"><span class="on">Public recap link</span></div>
+      <div class="ashot" aria-hidden="true">
+        <div class="hd"><span>Export</span></div>
+        <div class="bd">
+          <div class="achip"><b>Stat package · PDF</b><b>Stat package · XLS</b></div>
+          <div class="achip"><b>Season report · PDF</b><b>Season report · XLS</b></div>
+          <div class="achip" style="margin-bottom:0"><b class="go">Public recap link</b></div>
+        </div>
       </div>
     </div>
   </div>
@@ -838,20 +859,22 @@
       <p>And a rung can be answered whichever way you saw it. Enter the yards, or enter the
          yard line he was tackled on and StatChat works out the gain. Nothing that cannot
          happen on this down is ever on the screen.</p>
-      <div class="shot" aria-hidden="true">
-        <div class="shot-t">Pass · 1st &amp; 10 at own 20</div>
-        <div class="rung done"><span class="q">Outcome</span>
-          <div class="tr"><b class="on">&check; Completed</b><b>Sacked</b><b>Intercepted</b></div></div>
-        <div class="rung done"><span class="q">Passer</span>
-          <div class="tr"><b class="on">15 Whitfield</b><b>8 Okafor</b></div></div>
-        <div class="rung done"><span class="q">Receiver</span>
-          <div class="tr"><b>13 Brooks</b><b class="on">3 Ellis</b><b>19 Reyes</b><b>22 Delgado</b></div></div>
-        <div class="rung now"><span class="q">How far</span>
-          <div class="orbar"><span class="fld">Enter yards</span><span class="or">or</span>
-            <span class="pill on">Riverside</span><span class="fld">tackled on 37</span></div>
-          <div class="derived">from own 20 to own 37 = <b>+17</b></div></div>
-        <div class="rung"><span class="q">Tackled by · optional</span>
-          <div class="tr"><b class="go">#55 Pike</b><b>&plus; add</b></div></div>
+      <div class="ashot" aria-hidden="true">
+        <div class="hd"><span>Pass</span><span class="q">1st &amp; 10 at own 20</span></div>
+        <div class="bd">
+          <div class="rung done"><span class="q">Outcome</span>
+            <div class="achip"><b class="on">&check; Completed</b><b>Sacked</b><b>Int</b></div></div>
+          <div class="rung done"><span class="q">Passer</span>
+            <div class="achip"><b class="on">15 Whitfield</b><b>8 Okafor</b></div></div>
+          <div class="rung done"><span class="q">Receiver</span>
+            <div class="achip"><b>13 Brooks</b><b class="on">3 Ellis</b><b>19 Reyes</b></div></div>
+          <div class="rung now"><span class="q">How far</span>
+            <div class="achip"><b>Enter yards</b><span class="or">or</span>
+              <b class="on">Riverside</b><b>tackled on 37</b></div>
+            <div class="aderived">from own 20 to own 37 = <b>+17</b></div></div>
+          <div class="rung"><span class="q">Tackled by · optional</span>
+            <div class="achip" style="margin-bottom:0"><b class="go">#55 Pike</b><b>&plus; add</b></div></div>
+        </div>
       </div>
     </div>
     <div class="cell">
@@ -867,12 +890,13 @@
          ranked by what they have actually done tonight — so by the second quarter your
          top backs, receivers and tacklers are the first names on the screen. Every
          suggestion is only a suggestion: tap to confirm, or pick anyone else.</p>
-      <div class="shot" aria-hidden="true">
-        <div class="shot-t">Ball carrier — 2nd &amp; 4</div>
-        <div class="pk">
-          <span class="on">24 Delgado <em>11 car</em></span><span>31 Ellis <em>6 car</em></span>
-          <span>7 Whitfield <em>2 car</em></span><span>15 Okafor</span><span>28 Brooks</span>
-          <span>44 Nakamura</span>
+      <div class="ashot" aria-hidden="true">
+        <div class="hd"><span>Ball carrier</span><span class="q">2nd &amp; 4</span></div>
+        <div class="bd">
+          <div class="achip" style="margin-bottom:0">
+            <b class="on">24 Delgado <em>11 car</em></b><b>31 Ellis <em>6 car</em></b>
+            <b>7 Whitfield <em>2 car</em></b><b>15 Okafor</b><b>28 Brooks</b><b>44 Nakamura</b>
+          </div>
         </div>
       </div>
     </div>
