@@ -208,6 +208,18 @@
      'player team tackles tfl sacks int fumRec']
   ];
 
+  // OVERLAY PAGES NEED THE KEY TOO, and this was missed when 010 landed:
+  // the API was scoped, the raw feed addresses were given a key, and the
+  // ten overlay addresses on this same page were not. So the feeds worked
+  // and every overlay returned 401.
+  //
+  // An overlay is a browser source with no session — its key can only
+  // arrive in its own URL, exactly like a feed's.
+  const overlayUrl = (path) =>
+    ORIGIN + path + (feedKey
+      ? (path.indexOf('?') === -1 ? '?' : '&') + 'key=' + encodeURIComponent(feedKey)
+      : '');
+
   const feedUrlFor = (view, fmt) =>
     ORIGIN + '/api/feed?view=' + view + '&format=' + fmt +
     (feedKey ? '&key=' + encodeURIComponent(feedKey) : '');
@@ -251,25 +263,25 @@
 
     const ov = document.getElementById('overlayRows');
     ov.innerHTML = '';
-    [['Full scoreboard', ORIGIN + '/broadcast.html'],
-     ['Score only', ORIGIN + '/broadcast.html?layout=bug'],
+    [['Full scoreboard', overlayUrl('/broadcast.html')],
+     ['Score only', overlayUrl('/broadcast.html?layout=bug')],
      // THIS GAME's team comparison and each side's leaders, for holding
      // between drives. Live like the scoreboard, unlike the season panels
      // below -- it reads the game on air and repolls, so it is current
      // whenever the director cuts to it.
-     ['Team stats + leaders (this game)', ORIGIN + '/broadcast_stats.html'],
+     ['Team stats + leaders (this game)', overlayUrl('/broadcast_stats.html')],
      // Same graphic as a tall narrow column, for a lower-third or side
      // slot. Leaders stack with our team on top.
-     ['Team stats + leaders (portrait)', ORIGIN + '/broadcast_stats.html?layout=portrait'],
+     ['Team stats + leaders (portrait)', overlayUrl('/broadcast_stats.html?layout=portrait')],
      // SEASON leaders, not this game's. They read finished games only, so
      // a panel cut to air mid-game will not change under the director.
      // Add ?season=2025 to pin a year, ?top=3 for a shorter panel.
-     ['Rushing leaders (season)', ORIGIN + '/broadcast_leaders.html?view=rushing'],
-     ['Passing leaders (season)', ORIGIN + '/broadcast_leaders.html?view=passing'],
-     ['Receiving leaders (season)', ORIGIN + '/broadcast_leaders.html?view=receiving'],
-     ['Tackle leaders (season)', ORIGIN + '/broadcast_leaders.html?view=tackles'],
-     ['Kicking leaders (season)', ORIGIN + '/broadcast_leaders.html?view=kicking'],
-     ['Punting leaders (season)', ORIGIN + '/broadcast_leaders.html?view=punting']
+     ['Rushing leaders (season)', overlayUrl('/broadcast_leaders.html?view=rushing')],
+     ['Passing leaders (season)', overlayUrl('/broadcast_leaders.html?view=passing')],
+     ['Receiving leaders (season)', overlayUrl('/broadcast_leaders.html?view=receiving')],
+     ['Tackle leaders (season)', overlayUrl('/broadcast_leaders.html?view=tackles')],
+     ['Kicking leaders (season)', overlayUrl('/broadcast_leaders.html?view=kicking')],
+     ['Punting leaders (season)', overlayUrl('/broadcast_leaders.html?view=punting')]
     ].forEach(([label, url]) => {
       const tr = document.createElement('tr');
       tr.innerHTML = '<td class="what">' + label + '</td>' +
@@ -343,13 +355,13 @@
     L.push('the background is transparent so it keys straight over the');
     L.push('programme feed. No data mapping needed.');
     L.push('');
-    L.push('  Full scoreboard: ' + ORIGIN + '/broadcast.html');
-    L.push('  Score only:      ' + ORIGIN + '/broadcast.html?layout=bug');
-    L.push('  Team stats:      ' + ORIGIN + '/broadcast_stats.html');
-    L.push('  Team stats (tall):' + ORIGIN + '/broadcast_stats.html?layout=portrait');
+    L.push('  Full scoreboard: ' + overlayUrl('/broadcast.html'));
+    L.push('  Score only:      ' + overlayUrl('/broadcast.html?layout=bug'));
+    L.push('  Team stats:      ' + overlayUrl('/broadcast_stats.html'));
+    L.push('  Team stats (tall):' + overlayUrl('/broadcast_stats.html?layout=portrait'));
     ['rushing','passing','receiving','tackles','kicking','punting'].forEach(v => {
       L.push('  ' + (v.charAt(0).toUpperCase() + v.slice(1) + ' leaders').padEnd(17) +
-        ORIGIN + '/broadcast_leaders.html?view=' + v);
+        overlayUrl('/broadcast_leaders.html?view=') + v);
     });
     L.push('');
     L.push('=================================================');

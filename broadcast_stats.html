@@ -257,6 +257,9 @@
 </div>
 
 <script>
+  // See the note at the fetch below: an overlay is opened by vMix with
+  // no session, so its key arrives in its own URL.
+  const OVERLAY_KEY = new URLSearchParams(location.search).get('key') || '';
 // ===================================================================
 // BROADCAST OVERLAY -- GENERATED FILE, do not hand-edit.
 //   regenerate: python3 tools/make_broadcast.py
@@ -1090,8 +1093,20 @@ function extractNameTag(rawName){
   }
 
   async function fetchAndRender(){
-    const r = await fetch('/api/gamedata' +
-      (currentGameId ? '?id=' + encodeURIComponent(currentGameId) : ''),
+    // THE KEY TRAVELS IN THIS PAGE'S OWN URL. An overlay is a browser
+    // source in vMix: it has no session, so it cannot ask who it is.
+    // Since 010 the API requires a per-tenant key, and the only place
+    // this page can get one is the address it was opened with — the same
+    // way the raw feed URLs carry theirs.
+    //
+    // MISSED WHEN 010 LANDED: the endpoints were scoped and the three
+    // pages that CALL them were not, so every overlay returned 401 while
+    // the feed URLs worked. Scoping an endpoint is half the job; finding
+    // its callers is the other half.
+    const qs = [];
+    if (currentGameId) qs.push('id=' + encodeURIComponent(currentGameId));
+    if (OVERLAY_KEY)   qs.push('key=' + encodeURIComponent(OVERLAY_KEY));
+    const r = await fetch('/api/gamedata' + (qs.length ? '?' + qs.join('&') : ''),
       { cache: 'no-store' });
     if (!r.ok){
       const body = await r.json().catch(() => ({}));
