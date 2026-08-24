@@ -185,8 +185,8 @@
       </div>
 
       <div id="resetStep3" class="hidden danger-zone">
-        <p style="font-weight:600; margin:0 0 6px;">This cannot be undone</p>
-        <p class="sub" style="margin:0 0 10px;">Every game, every play, every roster snapshot, every player on your roster, and the current season year — gone permanently. There is no export and no undo. Type <strong>I agree</strong> exactly to confirm.</p>
+        <p style="font-weight:600; margin:0 0 6px;">This empties the app</p>
+        <p class="sub" style="margin:0 0 10px;">Every game disappears from your dashboard, your reports and any shared recap link. Your roster and the season year are cleared. Games are hidden rather than destroyed and StatChat support can restore them, but <strong>your roster and players cannot be recovered</strong> — export anything you want to keep first. Type <strong>I agree</strong> exactly to confirm.</p>
         <div id="resetPreflight" class="sub" style="margin:0 0 10px; font-weight:600; color:var(--sc-red, #a32d2d);"></div>
         <input type="text" id="resetAgreeInput" placeholder="I agree">
         <div class="row" style="margin-top:10px;">
@@ -725,35 +725,34 @@
       return;
     }
 
-    // Any finalized game needs to be un-finalized first -- same admin-only
-    // mechanism used everywhere else in the app that touches a final game.
-    const finalized = (allGames || []).filter(g => g.status === 'final');
-    for (const g of finalized){
-      const { error: unlockError } = await supabaseClient.from('games').update({ status: 'in_progress' }).eq('id', g.id);
-      if (unlockError){
-        showMsg('resetMsg', 'Could not reset: ' + unlockError.message, 'error');
-        document.getElementById('resetFinalBtn').disabled = false;
-        return;
+      // SOFT DELETE, THROUGH delete_game(), one game at a time.
+      // ---------------------------------------------------------------
+      // Two things vanish here that were both hazards.
+      //
+      // THE UN-FINALIZE LOOP IS GONE. It flipped every finished game to
+      // in_progress so a hard delete could get past the rules protecting
+      // them, and the comment that used to sit below admitted the
+      // consequence: if the delete then failed, every finished game was
+      // left unlocked and editable. delete_game() runs as SECURITY
+      // DEFINER and never touches status, so there is nothing to unlock
+      // and no half-finished state to warn about.
+      //
+      // AND THE RESET IS NOW RECOVERABLE. This is the single most
+      // destructive button in the application -- it empties the app for
+      // live use -- and it was the one action with no way back. The games
+      // are now hidden rather than destroyed, and the platform can put
+      // any of them back.
+      for (const g of (allGames || [])){
+        const { error: deleteError } = await supabaseClient
+          .rpc('delete_game', { p_game_id: g.id });
+        if (deleteError){
+          showMsg('resetMsg', 'Could not reset: ' + deleteError.message +
+            '<br><br>Nothing else has been changed. Games already removed stay ' +
+            'removed; re-run the reset to finish.', 'error');
+          document.getElementById('resetFinalBtn').disabled = false;
+          return;
+        }
       }
-    }
-
-    const ids = (allGames || []).map(g => g.id);
-    if (ids.length > 0){
-      const { error: deleteError } = await supabaseClient.from('games').delete().in('id', ids);
-      if (deleteError){
-        // The un-finalize loop above has already run. If the delete fails
-        // here, every finalized game has been flipped to in_progress and
-        // stays that way -- unlocked and editable. Harmless when the plan
-        // was to delete them, alarming if you now decide not to, so say
-        // so rather than leaving it to be discovered on the dashboard.
-        showMsg('resetMsg', 'Could not delete: ' + deleteError.message +
-          (finalized.length ? '<br><br><strong>Note:</strong> ' + finalized.length +
-            ' finished game(s) were unlocked to in-progress before this failed and are ' +
-            'still unlocked. Re-run the reset, or finalize them again from the dashboard.' : ''), 'error');
-        document.getElementById('resetFinalBtn').disabled = false;
-        return;
-      }
-    }
 
     // --- the team roster -------------------------------------------------
     // AFTER the games, never before. game_rosters rows carry a player_id

@@ -1081,14 +1081,14 @@
 
     const ok1 = confirm(
       'Delete game ' + designator + '?\n\n' +
-      'This permanently deletes ' + playCount + ' play(s) and the roster snapshot for this game. This cannot be undone.\n\nContinue?'
+      'This removes ' + playCount + ' play(s) and the roster snapshot for this game from your dashboard.\n\nContinue?'
     );
     if (!ok1) return;
 
     if (status === 'final'){
       const typed = prompt(
         'This game is marked FINAL — it represents a completed, finished game, not a work in progress.\n\n' +
-        'Deleting it is permanent. Every play and stat from this game will be gone, with no way to recover it afterward.\n\n' +
+        'It will disappear from your dashboard, your reports and any shared recap link.\n\n' +
         'Type the game designator exactly (' + designator + ') to confirm:'
       );
       if (typed === null) return; // cancelled
@@ -1097,17 +1097,23 @@
         return;
       }
 
-      // Deleting a finalized game requires briefly un-finalizing it first --
-      // only an admin account can do this, same rule as anywhere else in
-      // the app that touches a finalized game.
-      const { error: unlockError } = await supabaseClient.from('games').update({ status: 'in_progress' }).eq('id', gameId);
-      if (unlockError){
-        showMsg('dashboardMsg', 'Could not delete: ' + unlockError.message, 'error');
-        return;
-      }
+        // THE UN-FINALIZE DANCE IS GONE, and with it a real hazard. It
+        // used to flip a finished game to in_progress so a hard delete
+        // could get past the rules protecting finalised games. If the
+        // delete then failed, the game was left unlocked and editable --
+        // account.html still carries a comment warning about exactly that.
+        //
+        // delete_game() runs as SECURITY DEFINER and never touches status,
+        // so nothing has to be unlocked and nothing can be left half-done.
     }
 
-    const { error: deleteError } = await supabaseClient.from('games').delete().eq('id', gameId);
+      // SOFT DELETE. The game is hidden, not destroyed: plays and roster
+      // rows cascade from it, so leaving the row in place leaves all of
+      // them intact and the platform can restore the whole thing with
+      // one call. A coach deleting the wrong game is now a two-second
+      // fix rather than a restore from last night's backup.
+      const { data: didDelete, error: deleteError } = await supabaseClient
+        .rpc('delete_game', { p_game_id: gameId });
     if (deleteError){
       showMsg('dashboardMsg', 'Could not delete: ' + deleteError.message, 'error');
       return;
