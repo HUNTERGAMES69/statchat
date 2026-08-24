@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StatChat — platform</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<link rel="apple-touch-icon" href="logo.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="StatChat">
+
+<!-- THE PLATFORM CONSOLE — for statchatadmin@statchat.co only.
+     ======================================================================
+     WHY THIS PAGE EXISTS, and it is not really about restore.
+
+     The super-admin account has no tenant. Every other page in this app
+     asks "what is MY team" and works outward from there, so signing in as
+     the platform and landing on dashboard.html shows a MERGED VIEW of
+     every school at once, with nothing on screen saying whose data any of
+     it is. With one customer that is invisible. With two it is actively
+     misleading, and the person most likely to be misled is the one who can
+     change anything.
+
+     So this is the platform's landing page: it names the school before it
+     shows you anything belonging to one.
+
+     NO NEW SQL. Everything here reads through policies that already exist
+     -- `tenants_select` and `games_select` both carry `or is_super_admin()`
+     -- and restore calls `restore_game()`, added in migration 012. If this
+     page were deleted tomorrow nothing else would change.
+
+     WHAT THIS IS NOT: it is not "Act As". MULTI_TENANT_PLAN.md defers
+     impersonation until there is a real audit trail, and this page must
+     not quietly become it. Everything here reads a school's data AS THE
+     PLATFORM. There is no button that makes you a member of a school, and
+     adding one is a decision, not a convenience. -->
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="statchat.css">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+         background:var(--sc-page, #f4f3ef); margin:0;
+         padding-top:env(safe-area-inset-top); color:var(--sc-ink, #1a1a1a); }
+  .wrap { max-width:960px; margin:0 auto; padding:20px 16px 60px; }
+
+  .topbar { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+  .brand { display:flex; align-items:center; gap:9px; }
+  .brand img { width:26px; height:26px; border-radius:5px; display:block; }
+  .brand span { font-weight:800; font-size:18px; letter-spacing:-0.01em; }
+  /* THE ACCOUNT IS NAMED, ALWAYS. The whole hazard this page addresses is
+     not knowing whose data is on screen; the second half of that is not
+     remembering who you are signed in as. */
+  .whoami { margin-left:auto; font-size:12.5px; color:var(--sc-ink-muted, #9aa3b2); }
+  .whoami strong { color:var(--sc-ink-soft, #3a3a3a); }
+
+  .card { background:var(--sc-card, #fff); border-radius:var(--sc-radius, 10px);
+          padding:18px; box-shadow:0 2px 10px rgba(0,0,0,0.06); margin-bottom:16px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { color:#6b7680; margin:0 0 16px; font-size:13.5px; }
+
+  .tabs { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; }
+  .tabs button { padding:8px 14px; border-radius:var(--sc-radius-sm, 6px);
+                 border:1px solid var(--sc-rule-strong, #c8c8c8); background:#fff;
+                 color:var(--sc-ink-soft, #3a3a3a); font-size:14px; font-weight:600; cursor:pointer; }
+  .tabs button.on { background:var(--sc-navy, #1a1a2e); color:#fff; border-color:var(--sc-navy, #1a1a2e); }
+
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+       color:var(--sc-ink-muted, #9aa3b2); font-weight:700; padding:0 10px 8px;
+       border-bottom:1px solid var(--sc-rule, #e6e6e6); }
+  td { padding:10px; border-bottom:1px solid #f2f2f0; color:var(--sc-ink-soft, #3a3a3a); }
+  tr:last-child td { border-bottom:none; }
+  td.name { color:var(--sc-ink, #1a1a1a); font-weight:600; }
+  td.right { text-align:right; }
+
+  .pill { display:inline-block; font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:20px; }
+  .pill.live   { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
+  .pill.trial  { background:#eef2f8; color:#3d5a80; }
+  .pill.lapsed { background:var(--sc-amber-tint, #fff3cd); color:#8a6a00; }
+
+  button.act { padding:6px 12px; border-radius:var(--sc-radius-sm, 6px); border:none;
+               background:var(--sc-green, #1a7a4c); color:#fff; font-size:13px;
+               font-weight:700; cursor:pointer; }
+  button.act:disabled { opacity:.55; cursor:default; }
+  .msg { padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:14px; }
+  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
+  .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
+  .empty { color:#6b7680; font-size:14px; padding:6px 2px; }
+  .hidden { display:none; }
+  .note { font-size:12.5px; color:#6b7680; margin-top:12px; line-height:1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="brand"><img src="logo.png" alt=""><span>StatChat</span></span>
+    <span class="whoami" id="whoami"></span>
+  </div>
+
+  <div id="msg"></div>
+
+  <!-- Shown while the session is checked, and left showing if the account
+       turns out not to be the platform. Rendering the console first and
+       hiding it afterwards would flash real data at the wrong person. -->
+  <div id="gate" class="card">
+    <h1>Platform</h1>
+    <p class="sub" id="gateText">Checking your account…</p>
+  </div>
+
+  <div id="console" class="hidden">
+    <div class="tabs">
+      <button id="tabSchools" class="on">Schools</button>
+      <button id="tabRestore">Deleted games</button>
+    </div>
+
+    <div id="panelSchools" class="card">
+      <h1>Schools</h1>
+      <p class="sub">Every tenant on the platform. Counts are live games only —
+         deleted ones are on the other tab.</p>
+      <div id="schoolsBody"><p class="empty">Loading…</p></div>
+    </div>
+
+    <div id="panelRestore" class="card hidden">
+      <h1>Deleted games</h1>
+      <p class="sub">A game deleted from a school's dashboard is hidden, not destroyed.
+         Its plays and roster snapshot are untouched, so restoring puts the whole thing
+         back exactly as it was.</p>
+      <div id="restoreBody"><p class="empty">Loading…</p></div>
+      <p class="note"><strong>Why this is here and not on their dashboard.</strong>
+         Deleted games are hidden from the school by the same policy that hides them from
+         everyone, and showing them there would mean every game list in the app had to
+         learn to filter. Restoring is a support action, so it lives with support.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  function showMsg(text, type){
+    document.getElementById('msg').innerHTML =
+      text ? '<div class="msg ' + type + '">' + text + '</div>' : '';
+  }
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const fmtDate = d => d ? new Date(d).toLocaleDateString(undefined,
+    { year:'numeric', month:'short', day:'numeric' }) : '—';
+  const fmtWhen = d => d ? new Date(d).toLocaleString(undefined,
+    { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+
+  // THE AUTH LISTENER IS THE REAL ENTRY POINT on any page that has one --
+  // the standing rule for this codebase. Nothing runs before it fires.
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION'){
+      if (session){ init(session); } else { window.location.href = '/login.html'; }
+    } else if (event === 'SIGNED_OUT'){
+      window.location.href = '/login.html';
+    }
+  });
+
+  async function init(session){
+    const email = (session.user && session.user.email) || '';
+
+    // THE GATE IS A COURTESY, NOT THE CONTROL. Every query below is scoped
+    // by RLS whatever this check says, and restore_game() makes its own
+    // is_super_admin() test regardless of who calls it. This exists so a
+    // tenant admin who lands here by accident gets an explanation instead
+    // of an empty page.
+    const { data: me, error: meErr } = await supabaseClient
+      .from('profiles').select('is_super_admin, tenant_id').eq('id', session.user.id).limit(1);
+    if (meErr){
+      document.getElementById('gateText').textContent =
+        'Could not check your account: ' + meErr.message;
+      return;
+    }
+    const profile = (me || [])[0] || {};
+    if (!profile.is_super_admin){
+      document.getElementById('gateText').innerHTML =
+        'This page is for the StatChat platform account. ' +
+        '<a href="dashboard.html">Go to your dashboard</a> instead.';
+      return;
+    }
+
+    document.getElementById('whoami').innerHTML =
+      '<strong>' + esc(email) + '</strong> · platform';
+    document.getElementById('gate').classList.add('hidden');
+    document.getElementById('console').classList.remove('hidden');
+
+    loadSchools();
+    loadDeleted();
+  }
+
+  // ---- tabs -------------------------------------------------------------
+  function selectTab(which){
+    const isSchools = which === 'schools';
+    document.getElementById('tabSchools').classList.toggle('on', isSchools);
+    document.getElementById('tabRestore').classList.toggle('on', !isSchools);
+    document.getElementById('panelSchools').classList.toggle('hidden', !isSchools);
+    document.getElementById('panelRestore').classList.toggle('hidden', isSchools);
+  }
+  document.getElementById('tabSchools').addEventListener('click', () => selectTab('schools'));
+  document.getElementById('tabRestore').addEventListener('click', () => selectTab('restore'));
+
+  // ---- schools ----------------------------------------------------------
+  async function loadSchools(){
+    const body = document.getElementById('schoolsBody');
+    const { data: tenants, error } = await supabaseClient
+      .from('tenants').select('id, name, full_name, subscription, renews_on, created_at')
+      .order('name');
+    if (error){
+      body.innerHTML = '<p class="empty">Could not load schools: ' + esc(error.message) + '</p>';
+      return;
+    }
+    if (!tenants || !tenants.length){
+      body.innerHTML = '<p class="empty">No schools yet.</p>';
+      return;
+    }
+
+    // Counted in ONE query rather than one per school. Two tenants makes
+    // no difference; twenty would, and this page is the one that has to
+    // still work when there are twenty.
+    const { data: games } = await supabaseClient
+      .from('games').select('tenant_id, deleted_at, season_year');
+    const live = {}, gone = {};
+    (games || []).forEach(g => {
+      const bucket = g.deleted_at ? gone : live;
+      bucket[g.tenant_id] = (bucket[g.tenant_id] || 0) + 1;
+    });
+
+    body.innerHTML =
+      '<table><tr><th>School</th><th>Subscription</th><th>Renews</th>' +
+      '<th>Games</th><th>Deleted</th></tr>' +
+      tenants.map(t => {
+        const pill = t.subscription === 'active' ? 'live'
+                   : t.subscription === 'lapsed' ? 'lapsed' : 'trial';
+        const label = t.subscription === 'lapsed' ? 'Lapsed — read only'
+                    : t.subscription.charAt(0).toUpperCase() + t.subscription.slice(1);
+        return '<tr>' +
+          '<td class="name">' + esc(t.name) +
+            (t.full_name ? '<div style="font-weight:400; font-size:12.5px; color:#6b7680;">' +
+              esc(t.full_name) + '</div>' : '') + '</td>' +
+          '<td><span class="pill ' + pill + '">' + esc(label) + '</span></td>' +
+          '<td>' + fmtDate(t.renews_on) + '</td>' +
+          '<td>' + (live[t.id] || 0) + '</td>' +
+          '<td>' + (gone[t.id] || 0) + '</td>' +
+        '</tr>';
+      }).join('') + '</table>';
+  }
+
+  // ---- deleted games ----------------------------------------------------
+  async function loadDeleted(){
+    const body = document.getElementById('restoreBody');
+    // The join is what makes this readable: a designator on its own says
+    // nothing about WHOSE game it is, and two schools may legitimately
+    // both have a "2026-W1" since migration 010.
+    const { data: rows, error } = await supabaseClient
+      .from('games')
+      .select('id, designator, season_year, game_date, status, deleted_at, ' +
+              'home_team_name, away_team_name, tenants(name)')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false });
+    if (error){
+      body.innerHTML = '<p class="empty">Could not load deleted games: ' + esc(error.message) + '</p>';
+      return;
+    }
+    if (!rows || !rows.length){
+      body.innerHTML = '<p class="empty">Nothing has been deleted.</p>';
+      return;
+    }
+    body.innerHTML =
+      '<table><tr><th>School</th><th>Game</th><th>Played</th><th>Deleted</th><th></th></tr>' +
+      rows.map(g =>
+        '<tr data-game="' + esc(g.id) + '">' +
+          '<td class="name">' + esc((g.tenants && g.tenants.name) || '—') + '</td>' +
+          '<td>' + esc(g.designator) +
+            '<div style="font-size:12.5px; color:#6b7680;">' +
+              esc(g.away_team_name) + ' at ' + esc(g.home_team_name) + '</div></td>' +
+          '<td>' + fmtDate(g.game_date) + '</td>' +
+          '<td>' + fmtWhen(g.deleted_at) + '</td>' +
+          '<td class="right"><button class="act" data-restore="' + esc(g.id) + '">Restore</button></td>' +
+        '</tr>').join('') + '</table>';
+  }
+
+  // Delegated, because the rows are rebuilt after every restore and a
+  // listener bound to a button that no longer exists does nothing.
+  document.getElementById('restoreBody').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-restore]');
+    if (!btn) return;
+    const gameId = btn.getAttribute('data-restore');
+    btn.disabled = true;
+    btn.textContent = 'Restoring…';
+    showMsg('', '');
+
+    const { data, error } = await supabaseClient.rpc('restore_game', { p_game_id: gameId });
+    if (error){
+      showMsg('Could not restore: ' + esc(error.message), 'error');
+      btn.disabled = false; btn.textContent = 'Restore';
+      return;
+    }
+    if (data === false){
+      // The function returns false when the row was not there to restore.
+      // Distinguished from an error on purpose: nothing went wrong, the
+      // game simply is not deleted any more -- most likely restored in
+      // another tab.
+      showMsg('That game was not deleted — the list was out of date.', 'error');
+    } else {
+      showMsg('Game restored. It is back on that school\'s dashboard, with every play ' +
+              'and its roster snapshot.', 'success');
+    }
+    loadDeleted();
+    loadSchools();
+  });
+</script>
+</body>
+</html>

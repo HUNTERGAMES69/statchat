@@ -249,6 +249,11 @@
             <div id="accountMenu" class="hidden" style="position:absolute; right:0; top:110%; background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:20; min-width:200px; padding:6px 0;">
               <div id="accountMenuEmail" style="padding:8px 14px; font-size:12px; color:#888; border-bottom:1px solid #f0f0f0;"></div>
               <a href="account.html" class="accountMenuItem" style="display:block; padding:9px 14px; color:#333; font-size:14px; text-decoration:none;">Account settings</a>
+              <!-- REVEALED ONLY FOR THE PLATFORM ACCOUNT. Hidden by default
+                   rather than added at runtime: if the profile lookup fails,
+                   the safe outcome is a missing link, not one that appears
+                   for the wrong person. -->
+              <a href="platform.html" id="platformLink" class="accountMenuItem hidden" style="padding:9px 14px; color:#333; font-size:14px; text-decoration:none; border-top:1px solid #f0f0f0;">Platform console</a>
               <button id="signOutBtn" class="accountMenuItem" style="display:block; width:100%; text-align:left; padding:9px 14px; color:var(--sc-red, #a32d2d); font-size:14px; background:none; border:none;">Sign out</button>
             </div>
           </div>
@@ -359,9 +364,21 @@
 
   async function loadIsAdmin(){
     const { data, error } = await supabaseClient
-      .from('profiles').select('role').eq('id', currentUserId).limit(1);
+      .from('profiles').select('role, is_super_admin').eq('id', currentUserId).limit(1);
     const role = (!error && data && data.length > 0 && data[0].role) || 'view';
     currentIsAdmin = role === 'admin';
+
+      // THE PLATFORM ACCOUNT NEEDS A WAY IN. Without a link the address
+      // has to be remembered, and an address that must be remembered gets
+      // bookmarked -- which is how feed keys ended up in URLs.
+      //
+      // A convenience, never a control: platform.html checks
+      // is_super_admin itself and every query on it is scoped by RLS,
+      // whatever this page chooses to show.
+      if (!error && data && data.length > 0 && data[0].is_super_admin){
+        const pl = document.getElementById('platformLink');
+        if (pl) pl.classList.remove('hidden');
+      }
     currentCanEnterGames = role === 'admin' || role === 'game_entry';
     // Broadcast setup shows the static feed key, so it is not for view
     // accounts. Scorers get it because the crew sets up the day before.
