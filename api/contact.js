@@ -9,7 +9,7 @@
 // THIS ENDPOINT IS PUBLIC AND UNAUTHENTICATED, by necessity — the people
 // using it do not have accounts, which is the entire point. So it is
 // written on the assumption that most of what reaches it will be bots.
-// The defences below are deliberately cheap ones that cost a real person
+// The defenses below are deliberately cheap ones that cost a real person
 // nothing; anything stronger (a captcha) taxes the human to stop the
 // robot, and this form gets a handful of genuine submissions a month.
 //
@@ -30,7 +30,7 @@ const { createClient } = require('@supabase/supabase-js');
 const MAX = { name: 120, email: 254, organization: 160, message: 4000 };
 
 // keepBreaks matters for the message field and nothing else. Collapsing
-// every run of whitespace is right for a name or an organisation, and
+// every run of whitespace is right for a name or an organization, and
 // wrong for a paragraph: someone who writes three of them should not
 // arrive as one block of run-on text. So line breaks survive here, runs
 // of blank lines are capped at one, and control characters still go.
