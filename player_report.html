@@ -466,31 +466,50 @@
         [t.puntYds || 0, 'Total yds'],
         [t.blocked || 0, 'Blocked']
       ] },
-    // RETURNS, kickoff and punt combined (Andy's call). Selected on
-    // `returns` rather than yardage -- a return for a loss still happened
-    // and a yardage test would hide the player's whole section.
-    { key: 'returns', label: 'Returns', bucket: 'specialTeams',
-      has: (d) => (d.returns || 0) > 0,
-      cols: [['Ret','returns'],['Yds','retYds'],['Long','retLong'],['TD','retTd']],
-      volume: (t) => t.returns || 0,
-      value: (d) => d.returns || 0, trendLabel: 'Returns by game',
+    // RETURNS, kickoff and punt kept SEPARATE (Andy's call). Two sections
+    // rather than one: a 22-yard kickoff average and an 8-yard punt
+    // average are different skills in different situations, and averaging
+    // them gives a number that describes neither. Selected on the COUNT,
+    // not on yardage -- a return for a loss still happened.
+    { key: 'kickReturns', label: 'Kick returns', bucket: 'specialTeams',
+      has: (d) => (d.kickRet || 0) > 0,
+      cols: [['Ret','kickRet'],['Yds','kickRetYds'],['Long','kickRetLong'],['TD','kickRetTd']],
+      volume: (t) => t.kickRet || 0,
+      value: (d) => d.kickRet || 0, trendLabel: 'Kick returns by game',
       splits: (per, t) => [
-        [t.returns || 0, 'Returns'],
-        // Averaged over returns, all of which have a distance -- unlike
-        // punts, where one entered without yardage would drag the average
-        // down as though it had travelled nowhere.
-        [t.returns ? (t.retYds / t.returns).toFixed(1) : '—', 'Yds / return'],
-        [t.retLong || 0, 'Longest'],
-        [per.length ? (t.returns / per.length).toFixed(1) : '0.0', 'Ret / game'],
-        [t.retTd || 0, 'Touchdowns'],
-        [t.retYds || 0, 'Total yards']
+        [t.kickRet || 0, 'Returns'],
+        [t.kickRet ? (t.kickRetYds / t.kickRet).toFixed(1) : '\u2014', 'Yds / return'],
+        [t.kickRetLong || 0, 'Longest'],
+        [per.length ? (t.kickRet / per.length).toFixed(1) : '0.0', 'Ret / game'],
+        [t.kickRetTd || 0, 'Touchdowns'],
+        [t.kickRetYds || 0, 'Total yards']
       ],
       headline: (t) => [
-        [t.returns || 0, 'Returns'],
-        [t.returns ? (t.retYds / t.returns).toFixed(1) : '—', 'Yds / ret'],
-        [t.retLong || 0, 'Long'],
-        [t.retYds || 0, 'Total yds'],
-        [t.retTd || 0, 'TD']
+        [t.kickRet || 0, 'Returns'],
+        [t.kickRet ? (t.kickRetYds / t.kickRet).toFixed(1) : '\u2014', 'Yds / ret'],
+        [t.kickRetLong || 0, 'Long'],
+        [t.kickRetYds || 0, 'Total yds'],
+        [t.kickRetTd || 0, 'TD']
+      ] },
+    { key: 'puntReturns', label: 'Punt returns', bucket: 'specialTeams',
+      has: (d) => (d.puntRet || 0) > 0,
+      cols: [['Ret','puntRet'],['Yds','puntRetYds'],['Long','puntRetLong'],['TD','puntRetTd']],
+      volume: (t) => t.puntRet || 0,
+      value: (d) => d.puntRet || 0, trendLabel: 'Punt returns by game',
+      splits: (per, t) => [
+        [t.puntRet || 0, 'Returns'],
+        [t.puntRet ? (t.puntRetYds / t.puntRet).toFixed(1) : '\u2014', 'Yds / return'],
+        [t.puntRetLong || 0, 'Longest'],
+        [per.length ? (t.puntRet / per.length).toFixed(1) : '0.0', 'Ret / game'],
+        [t.puntRetTd || 0, 'Touchdowns'],
+        [t.puntRetYds || 0, 'Total yards']
+      ],
+      headline: (t) => [
+        [t.puntRet || 0, 'Returns'],
+        [t.puntRet ? (t.puntRetYds / t.puntRet).toFixed(1) : '\u2014', 'Yds / ret'],
+        [t.puntRetLong || 0, 'Long'],
+        [t.puntRetYds || 0, 'Total yds'],
+        [t.puntRetTd || 0, 'TD']
       ] },
     { key: 'defense', label: 'Defense',
       cols: [['Tackles','tackles'],['TFL','tfl'],['Sacks','sacks'],['Int','int'],['Fum Rec','fumRec']],

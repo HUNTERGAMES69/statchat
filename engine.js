@@ -1245,14 +1245,28 @@ function computeBoxScore(playsList){
     if (r.returner){
       const s = bucket(r.returner.team, 'specialTeams', r.returner.num, r.returner.name);
       if (s){
-        s.returns = (s.returns||0) + 1;
-        s.retYds = (s.retYds||0) + (r.returner.yards||0);
-        s.retLong = Math.max(s.retLong||0, r.returner.yards||0);
+        // SPLIT BY KIND, kickoff and punt kept apart (Andy's call, 23 Aug
+        // -- combined first, split the same day).
+        // -------------------------------------------------------------
+        // A 22-yard kickoff average and an 8-yard punt average are
+        // different skills in different game situations; averaging them
+        // gives a number that describes neither. The role has carried
+        // `kind` since it was written, so no play needs re-entering and
+        // nothing has to be backfilled.
+        //
+        // Anything without a kind is treated as a KICK return: the only
+        // plays that could lack one predate the field, and there are none
+        // -- but defaulting keeps a future writer from silently dropping
+        // a return by forgetting it.
+        const pre = r.returner.kind === 'punt' ? 'puntRet' : 'kickRet';
+        s[pre] = (s[pre]||0) + 1;
+        s[pre + 'Yds'] = (s[pre + 'Yds']||0) + (r.returner.yards||0);
+        s[pre + 'Long'] = Math.max(s[pre + 'Long']||0, r.returner.yards||0);
         // A return that scores. `effect.score` belongs to the returning
         // side on these plays, so the team check keeps a kicking-team
         // score (a muff recovered in the end zone) off the returner.
         if (e.score && e.score.team === r.returner.team && e.score.points === 6){
-          s.retTd = (s.retTd||0) + 1;
+          s[pre + 'Td'] = (s[pre + 'Td']||0) + 1;
         }
       }
     }

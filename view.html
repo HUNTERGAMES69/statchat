@@ -750,9 +750,9 @@ function extractNameTag(rawName){
       // could never be built no matter what the box score held.
       const stNums = Object.keys(s.specialTeams).filter(n => {
         const d = s.specialTeams[n];
-        return d.fgAtt || d.patAtt || d.punts || d.kickoffs || d.returns;
+        return d.fgAtt || d.patAtt || d.punts || d.kickoffs || d.kickRet || d.puntRet;
       });
-      const stKicking = [], stPunting = [], stKickoffs = [], stReturns = [];
+      const stKicking = [], stPunting = [], stKickoffs = [], stKickRet = [], stPuntRet = [];
       stNums.forEach(n => {
         const d = s.specialTeams[n];
         const name = n;
@@ -772,12 +772,16 @@ function extractNameTag(rawName){
           const tbPct = Math.round(100 * (d.touchbacks || 0) / d.kickoffs);
           stKickoffs.push({ name, values: [d.kickoffs, d.touchbacks || 0, tbPct + '%'] });
         }
-        // Returns, kickoff and punt combined. Sorted by yardage like the
-        // others, but SELECTED on `returns` -- a return for a loss still
-        // happened and must not be filtered out by a yardage test.
-        if (d.returns){
-          const avg = (d.retYds / d.returns).toFixed(1);
-          stReturns.push({ yds: d.retYds||0, name, values: [d.returns||0, d.retYds||0, avg, d.retLong||0] });
+        // Returns, kickoff and punt kept SEPARATE. Sorted by yardage like
+        // the others, but SELECTED on the count -- a return for a loss
+        // still happened and must not be filtered out by a yardage test.
+        if (d.kickRet){
+          stKickRet.push({ yds: d.kickRetYds||0, name,
+            values: [d.kickRet||0, d.kickRetYds||0, (d.kickRetYds/d.kickRet).toFixed(1), d.kickRetLong||0] });
+        }
+        if (d.puntRet){
+          stPuntRet.push({ yds: d.puntRetYds||0, name,
+            values: [d.puntRet||0, d.puntRetYds||0, (d.puntRetYds/d.puntRet).toFixed(1), d.puntRetLong||0] });
         }
         if (d.punts){
           const avg = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
@@ -789,8 +793,9 @@ function extractNameTag(rawName){
       });
       stKicking.sort((a, b) => b.yds - a.yds);
       stPunting.sort((a, b) => b.yds - a.yds);
-      stReturns.sort((a, b) => b.yds - a.yds);
-      const stTotalEntries = stKicking.length + stPunting.length + stKickoffs.length + stReturns.length;
+      stKickRet.sort((a, b) => b.yds - a.yds);
+      stPuntRet.sort((a, b) => b.yds - a.yds);
+      const stTotalEntries = stKicking.length + stPunting.length + stKickoffs.length + stKickRet.length + stPuntRet.length;
       if (stTotalEntries){
         // Three separate tables share this tile, and concatenated flush
         // they read as one run-on block: a header row lands directly
@@ -801,7 +806,8 @@ function extractNameTag(rawName){
         const pushIfRows = (hdrs, rows) => { if (rows.length) stSections.push(table(hdrs, rows)); };
         pushIfRows(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, MAX_ROWS).filter(rowHasValue));
         pushIfRows(['Punts','Avg','Long'], stPunting.slice(0, MAX_ROWS).filter(rowHasValue));
-        pushIfRows(['Ret','Yds','Avg','Long'], stReturns.slice(0, MAX_ROWS).filter(rowHasValue));
+        pushIfRows(['KR','Yds','Avg','Long'], stKickRet.slice(0, MAX_ROWS).filter(rowHasValue));
+        pushIfRows(['PR','Yds','Avg','Long'], stPuntRet.slice(0, MAX_ROWS).filter(rowHasValue));
         // Kickoffs: just the count and how many stayed in the end zone.
         // Individual kickoff distance is not reported anywhere and the
         // panel does not even ask for it, so a per-kicker yardage table

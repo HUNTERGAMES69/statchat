@@ -2081,9 +2081,15 @@ watch for.
   `game.html` and delete the other two test files. DONE 22 Aug 2026: the
   rail layout in `gametest3.html` won and is now `game.html`; the previous
   page is the frozen fallback `game_legacy.html`. See PROJECT_NOTES.
-- [x] **RETURN STATS — BUILT 23 Aug.** Kickoff and punt returns combined
-  into one line, per Andy's call, across the entry layer, the engine and
-  all five reporting surfaces.
+- [x] **RETURN STATS — BUILT 23 Aug.** Kickoff and punt returns kept
+  SEPARATE, across the entry layer, the engine and all five reporting
+  surfaces.
+
+  Built combined first and split the same day, on Andy's call: a 22-yard
+  kickoff average and an 8-yard punt average are different skills in
+  different game situations, and averaging them gives a number that
+  describes neither. The split cost about an hour because the role has
+  carried `kind` from the start -- no play needed re-entering.
 
   Scope, narrowed by Andy on the day: kickoff, GUIDED kickoff and punt
   only. NOT muffed-kick or blocked-kick recoveries -- those are loose
@@ -2095,8 +2101,10 @@ watch for.
   tacklers, interceptors and fumble recoverers. `defense` is still
   written alongside it, unchanged, so nothing existing counts differently.
 
-  `computeBoxScore` adds `returns`, `retYds`, `retLong`, `retTd` to the
-  `specialTeams` bucket. Shown in: recap, stat package, season report,
+  `computeBoxScore` adds `kickRet`/`kickRetYds`/`kickRetLong`/`kickRetTd`
+  and the `puntRet` equivalents to the `specialTeams` bucket. A returner
+  role with no `kind` is counted as a KICK return -- no such play exists,
+  but the default stops a future writer silently dropping one. Shown in: recap, stat package, season report,
   view and player report.
 
   NOT in the Live totals tile. A RET leader line was added there while

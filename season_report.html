@@ -901,9 +901,10 @@ function isAdminMarker(p){
 
     const koNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].kickoffs);
     const puntNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].punts);
-    // Returns, kickoff and punt combined. Filtered on `returns` rather
-    // than yardage: a return for a loss or no gain still happened.
-    const retNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].returns);
+    // Returns, kickoff and punt kept SEPARATE. Filtered on the count
+    // rather than yardage: a return for a loss still happened.
+    const kRetNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].kickRet);
+    const pRetNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].puntRet);
     const kickNames = Object.keys(seasonAgg.specialTeams).filter(n => seasonAgg.specialTeams[n].fgAtt || seasonAgg.specialTeams[n].patAtt);
     let stHtml = '';
     const stSub = (label, tableHtml) => tableHtml ? '<div class="st-subsection"><div class="st-subsection-label">'+label+'</div>'+tableHtml+'</div>' : '';
@@ -922,15 +923,18 @@ function isAdminMarker(p){
           return [p, wy?+(yds/wy).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].puntLong||0)), names.reduce((t,n)=>t+(obj[n].blocked||0),0)]; },
         'puntYds'));
     }
-    if (retNames.length){
-      const bucket = Object.fromEntries(retNames.map(n=>[n,seasonAgg.specialTeams[n]]));
-      stHtml += stSub('Returns', seasonStatTable(bucket, ['Ret','Yds','Avg','Long','TD'],
-        d => [d.returns||0, d.retYds||0, d.returns?+(d.retYds/d.returns).toFixed(1):0, d.retLong||0, d.retTd||0],
-        (obj,names) => { const r=names.reduce((t,n)=>t+(obj[n].returns||0),0), yds=names.reduce((t,n)=>t+(obj[n].retYds||0),0);
+    const retSub = (label, nameList, pre) => {
+      if (!nameList.length) return '';
+      const bucket = Object.fromEntries(nameList.map(n=>[n,seasonAgg.specialTeams[n]]));
+      return stSub(label, seasonStatTable(bucket, ['Ret','Yds','Avg','Long','TD'],
+        d => [d[pre]||0, d[pre+'Yds']||0, d[pre]?+(d[pre+'Yds']/d[pre]).toFixed(1):0, d[pre+'Long']||0, d[pre+'Td']||0],
+        (obj,names) => { const r=names.reduce((t,n)=>t+(obj[n][pre]||0),0), yds=names.reduce((t,n)=>t+(obj[n][pre+'Yds']||0),0);
           // Long is a MAX across the season, not a sum.
-          return [r, yds, r?+(yds/r).toFixed(1):0, Math.max(0,...names.map(n=>obj[n].retLong||0)), names.reduce((t,n)=>t+(obj[n].retTd||0),0)]; },
-        'retYds'));
-    }
+          return [r, yds, r?+(yds/r).toFixed(1):0, Math.max(0,...names.map(n=>obj[n][pre+'Long']||0)), names.reduce((t,n)=>t+(obj[n][pre+'Td']||0),0)]; },
+        pre+'Yds'));
+    };
+    stHtml += retSub('Kick returns', kRetNames, 'kickRet');
+    stHtml += retSub('Punt returns', pRetNames, 'puntRet');
     if (kickNames.length){
       const bucket = Object.fromEntries(kickNames.map(n=>[n,seasonAgg.specialTeams[n]]));
       stHtml += stSub('Kicking', seasonStatTable(bucket, ['FG Att','FG Made','Long FG','FG %','FG Blk','XP Att','XP Made','XP %','XP Blk'],
