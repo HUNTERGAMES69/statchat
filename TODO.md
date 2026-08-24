@@ -2598,12 +2598,11 @@ Collapsing these IS a visual change, however small, so none were touched:
   in markup. The tag is harmless but the file must STAY PRESENT until the
   tags go, or every page logs a 404. Do it whenever those files are next
   touched for other reasons; it is not worth 21 manual uploads on its own.
-- [x] ~~**Drop `teams.icon_url`.** Nothing reads it.~~ **WRONG — DO NOT
-  DROP THIS COLUMN.** `team-icon.js` reads it on all eighteen pages that
-  load that script, and uses it as the browser tab favicon. The claim
-  that nothing reads it appeared here twice and was never checked. The
-  column stays; the comment in `000_baseline.sql` saying "nothing reads
-  this" needs correcting when that file is next regenerated.
+- [ ] **Drop `teams.icon_url`.** Nothing reads it — correct, and it was
+  briefly and wrongly marked otherwise on 24 Aug. See the icon section
+  below: the root copy of `team-icon.js` was a stale pre-22-Aug version
+  that still read the column, which made the item look false. With the
+  neutered file restored there is again no reader.
 - [x] **Delete `gametest3.html` from the repo** — DONE. Verified 22 Aug:
   `gametest3.html`, `gametest.html`, `gametest2.html` and the three
   `layout_mockup*.html` files all return 404 from GitHub. They were never
@@ -2825,8 +2824,7 @@ scratch rebuild first.
   duplicates the unique `plays_game_seq_unique` on identical columns, and
   `plays_game_idx` is covered by both. `plays` is the highest-write table
   in the app — every play entered writes five index entries.
-- [ ] ~~Drop `teams.icon_url`~~ — **withdrawn 24 Aug**, `team-icon.js`
-  reads it. See above.
+- [ ] **Drop `teams.icon_url`.** Still valid; nothing reads it.
 - [ ] **Settle three column inconsistencies on `games`**: `is_preseason`
   is nullable where `is_broadcast` and `is_public` are NOT NULL with the
   same default; `game_phase` is nullable and has no CHECK where `status`
@@ -2911,33 +2909,45 @@ broken password reset survives unnoticed for months.
 
 ---
 
-## THE APP ICONS — SPLIT, 24 August 2026
+## THE APP ICONS — an upload that never landed, 24 August 2026
 
-Adding the app to an iPhone home screen showed the TEAM's logo, not
-StatChat's. Working as designed rather than broken: `team-icon.js` set
-both the tab favicon and `apple-touch-icon` from `teams.icon_url`, which
-was right when StatChat was the Neville tool and wrong now it is a
-product.
+An iPhone home screen was showing the school's logo rather than
+StatChat's. **The cause was not a design decision still standing: it was
+the 22 August removal never reaching the repo.**
 
-**Now split.** The favicon stays the team's mark — it answers "which of
-my open tabs is the game I am scoring", and the team logo is the best
-possible answer. The home screen takes StatChat's mark, because it
-answers "what is this app".
+`tests/team-icon.js` records the feature as removed on 22 Aug, on Andy's
+call, with the reasoning written out — the tab icon identifies the
+APPLICATION not the customer, a second per-team image is a second source
+of truth, and `is_our_team` picks exactly one row which multi-tenancy
+makes worse. The file was NEUTERED rather than deleted, because
+twenty-one pages carry `<script src="team-icon.js">` and an empty file is
+one upload instead of twenty-one.
 
-One file changed, `team-icon.js`, and it SETS `apple-touch-icon` to
-`logo.png` rather than merely leaving it alone. Not one of the eighteen
-pages declares a static apple-touch-icon, so removing the line without
-replacing it would have left iOS to fall back on the `icon` link — which
-this same file points at the team logo. The bug would have survived the
-fix. It is also set before the Supabase call and outside the try, so an
-unreachable server cannot leave the home screen with no icon.
+That neutered file was never uploaded. The root copy stayed the working
+pre-22-Aug version, so the feature carried on.
 
-Verified against both paths: team icon present, and team icon fetch
-failing. Each check mutation-tested.
+**Fixed by restoring the neutered file.** StatChat everywhere, tab and
+home screen. One upload.
 
-- [ ] **Per-tenant favicons** are a multi-tenancy question. `is_our_team`
-  picks one row today; with two schools it picks the wrong one. Fold into
-  the tenancy work rather than fixing separately.
+### What nearly happened instead
+
+Before finding `tests/team-icon.js`, this was "fixed" as a favicon/home-
+icon SPLIT — team logo on the tab, StatChat on the home screen. That
+would have reversed a decision already made and argued on multi-tenancy
+grounds, and it was written into TODO and PROJECT_NOTES as though it were
+new. **A file that contradicts a documented decision is more likely to be
+a failed upload than a change of mind, and the documented decision is the
+thing to check first.**
+
+- [ ] **Per-team icons, if ever wanted again**, belong in the tenancy
+  work. `is_our_team` picks one row; with two schools it picks the wrong
+  one, which is precisely why 22 Aug removed it.
+- [ ] `broadcast_leaders.html` declares no static favicon. Harmless — it
+  is a vMix browser input and no tab ever shows it — but it is the one
+  page the neutered file leaves with nothing.
+- [ ] The `<script src="team-icon.js">` tags can come out whenever those
+  pages are next touched. Deleting the file before then would 404 on
+  every page.
 
 ---
 

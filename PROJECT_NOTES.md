@@ -3065,26 +3065,53 @@ The one thing tenancy DOES change is the blast radius: today a bad
 concurrent-entry experience is Andy's own crew and Andy can explain it.
 With paying customers it is a support call from a school mid-game.
 
-## The icon that was working as designed (24 August 2026)
+## The icon that was NOT working as designed (24 August 2026)
 
-An iPhone home-screen icon showing the team's logo instead of StatChat's
-was reported as a bug. It was not: `team-icon.js` set both `icon` and
-`apple-touch-icon` from `teams.icon_url`, deliberately, on eighteen
-pages. It was right when StatChat was one school's tool.
+An iPhone home-screen icon showing the school's logo instead of
+StatChat's was reported as a bug. The root copy of `team-icon.js` set
+both `icon` and `apple-touch-icon` from `teams.icon_url` on eighteen
+pages, and reading only that file, the honest conclusion was that it was
+deliberate and simply out of date.
 
-Two lessons came out of a five-line change.
+It was not. `tests/team-icon.js` records the feature as REMOVED on 22
+August, on Andy's call, with the reasoning written out at length. The
+file was neutered rather than deleted — twenty-one pages carry
+`<script src="team-icon.js">`, and an empty file is one upload where
+removing the tags is twenty-one. **That neutered file was never
+uploaded.** The root copy stayed the working version and the feature
+carried on.
 
-**The obvious fix would not have worked.** Removing the
-`apple-touch-icon` line looks like the whole job — but no page declares a
-static one, so iOS falls back to the `icon` link, which the same file
-points at the team logo. The symptom would have survived. The fix had to
-SET the StatChat mark, not stop setting the team's.
+### The lesson, and it is the important one
 
-**And a TODO entry was simply false.** "Drop `teams.icon_url`. Nothing
-reads it." appeared twice in TODO.md. `team-icon.js` reads it on every
-page that loads it, and dropping the column would have taken the favicon
-out across the whole app. The claim had been copied forward without ever
-being checked against the code. Corrected in place with the reason, so
-the next person does not re-derive it — **a stale TODO item is more
-dangerous than a missing one, because it reads as a decision already
-made.**
+Before finding that file, this was "fixed" as a favicon/home-icon SPLIT:
+team logo on the tab, StatChat on the home screen. It was reasoned,
+tested, mutation-tested, and written into TODO.md and PROJECT_NOTES.md as
+a fresh decision. It also **reversed a decision already made and argued
+on multi-tenancy grounds** — `is_our_team` picks exactly one row, which
+is the whole problem with a per-team icon once there are two schools.
+
+**A file that contradicts a documented decision is more likely to be a
+failed upload than a change of mind.** The documented decision is the
+thing to check first, and the check is one grep. Three uploads have
+silently failed on this project already; that history should have been
+the first hypothesis rather than the last.
+
+It also produced a second wrong entry. `TODO.md` said "Drop
+`teams.icon_url`. Nothing reads it." Reading only the stale root file
+made that look false, so it was marked WRONG — when it was right, and is
+right again now the neutering is restored. **Correcting a document
+against a stale artifact makes the document worse.**
+
+### Where the decisions actually live
+
+`tests/` contains its own `PROJECT_NOTES.md` (28KB) and `tests_README.md`
+(31KB) which are STALE DUPLICATES of the root documents — no mention of
+anything from the last two days. `tests/team-icon.js`, by contrast, held
+a live decision nothing else recorded. So the tests directory is both a
+place where old copies go to rot AND a place where real reasoning is
+kept, with nothing to distinguish them. Same duplicate-drift pattern that
+produced `sql_README.md` and `sql/history/README.md`.
+
+- HANDOFF.md points a new session at TODO.md and PROJECT_NOTES.md. It
+  does not mention that a neutered source file may carry the only record
+  of why a feature is gone.
