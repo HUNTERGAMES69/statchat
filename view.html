@@ -750,9 +750,9 @@ function extractNameTag(rawName){
       // could never be built no matter what the box score held.
       const stNums = Object.keys(s.specialTeams).filter(n => {
         const d = s.specialTeams[n];
-        return d.fgAtt || d.patAtt || d.punts || d.kickoffs || d.kickRet || d.puntRet;
+        return d.fgAtt || d.patAtt || d.punts || d.kickoffs;
       });
-      const stKicking = [], stPunting = [], stKickoffs = [], stKickRet = [], stPuntRet = [];
+      const stKicking = [], stPunting = [], stKickoffs = [];
       stNums.forEach(n => {
         const d = s.specialTeams[n];
         const name = n;
@@ -772,17 +772,6 @@ function extractNameTag(rawName){
           const tbPct = Math.round(100 * (d.touchbacks || 0) / d.kickoffs);
           stKickoffs.push({ name, values: [d.kickoffs, d.touchbacks || 0, tbPct + '%'] });
         }
-        // Returns, kickoff and punt kept SEPARATE. Sorted by yardage like
-        // the others, but SELECTED on the count -- a return for a loss
-        // still happened and must not be filtered out by a yardage test.
-        if (d.kickRet){
-          stKickRet.push({ yds: d.kickRetYds||0, name,
-            values: [d.kickRet||0, d.kickRetYds||0, (d.kickRetYds/d.kickRet).toFixed(1), d.kickRetLong||0] });
-        }
-        if (d.puntRet){
-          stPuntRet.push({ yds: d.puntRetYds||0, name,
-            values: [d.puntRet||0, d.puntRetYds||0, (d.puntRetYds/d.puntRet).toFixed(1), d.puntRetLong||0] });
-        }
         if (d.punts){
           const avg = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
           // Total punt yardage is not a stat anyone reads -- it is just
@@ -793,9 +782,7 @@ function extractNameTag(rawName){
       });
       stKicking.sort((a, b) => b.yds - a.yds);
       stPunting.sort((a, b) => b.yds - a.yds);
-      stKickRet.sort((a, b) => b.yds - a.yds);
-      stPuntRet.sort((a, b) => b.yds - a.yds);
-      const stTotalEntries = stKicking.length + stPunting.length + stKickoffs.length + stKickRet.length + stPuntRet.length;
+      const stTotalEntries = stKicking.length + stPunting.length + stKickoffs.length;
       if (stTotalEntries){
         // Three separate tables share this tile, and concatenated flush
         // they read as one run-on block: a header row lands directly
@@ -806,13 +793,15 @@ function extractNameTag(rawName){
         const pushIfRows = (hdrs, rows) => { if (rows.length) stSections.push(table(hdrs, rows)); };
         pushIfRows(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, MAX_ROWS).filter(rowHasValue));
         pushIfRows(['Punts','Avg','Long'], stPunting.slice(0, MAX_ROWS).filter(rowHasValue));
-        pushIfRows(['KR','Yds','Avg','Long'], stKickRet.slice(0, MAX_ROWS).filter(rowHasValue));
-        pushIfRows(['PR','Yds','Avg','Long'], stPuntRet.slice(0, MAX_ROWS).filter(rowHasValue));
         // Kickoffs: just the count and how many stayed in the end zone.
         // Individual kickoff distance is not reported anywhere and the
         // panel does not even ask for it, so a per-kicker yardage table
         // would be all zeroes.
         pushIfRows(['Kicks','Touchbacks','TB%'], stKickoffs.filter(rowHasValue));
+        // NO RETURNS ON THIS PAGE (Andy's call, 23 Aug). Returns are in
+        // the recap, the stat package, the season report and the player
+        // report. This is the spectator tile and it is already dense;
+        // returns are the section a crowd scans for least.
         const stInner = stSections.map((sec, i) => i === 0 ? sec :
           '<div style="border-top:1px solid #dde3ea; margin-top:calc(9px * var(--stat-scale, 1)); ' +
           'padding-top:calc(7px * var(--stat-scale, 1));">' + sec + '</div>').join('');
@@ -2169,12 +2158,13 @@ function extractNameTag(rawName){
       const mergeInto = (target, key, delta) => {
         if (!target[key]) target[key] = {};
         Object.keys(delta).forEach(k => {
-          // A LIST OF MAXIMA, and every "long" has to be on it. `retLong`
-      // was added on 23 Aug with the return stats: without it a season
-      // total SUMS the longs, so three returns of 20 would report a long
-      // of 60. The suffix test catches any future one automatically --
-      // the explicit names are kept only so the intent stays readable.
-      if (/Long$/.test(k) || k === 'long' || k === 'fgLong' || k === 'puntLong' || k === 'retLong'){
+          // A LIST OF MAXIMA. The suffix test was added on 23 Aug: the list
+      // was three hardcoded names, so any new "long" stat would have been
+      // SUMMED across games -- three 20-yard returns reporting a long of
+      // 60. Returns are no longer shown on this page, but the trap is
+      // general and the fix is kept: the explicit names remain only so
+      // the intent stays readable.
+      if (/Long$/.test(k) || k === 'long' || k === 'fgLong' || k === 'puntLong'){
             target[key][k] = Math.max(target[key][k] || 0, delta[k] || 0);
           } else {
             target[key][k] = (target[key][k] || 0) + (delta[k] || 0);
