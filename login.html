@@ -247,6 +247,34 @@
       // factor guards against a stolen password, not against a network
       // blip on the way to reading the assurance level.
     }
+    // WHERE A SESSION LANDS DEPENDS ON WHETHER IT HAS A SCHOOL.
+    // ---------------------------------------------------------------------
+    // dashboard.html is built around "what is MY team" and works outward
+    // from there. The platform account has no tenant, so every query on
+    // that page returns EVERY school's data merged together with nothing
+    // saying whose any of it is. With one customer that looks like an
+    // ordinary dashboard, which is worse than looking broken.
+    //
+    // An account with no school should not land on a page built around
+    // having one.
+    //
+    // A FAILED CHECK LANDS ON THE DASHBOARD, deliberately — the same
+    // reasoning as the MFA block above. This decides where to go, not
+    // whether to let somebody in, and a network blip must not strand a
+    // coach on a page that will refuse them.
+    try {
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (user){
+        const { data: prof } = await supabaseClient
+          .from('profiles').select('is_super_admin').eq('id', user.id).limit(1);
+        if (prof && prof[0] && prof[0].is_super_admin){
+          window.location.href = 'platform.html';
+          return;
+        }
+      }
+    } catch (e){
+      // fall through to the dashboard
+    }
     window.location.href = 'dashboard.html';
   }
 

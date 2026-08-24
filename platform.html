@@ -74,6 +74,12 @@
   td.name { color:var(--sc-ink, #1a1a1a); font-weight:600; }
   td.right { text-align:right; }
 
+  /* The stand-in for a school with no crest yet. Deliberately plain: it
+     should read as "not set" rather than as a design decision. */
+  .crest { width:28px; height:28px; border-radius:5px; flex:none;
+           background:var(--sc-rule, #e6e6e6); color:#6b7680;
+           display:flex; align-items:center; justify-content:center;
+           font-weight:700; font-size:13px; }
   .pill { display:inline-block; font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:20px; }
   .pill.live   { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
   .pill.trial  { background:#eef2f8; color:#3d5a80; }
@@ -208,7 +214,7 @@
   async function loadSchools(){
     const body = document.getElementById('schoolsBody');
     const { data: tenants, error } = await supabaseClient
-      .from('tenants').select('id, name, full_name, subscription, renews_on, created_at')
+      .from('tenants').select('id, name, full_name, logo_url, subscription, renews_on, created_at')
       .order('name');
     if (error){
       body.innerHTML = '<p class="empty">Could not load schools: ' + esc(error.message) + '</p>';
@@ -239,9 +245,29 @@
         const label = t.subscription === 'lapsed' ? 'Lapsed — read only'
                     : t.subscription.charAt(0).toUpperCase() + t.subscription.slice(1);
         return '<tr>' +
-          '<td class="name">' + esc(t.name) +
-            (t.full_name ? '<div style="font-weight:400; font-size:12.5px; color:#6b7680;">' +
-              esc(t.full_name) + '</div>' : '') + '</td>' +
+          // THE CREST, ONCE THEY HAVE ONE. A school is recognised by its
+          // badge long before its name is read, and this list is the one
+          // place the platform decides which customer it is looking at.
+          //
+          // A MISSING LOGO GETS A MONOGRAM, not a broken image and not a
+          // blank. New schools have no crest until somebody visits
+          // Customize, so "no logo yet" is the ordinary state for exactly
+          // the customer you are most likely to be looking up.
+          //
+          // onerror clears the row rather than leaving a broken-image
+          // icon: storage refuses non-images now, but a logo deleted from
+          // the bucket would still leave a live logo_url behind.
+          '<td class="name"><span style="display:flex; align-items:center; gap:10px;">' +
+            (t.logo_url
+              ? '<img src="' + esc(t.logo_url) + '" alt="" ' +
+                'style="width:28px; height:28px; object-fit:contain; border-radius:5px; flex:none;" ' +
+                'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),' +
+                '{className:\'crest\', textContent:this.alt||\'\'}))">'
+              : '<span class="crest">' + esc(t.name.charAt(0).toUpperCase()) + '</span>') +
+            '<span>' + esc(t.name) +
+              (t.full_name ? '<div style="font-weight:400; font-size:12.5px; color:#6b7680;">' +
+                esc(t.full_name) + '</div>' : '') +
+            '</span></span></td>' +
           '<td><span class="pill ' + pill + '">' + esc(label) + '</span></td>' +
           '<td>' + fmtDate(t.renews_on) + '</td>' +
           '<td>' + (live[t.id] || 0) + '</td>' +
