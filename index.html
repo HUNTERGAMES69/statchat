@@ -3,33 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>StatChat — live football stats and broadcast overlays</title>
-<meta name="description" content="Live high-school football statistics and vMix broadcast overlays, entered from a browser. No capture card, no desktop install.">
+<title>StatChat — live football stats and broadcast data</title>
+<meta name="description" content="Live high-school football stats plus broadcast-ready data and graphics. Runs in a browser on any device. Feeds vMix, OBS and anything else that reads JSON or XML. $250 a season.">
 
-<!-- SELF-CONTAINED, and deliberately NOT loading statchat.css.
-     Same reasoning already recorded for the three broadcast overlays: a
-     surface with a different medium and a different job carries its own
-     palette. This page is read cold by a stranger on a phone; the app is
-     read by someone who is already signed in. Sharing a stylesheet would
-     mean overriding almost every token, which is worse than not sharing
-     one. The two colours that DO carry over are the ones that mean
-     something: #b00020 is the app's ON AIR red, and #ffc72c is what a
-     scorer already reads as "selected". -->
+<!-- EVERY NAME ON THIS PAGE IS INVENTED, and must stay that way. An
+     earlier version used real names lifted from a season report, which
+     put high-school players — minors — on a public marketing site. The
+     teams below are Riverside and Northgate; the players are ordinary
+     surnames chosen to read naturally and belong to nobody. If this page
+     is ever regenerated from live data, the names have to be replaced. -->
 
 <link rel="icon" href="favicon.ico">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
 <style>
   :root{
-    /* A vision-mixer console, not a dark theme. Graphite rather than
-       black, because a switcher surface is grey and its lamps are the
-       only saturated things on it. */
     --ink:#10141a; --panel:#191f27; --raise:#20272f; --edge:#2b333d;
     --paper:#eef1f4; --mute:#8d99a6;
     --program:#b00020;   /* ON AIR. Same red as the app. */
-    --preview:#1a7a4c;   /* Preview bus. The app's green. */
+    --preview:#7cb518;   /* The flyer's green. */
     --data:#ffc72c;      /* Numbers only. The app's "selected". */
     --label:'Barlow Condensed',ui-sans-serif,system-ui,sans-serif;
     --body:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
@@ -42,21 +36,16 @@
   .wrap{width:100%;max-width:1080px;margin:0 auto;padding:0 24px}
   a{color:inherit}
   :focus-visible{outline:2px solid var(--data);outline-offset:3px;border-radius:2px}
-
-  /* Channel-strip label. Used for every eyebrow and button on the page,
-     because uppercase condensed IS the vernacular of broadcast graphics
-     — it is what a lower third looks like everywhere. */
   .strip{font-family:var(--label);text-transform:uppercase;letter-spacing:.16em;
          font-weight:600;font-size:12px;color:var(--mute)}
 
-  /* ---------- header ---------- */
-  header{position:sticky;top:0;z-index:50;background:rgba(16,20,26,.92);
+  header{position:sticky;top:0;z-index:50;background:rgba(16,20,26,.93);
          backdrop-filter:blur(8px);border-bottom:1px solid var(--edge)}
   .bar{display:flex;align-items:center;gap:18px;height:62px}
   .mark{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:var(--label);
         font-weight:700;font-size:22px;letter-spacing:.04em;text-transform:uppercase}
-  .mark img{width:26px;height:26px;border-radius:5px}
-  nav{margin-left:auto;display:flex;align-items:center;gap:26px}
+  .mark svg{width:28px;height:28px;display:block}
+  nav{margin-left:auto;display:flex;align-items:center;gap:24px}
   nav a{font-family:var(--label);text-transform:uppercase;letter-spacing:.12em;
         font-size:13px;font-weight:600;color:var(--mute);text-decoration:none}
   nav a:hover{color:var(--paper)}
@@ -64,28 +53,27 @@
          font-weight:700;color:var(--ink)!important;background:var(--data);
          padding:9px 20px;border-radius:3px;text-decoration:none}
   .login:hover{background:#ffd558}
-  @media (max-width:720px){ nav a:not(.login){display:none} }
+  @media (max-width:760px){ nav a:not(.login){display:none} }
 
-  /* ---------- hero ---------- */
-  .hero{padding:76px 0 88px;border-bottom:1px solid var(--edge)}
+  .hero{padding:70px 0 84px;border-bottom:1px solid var(--edge)}
   .hero h1{font-family:var(--label);font-weight:700;text-transform:uppercase;
-           font-size:clamp(40px,7vw,78px);line-height:.94;letter-spacing:-.005em;margin:14px 0 0}
+           font-size:clamp(36px,6.4vw,70px);line-height:.96;margin:14px 0 0}
   .hero h1 em{font-style:normal;color:var(--data)}
-  .lede{max-width:56ch;color:#c3ccd5;font-size:18px;margin:22px 0 0}
-  .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+  .lede{max-width:58ch;color:#c3ccd5;font-size:18px;margin:22px 0 0}
+  .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px;align-items:center}
   .btn{font-family:var(--label);text-transform:uppercase;letter-spacing:.12em;font-size:13px;
-       font-weight:700;padding:13px 26px;border-radius:3px;text-decoration:none;border:1px solid transparent}
+       font-weight:700;padding:13px 26px;border-radius:3px;text-decoration:none;
+       border:1px solid transparent;display:inline-block}
   .btn-a{background:var(--data);color:var(--ink)}
   .btn-a:hover{background:#ffd558}
   .btn-b{border-color:var(--edge);color:var(--paper)}
   .btn-b:hover{border-color:var(--mute)}
+  .pricetag{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;
+            font-size:13px;color:var(--mute)}
+  .pricetag b{color:var(--paper);font-family:var(--mono);letter-spacing:0}
 
-  /* ---------- the scorebug: the signature ----------
-     This is not a screenshot. It is the same kind of markup that
-     composites over the programme feed in vMix, running live on the
-     page, because the overlay IS the product and describing it would be
-     weaker than showing it. */
-  .rig{margin-top:52px;background:var(--panel);border:1px solid var(--edge);
+  /* ---- the live scorebug ---- */
+  .rig{margin-top:50px;background:var(--panel);border:1px solid var(--edge);
        border-radius:6px;overflow:hidden}
   .rigbar{display:flex;align-items:center;gap:12px;padding:10px 14px;
           background:var(--raise);border-bottom:1px solid var(--edge)}
@@ -93,71 +81,110 @@
         text-transform:uppercase;letter-spacing:.14em;font-size:11px;font-weight:700}
   .dot{width:9px;height:9px;border-radius:50%;background:#39424d}
   .lamp.on .dot{background:var(--program);box-shadow:0 0 0 3px rgba(176,0,32,.22)}
-  .lamp.pv.on .dot{background:var(--preview);box-shadow:0 0 0 3px rgba(26,122,76,.22)}
+  .lamp.pv.on .dot{background:var(--preview);box-shadow:0 0 0 3px rgba(124,181,24,.22)}
   .lamp.off{color:#5c6773}
   .rigbar .src{margin-left:auto;font-family:var(--mono);font-size:11px;color:#5c6773}
-  .stage{position:relative;padding:28px 20px 22px;
-         background:linear-gradient(160deg,#1b2530,#121820 60%,#0d1218)}
-
-  .bug{display:flex;align-items:stretch;font-family:var(--label);text-transform:uppercase;
-       border-radius:4px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.45);max-width:520px}
+  .stage{padding:26px 20px 22px;background:linear-gradient(160deg,#1b2530,#121820 60%,#0d1218)}
+  .bug{display:flex;font-family:var(--label);text-transform:uppercase;border-radius:4px;
+       overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.45);max-width:540px}
   .bug .team{display:flex;align-items:center;gap:10px;padding:11px 15px;background:#12171e}
   .bug .team.us{background:var(--data);color:#20180a}
   .bug .abbr{font-weight:700;letter-spacing:.1em;font-size:16px}
   .bug .score{font-family:var(--mono);font-weight:700;font-size:20px;line-height:1}
-  .bug .clock{display:flex;flex-direction:column;justify-content:center;gap:2px;
-              padding:8px 16px;background:#0a0e13;border-left:1px solid #222b35;border-right:1px solid #222b35}
+  .bug .clock{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:8px 16px;
+              background:#0a0e13;border-left:1px solid #222b35;border-right:1px solid #222b35}
   .bug .q{font-size:10px;letter-spacing:.16em;color:var(--mute)}
   .bug .t{font-family:var(--mono);font-weight:700;font-size:16px;line-height:1}
   .bug .dd{display:flex;align-items:center;padding:11px 16px;background:#12171e;
            font-size:13px;letter-spacing:.08em;color:#cfd7df}
-
   .third{margin-top:14px;max-width:640px;background:rgba(10,14,19,.94);
          border-left:3px solid var(--data);padding:11px 16px;border-radius:0 4px 4px 0}
   .third .who{font-family:var(--label);text-transform:uppercase;letter-spacing:.14em;
               font-size:11px;color:var(--data)}
   .third .what{font-size:15px;color:#e6ebf0;margin-top:3px;min-height:1.6em}
-  .caption{margin-top:18px;font-size:13px;color:#6f7b88;max-width:60ch}
+  .caption{margin-top:16px;font-size:13px;color:#6f7b88;max-width:64ch}
 
-  /* ---------- generic section ---------- */
-  section{padding:82px 0;border-bottom:1px solid var(--edge)}
+  section{padding:78px 0;border-bottom:1px solid var(--edge)}
   h2{font-family:var(--label);text-transform:uppercase;font-weight:700;
-     font-size:clamp(28px,4.4vw,44px);line-height:1.02;margin:12px 0 0;letter-spacing:.01em}
-  .sub{color:#b6c0cb;max-width:62ch;margin:18px 0 0;font-size:17px}
+     font-size:clamp(27px,4.2vw,42px);line-height:1.03;margin:12px 0 0}
+  .sub{color:#b6c0cb;max-width:64ch;margin:18px 0 0;font-size:17px}
 
   .grid{display:grid;gap:1px;background:var(--edge);border:1px solid var(--edge);
-        border-radius:6px;overflow:hidden;margin-top:42px}
-  @media (min-width:820px){ .grid.three{grid-template-columns:repeat(3,1fr)} }
-  .cell{background:var(--panel);padding:28px 24px}
-  .cell h3{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em;
-           font-size:19px;font-weight:700;margin:10px 0 0}
+        border-radius:6px;overflow:hidden;margin-top:40px}
+  @media (min-width:760px){ .grid.two{grid-template-columns:repeat(2,1fr)} }
+  @media (min-width:900px){ .grid.four{grid-template-columns:repeat(4,1fr)} }
+  @media (min-width:760px) and (max-width:899px){ .grid.four{grid-template-columns:repeat(2,1fr)} }
+  .cell{background:var(--panel);padding:26px 22px}
+  .cell h3{font-family:var(--label);text-transform:uppercase;letter-spacing:.05em;
+           font-size:18px;font-weight:700;margin:10px 0 0;line-height:1.15}
   .cell p{color:#adb8c4;font-size:15px;margin:10px 0 0}
+  .tick{width:13px;height:13px;border-radius:2px;background:var(--preview);display:block}
 
-  /* ---------- the run of a game: a real sequence, so it is numbered ---------- */
-  .steps{margin-top:42px;border-top:1px solid var(--edge)}
-  .step{display:grid;gap:6px 26px;padding:24px 0;border-bottom:1px solid var(--edge)}
-  @media (min-width:760px){ .step{grid-template-columns:64px 220px 1fr;align-items:baseline} }
-  .num{font-family:var(--mono);font-weight:700;font-size:13px;color:var(--data)}
-  .step h3{font-family:var(--label);text-transform:uppercase;letter-spacing:.08em;
-           font-size:17px;font-weight:600;margin:0}
-  .step p{color:#adb8c4;font-size:15px;margin:0}
+  /* ---- three taps ---- */
+  .taps{display:grid;gap:1px;background:var(--edge);border:1px solid var(--edge);
+        border-radius:6px;overflow:hidden;margin-top:40px}
+  @media (min-width:760px){ .taps{grid-template-columns:repeat(3,1fr)} }
+  .tap{background:var(--panel);padding:24px 22px}
+  .tapnum{font-family:var(--mono);font-weight:700;font-size:12px;color:var(--data)}
+  .tap h3{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em;
+          font-size:17px;margin:8px 0 0}
+  .tap p{color:#adb8c4;font-size:15px;margin:8px 0 0}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+  .chip{font-family:var(--label);text-transform:uppercase;letter-spacing:.08em;font-size:12px;
+        font-weight:600;padding:6px 11px;border-radius:3px;background:var(--raise);
+        border:1px solid var(--edge);color:#c3ccd5}
+  .chip.sel{background:var(--data);color:#20180a;border-color:var(--data)}
 
-  /* ---------- pricing ---------- */
-  .tier{background:var(--panel);padding:30px 26px;display:flex;flex-direction:column}
-  .tier.feature{background:var(--raise);box-shadow:inset 3px 0 0 var(--data)}
-  .price{font-family:var(--mono);font-weight:700;font-size:38px;color:var(--data);margin:14px 0 2px}
-  .per{font-size:13px;color:var(--mute)}
-  .tier ul{list-style:none;padding:0;margin:20px 0 0}
-  .tier li{position:relative;padding-left:20px;font-size:15px;color:#adb8c4;margin-bottom:9px}
-  .tier li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;
-                   border-radius:50%;background:var(--preview)}
-  .tier .btn{margin-top:auto;text-align:center}
-  .tier .spacer{height:24px}
+  /* ---- feed samples ---- */
+  .tabs{display:flex;gap:6px;margin-top:36px;flex-wrap:wrap}
+  .tab{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;font-size:12px;
+       font-weight:700;padding:9px 16px;border-radius:3px;background:var(--panel);
+       border:1px solid var(--edge);color:var(--mute);cursor:pointer}
+  .tab[aria-selected="true"]{background:var(--data);color:#20180a;border-color:var(--data)}
+  .code{margin-top:12px;background:#0b0f14;border:1px solid var(--edge);border-radius:6px;
+        overflow:auto}
+  .code pre{margin:0;padding:20px;font-family:var(--mono);font-size:12.5px;line-height:1.75;
+            color:#cdd6df;white-space:pre}
+  .code .k{color:var(--data)}
+  .code .s{color:#9fd67a}
+  .code .n{color:#7fc3ff}
+  .code .c{color:#5c6773}
+  .endpoint{font-family:var(--mono);font-size:12px;color:#7f8b98;margin-top:14px;word-break:break-all}
 
-  /* ---------- close ---------- */
-  .close{text-align:center;padding:92px 0}
-  .close h2{max-width:20ch;margin-inline:auto}
-  footer{padding:34px 0 46px;color:#5c6773;font-size:13px}
+  /* ---- comparison ---- */
+  .cmp{width:100%;border-collapse:collapse;margin-top:38px;font-size:15px}
+  .cmp th,.cmp td{text-align:left;padding:14px 16px;border-bottom:1px solid var(--edge);
+                  vertical-align:top}
+  .cmp thead th{font-family:var(--label);text-transform:uppercase;letter-spacing:.1em;
+                font-size:12px;color:var(--mute);background:var(--raise)}
+  .cmp thead th.me{color:#20180a;background:var(--data)}
+  .cmp tbody th{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em;
+                font-size:13px;font-weight:600;color:var(--paper);width:150px}
+  .cmp td.me{background:rgba(255,199,44,.06);color:var(--paper)}
+  .cmp td{color:#9aa5b1}
+  .note{font-size:13px;color:#6f7b88;margin-top:16px;max-width:76ch;font-style:italic}
+  .scroller{overflow-x:auto}
+
+  .callout{margin-top:40px;background:rgba(124,181,24,.07);border-left:3px solid var(--preview);
+           padding:22px 24px;border-radius:0 5px 5px 0}
+  .callout h3{font-family:var(--label);text-transform:uppercase;letter-spacing:.05em;
+              font-size:18px;margin:0}
+  .callout p{color:#b6c0cb;font-size:15px;margin:10px 0 0}
+
+  /* ---- pricing ---- */
+  .pricebox{margin-top:40px;background:var(--panel);border:1px solid var(--edge);
+            border-radius:6px;padding:38px 30px;text-align:center}
+  .big{font-family:var(--mono);font-weight:700;font-size:clamp(46px,9vw,76px);
+       color:var(--data);line-height:1}
+  .per{font-family:var(--label);text-transform:uppercase;letter-spacing:.14em;
+       font-size:13px;color:var(--mute);margin-top:6px}
+  .incl{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:26px 0 0}
+  .incl span{font-size:14px;color:#adb8c4;background:var(--raise);border:1px solid var(--edge);
+             padding:7px 13px;border-radius:3px}
+  .soon{margin-top:24px;font-size:14px;color:#7f8b98}
+
+  .close{text-align:center;padding:86px 0}
+  footer{padding:32px 0 44px;color:#5c6773;font-size:13px}
   .foot{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
   .foot .src{margin-left:auto;font-family:var(--mono);font-size:11px}
 
@@ -171,10 +198,22 @@
 
 <header>
   <div class="wrap bar">
-    <a class="mark" href="#top"><img src="logo.png" alt="">StatChat</a>
+    <a class="mark" href="#top">
+      <!-- The lower third: accent block, then two rows of unequal
+           length. It is what the product puts on screen. Inline rather
+           than an <img> so it stays sharp and needs no request; the same
+           mark is in logo.png for the app's pages. -->
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <rect x="2"  y="7"  width="6"  height="18" rx="1.5" fill="#ffc72c"/>
+        <rect x="10" y="7"  width="20" height="7"  rx="1.5" fill="#eef1f4"/>
+        <rect x="10" y="18" width="13" height="7"  rx="1.5" fill="#7cb518"/>
+      </svg>
+      StatChat
+    </a>
     <nav>
-      <a href="#what">What it does</a>
-      <a href="#run">A game</a>
+      <a href="#stats">Stats</a>
+      <a href="#feeds">Feeds</a>
+      <a href="#compare">Compare</a>
       <a href="#pricing">Pricing</a>
       <a class="login" href="/login.html">Log in</a>
     </nav>
@@ -182,149 +221,263 @@
 </header>
 
 <div id="top" class="wrap hero">
-  <p class="strip">Live football stats &middot; Broadcast overlays</p>
-  <h1>The stat sheet<br>and the <em>lower third</em><br>are the same job.</h1>
-  <p class="lede">StatChat is live high-school football statistics entered from a browser,
-     feeding graphics straight into vMix. One person at the table keeps the score, the
-     play-by-play and every overlay on your programme feed in step — because they are
-     all reading the same game.</p>
+  <p class="strip">Live football stats &middot; Broadcast-ready data and graphics</p>
+  <h1>For the team that<br>already has enough<br>to do on <em>Friday nights</em>.</h1>
+  <p class="lede">StatChat is built the way a person actually scores a game: from the
+     sideline, on a tablet or a laptop, one play at a time. What you enter shows up live
+     straight away — for the crew calling the broadcast, and for the fans following at home.</p>
   <div class="cta">
-    <a class="btn btn-a" href="#pricing">See pricing</a>
-    <a class="btn btn-b" href="#run">How a game runs</a>
+    <a class="btn btn-a" href="mailto:signup@statchat.co?subject=StatChat%20demo">Schedule a demo</a>
+    <a class="btn btn-b" href="#feeds">See the data</a>
+    <span class="pricetag"><b>$250</b> a season &middot; football</span>
   </div>
 
   <div class="rig" aria-hidden="true">
     <div class="rigbar">
       <span class="lamp pv on" id="lampPv"><span class="dot"></span>Preview</span>
       <span class="lamp off" id="lampPg"><span class="dot"></span>On air</span>
-      <span class="src">vMix &middot; browser input &middot; 1920&times;1080</span>
+      <span class="src">browser input &middot; 1920&times;1080 &middot; transparent</span>
     </div>
     <div class="stage">
       <div class="bug">
-        <div class="team us"><span class="abbr">NEV</span><span class="score" id="sUs">21</span></div>
-        <div class="team"><span class="abbr">OPP</span><span class="score" id="sThem">14</span></div>
+        <div class="team us"><span class="abbr">RVS</span><span class="score" id="sUs">21</span></div>
+        <div class="team"><span class="abbr">NGT</span><span class="score" id="sThem">14</span></div>
         <div class="clock"><span class="q" id="qtr">3rd</span><span class="t" id="clk">7:42</span></div>
-        <div class="dd" id="dd">1st &amp; 10 &middot; OPP 34</div>
+        <div class="dd" id="dd">1st &amp; 10 &middot; NGT 34</div>
       </div>
       <div class="third">
         <div class="who" id="who">Play 41</div>
-        <div class="what" id="what">Robinson pass complete to Young for 12 yards.</div>
+        <div class="what" id="what">Whitfield pass complete to Brooks for 12 yards.</div>
       </div>
     </div>
   </div>
-  <p class="caption">That is not a picture of the overlay. It is the overlay — the same
-     kind of page vMix loads as a browser input, running here.</p>
+  <p class="caption">Not a picture of the overlay — it is the overlay, the same kind of page
+     your switcher loads as a browser input, running here.</p>
 </div>
 
-<section id="what" class="wrap">
-  <p class="strip">What it does</p>
-  <h2>Built for the crew,<br>not the clipboard</h2>
-  <p class="sub">Most stat software assumes the numbers are the point and the broadcast is
+<section id="why" class="wrap">
+  <p class="strip">What you get</p>
+  <h2>The only high-school stat platform<br>that hands your crew a live dashboard</h2>
+  <p class="sub">Most stat software treats the numbers as the point and the broadcast as
      somebody else's problem. If you are running a camera, a switcher and a commentator,
      that is backwards.</p>
 
-  <div class="grid three">
+  <div class="grid four">
     <div class="cell">
-      <p class="strip">Overlays</p>
-      <h3>Graphics that composite</h3>
-      <p>Score bug, team stats, season leaders and a full play-by-play, each a browser
-         input in vMix. No capture card, no key and fill, no desktop install. Add the URL
-         and it is on your programme feed.</p>
+      <span class="tick"></span>
+      <h3>Crew View</h3>
+      <p>A dedicated real-time dashboard — every play, every team and individual stat —
+         that updates the instant a play is entered. Built for the broadcast team, by a
+         broadcast team.</p>
     </div>
     <div class="cell">
-      <p class="strip">Entry</p>
-      <h3>One pass, not two</h3>
-      <p>A guided flow for kickoffs, punts, field goals and every ordinary snap. The scorer
-         enters the play once; the overlays, the live spectator page and the box score all
-         update from it.</p>
+      <span class="tick"></span>
+      <h3>Plugs into your broadcast</h3>
+      <p>Live JSON and XML drop straight into vMix, OBS, Wirecast, Livestream Studio,
+         CasparCG or anything else that reads a URL. A ready-made transparent overlay is
+         included for crews who would rather not build their own package.</p>
     </div>
     <div class="cell">
-      <p class="strip">Reports</p>
-      <h3>NFHS, not NFL</h3>
-      <p>Sack yardage charged to team rushing. Kneels and bad snaps as team rushes. No
-         defensive score on a try. The conventions your state association actually uses,
-         exported to PDF and Excel.</p>
+      <span class="tick"></span>
+      <h3>Built for the pace of a game</h3>
+      <p>Every play is three taps: pick the play type, fill in what happened, review before
+         you save. No stats department, no training class — one person, the sideline, and a
+         device they already own.</p>
+    </div>
+    <div class="cell">
+      <span class="tick"></span>
+      <h3>Stats, stats and more stats</h3>
+      <p>Nobody beats StatChat on stats. Team and individual, every unit, trends and
+         analysis across the whole season — all included, not an upgrade.</p>
     </div>
   </div>
 </section>
 
-<section id="run" class="wrap">
-  <p class="strip">A game, start to finish</p>
-  <h2>How a Friday runs</h2>
-  <p class="sub">The order below is the order it happens in. Nothing here needs a second
-     operator or a second machine.</p>
+<section id="stats" class="wrap">
+  <p class="strip">Stats</p>
+  <h2>Nobody beats StatChat on stats</h2>
+  <p class="sub">Everything below is in every account. There is no tier where the good
+     numbers live.</p>
 
-  <div class="steps">
-    <div class="step">
-      <span class="num">01</span>
-      <h3>Set up, midweek</h3>
-      <p>Build the game, import the roster and pick your starters. Paste the opponent's
-         colours in and every graphic takes them automatically.</p>
+  <div class="grid two">
+    <div class="cell">
+      <p class="strip">Team</p>
+      <h3>The full box, both sides</h3>
+      <p>Rushing, passing and total yards. First downs. Third and fourth down conversion.
+         Explosive plays over twenty yards. Sacks, interceptions, fumble recoveries.
+         Penalties and penalty yards. Time of possession, possessions, plays per game.
+         Kept for your team <em>and</em> the opponent, from the same play log.</p>
     </div>
-    <div class="step">
-      <span class="num">02</span>
-      <h3>Add the inputs</h3>
-      <p>Point vMix at the overlay URLs once. They stay pointed. Going on air is a toggle
-         in the app, not a change to your switcher.</p>
+    <div class="cell">
+      <p class="strip">Individual</p>
+      <h3>Every player, every unit</h3>
+      <p>Passing with completion percentage, yards per attempt, long, touchdowns,
+         interceptions and sacks taken. Rushing and receiving with attempts, targets, catch
+         rate and yards per touch. Tackles, tackles for loss and takeaways on defence.
+         Kickoffs, punts, field goals and extra points on special teams. Kick and punt
+         returns kept separately.</p>
     </div>
-    <div class="step">
-      <span class="num">03</span>
-      <h3>Enter the game</h3>
-      <p>Play by play, from a laptop or an iPad at the table. Undo works. So does a
-         correction three drives later, without renumbering anything.</p>
+    <div class="cell">
+      <p class="strip">Trends</p>
+      <h3>The season, not just the night</h3>
+      <p>Yardage by game and by half. Run–pass balance by attempt and by yard. Points by
+         quarter. Turnovers, sacks and penalties game over game. Third and fourth down rate
+         plotted across the year. A season report a coach can actually hand to someone.</p>
     </div>
-    <div class="step">
-      <span class="num">04</span>
-      <h3>Hand it over</h3>
-      <p>A single-game stat package or a full season report, as PDF or Excel, plus a public
-         recap link a parent can open without an account.</p>
+    <div class="cell">
+      <p class="strip">Out of the box</p>
+      <h3>Take it with you</h3>
+      <p>Single-game stat packages and full-season reports as PDF or Excel. A public recap
+         link a parent can open without an account. Live JSON and XML for your graphics.
+         Nothing locked in a format only StatChat can read.</p>
     </div>
+  </div>
+</section>
+
+<section id="easy" class="wrap">
+  <p class="strip">Ease of use</p>
+  <h2>Three taps a play</h2>
+  <p class="sub">The person scoring is usually also watching the game, minding a clock and
+     answering someone. The interface assumes that.</p>
+
+  <div class="taps">
+    <div class="tap">
+      <span class="tapnum">01</span>
+      <h3>Pick the play</h3>
+      <p>Run, pass, punt, field goal, kickoff. The choices that cannot happen on this down
+         are not offered.</p>
+      <div class="chips">
+        <span class="chip sel">Pass</span><span class="chip">Run</span>
+        <span class="chip">Punt</span><span class="chip">FG</span>
+      </div>
+    </div>
+    <div class="tap">
+      <span class="tapnum">02</span>
+      <h3>Fill in what happened</h3>
+      <p>Who, how far, what followed. Optional fields stay optional — the scorer decides
+         how much detail the night deserves.</p>
+      <div class="chips">
+        <span class="chip">#7 Whitfield</span><span class="chip sel">Complete</span>
+        <span class="chip">+12</span><span class="chip">#11 Brooks</span>
+      </div>
+    </div>
+    <div class="tap">
+      <span class="tapnum">03</span>
+      <h3>Review, then save</h3>
+      <p>The play reads back in plain English before it is committed. Undo works. So does
+         a correction three drives later.</p>
+      <div class="chips">
+        <span class="chip">Whitfield pass to Brooks, 12 yds — 1st down</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid two" style="margin-top:36px">
+    <div class="cell">
+      <p class="strip">Any device</p>
+      <h3>PC, Mac, iPad</h3>
+      <p>It is a web page. Windows, macOS, iPad, Android tablet, a phone at a pinch —
+         whatever is already in the booth or in your bag. Nothing to install, nothing to
+         update between games, no capture card and no dongle.</p>
+    </div>
+    <div class="cell">
+      <p class="strip">No lock-in</p>
+      <h3>One URL, set once</h3>
+      <p>Your broadcast software points at a URL that never changes — no game id, no week
+         number. Set the data sources up once in the pre-season and never touch them again.
+         StatChat works out which game is live from the dashboard.</p>
+    </div>
+  </div>
+</section>
+
+<section id="feeds" class="wrap">
+  <p class="strip">Feeds</p>
+  <h2>Data your graphics can bind to</h2>
+  <p class="sub">Every field describes football, never a vendor. Each package maps it to its
+     own templates — so the same feed drives vMix title fields, an OBS browser source or a
+     CasparCG template without translation.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true"  data-p="score">Score &middot; JSON</button>
+    <button class="tab" role="tab" aria-selected="false" data-p="team">Team stats &middot; XML</button>
+    <button class="tab" role="tab" aria-selected="false" data-p="players">Individual &middot; JSON</button>
+  </div>
+
+  <div class="code"><pre id="payload"></pre></div>
+  <p class="endpoint" id="endpoint"></p>
+  <p class="note">Field names are the real ones. Team and player names here are invented.</p>
+</section>
+
+<section id="compare" class="wrap">
+  <p class="strip">Compare</p>
+  <h2>How StatChat compares</h2>
+
+  <div class="scroller">
+    <table class="cmp">
+      <thead>
+        <tr><th scope="col"></th><th scope="col" class="me">StatChat</th>
+            <th scope="col">Desktop stat software</th><th scope="col">Mobile stat apps</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Runs on</th>
+            <td class="me">Any phone, tablet or laptop with a browser — PC, Mac or iPad</td>
+            <td>Windows only, often tied to specific hardware</td>
+            <td>A single phone or tablet</td></tr>
+        <tr><th scope="row">Feeds a broadcast</th>
+            <td class="me">Live JSON and XML into vMix, OBS and the rest, plus a ready-made overlay</td>
+            <td>Rarely, and only to local hardware</td>
+            <td>Not built for it</td></tr>
+        <tr><th scope="row">Live view for others</th>
+            <td class="me">Crew View, on any second screen</td>
+            <td>Limited or none</td>
+            <td>Not built for it</td></tr>
+        <tr><th scope="row">Learning curve</th>
+            <td class="me">Three taps a play. No training class, no stats department</td>
+            <td>Dense keyboard-driven entry, built for a trained scorer</td>
+            <td>Simple, but it only does stats</td></tr>
+        <tr><th scope="row">Built for</th>
+            <td class="me">NFHS high-school rules, from the ground up</td>
+            <td>Often adapted from college or pro conventions</td>
+            <td>General-purpose stat tracking</td></tr>
+        <tr><th scope="row">Cost</th>
+            <td class="me">$250 a season, everything included</td>
+            <td>Typically several times that, plus hardware</td>
+            <td>Cheaper, and does a fraction of the job</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Desktop and mobile categories are described in general terms rather than
+     against any one named product — pricing and packages in this market vary and change
+     often, and a specific figure printed here could be wrong by the time you read it.</p>
+
+  <div class="callout">
+    <h3>Built on NFHS rules, not adapted from someone else's</h3>
+    <p>Automatic first down under NFHS belongs to four fouls, not the dozen the NFL awards
+       it to. Pass interference is fifteen yards with no automatic first down, not the NFL's
+       spot foul. StatChat gets these right because it was built for high-school football
+       specifically — so the stat sheet you hand a coach matches the rule book the officials
+       are using.</p>
   </div>
 </section>
 
 <section id="pricing" class="wrap">
   <p class="strip">Pricing</p>
-  <h2>Per season, per team</h2>
-  <p class="sub">A season, not a subscription that renews while nobody is playing. If you
-     produce for more than one school, the producer tiers are one conversation instead of
-     eight.</p>
+  <h2>One price. Everything in it.</h2>
+  <p class="sub">A season, not a subscription that renews while nobody is playing. No tiers,
+     no per-user charge, and no feature held back for an upgrade.</p>
 
-  <div class="grid three">
-    <div class="tier">
-      <p class="strip">Program</p>
-      <div class="price">$399</div>
-      <div class="per">per season &middot; one school</div>
-      <ul>
-        <li>Every overlay and every report</li>
-        <li>Unlimited games and users</li>
-        <li>Public recap links</li>
-      </ul>
-      <div class="spacer"></div>
-      <a class="btn btn-b" href="#contact">Get started</a>
+  <div class="pricebox">
+    <div class="big">$250</div>
+    <div class="per">per season &middot; football</div>
+    <div class="incl">
+      <span>Unlimited games</span><span>Unlimited users</span><span>Crew View</span>
+      <span>JSON &amp; XML feeds</span><span>Transparent overlay</span>
+      <span>PDF &amp; Excel reports</span><span>Public recap links</span>
+      <span>Season reporting</span>
     </div>
-    <div class="tier feature">
-      <p class="strip">Producer</p>
-      <div class="price">$999</div>
-      <div class="per">per season &middot; up to 8 schools</div>
-      <ul>
-        <li>Everything in Program</li>
-        <li>Eight schools under one account</li>
-        <li>One invoice, one setup</li>
-      </ul>
-      <div class="spacer"></div>
-      <a class="btn btn-a" href="#contact">Talk to us</a>
-    </div>
-    <div class="tier">
-      <p class="strip">Producer unlimited</p>
-      <div class="price">$2,500</div>
-      <div class="per">per season &middot; no school limit</div>
-      <ul>
-        <li>Everything in Producer</li>
-        <li>No cap on schools</li>
-        <li>Setup help for your crew</li>
-      </ul>
-      <div class="spacer"></div>
-      <a class="btn btn-b" href="#contact">Talk to us</a>
+    <p class="soon">Football today. More sports coming.</p>
+    <div class="cta" style="justify-content:center;margin-top:26px">
+      <a class="btn btn-a" href="mailto:signup@statchat.co?subject=StatChat%20demo">Schedule a demo</a>
     </div>
   </div>
 </section>
@@ -335,7 +488,7 @@
   <p class="sub" style="margin-inline:auto">How many cameras, what you switch on, and what
      you do with the numbers afterwards. We will tell you honestly whether StatChat fits.</p>
   <div class="cta" style="justify-content:center">
-    <a class="btn btn-a" href="mailto:hello@statchat.co">Email us</a>
+    <a class="btn btn-a" href="mailto:signup@statchat.co?subject=StatChat%20demo">signup@statchat.co</a>
     <a class="btn btn-b" href="/login.html">Log in</a>
   </div>
 </section>
@@ -343,40 +496,105 @@
 <footer class="wrap">
   <div class="foot">
     <span>&copy; 2026 StatChat</span>
-    <span class="src">statchat.co</span>
+    <span class="src">www.statchat.co</span>
   </div>
 </footer>
 
 <script>
 (function(){
-  // The scorebug runs a short loop of real plays. It exists because the
-  // overlay is the product: a still picture of it would be a weaker
-  // claim than the thing itself.
+  var $ = function(id){ return document.getElementById(id); };
+
+  /* ---- the scorebug ------------------------------------------------
+     INVENTED NAMES ONLY. Riverside and Northgate are not real schools
+     and these are not real players. */
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var seq = [
-    { who:'Play 41', what:'Robinson pass complete to Young for 12 yards.', dd:'1st &amp; 10 &middot; OPP 34', clk:'7:42', us:21, them:14, air:false },
-    { who:'Play 42', what:'Blackston rush up the middle for 6 yards.',     dd:'2nd &amp; 4 &middot; OPP 28',  clk:'7:11', us:21, them:14, air:true  },
-    { who:'Play 43', what:'Roberson rush right for 9 yards. First down.',  dd:'1st &amp; 10 &middot; OPP 19', clk:'6:33', us:21, them:14, air:true  },
-    { who:'Play 44', what:'Robinson pass complete to Sledge for 19 yards. Touchdown.', dd:'Try &middot; OPP 3', clk:'6:02', us:27, them:14, air:true },
-    { who:'Play 45', what:'Yerger extra point is good.',                   dd:'Kickoff &middot; NEV 40', clk:'6:02', us:28, them:14, air:true }
+    { who:'Play 41', what:'Whitfield pass complete to Brooks for 12 yards.',   dd:'1st &amp; 10 &middot; NGT 34', clk:'7:42', us:21, them:14, air:false },
+    { who:'Play 42', what:'Delgado rush up the middle for 6 yards.',            dd:'2nd &amp; 4 &middot; NGT 28',  clk:'7:11', us:21, them:14, air:true  },
+    { who:'Play 43', what:'Delgado rush right for 9 yards. First down.',        dd:'1st &amp; 10 &middot; NGT 19', clk:'6:33', us:21, them:14, air:true  },
+    { who:'Play 44', what:'Whitfield pass complete to Ellis for 19 yards. Touchdown.', dd:'Try &middot; NGT 3', clk:'6:02', us:27, them:14, air:true },
+    { who:'Play 45', what:'Nakamura extra point is good.',                      dd:'Kickoff &middot; RVS 40', clk:'6:02', us:28, them:14, air:true }
   ];
   var i = 0;
-  var $ = function(id){ return document.getElementById(id); };
   function paint(s){
-    $('who').textContent = s.who;
-    $('what').textContent = s.what;
-    $('dd').innerHTML = s.dd;
-    $('clk').textContent = s.clk;
-    $('sUs').textContent = s.us;
-    $('sThem').textContent = s.them;
-    // The tally lamps are exclusive, the way a switcher's buses are:
-    // a source is on preview or on programme, never both.
+    $('who').textContent = s.who;  $('what').textContent = s.what;
+    $('dd').innerHTML = s.dd;      $('clk').textContent = s.clk;
+    $('sUs').textContent = s.us;   $('sThem').textContent = s.them;
     $('lampPg').className = 'lamp ' + (s.air ? 'on' : 'off');
     $('lampPv').className = 'lamp pv ' + (s.air ? 'off' : 'on');
   }
   paint(seq[0]);
-  if (reduce) return;            // one frame, no loop
-  setInterval(function(){ i = (i + 1) % seq.length; paint(seq[i]); }, 3200);
+  if (!reduce) setInterval(function(){ i = (i + 1) % seq.length; paint(seq[i]); }, 3200);
+
+  /* ---- the feed samples --------------------------------------------
+     FIELD NAMES ARE THE REAL ONES from api/feed.js, so a crew reading
+     this page can start mapping templates before they have an account.
+     The values are invented. */
+  var esc = function(t){ return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  var hi = function(t){
+    return esc(t)
+      .replace(/(&quot;|")([A-Za-z_][A-Za-z0-9_]*)\1(\s*:)/g, '<span class="k">$1$2$1</span>$3')
+      .replace(/: ("(?:[^"\\]|\\.)*")/g, ': <span class="s">$1</span>')
+      .replace(/: (-?\d+(?:\.\d+)?)/g, ': <span class="n">$1</span>')
+      .replace(/^(\s*&lt;!--.*--&gt;)$/gm, '<span class="c">$1</span>');
+  };
+  var samples = {
+    score: { url: 'GET /api/feed?view=score&format=json',
+      body:
+'{\n' +
+'  "home":        "Riverside",\n' +
+'  "away":        "Northgate",\n' +
+'  "homeScore":   21,\n' +
+'  "awayScore":   14,\n' +
+'  "quarter":     "3rd",\n' +
+'  "clock":       "7:42",\n' +
+'  "possession":  "Riverside",\n' +
+'  "down":        1,\n' +
+'  "distance":    10,\n' +
+'  "ballOn":      "opp 34",\n' +
+'  "lastPlay":    "Whitfield pass complete to Brooks for 12 yards."\n' +
+'}' },
+    team: { url: 'GET /api/feed?view=team&format=xml',
+      body:
+'&lt;?xml version="1.0" encoding="UTF-8"?&gt;\n' +
+'&lt;feed quarter="3rd" clock="7:42"&gt;\n' +
+'  &lt;team team="Riverside" score="21" totalYards="284" rushYards="96"\n' +
+'        passYards="188" rushAtt="21" passComp="14" passAtt="19"\n' +
+'        firstDowns="15" thirdDownConv="6" thirdDownAtt="11"\n' +
+'        thirdDownPct="55" fourthDownConv="1" fourthDownAtt="1"\n' +
+'        explosive="5" sacks="2" interceptions="1" fumbleRec="1"\n' +
+'        timeouts="2" timeOfPossession="18:34" /&gt;\n' +
+'  &lt;team team="Northgate" score="14" totalYards="211" rushYards="134"\n' +
+'        passYards="77" rushAtt="28" passComp="8" passAtt="17"\n' +
+'        firstDowns="11" thirdDownConv="4" thirdDownAtt="13"\n' +
+'        thirdDownPct="31" fourthDownConv="0" fourthDownAtt="2"\n' +
+'        explosive="3" sacks="1" interceptions="0" fumbleRec="0"\n' +
+'        timeouts="1" timeOfPossession="15:26" /&gt;\n' +
+'&lt;/feed&gt;' },
+    players: { url: 'GET /api/feed?view=passing&format=json',
+      body:
+'{\n' +
+'  "rows": [\n' +
+'    { "player": "Whitfield", "comp": 14, "att": 19, "pct": 74,\n' +
+'      "yds": 188, "ypa": 9.9, "long": 41, "td": 2, "int": 0, "sacked": 1 },\n' +
+'    { "player": "Okafor",    "comp": 1,  "att": 2,  "pct": 50,\n' +
+'      "yds": 12,  "ypa": 6.0, "long": 12, "td": 0, "int": 0, "sacked": 0 }\n' +
+'  ],\n' +
+'  "totals": { "comp": 15, "att": 21, "pct": 71, "yds": 200, "td": 2, "int": 0 }\n' +
+'}' }
+  };
+  function show(key){
+    $('payload').innerHTML = hi(samples[key].body);
+    $('endpoint').textContent = samples[key].url;
+  }
+  var tabs = [].slice.call(document.querySelectorAll('.tab'));
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){
+      tabs.forEach(function(x){ x.setAttribute('aria-selected', String(x === t)); });
+      show(t.getAttribute('data-p'));
+    });
+  });
+  show('score');
 })();
 </script>
 </body>
