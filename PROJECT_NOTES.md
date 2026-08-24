@@ -3115,3 +3115,56 @@ produced `sql_README.md` and `sql/history/README.md`.
 - HANDOFF.md points a new session at TODO.md and PROJECT_NOTES.md. It
   does not mention that a neutered source file may carry the only record
   of why a feature is gone.
+
+
+## Who may publish a game (24 August 2026)
+
+`004_restrict_game_visibility.sql` added a BEFORE UPDATE trigger stopping
+anyone but an admin changing `is_public` or `share_token`.
+`005_allow_entry_publish.sql` took it out again the same hour. Both were
+right at the time they were written, and the sequence is worth keeping.
+
+### The bug was real; the fix assumed an answer
+
+`games` carried two PERMISSIVE UPDATE policies — `games_update`
+(admin or game_entry) and `admins set game visibility` (admin). Permissive
+policies are OR'd, so the effective rule was just (admin or game_entry)
+and the second policy restricted nothing while its name claimed it did.
+
+That much was a genuine defect and the drop stands. What did not stand was
+the assumption that the INTENDED behaviour was admin-only. The policy's
+name was treated as the specification, and nobody had asked whether the
+name described what Andy wanted. Described in plain terms — "your crew
+can no longer share the recap without you" — the answer was immediately
+no.
+
+**A rule that does not match its name is evidence the rule is wrong, not
+evidence the name is right.**
+
+### Why the revert, rather than widening the test
+
+The obvious edit was `= 'admin'` becoming `in ('admin','game_entry')`.
+That leaves a trigger that CAN NEVER FIRE: `games_update` already limits
+updates to exactly those two roles, so `view` never reaches it and the
+other two always pass.
+
+A guard that cannot fail is worse than no guard. It reads as protection
+in every future audit of this schema, costs a function call on every row
+update of the busiest table in the application, and the day somebody
+widens `games_update` it silently stops covering the case it appears to
+cover. Dead security is more dangerous than absent security because it
+stops anyone looking.
+
+### Where the decision lives now
+
+In `comment on column` on `games.is_public` and `games.share_token`, not
+only in a migration file. A migration is read once, when it runs; a
+column comment is in front of anyone inspecting the schema, and this
+schema is about to be inspected a great deal during tenancy work.
+
+### What this does NOT settle
+
+Under multi-tenancy the question returns in a different shape: not "which
+role may publish" but "may this user publish THIS school's game". That is
+tenant scoping, which every table needs regardless, and it was not a
+reason to keep a role check here in the meantime.

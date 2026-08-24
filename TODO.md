@@ -2815,11 +2815,26 @@ Step 0 built the mechanism; these are the changes that were waiting on
 it. None is urgent and none should be run against production without a
 scratch rebuild first.
 
-- [ ] **`003_restrict_game_visibility.sql`** — make `admins set game
-  visibility` `AS RESTRICTIVE`, or take `is_public` and `share_token` out
-  of the column-level UPDATE grant for `authenticated`. Today a
-  `game_entry` user can publish a recap. Hazard 6 in
-  `MULTI_TENANT_PLAN.md`, and the only one wrong regardless of tenancy.
+- [x] ~~Restrict game visibility to admins~~ — **CLOSED 24 Aug, and the
+  answer was the opposite of the one assumed.** `004` added a trigger
+  restricting publish to admins; `005` reverted it. Andy's call:
+  `game_entry` MAY publish, because the crew who set the game up the day
+  before are the crew who share the recap, and needing an admin puts him
+  in the loop on a Friday night for nothing.
+
+  What survives from `004`: the policy `admins set game visibility` stays
+  DROPPED. It was PERMISSIVE alongside `games_update`, so it granted
+  nothing and restricted nothing while its NAME claimed a guarantee.
+  Correct to remove whichever way the decision went — the fault was a
+  rule that lied, not a rule that was too strict.
+
+  Why `005` reverted rather than widened the trigger to allow
+  `game_entry`: `games_update` already limits updates to exactly
+  `admin` and `game_entry`, so a widened trigger could never fire. **A
+  guard that cannot fail is worse than no guard** — it reads as
+  protection in every later audit, costs a call on every row update of
+  the busiest table in the app, and silently stops covering its case the
+  day somebody widens `games_update`.
 - [ ] **Drop the redundant `plays` indexes.** `plays_game_sequence_idx`
   duplicates the unique `plays_game_seq_unique` on identical columns, and
   `plays_game_idx` is covered by both. `plays` is the highest-write table
