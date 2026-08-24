@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StatChat — live football stats and broadcast data</title>
-<meta name="description" content="Live high-school football stats plus broadcast-ready data and graphics. Runs in a browser on any device. Feeds vMix, OBS and anything else that reads JSON or XML. $250 a season.">
+<meta name="description" content="Live high-school football stats plus broadcast-ready data and graphics. Runs in a browser on any device. Feeds vMix, OBS and anything else that reads JSON or XML. Only $250 per season.">
 
 <!-- EVERY NAME ON THIS PAGE IS INVENTED, and must stay that way. An
      earlier version used real names lifted from a season report, which
@@ -22,7 +22,7 @@
   :root{
     --ink:#10141a; --panel:#191f27; --raise:#20272f; --edge:#2b333d;
     --paper:#eef1f4; --mute:#8d99a6;
-    /* THREE COLOURS, THREE MEANINGS. Keeping them separate is what
+    /* THREE COLORS, THREE MEANINGS. Keeping them separate is what
        stops the page turning into decoration:
          GREEN  the brand, and anything affirmative — section labels,
                 the primary call to action, ticks, the price.
@@ -64,7 +64,12 @@
   .login:hover{background:#ffd558}
   @media (max-width:760px){ nav a:not(.login){display:none} }
 
-  .hero{padding:clamp(56px,6vw,80px) 0 clamp(72px,8vw,104px);border-bottom:1px solid var(--edge)}
+  /* padding-BLOCK, not the padding shorthand. Both this and `section`
+     also carry the .wrap class, and a shorthand here resets .wrap's side
+     padding to zero — invisible on a desktop, where the 1080px max-width
+     leaves a margin anyway, and running the text into both edges of a
+     phone. That was the mobile bleed. */
+  .hero{padding-block:clamp(52px,6vw,80px) clamp(64px,8vw,104px);border-bottom:1px solid var(--edge)}
   .hero h1{font-family:var(--label);font-weight:700;text-transform:uppercase;
            font-size:clamp(36px,6.4vw,70px);line-height:.96;margin:14px 0 0}
   .hero h1 em{font-style:normal;color:var(--brand)}
@@ -119,7 +124,7 @@
      one block crowding the start of the next.
      clamp() rather than a fixed value: 96px of air is right on a desktop
      and absurd on a phone, where the same gap costs a third of a screen. */
-  section{padding:clamp(60px,7.5vw,96px) 0;border-bottom:1px solid var(--edge);position:relative}
+  section{padding-block:clamp(54px,7.5vw,96px);border-bottom:1px solid var(--edge);position:relative}
   /* A short green rule above each section eyebrow: enough brand to read
      down the page as a rhythm, not enough to compete with the content. */
   section > .strip:first-child::before{content:"";display:block;width:34px;height:3px;
@@ -139,7 +144,101 @@
   .cell p{color:#adb8c4;font-size:15px;margin:10px 0 0}
   .tick{width:13px;height:13px;border-radius:2px;background:var(--brand);display:block}
 
-  /* ---- a few taps ---- */
+  /* The one short, flat claim on the page. Sits alone so it is read
+     rather than skimmed as part of the paragraph above it. */
+  .claim{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em;
+         font-weight:600;font-size:clamp(17px,2.4vw,21px);color:var(--paper);
+         margin:26px 0 0;padding-left:14px;border-left:3px solid var(--brand)}
+
+  /* A section-level subheading. The ease-of-use section now carries two
+     sequences — creating a game, and entering a play — and without a
+     label between them two sets of 01/02/03 read as one confused list. */
+  .subhead{font-family:var(--label);text-transform:uppercase;letter-spacing:.08em;
+           font-size:19px;font-weight:700;margin:42px 0 0;color:var(--paper)}
+  .subhead::before{content:"";display:inline-block;width:16px;height:3px;border-radius:2px;
+           background:var(--brand);vertical-align:middle;margin-right:10px}
+
+  /* Deliberately LIGHTER than .taps below it. Setup happens once a week;
+     entry happens a hundred times a night, so the per-play flow keeps the
+     heavier treatment and this one reads as a preamble. */
+  .setup{display:grid;gap:22px;margin-top:20px}
+  @media (min-width:760px){ .setup{grid-template-columns:repeat(3,1fr);gap:28px} }
+  .sstep h4{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em;
+            font-size:16px;font-weight:600;margin:6px 0 0}
+  .sstep p{color:#adb8c4;font-size:14.5px;margin:6px 0 0}
+
+  /* ---- CELL GRAPHICS -------------------------------------------------
+     RECREATIONS, NOT SCREENSHOTS, and the distinction is deliberate.
+     A screenshot of the running app would carry real players' names --
+     the exact fault that had to be fixed on this page once already --
+     and would go stale the first time a padding value changed. These are
+     built from the real button labels and the real feed field names, so
+     they show what the product looks like without claiming to BE a
+     capture of it. Each is marked aria-hidden: they illustrate the text
+     beside them and add nothing for a screen reader. */
+  .shot{margin-top:18px;background:#0b0f14;border:1px solid var(--edge);border-radius:5px;
+        padding:12px;overflow:hidden}
+  .shot-t{font-family:var(--label);text-transform:uppercase;letter-spacing:.12em;
+          font-size:9.5px;color:#5c6773;margin-bottom:9px;display:flex;gap:6px;align-items:center}
+  .shot-t::before{content:"";width:5px;height:5px;border-radius:50%;background:#39424d}
+
+  /* 1 — crew view */
+  .cv-row{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;
+          padding:5px 0;border-bottom:1px solid #161d25;color:#8d99a6}
+  .cv-row:last-child{border-bottom:none}
+  .cv-row b{color:var(--paper);font-weight:500}
+  .cv-row .v{margin-left:auto;color:var(--data)}
+  .cv-bar{height:4px;border-radius:2px;background:var(--brand);min-width:4px}
+
+  /* 2 — the entry card */
+  .pt{display:flex;flex-wrap:wrap;gap:5px}
+  .pt span{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em;font-size:10px;
+           font-weight:600;padding:5px 9px;border-radius:3px;background:var(--raise);
+           border:1px solid var(--edge);color:#9aa5b1}
+  .pt span.on{background:var(--data);color:#20180a;border-color:var(--data)}
+  .pad{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:9px}
+  .pad i{font-family:var(--mono);font-style:normal;font-size:11px;text-align:center;padding:6px 0;
+         border-radius:3px;background:var(--raise);border:1px solid var(--edge);color:#9aa5b1}
+  .pad i.on{background:var(--brand);color:#0e1408;border-color:var(--brand)}
+
+  /* 3 — season chart */
+  .chart{display:flex;align-items:flex-end;gap:5px;height:64px}
+  .chart div{flex:1;background:var(--brand);border-radius:2px 2px 0 0;opacity:.85}
+  .chart div.hi{background:var(--data);opacity:1}
+  .chart-x{display:flex;gap:5px;margin-top:5px;font-family:var(--mono);font-size:8.5px;color:#5c6773}
+  .chart-x span{flex:1;text-align:center}
+
+  /* 4 — feed */
+  .feedline{font-family:var(--mono);font-size:10px;line-height:1.85;color:#8d99a6;
+            white-space:pre;overflow:hidden}
+  .feedline b{color:var(--data);font-weight:400}
+  .feedline i{color:#9fd67a;font-style:normal}
+
+  /* the player picker, in usage order */
+  .pk{display:flex;flex-wrap:wrap;gap:5px}
+  .pk span{font-family:var(--label);text-transform:uppercase;letter-spacing:.04em;font-size:10px;
+           font-weight:600;padding:5px 9px;border-radius:3px;background:var(--raise);
+           border:1px solid var(--edge);color:#9aa5b1;display:flex;gap:6px;align-items:baseline}
+  .pk span.on{background:var(--data);color:#20180a;border-color:var(--data)}
+  .pk em{font-family:var(--mono);font-style:normal;font-size:9px;opacity:.7;letter-spacing:0}
+
+  /* stat-section tables */
+  .mini{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px;color:#8d99a6}
+  .mini th{text-align:right;font-weight:500;color:#5c6773;padding:0 0 5px;
+           border-bottom:1px solid #161d25;font-size:9px}
+  .mini th:first-child{text-align:left}
+  .mini td{text-align:right;padding:4px 0;border-bottom:1px solid #161d25}
+  .mini td:first-child{text-align:left;color:var(--paper)}
+  .mini tr:last-child td{border-bottom:none}
+  .mini td.k{color:var(--data)}
+  .split{display:flex;gap:10px;align-items:center;font-family:var(--mono);font-size:10px;
+         color:#8d99a6;padding:4px 0}
+  .split .lbl{width:64px;color:var(--paper)}
+  .split .track{flex:1;height:7px;border-radius:3px;background:#161d25;overflow:hidden;display:flex}
+  .split .a{background:var(--brand)}
+  .split .b{background:#39424d}
+
+  /* ---- setup, then a few taps ---- */
   .taps{display:grid;gap:1px;background:var(--edge);border:1px solid var(--edge);
         border-radius:6px;overflow:hidden;margin-top:40px}
   @media (min-width:760px){ .taps{grid-template-columns:repeat(3,1fr)} }
@@ -228,10 +327,62 @@
   #formMsg.err{background:rgba(176,0,32,.12);border-left:3px solid var(--program);color:#f2d3d8}
   .btn[disabled]{opacity:.55;cursor:default}
 
-  .close{text-align:center;padding:clamp(64px,8vw,96px) 0}
-  footer{padding:40px 0 56px;color:#5c6773;font-size:13px}
+  .close{text-align:center;padding-block:clamp(58px,8vw,96px)}
+  footer{padding-block:40px 56px;color:#5c6773;font-size:13px}
   .foot{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
   .foot .src{margin-left:auto;font-family:var(--mono);font-size:11px}
+
+  /* ================= PHONE =========================================
+     The bleed above was the structural fault; these are the pieces that
+     were still built for a desktop width. Tested against a 390px
+     viewport, which is what an iPhone reports. */
+  @media (max-width:560px){
+    .wrap{padding:0 18px}
+
+    /* THE SCOREBUG WRAPS RATHER THAN OVERFLOWS. Four cells in a row need
+       about 480px; a phone has 354px of content. Real broadcast bugs
+       stack the same way when they have to, so down-and-distance drops
+       to its own line rather than the whole thing scrolling sideways. */
+    .bug{flex-wrap:wrap;max-width:none}
+    .bug .team{flex:1 1 auto;padding:10px 12px}
+    .bug .period{flex:1 1 auto}
+    .bug .dd{flex:1 1 100%;border-top:1px solid #222b35;justify-content:center}
+
+    /* The input description is for a crew, not a first-time visitor, and
+       it is the first thing worth losing when space is short. */
+    .rigbar .src{display:none}
+    .stage{padding:18px 14px 16px}
+    .third{max-width:none}
+
+    /* Long single-word-ish strings in the feed samples would otherwise
+       force the whole page wide. */
+    .code pre{padding:14px;font-size:11.5px}
+    .endpoint{font-size:11px}
+
+    .formwrap{padding:22px 18px}
+    .pricebox{padding:28px 20px}
+    .cell{padding:22px 18px}
+    .tap{padding:20px 18px}
+    .claim{font-size:16px;padding-left:12px}
+    .subhead{font-size:17px;margin-top:34px}
+    .setup{gap:18px}
+    /* The graphics stay legible rather than shrinking with the cell. */
+    .shot{padding:10px}
+    .feedline{font-size:9.5px}
+    .chart{height:54px}
+    .cmp th,.cmp td{padding:11px 12px}
+    .incl span{font-size:13px;padding:6px 10px}
+
+    /* Full-width buttons: a 44px target that spans the column is easier
+       to hit than two side by side on a narrow screen. */
+    .cta .btn{flex:1 1 100%;text-align:center}
+    .hero .cta .pricetag{flex:1 1 100%}
+  }
+
+  /* A guard, not a fix. Everything above addresses a specific overflow;
+     this stops any FUTURE one from letting the whole page slide
+     sideways, which is the symptom that makes a site feel broken. */
+  html,body{overflow-x:hidden}
 
   @media (prefers-reduced-motion:reduce){
     html{scroll-behavior:auto}
@@ -271,10 +422,11 @@
   <p class="lede">StatChat is built the way a person actually scores a game: from the
      sideline, on a tablet or a laptop, one play at a time. What you enter shows up live
      straight away — for the crew calling the broadcast, and for the fans following at home.</p>
+  <p class="claim">From signup to entering plays in five minutes.</p>
   <div class="cta">
-    <a class="btn btn-a" href="mailto:signup@statchat.co?subject=StatChat%20demo">Schedule a demo</a>
+    <a class="btn btn-a" href="#contact">Schedule a demo</a>
     <a class="btn btn-b" href="#feeds">See the data</a>
-    <span class="pricetag"><b>$250</b> a season &middot; football</span>
+    <span class="pricetag">Only <b>$250</b> per season &middot; football</span>
   </div>
 
   <div class="rig" aria-hidden="true">
@@ -314,6 +466,14 @@
       <p>A dedicated real-time dashboard — every play, every team and individual stat —
          that updates the instant a play is entered. Built for the broadcast team, by a
          broadcast team.</p>
+      <div class="shot" aria-hidden="true">
+        <div class="shot-t">Crew View — live</div>
+        <div class="cv-row"><b>Total yards</b><div class="cv-bar" style="width:52px"></div><span class="v">284</span></div>
+        <div class="cv-row"><b>Rushing</b><div class="cv-bar" style="width:20px"></div><span class="v">96</span></div>
+        <div class="cv-row"><b>Passing</b><div class="cv-bar" style="width:38px"></div><span class="v">188</span></div>
+        <div class="cv-row"><b>3rd down</b><div class="cv-bar" style="width:30px"></div><span class="v">6/11</span></div>
+        <div class="cv-row"><b>Time of poss.</b><div class="cv-bar" style="width:34px"></div><span class="v">18:34</span></div>
+      </div>
     </div>
     <div class="cell">
       <span class="tick"></span>
@@ -321,6 +481,14 @@
       <p>Live JSON and XML drop straight into vMix, OBS, Wirecast, Livestream Studio,
          CasparCG or anything else that reads a URL. A ready-made transparent overlay is
          included for crews who would rather not build their own package.</p>
+      <div class="shot" aria-hidden="true">
+        <div class="shot-t">/api/feed?view=score</div>
+        <div class="feedline"><b>"homeTeam"</b>: <i>"Riverside"</i>,
+<b>"homeScore"</b>: 21,
+<b>"quarter"</b>: <i>"3rd"</i>,
+<b>"downAndDistance"</b>: <i>"1st &amp; 10"</i>,
+<b>"ballOn"</b>: <i>"opp 34"</i></div>
+      </div>
     </div>
     <div class="cell">
       <span class="tick"></span>
@@ -328,12 +496,30 @@
       <p>Every play is a few taps: pick the play type, fill in what happened, review before
          you save. No stats department, no training class — one person, the sideline, and a
          device they already own.</p>
+      <div class="shot" aria-hidden="true">
+        <div class="shot-t">Play entry — 2nd &amp; 4</div>
+        <div class="pt"><span>Rush</span><span class="on">Pass</span><span>Punt</span>
+          <span>FG</span><span>Kickoff</span><span>Penalty</span></div>
+        <div class="pad"><i>7</i><i>8</i><i>9</i><i>&minus;</i><i>0</i>
+          <i>4</i><i>5</i><i>6</i><i class="on">12</i><i>&#8629;</i></div>
+      </div>
     </div>
     <div class="cell">
       <span class="tick"></span>
       <h3>Stats, stats and more stats</h3>
       <p>Nobody beats StatChat on stats. Team and individual, every unit, trends and
          analysis across the whole season — all included, not an upgrade.</p>
+      <div class="shot" aria-hidden="true">
+        <div class="shot-t">Total yards by game</div>
+        <div class="chart">
+          <div style="height:58%"></div><div style="height:71%"></div><div style="height:34%"></div>
+          <div style="height:64%"></div><div style="height:47%"></div><div class="hi" style="height:92%"></div>
+          <div style="height:68%"></div><div style="height:39%"></div><div style="height:55%"></div>
+          <div style="height:61%"></div>
+        </div>
+        <div class="chart-x"><span>G1</span><span>G2</span><span>G3</span><span>G4</span><span>G5</span>
+          <span>G6</span><span>G7</span><span>G8</span><span>G9</span><span>G10</span></div>
+      </div>
     </div>
   </div>
 </section>
@@ -352,15 +538,40 @@
          Explosive plays over twenty yards. Sacks, interceptions, fumble recoveries.
          Penalties and penalty yards. Time of possession, possessions, plays per game.
          Kept for your team <em>and</em> the opponent, from the same play log.</p>
+      <div class="shot" aria-hidden="true">
+        <div class="shot-t">Team — Riverside v Northgate</div>
+        <div class="split"><span class="lbl">Total yds</span>
+          <span class="track"><i class="a" style="width:57%"></i><i class="b" style="width:43%"></i></span>
+          <span>284 / 211</span></div>
+        <div class="split"><span class="lbl">Rush</span>
+          <span class="track"><i class="a" style="width:42%"></i><i class="b" style="width:58%"></i></span>
+          <span>96 / 134</span></div>
+        <div class="split"><span class="lbl">Pass</span>
+          <span class="track"><i class="a" style="width:71%"></i><i class="b" style="width:29%"></i></span>
+          <span>188 / 77</span></div>
+        <div class="split"><span class="lbl">3rd down</span>
+          <span class="track"><i class="a" style="width:64%"></i><i class="b" style="width:36%"></i></span>
+          <span>55% / 31%</span></div>
+      </div>
     </div>
     <div class="cell">
       <p class="strip">Individual</p>
       <h3>Every player, every unit</h3>
       <p>Passing with completion percentage, yards per attempt, long, touchdowns,
          interceptions and sacks taken. Rushing and receiving with attempts, targets, catch
-         rate and yards per touch. Tackles, tackles for loss and takeaways on defence.
+         rate and yards per touch. Tackles, tackles for loss and takeaways on defense.
          Kickoffs, punts, field goals and extra points on special teams. Kick and punt
          returns kept separately.</p>
+      <div class="shot" aria-hidden="true">
+        <div class="shot-t">Receiving</div>
+        <table class="mini">
+          <tr><th>Player</th><th>Rec</th><th>Tgt</th><th>Yds</th><th>Y/C</th><th>TD</th></tr>
+          <tr><td>Brooks</td><td>7</td><td>9</td><td class="k">96</td><td>13.7</td><td>1</td></tr>
+          <tr><td>Ellis</td><td>4</td><td>6</td><td class="k">58</td><td>14.5</td><td>1</td></tr>
+          <tr><td>Okafor</td><td>2</td><td>2</td><td class="k">21</td><td>10.5</td><td>0</td></tr>
+          <tr><td>Delgado</td><td>1</td><td>2</td><td class="k">13</td><td>13.0</td><td>0</td></tr>
+        </table>
+      </div>
     </div>
     <div class="cell">
       <p class="strip">Trends</p>
@@ -368,24 +579,60 @@
       <p>Yardage by game and by half. Run–pass balance by attempt and by yard. Points by
          quarter. Turnovers, sacks and penalties game over game. Third and fourth down rate
          plotted across the year. A season report a coach can actually hand to someone.</p>
+      <div class="shot" aria-hidden="true">
+        <div class="shot-t">3rd down % by game</div>
+        <div class="chart">
+          <div style="height:31%"></div><div style="height:44%"></div><div style="height:52%"></div>
+          <div style="height:38%"></div><div class="hi" style="height:71%"></div><div style="height:55%"></div>
+          <div style="height:49%"></div><div style="height:62%"></div><div style="height:44%"></div>
+          <div style="height:58%"></div>
+        </div>
+        <div class="chart-x"><span>G1</span><span>G2</span><span>G3</span><span>G4</span><span>G5</span>
+          <span>G6</span><span>G7</span><span>G8</span><span>G9</span><span>G10</span></div>
+      </div>
     </div>
     <div class="cell">
       <p class="strip">Out of the box</p>
       <h3>Take it with you</h3>
       <p>Single-game stat packages and full-season reports as PDF or Excel. A public recap
-         link a parent can open without an account. Live JSON and XML for your graphics.
+         link to send to local media. Live JSON and XML for your graphics.
          Nothing locked in a format only StatChat can read.</p>
+      <div class="shot" aria-hidden="true">
+        <div class="shot-t">Export</div>
+        <div class="pt"><span>Stat package · PDF</span><span>Stat package · XLS</span></div>
+        <div class="pt" style="margin-top:5px"><span>Season report · PDF</span><span>Season report · XLS</span></div>
+        <div class="pt" style="margin-top:5px"><span class="on">Public recap link</span></div>
+      </div>
     </div>
   </div>
 </section>
 
 <section id="easy" class="wrap">
   <p class="strip">Ease of use</p>
-  <h2>A few taps a play</h2>
-  <p class="sub">Pick, fill, review — that is the shape of every play, whether it is a
-     kneel or a fumble recovered three laterals later. The person scoring is usually also
-     watching the game, minding a clock and answering someone, and the interface assumes
-     that.</p>
+  <h2>Five minutes from signup<br>to entering plays</h2>
+  <p class="sub">No complicated setup, no install, no training class. Make an account, build
+     a game, and you are scoring — inside the time it takes the teams to finish warm-ups.</p>
+
+  <h3 class="subhead">Create a game in three steps</h3>
+  <div class="setup">
+    <div class="sstep"><span class="tapnum">01</span>
+      <h4>Game details</h4>
+      <p>Opponent, date, home or away, quarter length. Thirty seconds.</p></div>
+    <div class="sstep"><span class="tapnum">02</span>
+      <h4>Rosters and starters</h4>
+      <p>Name your team's likely starters and upload the opponent's roster. Yours carries
+         over, so week two is a glance rather than a rebuild.</p></div>
+    <div class="sstep"><span class="tapnum">03</span>
+      <h4>Opponent logo and colors</h4>
+      <p>Add their logo and two colors, and every graphic picks them up. Nothing else to
+         configure.</p></div>
+  </div>
+
+  <h3 class="subhead">Then a few taps per play</h3>
+  <p class="sub" style="margin-top:12px">Pick, fill, review — that is the shape of every
+     play, whether it is a kneel or a fumble recovered three laterals later. The person
+     scoring is usually also watching the game, minding a clock and answering someone, and
+     the interface assumes that.</p>
 
   <div class="taps">
     <div class="tap">
@@ -420,6 +667,34 @@
   </div>
 
   <div class="grid two" style="margin-top:36px">
+    <div class="cell">
+      <p class="strip">It follows the game</p>
+      <h3>Entry flows with the play</h3>
+      <p>The next question is the one the game just asked. A touchdown offers the try, not
+         a punt. Fourth down offers the punt and the field goal. After a change of
+         possession the sides swap themselves. Nothing that cannot happen on this down is
+         on the screen, so there is less to read and less to get wrong.</p>
+    </div>
+    <div class="cell">
+      <p class="strip">It learns as it goes</p>
+      <h3>It remembers who does what</h3>
+      <p>Once a quarterback has thrown, he is pre-selected on the next pass. Same for the
+         punter, the placekicker and the kickoff specialist — each remembered separately,
+         because the man who kicks off is often not the man who kicks the extra point.</p>
+      <p>The picker reorders itself as the game goes on. Anyone who has already carried,
+         caught or made a tackle sorts to the front, ahead of the rest of the roster and
+         ranked by what they have actually done tonight — so by the second quarter your
+         top backs, receivers and tacklers are the first names on the screen. Every
+         suggestion is only a suggestion: tap to confirm, or pick anyone else.</p>
+      <div class="shot" aria-hidden="true">
+        <div class="shot-t">Ball carrier — 2nd &amp; 4</div>
+        <div class="pk">
+          <span class="on">24 Delgado <em>11 car</em></span><span>31 Ellis <em>6 car</em></span>
+          <span>7 Whitfield <em>2 car</em></span><span>15 Okafor</span><span>28 Brooks</span>
+          <span>44 Nakamura</span>
+        </div>
+      </div>
+    </div>
     <div class="cell">
       <p class="strip">Any device</p>
       <h3>PC, Mac, iPad</h3>
@@ -479,7 +754,7 @@
             <td>Limited or none</td>
             <td>Not built for it</td></tr>
         <tr><th scope="row">Learning curve</th>
-            <td class="me">A few taps a play. No training class, no stats department</td>
+            <td class="me">A few taps per play. No training class, no stats department</td>
             <td>Dense keyboard-driven entry, built for a trained scorer</td>
             <td>Simple, but it only does stats</td></tr>
         <tr><th scope="row">Built for</th>
@@ -487,7 +762,7 @@
             <td>Often adapted from college or pro conventions</td>
             <td>General-purpose stat tracking</td></tr>
         <tr><th scope="row">Cost</th>
-            <td class="me">$250 a season, everything included</td>
+            <td class="me">Only $250 per season, everything included</td>
             <td>Typically several times that, plus hardware</td>
             <td>Cheaper, and does a fraction of the job</td></tr>
       </tbody>
@@ -514,6 +789,7 @@
      no per-user charge, and no feature held back for an upgrade.</p>
 
   <div class="pricebox">
+    <div class="per" style="margin:0 0 4px">Only</div>
     <div class="big">$250</div>
     <div class="per">per season &middot; football</div>
     <div class="incl">
@@ -566,7 +842,7 @@
 
     <div class="cta" style="margin-top:20px">
       <button class="btn btn-a" id="sendBtn" type="button">Send</button>
-      <span class="pricetag">Everything for <b>$250</b> a year</span>
+      <span class="pricetag">Everything for only <b>$250</b> per season</span>
     </div>
   </div>
 </section>
