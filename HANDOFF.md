@@ -123,9 +123,13 @@ reasoning. Read those two and treat this file as background.
 
 # WHERE TO PICK UP — end of 23 August 2026
 
-**Next task: finish the password reset flow — it is small and stuck on
-configuration, not code. Then multi-tenancy step 1, the overlay auth.**
-See `TODO.md`, section "RESUME HERE".
+**Next task: multi-tenancy step 1 — design the overlay auth.**
+See `MULTI_TENANT_PLAN.md`, and `TODO.md` section "RESUME HERE".
+
+Password reset is DONE and proven end to end (24 Aug): link, email,
+landing page, new password. Custom SMTP was never outstanding — Resend
+was already configured, and an entry claiming otherwise has been
+corrected.
 
 ## What closed on 23 August
 
@@ -172,8 +176,13 @@ the flow is NOT yet proven end to end — see TODO.
   engine, ignores `@media` entirely, and cannot settle `!important`.
   Batch visual work and ask for one look; do not iterate blind.
 - **Nothing is written to `tests/` during a session** — ad-hoc
-  verification, then one batch at wrap-up. A batch is currently OWED;
-  see TODO.md.
+  verification, then one batch at wrap-up. The 23-24 Aug batch is
+  WRITTEN: four site checks, listed in `tests/README.md`.
+- **A source file that contradicts a documented decision is more likely
+  a failed upload than a change of mind.** `team-icon.js` at the repo
+  root was still the pre-22-Aug version and nearly caused a settled
+  decision to be reversed. Three uploads have silently failed on this
+  project; check the document before "fixing" the file.
 - **Verify uploads from the codeload tarball**, not
   `raw.githubusercontent.com`, and wait a minute before concluding a
   step failed.

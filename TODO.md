@@ -2891,12 +2891,14 @@ after unbanning, the next reset produced no email at all.
   recipient sees it, burning the token. The user then assumes nothing
   sent and burns another. Fix: read `error_description` from the hash,
   show it on the sign-in view, offer a fresh link. ~15 minutes.
-- [ ] **Custom SMTP, before selling.** Supabase's built-in email is
-  explicitly development-only: low hourly caps, no deliverability
-  guarantee, shared infrastructure, and a sender address that is not
-  yours. A coach who cannot reset a password on a Friday night is a
-  support call nobody can answer. Authentication → Emails → SMTP
-  Settings; Resend, Postmark, SendGrid or SES.
+- [x] ~~**Custom SMTP, before selling.**~~ **ALREADY DONE — this entry
+  was wrong.** Resend was configured as Supabase's SMTP provider before
+  any of this, and the same account now sends lead notifications from
+  `api/contact.js`. The blocker was written on 24 Aug on the strength of
+  a password-reset email that did not arrive, which was a banned account
+  rather than a mail problem. **A missing email is not evidence of
+  missing infrastructure**; the provider's own delivery log settles it in
+  one look, and was never checked.
 
 ### Settle `www` vs the apex
 
@@ -3103,18 +3105,32 @@ first. See the "Migrations now possible" section above for the full list;
 the one worth doing first is `003_restrict_game_visibility.sql`, because
 it is wrong independently of tenancy.
 
-### Owed from the 23 Aug session
+### The test batch — WRITTEN 24 Aug 2026
 
-- **The test batch.** Nothing in `tests/` was written this session, per
-  the standing rule. Four pieces: a `season_report_layout_check.js`
-  asserting from SOURCE TEXT (jsdom ignores `@media` and `@page`, so a
-  getComputedStyle check cannot fail); a Postgres-dependent
-  `sql_baseline_check.js` — **open decision: default run, or gated
-  behind a flag, since it needs a scratch Postgres**; the
-  strip-CSS-comments fix to how source assertions are written; and
-  updates to `tests/README.md`.
-- `accuracy_check.js` and `accuracy.golden.json` are UNTOUCHED and need
-  no re-blessing. Nothing this session went near `engine.js`.
+Four new checks, all in `tests/`, all listed in `tests/README.md`:
+
+    site_layout_check.js    layout rules read from SOURCE, not jsdom
+    login_reset_check.js    a password can actually be reset
+    contact_check.js        a lead is never lost by a broken notifier
+    icon_check.js           team-icon.js is present and inert
+
+Every assertion was mutation-tested. Two were strengthened because a
+mutation slipped through: checking the honeypot KEY passes when the
+VALUE is blanked, and checking that `section.wrap` appears somewhere
+passes when only one of the two rules keeps its class.
+
+`site_layout_check.js` found a live bug while being written — the
+`.wrap{padding:0 18px}` shorthand inside the phone media query, the same
+class-beats-element trap as the desktop rule one media query down.
+
+`tests/create_game.html` is back in sync with the real page (2
+redirects). `accuracy_check.js` and `accuracy.golden.json` are UNTOUCHED
+— nothing since 23 Aug went near `engine.js`.
+
+**The Postgres-dependent schema check was NOT written.** Deferred rather
+than gated: `000_baseline.sql` is already proven by rebuild-and-diff, and
+a check that silently skips on every machine without Postgres is a check
+nobody runs. Revisit if the baseline is ever regenerated.
 
 ### Two habits worth carrying in
 

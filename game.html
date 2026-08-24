@@ -4188,6 +4188,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       error = e;   // a thrown TypeError: Failed to fetch lands here
     }
     if (error){
+      // A UNIQUE VIOLATION IS NOT A NETWORK PROBLEM, and must not be
+      // reported as one. Postgres returns 23505 when this game already
+      // has a play at this sequence number, which in practice means a
+      // SECOND SCORER is entering the same game: both pages seeded
+      // nextSequenceNumber from the same log and reached the same number.
+      //
+      // Queuing it would be the worst possible response. The number stays
+      // taken, so the retry hits the same constraint forever, and the
+      // message would tell the scorer to keep going -- so they work
+      // through a quarter accumulating plays that can never land.
+      if (error.code === '23505') {
+        showMsg('gameMsg', 'That play was rejected because this game already has a play in ' +
+          'that position — somebody else is very likely entering this same game right now. ' +
+          'Reload the page to pick up their plays before entering any more. Nothing you have ' +
+          'already saved is lost.', 'error');
+        return;
+      }
       enqueuePlay(row);
       showMsg('gameMsg', 'No connection to the server — this play is saved on this device and ' +
         'will upload automatically when the connection comes back. Keep entering plays as normal.', 'error');
