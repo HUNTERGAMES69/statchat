@@ -2910,3 +2910,92 @@ the Auth Logs, the address bar — was skipped in favour of explaining.
 This is the same failure the standing rule already names for code ("read
 the exact code path before proposing a cause"); it applies to
 infrastructure identically, and the check is usually one click.
+
+
+## Tokenization and dark mode — measured, then deferred (24 August 2026)
+
+Asked whether the app could be restyled to match the new marketing site,
+and whether a dark-mode selector was possible. Both come down to the same
+question, so both were measured rather than estimated.
+
+### The count, and why the total is misleading
+
+1,730 hardcoded hex values across 21 pages:
+
+    page                     <style>   attr    js
+    game.html                     97    231   203
+    game_legacy.html              36    234   189
+    view.html                     48     26    19
+    dashboard.html                39     29     6
+    create_game.html              18     35     6
+    ...13 more pages under 40 non-<style> values each
+    TOTAL                        592    618   520
+
+`game.html` and `game_legacy.html` are 83% of the non-`<style>` cost
+between them. The other thirteen pages are an hour or two in total.
+
+### FOUR different kinds of hex, and only one should become a token
+
+The raw count is misleading because it lumps together things that must be
+treated differently. Reading a sample of `game.html`'s JS values settled
+it:
+
+  * **Field-diagram colours** — `#639922`, `#97C459`, `#3B6D11` for grass
+    and hash marks, `#4A1B0C` for the ball. Illustration, not theme. A
+    dark mode must NOT invert the grass.
+  * **Team-branding fallbacks** — `TEAMS.teamA = { bg:
+    ourBranding.primary_color || '#1a1a2e' }` and `|| '#8B0000'` for the
+    opponent. These are the answer to "this school has not set a colour
+    yet". Tokenizing them would make a school's own branding follow the
+    app theme, which is backwards.
+  * **Generic greys** — `#fff` ×46, `#ccc` ×27, `#555` ×26. These are the
+    real candidates.
+  * **`<style>` block values** — the tractable 592, and the only ones the
+    standing rule permits converting mechanically.
+
+**A count of hardcoded colours is not a measure of work until you know
+what each colour is FOR.** The same six characters can be a theme value,
+a piece of customer data, or a picture of grass.
+
+### The app already themes at runtime, which is the interesting part
+
+Team colours are applied from `teams.primary_color` and
+`games.opponent_primary_color` at run time. So the app has had a form of
+dynamic theming since before any of this was asked — it just themes by
+TEAM rather than by preference. Worth remembering when multi-tenancy
+lands: those two fallbacks are a multi-tenant default question, not a CSS
+one, and a navy default may be wrong once the tenant is not Neville.
+
+### Why it was deferred
+
+Not a prerequisite for multi-tenancy — presentation and data isolation do
+not touch. None of the six hazards in `MULTI_TENANT_PLAN.md` involves CSS.
+
+The real cost is not the editing, it is the VERIFICATION. jsdom has no
+layout engine and cannot tell you a panel went white-on-white, so every
+converted page needs a human look. That is 21 pages of Andy's attention,
+which is the scarcer resource. Deferred on that basis rather than on
+effort.
+
+### The entry-screen mockup, and what it showed
+
+A mockup of the game entry screen in the marketing site's palette
+answered a narrower question: **the colours transferred and the
+typography did not.**
+
+Gold-means-selected, red-means-on-air and green-means-affirmative moved
+across without argument — because they were taken FROM the app when the
+site was built. But condensed tracked uppercase is elegant and slower to
+read, and it survives only on small static labels. Everything a scorer
+reads at speed went back to Inter and the mono at full size.
+
+The number that mattered most: **48px minimum for anything a finger hits,
+against roughly 28px for the equivalent chip on the marketing site.**
+That single value is most of the difference between an illustration of a
+control and a control. A style built for reading a page cold does not
+transfer unaltered to a tool used at speed in the dark.
+
+Two smaller adjustments for the medium: hairlines lightened from
+`#2b333d` to `#323c47` and labels brightened, because the site is read on
+a phone held close and the entry screen is read at arm's length in a lit
+press box, where the site's values disappear.

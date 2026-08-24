@@ -2908,6 +2908,68 @@ broken password reset survives unnoticed for months.
 
 ---
 
+## TOKENIZATION AND DARK MODE — measured 24 Aug, DEFERRED
+
+Not a prerequisite for multi-tenancy; the two do not touch. Deferred on
+Andy's call. Measured properly first so the next person does not have to
+guess. Full reasoning in PROJECT_NOTES, "Tokenization and dark mode".
+
+**A dark-mode selector is possible and is the SAME job as restyling.**
+`statchat.css` already carries 26 tokens across 16 pages, so the
+mechanism exists. What blocks both is the same thing: a theme toggle can
+only reach values that go through a token, and most do not.
+
+### The measurement
+
+1,730 hardcoded hex across 21 pages — 592 inside `<style>`, 618 in
+`style=""` attributes, 520 in JS string literals. **`game.html` (434
+non-style) and `game_legacy.html` (423) are 83% of it between them.** The
+other thirteen pages are under 40 each and would take an hour or two in
+total.
+
+### DO NOT convert all of them — four kinds, one candidate
+
+  * **Field-diagram colours** (`#639922`, `#97C459`, `#3B6D11` grass and
+    hash marks, `#4A1B0C` ball). Illustration. A dark mode must not
+    invert the grass.
+  * **Team-branding fallbacks** (`ourBranding.primary_color || '#1a1a2e'`,
+    `opponent_primary_color || '#8B0000'`). Customer data defaults, not
+    theme. See the multi-tenancy note below.
+  * **Generic greys** — `#fff` ×46, `#ccc` ×27, `#555` ×26. The real
+    candidates.
+  * **`<style>` blocks** — the tractable part, and the only part the
+    standing rule permits converting mechanically.
+
+### The cost is verification, not editing
+
+jsdom has no layout engine and cannot see a panel that went white on
+white. Every converted page needs a human look — 21 pages of Andy's
+attention. That, not the editing, is why this is deferred.
+
+Procedure if it is ever picked up, already recorded in PROJECT_NOTES:
+convert only inside `<style>`; always use the fallback form
+`var(--sc-navy, #1a1a2e)`; verify by reversing the substitution and
+diffing against the pristine file; one page at a time with a look after
+each. `game_legacy.html` may not be worth touching at all.
+
+### One thing to carry into multi-tenancy
+
+- [ ] **The team-branding fallbacks are a TENANT default question.**
+  `'#1a1a2e'` and `'#8B0000'` are what a team gets when it has not set a
+  colour. A navy default is Neville's colour, and it will be wrong for
+  the second school. Decide this when `teams` gets a tenant id, not as
+  part of any CSS work.
+
+### The entry-screen mockup exists
+
+A mockup of the game entry screen in the marketing site's palette was
+built and reviewed. It is a PICTURE — no Supabase, no engine, no scripts
+— and must never be uploaded over `game.html`. Finding: the colours
+transfer, the typography does not. Anything a finger hits needs 48px
+minimum against the site's ~28px chips.
+
+---
+
 ## THE PUBLIC SITE — DONE and live 23 August 2026
 
 `statchat.co` now serves a one-page brochure; the app's sign-in moved to
