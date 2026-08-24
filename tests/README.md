@@ -61,6 +61,16 @@ node tests/full_game_check.js             # ~15s a WHOLE GAME through the UI, no
 # and login.html, which no other check touches, and api/contact.js.
 node tests/site_layout_check.js           # ~1s   layout rules, read from SOURCE not jsdom
 node tests/login_reset_check.js           # ~2s   a password can actually be reset
+
+# REMOVED 24 Aug 2026: tests/reset_check.js. It covered "Reset for
+# production" on account.html — a one-shot button that emptied the app
+# after Andy's own testing. The job was done, and the button was the
+# sharpest thing in the app for a multi-tenant install: it fetched games
+# with an UNFILTERED select, safe only because RLS narrowed it to the
+# caller's school. The platform account has no tenant, so for that one
+# account it would have emptied every customer. Feature removed, test
+# removed with it — a test for code that no longer exists is a test that
+# can only ever mislead.
 node tests/contact_check.js               # ~2s   a lead is never lost by a broken notifier
 node tests/icon_check.js                  # ~1s   team-icon.js is present and inert
 
