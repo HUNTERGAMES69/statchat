@@ -2104,8 +2104,10 @@ watch for.
   `computeBoxScore` adds `kickRet`/`kickRetYds`/`kickRetLong`/`kickRetTd`
   and the `puntRet` equivalents to the `specialTeams` bucket. A returner
   role with no `kind` is counted as a KICK return -- no such play exists,
-  but the default stops a future writer silently dropping one. Shown in: recap, stat package, season report,
-  view and player report.
+  but the default stops a future writer silently dropping one. Shown in: recap, stat package, season
+  report and player report. NOT on the view page -- that is the spectator
+  tile, already dense, and returns are what a crowd scans for least
+  (Andy's call). Returns come LAST in every special teams section.
 
   NOT in the Live totals tile. A RET leader line was added there while
   the feature was being built, purely so the new stat was visible enough
