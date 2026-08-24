@@ -361,7 +361,13 @@
     L.push('  Team stats (tall):' + overlayUrl('/broadcast_stats.html?layout=portrait'));
     ['rushing','passing','receiving','tackles','kicking','punting'].forEach(v => {
       L.push('  ' + (v.charAt(0).toUpperCase() + v.slice(1) + ' leaders').padEnd(17) +
-        overlayUrl('/broadcast_leaders.html?view=') + v);
+          // THE VIEW GOES IN BEFORE overlayUrl RUNS. Concatenating it after
+          // put the key in the middle -- "?view=&key=abc...rushing" -- and the
+          // emailed instructions would have handed out six dead addresses.
+          // The on-screen list built each URL whole and was fine; this loop
+          // built one and appended, which is exactly the difference a bulk
+          // regex edit misses.
+          overlayUrl('/broadcast_leaders.html?view=' + v));
     });
     L.push('');
     L.push('=================================================');
