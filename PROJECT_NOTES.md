@@ -2779,3 +2779,134 @@ is better but also lags by up to a minute. The habit: fetch the tarball,
 and if the answer is "the step did not happen", WAIT and re-check before
 saying so. Sending someone back to redo work they already did correctly
 costs more than the wait.
+
+
+## Splitting the brochure from the app (23 August 2026)
+
+`statchat.co` served `index.html`, which was the app's sign-in page. A
+public marketing site had to live at the root without moving the app,
+because moving the app is expensive in ways that are easy to miss.
+
+### What reading the code changed about the plan
+
+Andy's instinct was to put the brochure on GoDaddy hosting. That would
+have forced the app onto a subdomain, and a grep found why that is
+costly: **28 redirects across 15 pages point at bare `/`**, and NOTHING
+references `index.html` by name. Every "no session" path relies on `/`
+BEING the sign-in page.
+
+Moving the app would also have broken three things already out in the
+world: the `/g/:token` share links parents hold (a `vercel.json` rewrite
+to `api/share`), the vMix browser-input URLs configured on a production
+machine, and Supabase's per-domain auth redirect list.
+
+So: keep everything on Vercel, make `/` the brochure, move sign-in to
+`login.html`, and repoint the 28 redirects. Every other URL is untouched.
+GoDaddy stays the registrar and nothing more.
+
+**The generalisation: before recommending against a hosting change, find
+out what is pinned to the current URLs.** The answer was 28 redirects, a
+rewrite rule, a vMix config and an auth allow list — none of it visible
+from the file being replaced.
+
+### Upload ORDER was the load-bearing detail
+
+`login.html` first (new file, breaks nothing), then the 14 patched app
+files, then `index.html` last. Replacing the root while the redirects
+still point at `/` would have sent every session timeout to the sales
+page. At no point in the sequence is the app broken.
+
+### One commit per file is one DEPLOY per file
+
+Uploading through GitHub's pencil-edit path makes a separate commit, and
+therefore a separate Vercel build, for every file. Between the site
+files, the sql capture files, the moves and the doc revisions, this
+session crossed Vercel's free-tier limit of 100 deployments per day and
+the brochure could not ship.
+
+**Use Add file → Upload files and drag the whole batch: one commit, one
+deploy.** Presenting files one at a time — which was the right call for
+avoiding a README name collision — is the wrong call for the deploy
+budget, and both costs have to be weighed at once.
+
+### Three wrong theories, and what they have in common
+
+The brochure did not appear after the push. In order, the explanations
+offered were: the deploy cap, then Vercel's Redeploy button rebuilding
+the commit it was clicked on rather than the newest. Both were plausible
+and neither was checked. What actually fixed it was Andy re-uploading the
+files as one batch, which produced a fresh commit and a fresh build.
+
+Every one of those theories was offered without looking at the
+Deployments list, which was the one place that would have said. **When a
+deploy does not appear, read the deployment log before explaining why.**
+
+## Password reset: half of it was already built (23 August 2026)
+
+Andy reported the missing "Forgot password" link as a bug. It was, and
+reading the page showed the shape of it precisely: `login.html` has
+detected `type=recovery` in the URL hash and offered a set-password
+screen since the invite flow was built. The RECEIVING half worked. The
+SENDING half — a link, an email box, a `resetPasswordForEmail` call — did
+not exist, so nothing could ever reach it.
+
+Worth remembering as a category: **an unreachable feature and an absent
+one look identical from the outside**, and the same lesson is already
+recorded for the interception receiver field in `ui_driver`.
+
+Four decisions, each with a reason:
+
+  * **`redirectTo` is `window.location.origin + '/login.html'`**, not a
+    constant. The app answers on three hostnames — apex, `www`, and the
+    vercel.app deploy URL — and a hardcoded value bounces anyone who
+    started on the other two.
+  * **The reply never says whether the account exists.** "If there is an
+    account for that address..." either way. Otherwise the box is a way
+    to enumerate who has an account, and a school's staff list is not
+    ours to confirm to a stranger. The real error is logged to the
+    console so a genuine outage is not silently reported as success.
+  * **The send button stays disabled afterwards.** Only the newest link
+    works; five taps produce four dead links and no way to tell which is
+    which.
+  * **The set-password screen stops claiming "you're accepting an
+    invite"** when the arrival was a recovery. One screen serving two
+    arrivals must not lie about which one this is.
+
+### The gap the errors exposed, NOT yet fixed
+
+`login.html` parses `type` out of the hash and ignores `error` entirely.
+A banned account, an expired link and an already-consumed link all
+produce the same thing: a plain sign-in form and no explanation. Andy
+only learned what had happened by copying the URL out of the address bar.
+
+That matters because expired links are ROUTINE — reset links are
+single-use, and corporate mail scanners commonly fetch every link in an
+email before the recipient sees it, burning the token. The user then sees
+a normal login screen, assumes nothing was sent, and requests another.
+
+### Diagnosing it: the URL in the address bar was the whole answer
+
+Four different causes produce "I landed on login but not the reset
+screen", and the hash distinguishes all four: `#access_token=...` (a
+routing bug), `?code=...` (PKCE flow, unhandled), `#error=...` (auth
+refused), or nothing at all (the redirect was stripped). Asking for the
+URL settled in one step what several rounds of theorising had not.
+
+It read `error_code=user_banned`. Not a code bug at all — `banned_until`
+was set on the account, and Supabase refuses every route in for a banned
+user including a valid recovery token.
+
+## Getting ahead of the evidence — a pattern from this session (23 August 2026)
+
+Four theories were offered before their evidence: the Vercel deploy cap,
+the Redeploy button, the free-tier email rate limit, and an apex-versus-
+www recommendation that the first reset link immediately contradicted.
+Two were wrong outright and one was contradicted by a fetch already sat
+in the transcript showing every request landing on `www`.
+
+The pattern is the same each time: a plausible mechanism was available,
+and the cheap check that would have settled it — the Deployments list,
+the Auth Logs, the address bar — was skipped in favour of explaining.
+This is the same failure the standing rule already names for code ("read
+the exact code path before proposing a cause"); it applies to
+infrastructure identically, and the check is usually one click.

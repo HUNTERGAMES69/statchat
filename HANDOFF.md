@@ -123,7 +123,8 @@ reasoning. Read those two and treat this file as background.
 
 # WHERE TO PICK UP — end of 23 August 2026
 
-**Next task: multi-tenancy step 1, design the overlay auth.**
+**Next task: finish the password reset flow — it is small and stuck on
+configuration, not code. Then multi-tenancy step 1, the overlay auth.**
 See `TODO.md`, section "RESUME HERE".
 
 ## What closed on 23 August
@@ -149,6 +150,20 @@ visibility` is PERMISSIVE alongside `games_update`, and permissive
 policies OR together, so a `game_entry` user can publish a recap.
 `MULTI_TENANT_PLAN.md` now lists six hazards rather than three.
 
+## Also closed on 23 August — the public site
+
+`statchat.co` is now a one-page brochure; the app's sign-in moved from
+`index.html` to `login.html`, and 28 redirects across 14 pages were
+repointed from `/` to `/login.html`. Verified live.
+
+Everything else stayed where it was on purpose: the `/g/:token` share
+links parents already hold, the vMix input URLs, and every deep link.
+That is why the brochure went on Vercel rather than GoDaddy — moving the
+app would have broken all three.
+
+`login.html` also gained a password reset. The code is done and tested;
+the flow is NOT yet proven end to end — see TODO.
+
 ## Standing constraints
 
 - **Do not run anything against the production database.** Andy's call.
@@ -162,3 +177,13 @@ policies OR together, so a `game_entry` user can publish a recap.
 - **Verify uploads from the codeload tarball**, not
   `raw.githubusercontent.com`, and wait a minute before concluding a
   step failed.
+- **Upload a batch as ONE commit** — GitHub's Add file → Upload files,
+  not the pencil icon per file. One commit is one Vercel deploy; editing
+  16 files individually is 16 builds, and that hit the deploy limit on
+  23 Aug and blocked a release.
+- **`www.statchat.co` is the canonical hostname.** The apex redirects to
+  it. Anything configured against the bare apex — Supabase Site URL, vMix
+  inputs, share links — should be checked.
+- **Read the log before explaining a failure.** Vercel Deployments,
+  Supabase Auth Logs, the browser address bar. Four theories were offered
+  ahead of their evidence on 23 Aug and two were simply wrong.

@@ -2842,7 +2842,111 @@ to the application and is recorded as an accepted delta.
 
 ---
 
-## RESUME HERE — multi-tenancy, step 1 (opened 23 August 2026)
+## RESUME HERE — password reset, then multi-tenancy step 1
+
+**FIRST, and it is small: finish the password reset flow.** It is half
+proven and stuck on configuration, not code. Details in the section below
+this one. Then pick up multi-tenancy step 1 as originally planned.
+
+---
+
+## PASSWORD RESET — code DONE, flow NOT YET PROVEN end to end (23 Aug)
+
+`login.html` (20,657 bytes, live in the repo) now has a "Forgot your
+password?" link, an email box and a `resetPasswordForEmail` call. Sixteen
+jsdom checks pass and each was mutation-tested. The receiving half —
+`type=recovery` in the hash opening a set-password screen — was already
+built with the invite flow and had simply been unreachable.
+
+**What was proven:** the emailed link resolves correctly to
+`https://www.statchat.co/login.html`, and Supabase answered
+`error_code=user_banned`, which means every step up to the account check
+worked.
+
+**What was NOT proven:** actually setting a new password. The account was
+banned (`banned_until` set — nobody knows by what, worth finding out);
+after unbanning, the next reset produced no email at all.
+
+### Next session, in order
+
+  1. **Supabase → Logs → Auth Logs**, last few minutes. Every reset
+     attempt is there with its outcome. Also check the browser console
+     while requesting one: the code logs `resetPasswordForEmail: <msg>`.
+     The success message is deliberately identical whether or not the
+     address exists, so a rate limit and a wrong address look the same
+     from outside — the log is the only way to tell.
+  2. **Confirm the unban took.** Authentication → Users. A banned user
+     gets no auth email at all.
+  3. Once an email arrives, follow it through to setting a new password.
+     That is the only step still unproven.
+
+### Two REAL blockers this exposed
+
+- [ ] **`login.html` ignores `error` in the URL hash.** It parses `type`
+  and nothing else, so a banned account, an expired link and an
+  already-consumed link all produce a plain sign-in form with no
+  explanation. Expired links are ROUTINE — they are single-use and
+  corporate mail scanners often fetch every link in an email before the
+  recipient sees it, burning the token. The user then assumes nothing
+  sent and burns another. Fix: read `error_description` from the hash,
+  show it on the sign-in view, offer a fresh link. ~15 minutes.
+- [ ] **Custom SMTP, before selling.** Supabase's built-in email is
+  explicitly development-only: low hourly caps, no deliverability
+  guarantee, shared infrastructure, and a sender address that is not
+  yours. A coach who cannot reset a password on a Friday night is a
+  support call nobody can answer. Authentication → Emails → SMTP
+  Settings; Resend, Postmark, SendGrid or SES.
+
+### Settle `www` vs the apex
+
+`www.statchat.co` is canonical — the apex redirects to it, and the reset
+link confirmed it. Everything should agree and currently does not:
+Supabase Site URL should be `https://www.statchat.co/login.html`, and the
+vMix input URLs and any share links already handed out should be checked
+against the same hostname. Two hostnames both half-configured is how a
+broken password reset survives unnoticed for months.
+
+---
+
+## THE PUBLIC SITE — DONE and live 23 August 2026
+
+`statchat.co` now serves a one-page brochure; the app's sign-in moved to
+`login.html`. Verified live. See PROJECT_NOTES, "Splitting the brochure
+from the app".
+
+    index.html      the brochure (new)
+    login.html      the sign-in page, formerly index.html
+    14 app files    28 redirects repointed from '/' to '/login.html'
+
+Everything else is untouched by design — the `/g/:token` share links, the
+vMix input URLs and every deep link still work.
+
+### Open decisions on the brochure
+
+- [ ] **The $149 stats-only tier is OFF the page.** `GO_TO_MARKET.md`
+  says it is unsettled; publishing a price is harder to retract than to
+  add. Decide, then add or leave it out deliberately.
+- [ ] **No competitor is named.** The positioning against TurboStats and
+  SnapStat is sharp in the GTM doc; naming them publicly is a different
+  decision.
+- [ ] **`hello@statchat.co` is a placeholder** in the two contact links.
+
+### Two process lessons that cost real time
+
+- **One commit = one Vercel deploy.** GitHub's pencil-edit path commits
+  per file, and this session crossed the free-tier 100-deploys-per-day
+  limit, which blocked the brochure from shipping. Use **Add file →
+  Upload files** and drag the whole batch: one commit, one deploy.
+  Presenting files one at a time is right for avoiding a name collision
+  and wrong for the deploy budget; weigh both.
+- **When a push does not appear, read the Deployments list first.**
+  Three explanations were offered for the brochure not showing and none
+  was checked against the log. What fixed it was re-uploading as one
+  batch.
+
+---
+
+## MULTI-TENANCY, step 1 (opened 23 August 2026)
 
 Step 0 is closed and the repo is tidy. The next session picks up at
 **step 1 of `MULTI_TENANT_PLAN.md`: design the overlay auth.** The plan
