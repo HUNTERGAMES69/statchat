@@ -18,6 +18,7 @@
 // waits for the whistle.
 
 const { createClient } = require('@supabase/supabase-js');
+const { tenantFromKey } = require('./_tenant');
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
@@ -34,11 +35,19 @@ module.exports = async (req, res) => {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 
+  // NO AUTHENTICATION AT ALL until 24 Aug 2026. This one serves a whole
+  // SEASON — every game, every play, every roster — to anyone who found
+  // the URL. The service role bypasses the 009 policies, so the key
+  // check below is the only thing scoping it.
+  const { tenantId, error: keyError, status: keyStatus } =
+    await tenantFromKey(db, (req.query && req.query.key));
+  if (keyError) { res.status(keyStatus).json({ error: keyError }); return; }
+
   try {
     const q = req.query || {};
     const teamRes = await db.from('teams')
       .select('primary_color, secondary_color, logo_url, name, current_season_year')
-      .eq('is_our_team', true).limit(1);
+      .eq('tenant_id', tenantId).limit(1);
     const ourBranding = (teamRes.data || [])[0] || {};
 
     // An explicit season wins; otherwise the team's current one. Without
@@ -57,6 +66,9 @@ module.exports = async (req, res) => {
 
     const { data: games, error: gamesErr } = await db.from('games')
       .select('*').eq('season_year', season).eq('status', 'final')
+      // SCOPED. Without this the endpoint returns every school's season
+      // for that year, not just the one whose key was presented.
+      .eq('tenant_id', tenantId)
       .order('game_date', { ascending: true });
     if (gamesErr) throw gamesErr;
 

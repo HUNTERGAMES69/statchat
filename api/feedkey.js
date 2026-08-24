@@ -56,7 +56,7 @@ module.exports = async (req, res) => {
     // Admin and game_entry only. A `view` account views -- and this hands
     // out a credential, however weak.
     const { data: profile } = await admin
-      .from('profiles').select('role').eq('id', userData.user.id).limit(1);
+      .from('profiles').select('role, tenant_id').eq('id', userData.user.id).limit(1);
     const role = ((profile || [])[0] || {}).role || 'view';
     if (role !== 'admin' && role !== 'game_entry') {
       res.status(403).json({ error: 'Not permitted' });
@@ -66,9 +66,25 @@ module.exports = async (req, res) => {
     // No FEED_KEY configured means the feed is ungated, so there is
     // nothing to hand out and the addresses work without one. Say so
     // rather than returning an empty string that looks like a failure.
+    // THE CALLER'S OWN TENANT KEY, not an environment variable.
+    // ------------------------------------------------------------------
+    // This used to return process.env.FEED_KEY — one secret shared by
+    // every installation. Since 010 each school has its own, stored on
+    // its tenants row, and a school may only ever be handed its own.
+    //
+    // The super admin has no tenant of its own and therefore no key to
+    // fetch. That is correct rather than an oversight: there is
+    // deliberately NO MASTER KEY, so the platform reads another school's
+    // feed through the audited path, not by holding a secret.
+    const { data: tenantRows, error: tenantErr } = await adminClient
+      .from('tenants').select('feed_key')
+      .eq('id', profileRows[0].tenant_id).limit(1);
+    if (tenantErr) { res.status(500).json({ error: tenantErr.message }); return; }
+    const tenantKey = ((tenantRows || [])[0] || {}).feed_key || null;
+
     res.status(200).json({
-      key: process.env.FEED_KEY || null,
-      configured: !!process.env.FEED_KEY
+      key: tenantKey,
+      configured: !!tenantKey
     });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });

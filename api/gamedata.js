@@ -18,6 +18,7 @@
 //   GET /api/gamedata?id=<gameId>
 
 const { createClient } = require('@supabase/supabase-js');
+const { tenantFromKey } = require('./_tenant');
 
 module.exports = async (req, res) => {
   // The overlay may be served from a different origin than the API in
@@ -49,9 +50,19 @@ module.exports = async (req, res) => {
     return;
   }
 
+  // THIS ENDPOINT HAD NO AUTHENTICATION AT ALL until 24 Aug 2026 — no
+  // key, no token, nothing. With one school that exposed one school's
+  // live game to anyone who found the URL, which was a known and
+  // accepted position. With two it is a cross-tenant leak, and the
+  // service role bypasses the 009 policies, so nothing downstream would
+  // have caught it.
   const db = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
     auth: { autoRefreshToken: false, persistSession: false }
   });
+
+  const { tenantId, error: keyError, status: keyStatus } =
+    await tenantFromKey(db, (req.query && req.query.key));
+  if (keyError) { res.status(keyStatus).json({ error: keyError }); return; }
 
   try {
     // Resolve the game: an explicit id, else the FLAGGED game. Nothing
@@ -74,7 +85,7 @@ module.exports = async (req, res) => {
     let resolvedId = gameId, resolvedBy = 'id';
     if (!resolvedId) {
       const { data: flagged } = await db.from('games')
-        .select('id').eq('is_broadcast', true).limit(1);
+        .select('id').eq('is_broadcast', true).eq('tenant_id', tenantId).limit(1);
       if ((flagged || [])[0]) {
         resolvedId = flagged[0].id; resolvedBy = 'broadcast flag';
       }
@@ -85,10 +96,12 @@ module.exports = async (req, res) => {
     }
 
     const [gameRes, rosterRes, playsRes, teamRes] = await Promise.all([
-      db.from('games').select('*').eq('id', resolvedId).limit(1),
+      // SCOPED. `?id=` is caller-supplied, so without this a request could
+        // name any school's game by id and be handed it.
+        db.from('games').select('*').eq('id', resolvedId).eq('tenant_id', tenantId).limit(1),
       db.from('game_rosters').select('*').eq('game_id', resolvedId),
       db.from('plays').select('*').eq('game_id', resolvedId).order('sequence_number', { ascending: true }),
-      db.from('teams').select('primary_color, secondary_color, logo_url').eq('is_our_team', true).limit(1)
+      db.from('teams').select('primary_color, secondary_color, logo_url').eq('tenant_id', tenantId).limit(1)
     ]);
 
     const game = (gameRes.data || [])[0];

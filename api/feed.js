@@ -21,6 +21,7 @@
 // scoreboard, and RLS protects everything that matters.
 
 const { createClient } = require('@supabase/supabase-js');
+const { tenantFromKey } = require('./_tenant');
 const engine = require('./_engine.js');
 const { countPossessions, countTurnovers, quarterLabel } = engine;
 
@@ -241,12 +242,6 @@ module.exports = async (req, res) => {
   const view = String(q.view || 'score').toLowerCase();
   const format = String(q.format || 'xml').toLowerCase();
 
-  const FEED_KEY = process.env.FEED_KEY;
-  if (FEED_KEY && String(q.key || '') !== FEED_KEY) {
-    res.status(401).json({ error: 'Invalid or missing key' });
-    return;
-  }
-
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
   if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
@@ -258,10 +253,25 @@ module.exports = async (req, res) => {
     auth: { autoRefreshToken: false, persistSession: false }
   });
 
+  // THE KEY IS NOW THE TENANT, not a single shared secret. See
+  // api/_tenant.js for why, and for why the old `if (FEED_KEY && ...)`
+  // could not simply be deleted — it only checked the key IF the
+  // variable was set, so unsetting it opened the feed to everyone.
+  //
+  // This runs BEFORE any query. The service role bypasses RLS, so
+  // nothing downstream will stop a caller reading another school.
+  const { tenantId, error: keyError, status: keyStatus } =
+    await tenantFromKey(db, q.key);
+  if (keyError) { res.status(keyStatus).json({ error: keyError }); return; }
+
   try {
     // Which game? THE FLAG, and only the flag.
+    // SCOPED TO THE TENANT THE KEY NAMES. Without this the endpoint
+    // serves whichever school happens to be on air — and after 010 the
+    // broadcast flag is unique PER TENANT, so with two schools
+    // broadcasting there are genuinely two rows to choose between.
     let { data: flagged } = await db.from('games')
-      .select('*').eq('is_broadcast', true).limit(1);
+      .select('*').eq('is_broadcast', true).eq('tenant_id', tenantId).limit(1);
     let game = (flagged || [])[0];
     let resolvedBy = 'broadcast flag';
     // THE in-progress FALLBACK WAS REMOVED, 22 Aug 2026 -- see the note in
@@ -282,7 +292,13 @@ module.exports = async (req, res) => {
       db.from('plays').select('*').eq('game_id', game.id)
         .order('sequence_number', { ascending: true }),
       db.from('teams').select('primary_color, secondary_color, logo_url')
-        .eq('is_our_team', true).limit(1)
+        .eq('tenant_id', tenantId).limit(1)
+        // ^ BRANDING BY TENANT, not by is_our_team. Hazard 0 inside a
+        // service-key endpoint, where it is worse than in the app: RLS
+        // would have scoped it there, and here nothing does. With two
+        // schools `is_our_team` matches a row in EACH, and an unordered
+        // limit(1) returns whichever Postgres feels like — the overlay
+        // would wear the wrong school's colours, with no error anywhere
     ]);
 
     const ctx = engine.buildContext(game, rosterRes.data || [],
