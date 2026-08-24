@@ -2993,6 +2993,35 @@ Three layout faults fixed, reasoning in PROJECT_NOTES:
 
 ---
 
+## ACCURACY GOLDEN IS STALE — found 24 August 2026
+
+`node tests/accuracy_check.js` reports **4 changed paths against the
+committed `accuracy.golden.json`**, and it did so BEFORE any change made
+on 24 Aug — verified by running it against the pristine `engine.js` from
+the repo and getting the identical result.
+
+The four are all the same thing:
+
+    was: Returner returns=1 retYds=9 retLong=9
+    now: Returner puntRet=1 puntRetYds=9 puntRetLong=9
+
+That is the **kick/punt return split of 22 August**. The golden snapshot
+was never re-blessed afterwards, so the check has been failing for two
+days for anyone who ran it — which is presumably why nobody has.
+
+- [ ] **Re-bless `accuracy.golden.json`, deliberately.** Re-blessing
+  accepts whatever the engine currently does as correct, so the four
+  paths want a look first. They are almost certainly right — splitting
+  kick and punt returns was the intended change — but "almost certainly"
+  is the wrong standard for the file every other engine change is
+  measured against. `node tests/accuracy_check.js --update`, then read
+  the diff before committing it.
+- **Until it is re-blessed, the check cannot detect a real regression**,
+  because it is already failing. That is worse than having no check: a
+  fifth failure would arrive among four expected ones.
+
+---
+
 ## TOKENIZATION AND DARK MODE — measured 24 Aug, DEFERRED
 
 Not a prerequisite for multi-tenancy; the two do not touch. Deferred on

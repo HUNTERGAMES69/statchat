@@ -775,6 +775,27 @@ candidate answers:
 **DECIDED 24 Aug: both.** Neutral greys as the fallback, AND the tenant
 admin's first login lands on Customize with the two names filled in.
 
+**DONE 24 Aug: the neutrals are in.** Thirty fallbacks across thirteen
+files — including both copies of `engine.js` — replaced:
+
+    our team    '#1a1a2e'  navy      ->  '#2b3440'  slate
+    opponent    '#8B0000'  dark red  ->  '#6e7885'  grey
+
+Two neutrals rather than one, so home and away stay distinguishable when
+neither school has set a colour, separated by lightness rather than hue
+so nothing reads as a team identity. Both carry white text, which is what
+the `secondary_color` fallback supplies.
+
+**Done NOW precisely because it changes nothing.** Neville has colours
+set, so every one of these `||` branches is dead code today. Landing it
+during the tenancy migration would have meant no way to tell a colour
+problem caused by the neutrals from one caused by the tenant work.
+
+Only `primary_color ||` and `secondary_color ||` expressions were
+touched; a blanket replace would have hit unrelated navy in stylesheets
+and chart palettes. Every file verified as reversible — putting the old
+values back reproduces the original byte for byte.
+
 Both rather than either, and Andy's reason is the right one: landing on
 Customize handles the ordinary case, and the greys protect the case where
 somebody skips it. A default that is only correct if a screen gets

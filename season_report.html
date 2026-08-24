@@ -5,9 +5,6 @@
 <!-- Without this every page load logs a 404 for /favicon.ico.
      Harmless, but a red console error should MEAN something. -->
 <link rel="icon" href="favicon.ico" sizes="any">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&display=swap" rel="stylesheet">
 <link rel="icon" href="logo.png" type="image/png">
 <!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
      below still wins -- that ordering is what lets a page be converted
@@ -41,16 +38,7 @@
   .msg { padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:14px; }
   .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
   .report-header { position:relative; text-align:center; margin-bottom:16px; background:#fff; border:1px solid #ddd; padding:16px; }
-  /* A LOCKUP, not a bare logo. A 60px mark alone in the corner reads as
-     a watermark; with the wordmark beside it at a smaller size it reads
-     as a masthead, matching recap.html, the sign-in page and statchat.co. */
-  .statchat-mark { position:absolute; top:12px; right:14px; display:flex;
-                   align-items:center; gap:7px; }
-  .statchat-mark img { width:24px; height:24px; border-radius:5px; display:block; }
-  .statchat-mark span { font-family:'Barlow Condensed', -apple-system, BlinkMacSystemFont,
-                        'Segoe UI', Arial, sans-serif;
-                        font-weight:700; font-size:18px; line-height:1; text-transform:uppercase;
-                        letter-spacing:0.04em; color:var(--sc-navy, #1a1a2e); }
+  .statchat-logo { position:absolute; top:12px; right:12px; width:60px; height:auto; border-radius:6px; }
   .report-header h1 { font-size:18px; margin:0 0 4px; }
   .report-header .sub { color:#666; font-size:13px; }
   .report-header .record { font-size:13px; font-weight:600; margin-top:4px; }
@@ -96,20 +84,13 @@
   /* Four series plus their point labels; 240px letterboxes it. */
   .chart-box.tall { height:285px; }
 
-  /* NOTE: this block FIRES WHEN PRINTING. Letter paper minus this
-     file's 8mm @page margins is about 755px of layout width, which is
-     under 767. That is deliberate to leave alone -- the heights and
-     paddings here suit a printed sheet as well as a phone -- but it is
-     why the one rule below had to change rather than the media query. */
   @media (max-width: 767px) {
     .wrap { padding:14px 12px 40px; }
     .topbar { flex-wrap:wrap; gap:10px; }
     .topbar .actions { width:100%; }
     .topbar .actions button { flex:1; }
     .report-header { padding:14px; }
-    .statchat-mark { top:10px; right:10px; gap:5px; }
-    .statchat-mark img { width:20px; height:20px; }
-    .statchat-mark span { font-size:15px; }
+    .statchat-logo { width:44px; top:10px; right:10px; }
     .section { padding:12px; }
     .metric-grid { grid-template-columns:repeat(auto-fit, minmax(88px, 1fr)); gap:8px; }
     .metric-tile .metric-val { font-size:19px; }
@@ -119,13 +100,7 @@
        rules that used to restore metric/chart pairing here are gone with
        the grids that needed them. */
     .chart-box { height:210px; }
-    /* `max-width:none` USED TO BE HERE, and it is what un-centred the
-       four fixed-bar-count charts on paper: with no cap the box fills
-       the column, and `margin-inline:auto` has no spare space left to
-       distribute. Lifting the cap was meant for a phone narrower than
-       430px, where it changes nothing anyway -- so it cost the print
-       layout something and bought the phone nothing. */
-    .chart-box.compact { height:200px; }
+    .chart-box.compact { height:200px; max-width:none; }
     .chart-box.tall { height:250px; }
     .chart-col-metrics { justify-content:space-between; }
 
@@ -199,24 +174,11 @@
        bottom of the final printed sheet, so if the content happens to end
        low on the page the logo moves to the next one. 42mm is chosen to
        clear the common case without being so large it usually spills. */
-    /* WAS 42mm, WHICH IS WHY THE END MARK KEPT LANDING ON A PAGE OF ITS
-       OWN. The old comment admitted the flaw and then chose a number
-       anyway. A margin cannot anchor anything to the bottom of a sheet,
-       so every value large enough to LOOK like a footer is also large
-       enough to spill — the failure is in the mechanism, not the number.
-       Abandoned rather than retuned. `.print-footer` is position:fixed
-       and does anchor; that is what sits at the foot of every page. */
-    .print-endmark { display:flex; align-items:center; justify-content:center; gap:8px;
-                     margin:14mm 0 0; padding-top:14px;
+    .print-endmark { display:flex; align-items:center; justify-content:center;
+                     margin:42mm 0 0; padding-top:18px;
                      border-top:1px solid var(--sc-rule, #e6e6e6);
-                     page-break-inside:avoid; break-inside:avoid;
-                     page-break-before:avoid; break-before:avoid; }
-    .print-endmark img { width:24px; height:24px; border-radius:5px; }
-    .print-endmark span { font-family:'Barlow Condensed', -apple-system, BlinkMacSystemFont,
-                          'Segoe UI', Arial, sans-serif;
-                          font-weight:700; font-size:17px; line-height:1;
-                          text-transform:uppercase; letter-spacing:0.04em;
-                          color:var(--sc-ink-muted, #9aa3b2); }
+                     page-break-inside:avoid; break-inside:avoid; }
+    .print-endmark img { width:38px; height:38px; border-radius:7px; }
 
     /* BACKGROUNDS MUST BE TOLD TO PRINT.
        Browsers drop background colours from printed output by default --
@@ -379,10 +341,10 @@ function isAdminMarker(p){
   function buildTeams(game, rosterRows, ourBranding){
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
     const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
-    TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
+    TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#2b3440', text: ourBranding.secondary_color || '#ffffff',
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, rosterUnassigned:{}, posOffense:{}, logo: ourBranding.logo_url || null,
       isHome: !!game.our_team_is_home };
-    const oppPrimary = game.opponent_primary_color || '#8B0000', oppSecondary = game.opponent_secondary_color || '#ffffff';
+    const oppPrimary = game.opponent_primary_color || '#6e7885', oppSecondary = game.opponent_secondary_color || '#ffffff';
     TEAMS.teamB = { name: oppName, bg: oppPrimary, text: oppSecondary,
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, rosterUnassigned:{}, posOffense:{}, logo: game.opponent_logo_url || null,
       isHome: !game.our_team_is_home };
@@ -828,7 +790,7 @@ function isAdminMarker(p){
     const per = (v) => gamesPlayed ? +(v/gamesPlayed).toFixed(1) : 0;
     const pct = (c,a) => a ? Math.round(100*c/a) : 0;
 
-    let html = '<div class="report-header"><div class="statchat-mark"><img src="logo.png" alt=""><span>StatChat</span></div>' +
+    let html = '<div class="report-header"><img class="statchat-logo" src="logo.png" alt="StatChat">' +
       '<h1>' + TEAMS.teamA.name + ' — ' + seasonYearLabel + ' season</h1>' +
       '<div class="record">' + seasonAgg.wins + '-' + seasonAgg.losses + (seasonAgg.ties ? '-' + seasonAgg.ties : '') +
       ' &middot; ' + gamesPlayed + ' games</div></div>';
@@ -1035,7 +997,7 @@ function isAdminMarker(p){
     // no "last sheet" selector), so the duplicate had to go from the half
     // that CAN be changed. The logo sits above the footer line and the
     // two read as one mark.
-    html += '<div class="print-endmark"><img src="logo.png" alt=""><span>StatChat</span></div>';
+    html += '<div class="print-endmark"><img src="logo.png" alt="StatChat"></div>';
     return html;
   }
 
@@ -1091,8 +1053,8 @@ function isAdminMarker(p){
     // Chart colors are derived from the team's own branded primary/
     // secondary colors (set in account settings), not a fixed
     // categorical palette, so the report visually matches the team.
-    const primary = seasonAgg.ourBranding.primary_color || '#1a1a2e';
-    const secondary = seasonAgg.ourBranding.secondary_color || '#8B0000';
+    const primary = seasonAgg.ourBranding.primary_color || '#2b3440';
+    const secondary = seasonAgg.ourBranding.secondary_color || '#6e7885';
     const primaryLight = lighten(primary, 0.45);
     const secondaryLight = lighten(secondary, 0.45);
 

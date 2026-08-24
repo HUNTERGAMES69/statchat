@@ -1461,9 +1461,9 @@
       });
       return out;
     };
-    TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#1a1a2e', text: ourBranding.secondary_color || '#ffffff',
+    TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#2b3440', text: ourBranding.secondary_color || '#ffffff',
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, rosterUnassigned:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: ourBranding.logo_url || null, seedOrder: seedOrderFor('teamA'), seedPos: seedPosFor('teamA'), seedIdentity: seedIdentityFor('teamA') };
-    TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#8B0000', text: game.opponent_secondary_color || '#ffffff',
+    TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#6e7885', text: game.opponent_secondary_color || '#ffffff',
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, rosterUnassigned:{}, posOffense:{}, posDefense:{}, posSpecialTeams:{}, logo: game.opponent_logo_url || null, seedOrder: seedOrderFor('teamB'), seedPos: seedPosFor('teamB'), seedIdentity: seedIdentityFor('teamB') };
     TEAMS.teamA.ambiguousOffense = {}; TEAMS.teamA.ambiguousDefense = {}; TEAMS.teamA.ambiguousSpecialTeams = {};
     TEAMS.teamB.ambiguousOffense = {}; TEAMS.teamB.ambiguousDefense = {}; TEAMS.teamB.ambiguousSpecialTeams = {};
@@ -2074,37 +2074,7 @@ function parseInput(raw, state){
     const which = penMatch[1].toLowerCase();
     const yds = parseInt(tokens[1]) || 0;
     const team = which === 'po' ? off : def;
-    // 'sp:<marker>' = SPOT OF THE FOUL, optional. The penalty is walked
-    // off from where the foul happened rather than from where the ball
-    // currently is -- a hold during a punt return being the case that
-    // asked for it.
-    //
-    // THE EFFECT SHAPE DOES NOT CHANGE. This resolves to a different
-    // `fieldDelta` and nothing more, so engine.js, view.html's penalty
-    // rendering, the feed and all four reports keep working untouched.
-    // That matters because engine.js is duplicated across five files and
-    // any change to it means re-blessing accuracy.golden.json; a new
-    // effect field would have cost all of that to move a ball spot.
-    //
-    // penaltyYds stays the PENALTY'S yardage -- 10 for a hold -- while
-    // fieldDelta carries the net movement of the ball. They were already
-    // separate fields, so the penalty-yards statistic stays honest
-    // instead of recording the net.
-    const spotTok = tokens.slice(2).find(t => /^sp:-?\d+$/i.test(t));
-    let spotFieldPos = null;
-    if (spotTok){
-      const marker = parseInt(spotTok.slice(3));
-      spotFieldPos = marker < 0 ? Math.abs(marker) : (100 - marker);
-    }
-    const enforcedFrom = spotFieldPos === null ? state.fieldPos : spotFieldPos;
-    const enforcedTo = enforcedFrom + (which === 'po' ? -yds : yds);
-    // Deliberately NOT clamped to the field. A spot that walks the ball
-    // past a goal line is a real entry error or a half-the-distance
-    // situation, and silently pinning it to the 0 or the 100 would hide
-    // which. The engine treats this the same as any other fieldDelta.
-    const fieldDelta = spotFieldPos === null
-      ? (which === 'po' ? -yds : yds)
-      : (enforcedTo - state.fieldPos);
+    const fieldDelta = which === 'po' ? -yds : yds;
     // 'f:slug' = the penalty type, OPTIONAL. Carried as a slug rather than
     // the display name because the code line is split on whitespace and
     // half these names contain spaces. PENALTIES is the single source for
@@ -2186,26 +2156,14 @@ function parseInput(raw, state){
       // Zero stays unsigned: "+0" and "-0" both read like a typo, and a
       // 0-yard penalty is a real entry when a foul walks off to the same
       // spot.
-      // With a spot, the sentence reports the PENALTY yardage and where
-      // it was walked off from -- "10 yards from own 25" -- because
-      // that is what a scorer reading the log back needs to check. The
-      // net field movement is the app's arithmetic, not the call.
       text: 'PENALTY, ' + (penName ? penName + ', ' : '') +
         'on ' + TEAMS[team].name + ', ' +
-        (spotFieldPos !== null
-          ? yds + (yds === 1 ? ' yard' : ' yards') +
-            ' from the spot of the foul at ' + markerLabel(spotFieldPos)
-          : (fieldDelta === 0 ? '0 yards'
-              : (fieldDelta > 0 ? '+' : '') + fieldDelta +
-                (Math.abs(fieldDelta) === 1 ? ' yard' : ' yards'))) +
+        (fieldDelta === 0 ? '0 yards'
+          : (fieldDelta > 0 ? '+' : '') + fieldDelta +
+            (Math.abs(fieldDelta) === 1 ? ' yard' : ' yards')) +
         (noDownChange ? ' (no down change)' : '') +
         (autoFirstDown ? ' (automatic first down)' : '') + downDistanceText,
       effect: Object.assign({ penaltyTeam: team, penaltyYds: yds, fieldDelta },
-        // Recorded so a later reader can tell a spot-enforced penalty
-        // from an ordinary one without re-deriving it from fieldDelta.
-        // Nothing consumes it yet; it costs one key and it is the only
-        // evidence that survives.
-        spotFieldPos !== null ? { penaltySpot: spotFieldPos } : {},
         // Stored as well as written into the text, so a penalty breakdown
         // by type is possible later without re-parsing prose.
         penName ? { penaltyName: penName } : {},
@@ -13039,29 +12997,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // design, not automatic detection. The human decides WHETHER a
         // rule applies; the app only computes the number once told to.
         '<button type="button" id="pen_half_dist_btn" class="secondary" style="padding:8px 12px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">Half the distance</button>' +
-        // SPOT OF THE FOUL. A toggle, not a click, because unlike half
-        // the distance it is not a one-time transform of the yardage --
-        // it changes WHERE the yardage is walked off from, and the
-        // scorer needs to see that it is still armed while they type the
-        // yard line.
-        //
-        // Andy, 24 Aug: this is IN ADDITION TO "Dead Ball / After Play",
-        // not instead of it. A hold on a punt return is enforced from
-        // the spot AND leaves the receiving team at 1st & 10, so both
-        // get pressed. Making the spot imply no-down-change would be
-        // wrong for a foul on a scrimmage play enforced from the spot,
-        // where the down does advance.
-        '<input autocomplete="off" type="checkbox" id="pen_spot" style="display:none;">' +
-        '<button type="button" id="pen_spot_toggle" class="ptoggle" ' +
-          'title="Walk the penalty off from where the foul happened, not from the current ball spot — a hold during a return, for example" ' +
-          'style="padding:8px 12px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">Spot of the foul</button>' +
-      '</div>' +
-      // The same spot control the punt, kickoff and bad-snap trees use.
-      // A third hand-rolled yard-line calculator was the alternative and
-      // this one is already understood by anyone who has entered a punt.
-      '<div id="pen_spot_wrap" style="display:none; margin-top:8px;">' +
-        startingSpotFieldsHtml('pen_spot', 'Spot of the foul', computeState().possession) +
-        '<div id="pen_spot_readout" style="font-size:13px; margin-top:6px;"></div>' +
       '</div>' +
       '<div id="pen_half_readout" style="display:none; font-size:13px; margin-top:6px;"></div>' +
       // "Dead Ball / After Play" -- Andy's wording, 22 Aug.
@@ -13202,49 +13137,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // reads the same way every other selection in the app already does.
       document.getElementById('pen_half_dist_btn').classList.add('picked');
     });
-    // Wired with the shared helper so the side buttons and the yard box
-    // behave exactly as they do on every other tree.
-    const penSpotGet = wireStartingSpot(panel, 'pen_spot');
-    function penSpotMarker(){
-      const r = penSpotGet();            // { down, distance, fieldPos } or null
-      if (!r || !isFinite(r.fieldPos)) return null;
-      // Back to the marker convention the code line uses: negative is
-      // our own side, positive is theirs. Same encoding as the
-      // down-and-distance adjust, so there is one convention not two.
-      return r.fieldPos <= 50 ? -r.fieldPos : (100 - r.fieldPos);
-    }
-    function paintPenSpot(){
-      const on = document.getElementById('pen_spot').checked;
-      document.getElementById('pen_spot_wrap').style.display = on ? 'block' : 'none';
-      const out = document.getElementById('pen_spot_readout');
-      if (!on){ out.textContent = ''; return; }
-      const marker = penSpotMarker();
-      const yds = parseInt(document.getElementById('pen_yds').value.trim());
-      if (marker === null || !isFinite(yds)){
-        out.textContent = 'Pick a side and a yard line.';
-        out.style.color = '#888';
-        return;
-      }
-      const spotFp = marker < 0 ? Math.abs(marker) : (100 - marker);
-      const enforced = spotFp + (penTeam === 'off' ? -yds : yds);
-      // SHOW THE WORKING. The same reasoning as the tackled-on
-      // calculator: a scorer who can see the arithmetic will catch a
-      // mis-typed yard line, and one who cannot will not.
-      out.innerHTML = 'From ' + markerLabel(spotFp) + ', ' +
-        (penTeam === 'off' ? 'back ' : 'forward ') + yds + ' yards &rarr; <b>' +
-        markerLabel(Math.max(0, Math.min(100, enforced))) + '</b>' +
-        ((enforced < 0 || enforced > 100) ? ' — beyond the goal line; use Half the distance' : '');
-      out.style.color = (enforced < 0 || enforced > 100) ? '#a32d2d' : '#1a4d2e';
-    }
-    document.getElementById('pen_spot_toggle').addEventListener('click', () => {
-      setToggle('pen_spot', !document.getElementById('pen_spot').checked);
-      paintPenSpot();
-    });
-    panel.querySelectorAll('.pen_spot_side').forEach(b => b.addEventListener('click', paintPenSpot));
-    const penSpotYl = document.getElementById('pen_spot_yardline');
-    if (penSpotYl) penSpotYl.addEventListener('input', paintPenSpot);
-    document.getElementById('pen_yds').addEventListener('input', paintPenSpot);
-
     document.getElementById('pen_clear').addEventListener('click', collapsePlayPanel);
     document.getElementById('pen_review').addEventListener('click', () => {
       const yds = document.getElementById('pen_yds').value.trim();
@@ -13253,18 +13145,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const firstDown = document.getElementById('pen_first_down').checked;
       const lossOfDown = document.getElementById('pen_lod').checked;
       const penType = (document.getElementById('pen_type') || {}).value || '';
-      // sp:<marker> only when the toggle is on AND a spot was actually
-      // entered. An armed toggle with an empty yard line must not
-      // silently fall back to the current spot -- that would look like
-      // it worked and place the ball wrong.
-      const spotMarker = document.getElementById('pen_spot').checked ? penSpotMarker() : null;
-      if (document.getElementById('pen_spot').checked && spotMarker === null){
-        showMsg('gameMsg', 'Spot of the foul is on but no yard line is set — pick a side and a yard line, or turn it off.', 'error');
-        return;
-      }
       const code = (penTeam === 'off' ? 'po' : 'pd') + ' ' + yds +
         (penType ? ' f:' + penType : '') +
-        (spotMarker !== null ? ' sp:' + spotMarker : '') +
         (noDown ? ' nd' : '') + (firstDown ? ' fd' : '') + (lossOfDown ? ' ld' : '');
       document.getElementById('code').value = code;
       showConfirm();

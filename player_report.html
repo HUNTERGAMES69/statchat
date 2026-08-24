@@ -3,9 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <link rel="icon" href="favicon.ico" sizes="any">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&display=swap" rel="stylesheet">
 <link rel="icon" href="logo.png" type="image/png">
 <!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
      below still wins -- that ordering is what lets a page be converted
@@ -50,22 +47,7 @@
   .team-band .tb-sub { margin-left:auto; font-weight:600; letter-spacing:0.06em;
                        opacity:0.85; text-transform:none; font-size:11px; }
 
-  /* position:relative so the StatChat mark can sit in its corner. */
-  .player-head { display:flex; align-items:center; gap:16px; position:relative; }
-  /* THE ONLY REPORT THAT CARRIED NO STATCHAT BRANDING in its header --
-     recap, season and stat package all do. The team logo beside the
-     player's name says whose player it is; this says whose report it is. */
-  .statchat-mark { position:absolute; top:0; right:0; display:flex;
-                   align-items:center; gap:7px; }
-  .statchat-mark img { width:24px; height:24px; border-radius:5px; display:block; }
-  .statchat-mark span { font-family:'Barlow Condensed', -apple-system, BlinkMacSystemFont,
-                        'Segoe UI', Arial, sans-serif;
-                        font-weight:700; font-size:18px; line-height:1; text-transform:uppercase;
-                        letter-spacing:0.04em; color:var(--sc-navy, #1a1a2e); }
-  @media (max-width:640px){
-    .statchat-mark img { width:20px; height:20px; }
-    .statchat-mark span { font-size:15px; }
-  }
+  .player-head { display:flex; align-items:center; gap:16px; }
   .player-logo { width:52px; height:52px; object-fit:contain; flex-shrink:0; }
   .player-name { font-size:26px; font-weight:800; letter-spacing:-0.02em; line-height:1.1; }
   .player-meta { font-size:13px; color:#7c8794; margin-top:3px; }
@@ -161,36 +143,8 @@
     body { background:#fff; }
     .wrap { max-width:none; padding:0 24px; }
     .no-print { display:none !important; }
-    /* CARDS MAY BREAK ACROSS PAGES. They used to carry
-       `break-inside:avoid`, and that one declaration caused BOTH faults
-       in the printed report:
-         * page one held the header and nothing else, because the first
-           stat card could not fit beneath it and so moved wholesale to
-           page two;
-         * the end mark landed on a sheet of its own, because the last
-           card filled its page and left nowhere for the mark to sit --
-           and honouring its `break-before:avoid` would have required
-           moving the whole unbreakable card, which the browser declines.
-       A card here is most of a page tall. `break-inside:avoid` on a
-       block taller than the space available is a hope about space, not a
-       rule about a boundary (see PROJECT_NOTES, 15 Aug) -- the browser
-       cannot satisfy it and resolves it however it likes.
-       So the card flows, and the pieces that must NOT be split say so
-       individually below. Those are all short enough that the request
-       can actually be granted. */
-    .card { box-shadow:none; border:1px solid #ddd; }
-    /* A heading never parts from what it introduces. */
-    .sec-head, .team-band { page-break-after:avoid; break-after:avoid; }
-    /* Each of these is a few centimetres at most, so "keep together" is
-       a request a print engine can honour. */
-    .totals, .tot, .splits, .sp, .trend-cols, .trend-bars, .cols,
-    .chart-key, .bar-row { page-break-inside:avoid; break-inside:avoid; }
-    /* Tables may split -- a nine-row game log across a page boundary is
-       ordinary and readable -- but never leave one or two rows stranded. */
-    table { page-break-inside:auto; }
-    tbody tr { page-break-inside:avoid; break-inside:avoid; }
-    thead { display:table-header-group; }
-    tfoot { display:table-footer-group; }
+    .card { box-shadow:none; border:1px solid #ddd; page-break-inside:avoid;
+            break-inside:avoid; }
     .sec-eyebrow { display:block; }
     .team-band, .card, tbody tr {
       -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -205,42 +159,17 @@
        break-before:avoid is the part that actually enforces it: it tells
        the browser not to start a new page immediately before the mark, so
        it stays with the content it belongs to. */
-    .print-endmark { display:flex; align-items:center; justify-content:center; gap:8px;
-                     margin:14mm 0 0; padding-top:14px;
+    .print-endmark { display:flex; align-items:center; justify-content:center;
+                     margin:24px 0 0; padding-top:16px;
                      border-top:1px solid var(--sc-rule, #e6e6e6);
                      page-break-before:avoid; break-before:avoid;
                      page-break-inside:avoid; break-inside:avoid; }
-    .print-endmark img { width:24px; height:24px; border-radius:5px; }
-    .print-endmark span { font-family:'Barlow Condensed', -apple-system, BlinkMacSystemFont,
-                          'Segoe UI', Arial, sans-serif;
-                          font-weight:700; font-size:17px; line-height:1;
-                          text-transform:uppercase; letter-spacing:0.04em;
-                          color:var(--sc-ink-muted, #9aa3b2); }
+    .print-endmark img { width:38px; height:38px; border-radius:7px; }
     /* Print gets the columns whatever the screen was doing -- a sheet of
        paper is always wide enough. */
     .trend-cols { display:block !important; }
     .trend-bars { display:none !important; }
-
-    /* ---- MAKING A CARD FIT A SHEET ---------------------------------
-       Letting cards break (the fix that emptied page one) left each
-       card's closing block stranded at the top of the next page with the
-       card border cut across the boundary. Breaking gracefully is not
-       the same as fitting, and the honest fix is to make the card
-       shorter rather than to keep choosing where to cut it.
-       Two blocks were spending a whole row each on nothing:
-         * the top tiles wrapped 5 + 1, because auto-fit at 110px only
-           reaches five columns in the printable width;
-         * the closing splits ran two columns by three rows, a screen
-           layout carried onto a sheet that is wider than it is.
-       Both now fit one and two rows respectively, which is about 150px
-       back -- roughly the overspill. The chart gives up a little more. */
-    .totals { grid-template-columns:repeat(auto-fit, minmax(88px, 1fr)); gap:7px; }
-    .tot { padding:8px 10px; }
-    .splits { grid-template-columns:repeat(3, 1fr); gap:8px; margin-top:12px; }
-    .sp { padding:8px 10px; }
-    .card { padding:12px 14px; margin-bottom:10px; }
-    .sec-head { margin:0 0 10px; }
-    .cols { height:118px; }
+    .cols { height:132px; }
     /* Pulled in so a player with three or four categories still lands in
        two pages rather than spilling a card onto a third. */
     .card { padding:14px 16px; margin-bottom:12px; }
@@ -347,11 +276,11 @@
   function buildTeams(game, rosterRows, branding){
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
     const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
-    TEAMS.teamA = { name: ourName, bg: branding.primary_color || '#1a1a2e',
+    TEAMS.teamA = { name: ourName, bg: branding.primary_color || '#2b3440',
       text: branding.secondary_color || '#ffffff',
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{},
       logo: branding.logo_url || null, isHome: !!game.our_team_is_home };
-    TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#8b0000',
+    TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#6e7885',
       text: game.opponent_secondary_color || '#ffffff',
       rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{},
       logo: game.opponent_logo_url || null, isHome: !game.our_team_is_home };
@@ -795,7 +724,6 @@
 
     let html = '<div class="card">' +
       '<div class="player-head">' +
-        '<div class="statchat-mark"><img src="logo.png" alt=""><span>StatChat</span></div>' +
         (logo ? '<img class="player-logo" src="' + logo + '">' : '') +
         '<div>' +
           '<div class="player-name">' + name + '</div>' +
@@ -913,7 +841,7 @@
         'in the selected season.</p></div>';
     }
 
-    html += '<div class="print-endmark"><img src="logo.png" alt=""><span>StatChat</span></div>';
+    html += '<div class="print-endmark"><img src="logo.png" alt="StatChat"></div>';
     return html;
   }
 
