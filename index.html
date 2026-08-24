@@ -203,6 +203,15 @@
   .drive .p{font-size:11px;color:#dfe6ec;line-height:1.35;margin-top:2px}
   .drive .p em{font-style:normal;color:var(--data);font-weight:600}
 
+  /* the stats section is two columns, so these graphics get roughly
+     twice the width of the four-across ones and can carry axis labels */
+  .g2w{display:flex;align-items:flex-end;gap:26px;height:84px;padding:0 8px}
+  .g2w .grp{flex:1;display:flex;align-items:flex-end;gap:6px;height:100%}
+  .g2w .grp i{flex:1;border-radius:2px 2px 0 0;position:relative}
+  .g2w .grp i b{position:absolute;top:-13px;left:0;right:0;text-align:center;
+                font-family:var(--mono);font-size:9.5px;font-weight:500;color:#9aa5b1}
+  .g2w .us{background:var(--data)} .g2w .them{background:#4a5563}
+
   /* 3 — the season report's grouped bars, us against them */
   .g2{display:flex;align-items:flex-end;gap:9px;height:62px}
   .g2 .grp{flex:1;display:flex;align-items:flex-end;gap:2px;height:100%}
@@ -271,12 +280,6 @@
   .mini td:first-child{text-align:left;color:var(--paper)}
   .mini tr:last-child td{border-bottom:none}
   .mini td.k{color:var(--data)}
-  .split{display:flex;gap:10px;align-items:center;font-family:var(--mono);font-size:10px;
-         color:#8d99a6;padding:4px 0}
-  .split .lbl{width:64px;color:var(--paper)}
-  .split .track{flex:1;height:7px;border-radius:3px;background:#161d25;overflow:hidden;display:flex}
-  .split .a{background:var(--brand)}
-  .split .b{background:#39424d}
 
   /* ---- setup, then a few taps ---- */
   .taps{display:grid;gap:1px;background:var(--edge);border:1px solid var(--edge);
@@ -414,6 +417,7 @@
     .g2{height:56px}
     .tree{grid-template-columns:46px 1fr;gap:6px}
     .tile b{font-size:14px}
+    .g2w{gap:16px;height:74px}
     .cmp th,.cmp td{padding:11px 12px}
     .incl span{font-size:13px;padding:6px 10px}
 
@@ -600,19 +604,14 @@
          Penalties and penalty yards. Time of possession, possessions, plays per game.
          Kept for your team <em>and</em> the opponent, from the same play log.</p>
       <div class="shot" aria-hidden="true">
-        <div class="shot-t">Team — Riverside v Northgate</div>
-        <div class="split"><span class="lbl">Total yds</span>
-          <span class="track"><i class="a" style="width:57%"></i><i class="b" style="width:43%"></i></span>
-          <span>284 / 211</span></div>
-        <div class="split"><span class="lbl">Rush</span>
-          <span class="track"><i class="a" style="width:42%"></i><i class="b" style="width:58%"></i></span>
-          <span>96 / 134</span></div>
-        <div class="split"><span class="lbl">Pass</span>
-          <span class="track"><i class="a" style="width:71%"></i><i class="b" style="width:29%"></i></span>
-          <span>188 / 77</span></div>
-        <div class="split"><span class="lbl">3rd down</span>
-          <span class="track"><i class="a" style="width:64%"></i><i class="b" style="width:36%"></i></span>
-          <span>55% / 31%</span></div>
+        <div class="shot-t">Season report — total yardage by half</div>
+        <div class="g2w">
+          <div class="grp"><i class="us" style="height:92%"><b>2547</b></i><i class="them" style="height:71%"><b>1979</b></i></div>
+          <div class="grp"><i class="us" style="height:46%"><b>1278</b></i><i class="them" style="height:57%"><b>1589</b></i></div>
+        </div>
+        <div class="chart-x" style="padding:0 8px"><span>1st half</span><span>2nd half</span></div>
+        <div class="lgd" style="padding:0 8px"><span><i style="background:var(--data)"></i>Riverside</span>
+          <span><i style="background:#4a5563"></i>Opponent</span></div>
       </div>
     </div>
     <div class="cell">
@@ -643,15 +642,30 @@
       <p>Charted, not tabulated, and in a season report a coach can actually hand to
          someone.</p>
       <div class="shot" aria-hidden="true">
-        <div class="shot-t">3rd down % by game</div>
-        <div class="chart">
-          <div style="height:31%"></div><div style="height:44%"></div><div style="height:52%"></div>
-          <div style="height:38%"></div><div class="hi" style="height:71%"></div><div style="height:55%"></div>
-          <div style="height:49%"></div><div style="height:62%"></div><div style="height:44%"></div>
-          <div style="height:58%"></div>
-        </div>
+        <div class="shot-t">Season report — 3rd down % by game</div>
+        <!-- A LINE, not bars. A trend is a shape over time, and bars make
+             the reader assemble it. The season report plots this the same
+             way, offense against opponent. -->
+        <svg viewBox="0 0 300 96" width="100%" height="96" preserveAspectRatio="none"
+             style="display:block;overflow:visible">
+          <line x1="0" y1="8"  x2="300" y2="8"  stroke="#1b232c" stroke-width="1"/>
+          <line x1="0" y1="44" x2="300" y2="44" stroke="#1b232c" stroke-width="1"/>
+          <line x1="0" y1="80" x2="300" y2="80" stroke="#262f39" stroke-width="1"/>
+          <polyline fill="none" stroke="#4a5563" stroke-width="2" stroke-linejoin="round"
+            points="6,62 38,56 71,56 104,68 137,53 170,66 203,58 236,52 269,68 294,64"/>
+          <polyline fill="none" stroke="#ffc72c" stroke-width="2.5" stroke-linejoin="round"
+            points="6,80 38,58 71,51 104,52 137,49 170,66 203,44 236,51 269,69 294,58"/>
+          <g fill="#ffc72c">
+            <circle cx="6" cy="80" r="2.5"/><circle cx="38" cy="58" r="2.5"/><circle cx="71" cy="51" r="2.5"/>
+            <circle cx="104" cy="52" r="2.5"/><circle cx="137" cy="49" r="2.5"/><circle cx="170" cy="66" r="2.5"/>
+            <circle cx="203" cy="44" r="2.5"/><circle cx="236" cy="51" r="2.5"/><circle cx="269" cy="69" r="2.5"/>
+            <circle cx="294" cy="58" r="2.5"/>
+          </g>
+        </svg>
         <div class="chart-x"><span>G1</span><span>G2</span><span>G3</span><span>G4</span><span>G5</span>
           <span>G6</span><span>G7</span><span>G8</span><span>G9</span><span>G10</span></div>
+        <div class="lgd"><span><i style="background:var(--data)"></i>Offense</span>
+          <span><i style="background:#4a5563"></i>Opponent</span></div>
       </div>
     </div>
     <div class="cell">
