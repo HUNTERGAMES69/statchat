@@ -169,6 +169,18 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
       'page is exactly where it would quietly appear');
   chk(/is_super_admin/.test(code), 'the gate reads is_super_admin from the profile');
 
+  // A LANDING PAGE MUST BE LEAVABLE. The platform account lands here
+  // rather than on the dashboard, so this is the only page it sees. It
+  // shipped with no sign-out and no route to change its own password.
+  chk(/id="signOutBtn"/.test(raw), 'there is a sign-out control');
+  chk(/href="account\.html"/.test(raw), 'and a route to account settings');
+  // Wired OUTSIDE the gate: an account that fails the is_super_admin
+  // check still has to be able to leave.
+  const gateAt = code.indexOf('is_super_admin){');
+  const signOutAt = code.indexOf("getElementById('signOutBtn').addEventListener");
+  chk(signOutAt !== -1 && signOutAt > gateAt,
+      'sign-out is wired unconditionally, so a refused account can still leave');
+
   console.log(fails ? '\n' + fails + ' FAILURES' : '\nALL PASS');
   process.exit(fails ? 1 : 0);
 })();
