@@ -72,6 +72,16 @@ function run() {
   if (!/key=' \+ encodeURIComponent\(feedKey\)/.test(setup)) {
     bad('broadcast_setup.html', 'overlayUrl does not append the key');
   }
+  // A URL CANNOT BE CONCATENATED ONTO AFTER THE KEY IS ADDED. The emailed
+  // instructions built leader addresses as overlayUrl('...?view=') + v,
+  // which put the key in the middle: "?view=&key=abc...rushing". Six dead
+  // addresses, and only in the email — the on-screen list was fine, which
+  // is exactly how it would have gone unnoticed.
+  const tacked = setup.match(/overlayUrl\([^)]*\)\s*\+\s*[A-Za-z_]/g) || [];
+  if (tacked.length) {
+    bad('broadcast_setup.html', tacked.length + ' address(es) append to overlayUrl() AFTER ' +
+        'the key: ' + tacked.join(', ') + '. Build the whole path first, then wrap it.');
+  }
 
   return fails;
 }
