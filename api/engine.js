@@ -643,9 +643,9 @@ function buildContext(game, rosterRows, playRows, ourBranding){
   });
 
   const teams = {
-    teamA: mkTeam(ourName, b.primary_color || '#1a1a2e',
+    teamA: mkTeam(ourName, b.primary_color || '#2b3440',
                   b.secondary_color || '#ffffff', b.logo_url),
-    teamB: mkTeam(oppName, game.opponent_primary_color || '#8B0000',
+    teamB: mkTeam(oppName, game.opponent_primary_color || '#6e7885',
                   game.opponent_secondary_color || '#ffffff', game.opponent_logo_url)
   };
 
