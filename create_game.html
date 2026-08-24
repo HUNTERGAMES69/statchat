@@ -140,6 +140,10 @@
           <button type="button" id="chooseOppLogoBtn" class="secondary">Choose logo</button>
           <input type="file" id="oppLogoInput" accept="image/*" style="display:none;">
           <img id="oppLogoPreview" style="display:none; height:44px; margin-top:8px; border-radius:6px;">
+            <div id="oppLogoError" role="alert" style="display:none; margin-top:6px;
+                 font-size:13px; line-height:1.35; color:var(--sc-red, #a32d2d);
+                 background:var(--sc-red-tint, #fdecea); border-radius:6px;
+                 padding:7px 9px; max-width:260px;"></div>
         </div>
         <div>
           <label style="font-size:12px;">Primary color</label>
@@ -169,6 +173,19 @@
   // chosen rather than minutes later at save time.
   const LOGO_TYPES = ['image/png','image/jpeg','image/webp','image/svg+xml'];
   const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+  // Shows a message AT the logo control rather than at the top of the
+  // form. A message about this button, rendered several fields above it,
+  // is a message about something the reader is no longer looking at --
+  // reported on 24 Aug: the error appeared and was missed.
+  // role="alert" on the element means a screen reader announces it
+  // without focus having to move.
+  function showLogoError(html){
+    const el = document.getElementById('oppLogoError');
+    if (!el) return;
+    if (!html){ el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.innerHTML = html;
+    el.style.display = 'block';
+  }
   // Roster import limits, matching roster.html. HARD caps: there is no
   // legitimate 200+ player football roster.
   const MAX_ROSTER_BYTES = 5 * 1024 * 1024;
@@ -1275,16 +1292,20 @@
       // filled-in form later, and was then overwritten by 'Game created.'
       // and a redirect. Reported here it is a two-second correction.
       if (!LOGO_TYPES.includes(pendingOppLogoFile.type)){
-        showMsg('setupMsg', 'That file is ' + (pendingOppLogoFile.type || 'of an unknown type') +
-          '. A logo has to be a PNG, JPEG, WebP or SVG.', 'error');
+        showLogoError('<strong>Invalid file type.</strong><br>' +
+          'That file is ' + (pendingOppLogoFile.type || 'of an unknown type') + '.<br>' +
+          'Logos must be <strong>PNG, JPEG, WebP or SVG</strong>.');
+
         pendingOppLogoFile = null; e.target.value = '';
         const pv0 = document.getElementById('oppLogoPreview');
         if (pv0) pv0.style.display = 'none';
         return;
       }
       if (pendingOppLogoFile.size > LOGO_MAX_BYTES){
-        showMsg('setupMsg', 'That image is ' + (pendingOppLogoFile.size / 1048576).toFixed(1) +
-          'MB and the limit is 2MB. A crest is usually well under 100KB.', 'error');
+        showLogoError('<strong>That image is too large.</strong><br>' +
+          (pendingOppLogoFile.size / 1048576).toFixed(1) + 'MB, and the limit is 2MB.<br>' +
+          'A crest is usually well under 100KB.');
+
         pendingOppLogoFile = null; e.target.value = '';
         const pv1 = document.getElementById('oppLogoPreview');
         if (pv1) pv1.style.display = 'none';
@@ -1297,6 +1318,7 @@
         img.style.display = 'inline-block';
       } catch (e){}
     }
+    showLogoError('');   // a good file clears whatever the last one said
     const dataUrl = await readFileAsDataURL(pendingOppLogoFile);
     const detected = await detectLogoColors(dataUrl);
     if (detected.primary){

@@ -73,6 +73,10 @@
           <label>Logo</label>
           <button type="button" id="chooseLogoBtn" class="secondary">Choose file</button>
           <input type="file" id="logoInput" accept="image/*" style="display:none;">
+            <div id="logoError" role="alert" style="display:none; margin-top:6px;
+                 font-size:13px; line-height:1.35; color:var(--sc-red, #a32d2d);
+                 background:var(--sc-red-tint, #fdecea); border-radius:6px;
+                 padding:7px 9px; max-width:280px;"></div>
           <div class="hint">Colors below auto-fill from the logo — still yours to adjust.</div>
         </div>
       </div>
@@ -108,6 +112,16 @@
   // file is refused when it is chosen rather than when it is saved.
   const LOGO_TYPES = ['image/png','image/jpeg','image/webp','image/svg+xml'];
   const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+  // AT the control, not at the top of the page. Same reasoning as
+  // create_game.html: a message about this button, rendered above the
+  // fold, is a message about something the reader is not looking at.
+  function showLogoError(html){
+    const el = document.getElementById('logoError');
+    if (!el) return;
+    if (!html){ el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.innerHTML = html;
+    el.style.display = 'block';
+  }
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
@@ -252,21 +266,26 @@
     // refusal arrives at save time, and a message at save time about a
     // choice made minutes ago is a worse message.
     if (!LOGO_TYPES.includes(pendingLogoFile.type)){
-      showMsg('That file is ' + (pendingLogoFile.type || 'of an unknown type') +
-        '. A logo has to be a PNG, JPEG, WebP or SVG.', 'error');
+      showLogoError('<strong>Invalid file type.</strong><br>' +
+        'That file is ' + (pendingLogoFile.type || 'of an unknown type') + '.<br>' +
+        'Logos must be <strong>PNG, JPEG, WebP or SVG</strong>.');
+
       pendingLogoFile = null; e.target.value = '';
       const lp0 = document.getElementById('logoPreview');
       if (lp0) lp0.style.display = 'none';
       return;
     }
     if (pendingLogoFile.size > LOGO_MAX_BYTES){
-      showMsg('That image is ' + (pendingLogoFile.size / 1048576).toFixed(1) +
-        'MB and the limit is 2MB. A crest is usually well under 100KB.', 'error');
+      showLogoError('<strong>That image is too large.</strong><br>' +
+        (pendingLogoFile.size / 1048576).toFixed(1) + 'MB, and the limit is 2MB.<br>' +
+        'A crest is usually well under 100KB.');
+
       pendingLogoFile = null; e.target.value = '';
       const lp1 = document.getElementById('logoPreview');
       if (lp1) lp1.style.display = 'none';
       return;
     }
+    showLogoError('');   // a good file clears whatever the last one said
     if (URL.createObjectURL){
       try {
         const img = document.getElementById('logoPreview');
