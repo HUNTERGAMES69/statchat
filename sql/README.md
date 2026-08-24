@@ -3,7 +3,7 @@
 **Every change to the Supabase schema is committed here before the session
 ends. No exceptions, including "it was only one column".**
 
-This is not bookkeeping. `sql/schema.sql` is the only copy of the schema
+This is not bookkeeping. `sql/000_baseline.sql` is the only copy of the schema
 that exists outside a hosted dashboard. It is what a second instance is
 built from, what a restore is checked against, and the only version of
 the database anybody can actually read.
@@ -15,14 +15,43 @@ app, is a backup with extra steps.
 
 ## What goes in this folder
 
-    schema.sql        the whole schema, dumped. The current truth.
-    seed.sql          the minimum that makes an empty instance usable
+    000_baseline.sql  the whole schema as of 23 Aug 2026. The state.
     NNN_name.sql      one migration per change, numbered, never edited
+    capture/          seven read-only queries that dump the live schema
+    history/          scripts that ran BEFORE the baseline was captured
 
-`schema.sql` is REGENERATED, not hand-edited. The migrations are the
-history; the dump is the state. Neither is derivable from the other in
-practice — a dump cannot tell you why a column exists, and a stack of
-migrations takes an hour to read.
+**`schema.sql` was never created.** The rule above described it for weeks
+and the file did not exist — the first `CREATE TABLE` statement in this
+repo is `000_baseline.sql`, written 23 Aug 2026. The baseline now does
+the job `schema.sql` was meant to: it is the state, the migrations are
+the history. Neither is derivable from the other in practice — a
+baseline cannot tell you why a column exists, and a stack of migrations
+takes an hour to read.
+
+The baseline is REGENERATED, not hand-edited, and only when there is a
+reason to re-baseline. Day to day it stays still and migrations
+accumulate on top.
+
+### Numbers are never reused and never reordered
+
+Even when a file moves. `001` is `public_recap_sharing`; `002` is
+`schema_migrations`; the next is `003` whatever happens to the others. A
+number identifies a change that ran somewhere, and reusing it makes two
+instances disagree while both claiming to be version 2.
+
+`history/` holds scripts with NO number: they ran before the baseline was
+captured, so their effects are already inside `000`. Numbering them would
+make an instance built from the baseline look like it were missing two
+migrations it already has.
+
+## Capturing the live schema without pg_dump
+
+`pg_dump` needs a direct database connection. `capture/A..G` need only
+the SQL editor, are read-only, and between them cover everything a dump
+would — see `capture/README.md`. That is also the verification
+mechanism: the same queries run against a scratch database rebuilt from
+these files should give the same answers, which replaces the
+`git diff` step below for anyone without a connection.
 
 ---
 
@@ -39,9 +68,13 @@ migrations takes an hour to read.
 
        pg_dump "postgres://postgres:[PASSWORD]@db.pboushzlcyfkssojpuut.supabase.co:5432/postgres" \
          --schema-only --schema=public --no-owner --no-privileges \
-         -f sql/schema.sql
+         -f sql/schema_dump.sql
 
-4. **Diff the dump.** `git diff sql/schema.sql` should show exactly what
+   If you do not have a direct connection — Supabase has been moving
+   5432 behind the pooler — run `capture/A..G` in the SQL editor
+   instead. That is how the baseline was made.
+
+4. **Diff the dump.** `git diff` on the dump should show exactly what
    the migration said it would and nothing else. This is the step that
    earns the whole procedure: it catches the column you added by hand in
    the table editor three weeks ago and forgot, and it catches a
@@ -63,16 +96,20 @@ by hand and remember. With three you cannot.
 
 ---
 
-## When there is more than one instance
+## schema_migrations — BUILT 23 August 2026
 
-Add a `schema_migrations` table recording which files have been applied,
-and have each migration insert its own number. Then an instance can be
-ASKED what it is missing rather than somebody having to remember.
+`002_schema_migrations.sql`. An instance can now be ASKED what it is
+missing rather than somebody having to remember.
 
-Not needed for one deployment. Needed by the third — see the clonable
-deployment item in TODO.md. Written down here now because the cost of
-adopting it later is proportional to how many unnumbered changes came
-first.
+**The last statement of every migration from here on is its own insert
+into that table.** Not the first — a migration that records itself before
+doing the work leaves a lie behind when it fails halfway.
+
+The table is deliberately locked down, unlike every other table here: no
+grants to `anon` or `authenticated`, RLS on with no policies at all. The
+Supabase default of granting everything and letting RLS decide is the
+wrong default for a table whose only job is to be trustworthy, and
+nothing in the application reads it.
 
 ---
 
