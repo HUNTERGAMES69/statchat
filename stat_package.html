@@ -5,6 +5,9 @@
 <!-- Without this every page load logs a 404 for /favicon.ico.
      Harmless, but a red console error should MEAN something. -->
 <link rel="icon" href="favicon.ico" sizes="any">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&display=swap" rel="stylesheet">
 <link rel="icon" href="logo.png" type="image/png">
 <!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
      below still wins -- that ordering is what lets a page be converted
@@ -26,7 +29,16 @@
   .msg { padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:14px; }
   .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
   .report-header { position:relative; text-align:center; margin-bottom:16px; background:#fff; border:1px solid #ddd; padding:16px; }
-  .statchat-logo { position:absolute; top:12px; right:12px; width:60px; height:auto; border-radius:6px; }
+  /* A LOCKUP, not a bare logo. A 60px mark alone in the corner reads as
+     a watermark; with the wordmark beside it at a smaller size it reads
+     as a masthead, matching recap.html, the sign-in page and statchat.co. */
+  .statchat-mark { position:absolute; top:12px; right:14px; display:flex;
+                   align-items:center; gap:7px; }
+  .statchat-mark img { width:24px; height:24px; border-radius:5px; display:block; }
+  .statchat-mark span { font-family:'Barlow Condensed', -apple-system, BlinkMacSystemFont,
+                        'Segoe UI', Arial, sans-serif;
+                        font-weight:700; font-size:18px; line-height:1; text-transform:uppercase;
+                        letter-spacing:0.04em; color:var(--sc-navy, #1a1a2e); }
   .report-header h1 { font-size:18px; margin:0 0 4px; }
   .report-header .sub { color:#666; font-size:13px; }
   table.quarter-table { width:100%; border-collapse:collapse; margin:0 auto 16px; font-size:13px; background:#fff; border:1px solid #ddd; }
@@ -79,7 +91,9 @@
     .topbar .actions { width:100%; }
     .topbar .actions button { flex:1; }
     .report-header { padding:14px; }
-    .statchat-logo { width:44px; top:10px; right:10px; }
+    .statchat-mark { top:10px; right:10px; gap:5px; }
+    .statchat-mark img { width:20px; height:20px; }
+    .statchat-mark span { font-size:15px; }
     .team-block { padding:12px 14px; }
     .metric-group-row { gap:16px; }
     .metric-group-row .metric-item .metric-val { font-size:18px; }
@@ -164,11 +178,24 @@
        bottom of the final printed sheet, so if the content happens to end
        low on the page the logo moves to the next one. 42mm is chosen to
        clear the common case without being so large it usually spills. */
-    .print-endmark { display:flex; align-items:center; justify-content:center;
-                     margin:42mm 0 0; padding-top:18px;
+    /* WAS 42mm, WHICH IS WHY THE END MARK KEPT LANDING ON A PAGE OF ITS
+       OWN. The old comment admitted the flaw and then chose a number
+       anyway. A margin cannot anchor anything to the bottom of a sheet,
+       so every value large enough to LOOK like a footer is also large
+       enough to spill — the failure is in the mechanism, not the number.
+       Abandoned rather than retuned. `.print-footer` is position:fixed
+       and does anchor; that is what sits at the foot of every page. */
+    .print-endmark { display:flex; align-items:center; justify-content:center; gap:8px;
+                     margin:14mm 0 0; padding-top:14px;
                      border-top:1px solid var(--sc-rule, #e6e6e6);
-                     page-break-inside:avoid; break-inside:avoid; }
-    .print-endmark img { width:38px; height:38px; border-radius:7px; }
+                     page-break-inside:avoid; break-inside:avoid;
+                     page-break-before:avoid; break-before:avoid; }
+    .print-endmark img { width:24px; height:24px; border-radius:5px; }
+    .print-endmark span { font-family:'Barlow Condensed', -apple-system, BlinkMacSystemFont,
+                          'Segoe UI', Arial, sans-serif;
+                          font-weight:700; font-size:17px; line-height:1;
+                          text-transform:uppercase; letter-spacing:0.04em;
+                          color:var(--sc-ink-muted, #9aa3b2); }
 
     /* Page one of the stat package runs about half full: a header, a
        quarter line and seven scores. These spend the space rather than
@@ -900,7 +927,7 @@ function isAdminMarker(p){
     const visitorKey = TEAMS.teamA.isHome ? 'teamB' : 'teamA';
     const homeKey = TEAMS.teamA.isHome ? 'teamA' : 'teamB';
 
-    let html = '<div class="report-header"><img class="statchat-logo" src="logo.png" alt="StatChat">' +
+    let html = '<div class="report-header"><div class="statchat-mark"><img src="logo.png" alt=""><span>StatChat</span></div>' +
       '<h1>' + TEAMS[visitorKey].name + ' @ ' + TEAMS[homeKey].name + '</h1>' +
       '<div class="sub">' + (gameLabel || '') + (gameDate ? ' &middot; ' + new Date(gameDate + 'T00:00:00').toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'}) : '') + '</div>' +
       '</div>';
@@ -1132,7 +1159,7 @@ function isAdminMarker(p){
     // no "last sheet" selector), so the duplicate had to go from the half
     // that CAN be changed. The logo sits above the footer line and the
     // two read as one mark.
-    html += '<div class="print-endmark"><img src="logo.png" alt="StatChat"></div>';
+    html += '<div class="print-endmark"><img src="logo.png" alt=""><span>StatChat</span></div>';
     return html;
   }
 </script>
