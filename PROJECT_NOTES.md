@@ -2488,3 +2488,56 @@ The rule that follows: **functional work can be verified here and should
 be; visual work cannot.** Batch visual changes and ask for one look, or
 leave them. Do not iterate blind, and say plainly when the harness cannot
 settle a question rather than reporting a green test as though it had.
+
+### Return stats — built the same day, and what the design bought
+
+Kickoff and punt returns, kept SEPARATE. Scope narrowed by Andy: kickoff,
+guided kickoff and punt only. NOT muffed-kick or blocked-kick recoveries
+-- those are loose balls, not returns, and counting them would inflate
+the average that makes the stat worth having.
+
+**`roles.returner` is a role of its own**, not the `defense` key that
+returners used to share with tacklers, interceptors and fumble
+recoverers. Sharing that key is why a kick returner appeared in the
+"Tackled by" picker for the rest of a game, and it meant return yardage
+could not be told apart from anything else a defender did. `defense` is
+still written alongside it, unchanged, so no existing report counts
+differently.
+
+The role carries `kind: 'kick' | 'punt'` from the first commit. That one
+field is why splitting the combined stat into two, later the same day,
+cost about an hour instead of a re-entry -- worth remembering as an
+argument for recording the distinction even when the immediate
+requirement does not need it.
+
+**No backfill, by nature.** Roles are stored with each play in the
+database rather than re-derived on load, so anything recorded before this
+shipped has no returner role and never will. Worth knowing before
+promising a stat retroactively: the play TEXT carries the returner and
+the yardage, so a backfill is possible by re-parsing, but it is real work.
+
+Two bugs found while building it, both instructive:
+
+  * The leaders helper `top` only accepts a value above zero -- right for
+    rushing, wrong for returns. A punt returned for a LOSS vanished
+    entirely. Found because Andy's first real test entered **-39**; the
+    fixtures used 24 and 11, and would have missed it. A fixture kinder
+    than reality tests nothing.
+  * `mergeInto` in season_report and view kept a HARDCODED list of "long"
+    keys to take the max of. `retLong` was not on it, so a season would
+    have SUMMED the longs -- three 20-yard returns reporting a long of
+    60. Both now use a `/Long$/` suffix test, as player_report already
+    did. Any future "long" stat is handled automatically.
+
+Shown in recap, stat package, season report and player report, LAST in
+each special teams section. Deliberately NOT in the Live totals tile or
+on the view page: a RET line was added to Live totals only so the new
+stat was visible enough to verify while being built, and removed once the
+reports carried it.
+
+**The interception's intended receiver was already fixed.** Listed in
+TODO as an open bug; the app records it correctly and always did. The gap
+was in `ui_driver`, which never filled the field -- so no test could see
+it either way and the entry stayed open long after the code was right.
+Now pinned in tackles_check. Worth a general lesson: an untested feature
+and a broken one look identical from the outside.

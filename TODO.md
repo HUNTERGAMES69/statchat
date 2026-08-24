@@ -2138,6 +2138,92 @@ watch for.
   see it either way and the entry stayed open long after the code was
   right. Now pinned in tackles_check.
 
+## SEASON REPORT — formatting does not scale with the season
+
+Reported 23 Aug from a real PDF: wrapping, charts too small. NOT YET
+FIXED, and it is a design problem rather than a bug.
+
+**The difficulty, in Andy's words:** a season report run after game 1
+looks nothing like one run after game 15, and the layout has to hold up
+across that whole range. Everything is currently fixed:
+
+    .chart-box     height:220px           -- never changes
+    .chart-row     grid 1fr 1fr           -- always two across
+    .chart-row-3   grid 1fr 1fr 1fr       -- always three across
+    .metric-tile   flex:1; min-width:70px -- wraps once there are enough
+
+### WHICH CHARTS GROW — the ones to fix
+
+Fifteen charts, and the id says which is which: anything ending `ByGame`
+gains a bar per game and grows all season. The rest have a fixed number
+of bars however long the season runs.
+
+**NINE PER-GAME charts, in three groups by how bad the squeeze is:**
+
+*Worst -- one THIRD of the page width, in `.chart-row-3`:*
+
+    chartTurnoversByGame
+    chartSacksByGame
+    chartPenaltiesByGame
+
+  Fifteen labelled bars in a third of a page is the tightest fit in the
+  report. These almost certainly account for the reported wrapping.
+
+*Bad -- HALF width, in `.chart-row`:*
+
+    chart3rdDownByGame
+    chart4thDownByGame
+    chartExplosiveByGame
+    chartPossPlaysByGame
+
+*Already full width, and the model to follow:*
+
+    chartYardsByGame        <- full width, alone, 260px tall
+    chartPassRushByGame     <- same
+
+  These two are in a plain section rather than a grid, one per row. That
+  is the arrangement the other seven probably want once the season fills
+  up -- the fix may be as simple as promoting them out of the grids,
+  rather than inventing new sizing.
+
+**SIX AGGREGATE charts -- leave them alone.** Their bar count never
+changes, so they are fine at half width and small:
+
+    chartPointsByQuarter   chartHalfYards      chartRunPassAtt
+    chartRunPassYds        chartPassByHalf     chartRushByHalf
+
+  (chartPassByHalf and chartRushByHalf are already full width, which is
+  arguably wasted on them -- worth reclaiming that space for a per-game
+  chart that needs it.)
+
+**Also:** `.chart-col-metrics .metric-tile` is `flex:1; min-width:70px`
+with `flex-wrap:wrap`, so the tiles reflow as the season adds numbers.
+That is a second, separate source of wrapping.
+
+**Do not start this without seeing the output.** It is a visual problem
+on a PDF, and jsdom has no layout engine, ignores @media (including
+`@media print`, which this page has), and cannot measure anything. The
+harness will report every version as correct. That cost most of an
+afternoon on the iPad header; do not repeat it here.
+
+Suggested approach when picked up:
+
+  1. Get PDFs at THREE points -- 1 game, ~6 games, ~15 games. The whole
+     problem is the range, so one sample cannot show it.
+  2. Decide what is elastic and what is fixed. A per-game bar chart
+     probably wants to grow in WIDTH with the game count (full-width row
+     rather than half) while a season-total donut stays small.
+  3. Height 220px is likely too short once labels rotate; and a chart
+     that must show fifteen labelled bars may need to be full-width and
+     alone on its row.
+  4. `@page` and page-break rules matter as much as the charts -- a
+     report that doubles in length needs to break in sensible places.
+
+Worth doing before production: this is the report a coach would actually
+hand to someone.
+
+---
+
 ## WHERE THINGS STAND — end of 23 Aug
 
 **Desktop is done and confirmed working.** iPad portrait is usable and
