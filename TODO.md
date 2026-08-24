@@ -2993,22 +2993,26 @@ Three layout faults fixed, reasoning in PROJECT_NOTES:
 
 ---
 
-## THE vMIX FEED IS UNTESTED SINCE THE TENANCY MIGRATION
+## THE FEED ENDPOINTS BYPASS RLS — and 009 does not change that
 
-Migrations 006-008 ran against production on 24 Aug. Game creation, play
-entry and roster additions were all verified from a browser. **The four
-feed endpoints were not.**
+Five endpoints read with `SUPABASE_SECRET_KEY`: `feed.js`, `gamedata.js`,
+`seasondata.js`, `og.js`, `share.js`. That is the service role, and
+`000_baseline.sql` line 44 creates it with **BYPASSRLS**.
 
-- [ ] **Load a vMix browser input and confirm the overlay still
-  populates.** They hold the service key and read with elevated rights,
-  so `auth.uid()` is null and `current_tenant_id()` returns null for
-  them. Harmless today, because RLS is still `using (true)`.
+An earlier version of this entry called the vMix feed a blocker for 009,
+on the reasoning that a tenant policy would deny a caller with no
+session. **Wrong** — the policy is never consulted. Proven in scratch: a
+BYPASSRLS role saw every row under a policy that gave an ordinary
+sessionless role none.
 
-  **It stops being harmless at 009.** A policy reading `tenant_id =
-  current_tenant_id()` denies every row to a caller with no session —
-  the overlay goes blank on air, and nothing in the app says why. This
-  is the single most likely way 009 breaks something, and the test takes
-  two minutes.
+- [ ] **Tenant-scope the five service-key endpoints by hand.** RLS will
+  cover the entire application except these. With a second school,
+  `api/feed.js` would serve their live game to anyone holding the URL.
+  The mechanism is decided (`tenants.feed_key`, Q2 in
+  MULTI_TENANT_PLAN.md); the work is a lookup in each endpoint plus a
+  Rotate control on `broadcast_setup.html`.
+- [ ] **Test a vMix browser input** when hardware allows. Not a gate on
+  009. It is a gate on selling to a second school.
 
 ---
 

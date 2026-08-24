@@ -956,16 +956,39 @@ whichever row Postgres feels like, which is the precise fault that made
 Verified from a browser after 008: game creation, play entry, roster
 additions.
 
-- [ ] **The vMix feed has NOT been re-tested since the migration.**
-  Deferred on 24 Aug. The four feed endpoints hold the service key, so
-  `auth.uid()` is null for them and `current_tenant_id()` returns null —
-  which is harmless while they only READ and RLS is still `using (true)`.
-  **It stops being harmless at 009.** A policy of `tenant_id =
-  current_tenant_id()` denies every row to a caller with no session, and
-  the overlay would go blank on air with nothing in the app to explain
-  it. Test the feed BEFORE 009, not after.
+### THE vMIX FEED WILL NOT BREAK AT 009 — a correction, 24 Aug
 
-### The order now
+An earlier note in this document said the feed had to be tested BEFORE
+009, on the reasoning that a policy of `tenant_id = current_tenant_id()`
+would deny every row to a caller with no session and take the overlay
+blank on air.
+
+**That was wrong, and the mistake is worth keeping.** The reasoning
+stopped at "no session, so the function returns null" without asking
+whether the policy would be consulted at all. It will not be.
+
+All five read endpoints — `feed.js`, `gamedata.js`, `seasondata.js`,
+`og.js`, `share.js` — use `SUPABASE_SECRET_KEY`, which is the service
+role, and `000_baseline.sql` line 44 creates that role with **BYPASSRLS**.
+Demonstrated rather than assumed: with a tenant policy in force, a
+BYPASSRLS role still saw every row while an ordinary role with no session
+saw none.
+
+So 009 cannot blank the overlay. RLS is not in that path.
+
+**The real problem is the opposite one, and it is worse.** Because those
+endpoints bypass RLS, 009 gives them NO PROTECTION AT ALL. With a second
+school, `api/feed.js` would serve their live game to anyone who asked.
+That is Hazard 2, and it means tenant isolation for the feed has to be
+written BY HAND, in code, against `tenants.feed_key`.
+
+RLS will cover the whole application EXCEPT these five files.
+
+- [ ] **Test a vMix browser input when hardware is available.** No longer
+  a gate on 009 — it is a gate on selling to a SECOND SCHOOL, which is
+  weeks away rather than days.
+
+### The order now### The order now
 
     006  columns, backfill, functions, signup trigger   <- DONE 24 Aug
     007  column defaults                                <- DONE 24 Aug
