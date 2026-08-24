@@ -312,6 +312,50 @@
   .code .c{color:#5c6773}
   .endpoint{font-family:var(--mono);font-size:12px;color:#7f8b98;margin-top:14px;word-break:break-all}
 
+  /* ---- READY-MADE OVERLAYS ------------------------------------------
+     Shown on a video-like backdrop rather than flat on the page, because
+     that is the only place these ever appear: they are transparent
+     browser inputs composited over a program feed. Rendered flat on a
+     dark page they would read as UI panels, which is the wrong idea. */
+  .ov-stage{margin-top:18px;border:1px solid var(--edge);border-radius:6px;padding:26px 20px;
+            background:linear-gradient(155deg,#243040,#141b24 55%,#0d1218)}
+  .ov-stage + .ov-stage{margin-top:14px}
+
+  /* the score bar */
+  .ovbar{display:flex;border-radius:6px;overflow:hidden;box-shadow:0 8px 26px rgba(0,0,0,.5);
+         font-family:var(--label);text-transform:uppercase;max-width:620px;margin:0 auto}
+  .ovbar .side{display:flex;align-items:center;gap:12px;padding:12px 18px;flex:1}
+  .ovbar .side.l{background:var(--data);color:#20180a;justify-content:flex-end}
+  .ovbar .side.r{background:#1f4f8f;color:#fff}
+  .ovbar .nm{font-weight:700;font-size:19px;letter-spacing:.03em}
+  .ovbar .sc{font-family:var(--mono);font-weight:700;font-size:23px;line-height:1}
+  .ovbar .mid{background:#12171e;color:#fff;padding:12px 20px;display:flex;align-items:center;
+              gap:12px;white-space:nowrap}
+  .ovbar .dd{font-weight:700;font-size:16px;letter-spacing:.03em}
+  .ovbar .q{font-size:14px;color:#7f8b98}
+
+  /* the team-stats comparison */
+  .ovcmp{max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;
+         box-shadow:0 8px 26px rgba(0,0,0,.5)}
+  .ovcmp .hd{display:flex;font-family:var(--label);text-transform:uppercase;font-weight:700}
+  .ovcmp .hd .a{flex:1;background:var(--data);color:#20180a;padding:11px 16px;display:flex;
+                align-items:center;gap:10px}
+  .ovcmp .hd .b{flex:1;background:#1f4f8f;color:#fff;padding:11px 16px;display:flex;
+                align-items:center;gap:10px;justify-content:flex-end}
+  .ovcmp .hd .c{background:#12171e;color:#fff;padding:11px 18px;font-size:12px;
+                letter-spacing:.14em;display:flex;align-items:center}
+  .ovcmp .hd .nm{font-size:16px;letter-spacing:.03em}
+  .ovcmp .hd .sc{font-family:var(--mono);font-size:20px}
+  .ovcmp .r{display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid #eceff2}
+  .ovcmp .r:last-child{border-bottom:none}
+  .ovcmp .r .v{font-family:var(--mono);font-weight:700;font-size:17px;color:#12171e;
+               flex:0 0 92px}
+  .ovcmp .r .v.rt{text-align:right}
+  .ovcmp .r .k{flex:1;text-align:center;font-family:var(--label);text-transform:uppercase;
+               letter-spacing:.13em;font-size:10.5px;color:#6b7680}
+  .ovcap{text-align:center;margin-top:11px;font-family:var(--label);text-transform:uppercase;
+         letter-spacing:.12em;font-size:10px;color:#5c6773}
+
   /* ---- comparison ---- */
   .cmp{width:100%;border-collapse:collapse;margin-top:38px;font-size:15px}
   .cmp th,.cmp td{text-align:left;padding:14px 16px;border-bottom:1px solid var(--edge);
@@ -418,6 +462,18 @@
     .tree{grid-template-columns:46px 1fr;gap:6px}
     .tile b{font-size:14px}
     .g2w{gap:16px;height:74px}
+    .ov-stage{padding:16px 12px}
+    .ovbar{flex-wrap:wrap}
+    .ovbar .mid{flex:1 1 100%;order:3;justify-content:center;padding:9px 12px}
+    .ovbar .dd{font-size:14px}
+    .ovbar .nm{font-size:15px}
+    .ovbar .sc{font-size:19px}
+    .ovbar .side{padding:10px 12px}
+    .ovcmp .hd .nm{font-size:13px}
+    .ovcmp .hd .c{padding:11px 10px;font-size:10px;letter-spacing:.08em}
+    .ovcmp .r{padding:7px 10px}
+    .ovcmp .r .v{flex:0 0 74px;font-size:15px}
+    .ovcmp .r .k{font-size:9px;letter-spacing:.08em}
     .cmp th,.cmp td{padding:11px 12px}
     .incl span{font-size:13px;padding:6px 10px}
 
@@ -794,9 +850,10 @@
 <section id="feeds" class="wrap">
   <p class="strip">Feeds</p>
   <h2>Data your broadcast can bind to</h2>
-  <p class="sub">Every field describes football, never a vendor. Each package maps it to its
-     own templates — so the same feed drives vMix title fields, an OBS browser source or a
-     CasparCG template without translation.</p>
+  <p class="sub">Every field describes football, never a vendor. Each package maps it to
+     its own templates — so the same feed drives vMix title fields, an OBS browser source or
+     a CasparCG template without translation. And if you would rather not build a graphics
+     package at all, StatChat ships one.</p>
 
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" aria-selected="true"  data-p="score">Score &middot; JSON</button>
@@ -807,6 +864,38 @@
   <div class="code"><pre id="payload"></pre></div>
   <p class="endpoint" id="endpoint"></p>
   <p class="note">Field names are the real ones. Team and player names here are invented.</p>
+
+  <h3 class="subhead">Or use the ones we ship</h3>
+  <p class="sub" style="margin-top:12px">Every account includes a ready-made transparent
+     overlay package — score bar, team comparison, season leaders. Add the URL as a browser
+     input and it is on your program feed. They take the opponent's colors from the game you
+     built, so week two looks right without anyone opening a graphics editor.</p>
+
+  <div class="ov-stage" aria-hidden="true">
+    <div class="ovbar">
+      <div class="side l"><span class="nm">Riverside</span><span class="sc">24</span></div>
+      <div class="mid"><span class="dd">1st &amp; 10 at opp 39</span><span class="q">Q2</span></div>
+      <div class="side r"><span class="sc">7</span><span class="nm">Northgate</span></div>
+    </div>
+    <p class="ovcap">Score bar</p>
+  </div>
+
+  <div class="ov-stage" aria-hidden="true">
+    <div class="ovcmp">
+      <div class="hd">
+        <div class="a"><span class="nm">Riverside</span><span class="sc">24</span></div>
+        <div class="c">Team stats</div>
+        <div class="b"><span class="sc">7</span><span class="nm">Northgate</span></div>
+      </div>
+      <div class="r"><span class="v">311</span><span class="k">Total yards</span><span class="v rt">186</span></div>
+      <div class="r"><span class="v">209</span><span class="k">Pass yards</span><span class="v rt">146</span></div>
+      <div class="r"><span class="v">102</span><span class="k">Rush yards</span><span class="v rt">40</span></div>
+      <div class="r"><span class="v">11:18</span><span class="k">Time of possession</span><span class="v rt">12:13</span></div>
+      <div class="r"><span class="v">1</span><span class="k">Turnovers</span><span class="v rt">1</span></div>
+      <div class="r"><span class="v">3/5 (60%)</span><span class="k">3rd down</span><span class="v rt">2/6 (33%)</span></div>
+    </div>
+    <p class="ovcap">Team comparison</p>
+  </div>
 </section>
 
 <section id="compare" class="wrap">
