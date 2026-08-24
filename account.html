@@ -207,6 +207,10 @@
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
   let currentUserId = null, currentUserEmail = null, currentAccessToken = null;
+  // Read once at boot. currentTenantId is null for the platform account,
+  // which is the case every unfiltered query on this page has to answer
+  // for -- see the reset path below.
+  let currentTenantId = null, currentIsSuperAdmin = false;
 
   function showView(name){
     ['loading', 'mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
@@ -221,6 +225,13 @@
         currentUserId = session.user.id;
         currentUserEmail = session.user.email;
         currentAccessToken = session.access_token;
+          supabaseClient.from('profiles')
+            .select('tenant_id, is_super_admin').eq('id', session.user.id).limit(1)
+            .then(({ data }) => {
+              const p = (data || [])[0] || {};
+              currentTenantId = p.tenant_id || null;
+              currentIsSuperAdmin = !!p.is_super_admin;
+            });
         init();
         // Read the two-factor state after init, so the card reflects
         // reality rather than its default hidden state.
@@ -718,7 +729,28 @@
     document.getElementById('resetFinalBtn').disabled = true;
     showMsg('resetMsg', 'Deleting everything…', 'success');
 
-    const { data: allGames, error: fetchError } = await supabaseClient.from('games').select('id, status');
+    // SCOPED TO THE CALLER'S OWN SCHOOL, EXPLICITLY.
+    // ---------------------------------------------------------------------
+    // This was an unfiltered select, which was correct while every account
+    // had a tenant: RLS scoped it to the caller's school and nothing else
+    // was reachable.
+    //
+    // The platform account broke that assumption. It has NO tenant, and
+    // `games_select` ends `or is_super_admin()` — so an unfiltered select
+    // returns EVERY SCHOOL'S GAMES, and this button would empty every
+    // customer on the platform behind one typed confirmation.
+    //
+    // Recoverable since migration 012, and still not a button that should
+    // exist. The platform has no school to reset, so it is refused rather
+    // than scoped to nothing.
+    if (currentIsSuperAdmin){
+      showMsg('resetMsg', 'The platform account has no school of its own to reset. ' +
+        'Manage individual schools from the platform console.', 'error');
+      document.getElementById('resetFinalBtn').disabled = false;
+      return;
+    }
+    const { data: allGames, error: fetchError } = await supabaseClient
+      .from('games').select('id, status').eq('tenant_id', currentTenantId);
     if (fetchError){
       showMsg('resetMsg', 'Could not load games: ' + fetchError.message, 'error');
       document.getElementById('resetFinalBtn').disabled = false;
