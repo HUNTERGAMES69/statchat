@@ -2332,7 +2332,7 @@ Still open, in rough order of value:
     1. iPad PORTRAIT   -- DONE 23 Aug (landscape/rails deferred, below)
     2. SEASON REPORT   -- DONE 23 Aug, checked against a real PDF
     3. Multi-tenant    -- Step 0 (schema versioning) DONE 23 Aug
-                          <- NEXT: step 1, design the overlay auth
+                          <- RESUME HERE: step 1, design the overlay auth
     4. Everything else
 
 **Step 0 is done.** `sql/000_baseline.sql` exists and was proven by
@@ -2838,3 +2838,83 @@ Two things NOT on this list, deliberately. The broad `anon` grants
 and are not reachable through PostgREST. And the `profiles` attnum gap at
 position 3 is a dropped column that a rebuild renumbers; it is invisible
 to the application and is recorded as an accepted delta.
+
+
+---
+
+## RESUME HERE — multi-tenancy, step 1 (opened 23 August 2026)
+
+Step 0 is closed and the repo is tidy. The next session picks up at
+**step 1 of `MULTI_TENANT_PLAN.md`: design the overlay auth.** The plan
+has said since 22 Aug that this comes BEFORE tenancy touches those
+endpoints, and that is still right — it constrains the shape of the
+tenant column, so deciding it afterwards means redoing it.
+
+### Read first
+
+    HANDOFF.md              entry point
+    TODO.md                 this file
+    MULTI_TENANT_PLAN.md    the plan, six hazards, order of work
+    sql/README.md           the rule: numbering, procedure, capture
+    sql/000_baseline.md     how the baseline was proven, accepted deltas
+    PROJECT_NOTES.md        "Versioning the schema — what a capture is
+                            worth", 23 Aug
+
+### The state of the database work
+
+`sql/` now holds `000_baseline.sql` (the schema, proven by rebuilding an
+empty Postgres from it and diffing the capture field by field),
+`002_schema_migrations.sql`, `capture/A..G` (seven read-only queries that
+re-dump the live schema from the SQL editor, no direct connection
+needed), and `history/` (three pre-baseline scripts, deliberately
+unnumbered — their effects are already inside the baseline).
+
+**Nothing has been run against production, and nothing needs to be.**
+Andy's instruction stands: do not risk the production database. The
+baseline's job is to be committed and to build scratch databases.
+
+### The question step 1 has to answer
+
+`api/gamedata.js`, `api/feed.js` and `api/seasondata.js` read with
+elevated rights because a vMix browser input cannot authenticate. With
+one tenant that is acceptable. With two it is a cross-tenant data leak.
+
+So: **how does an unauthenticated browser source prove which tenant it is
+allowed to read?** Everything else in tenancy waits on the answer,
+because it decides what the tenant key has to look like and whether it
+can appear in a URL.
+
+Related, and probably the same decision: hazard 3, vMix URLs are shared
+secrets. Anyone with the URL sees the feed.
+
+### Migrations waiting, none urgent
+
+None of these should be run against production without a scratch rebuild
+first. See the "Migrations now possible" section above for the full list;
+the one worth doing first is `003_restrict_game_visibility.sql`, because
+it is wrong independently of tenancy.
+
+### Owed from the 23 Aug session
+
+- **The test batch.** Nothing in `tests/` was written this session, per
+  the standing rule. Four pieces: a `season_report_layout_check.js`
+  asserting from SOURCE TEXT (jsdom ignores `@media` and `@page`, so a
+  getComputedStyle check cannot fail); a Postgres-dependent
+  `sql_baseline_check.js` — **open decision: default run, or gated
+  behind a flag, since it needs a scratch Postgres**; the
+  strip-CSS-comments fix to how source assertions are written; and
+  updates to `tests/README.md`.
+- `accuracy_check.js` and `accuracy.golden.json` are UNTOUCHED and need
+  no re-blessing. Nothing this session went near `engine.js`.
+
+### Two habits worth carrying in
+
+- **Verify an upload from the codeload TARBALL, not
+  `raw.githubusercontent.com`** — the raw CDN serves stale copies of
+  recent commits and `?v=<timestamp>` does not defeat it. The tarball
+  also lags by up to a minute, so if a step looks like it failed, WAIT
+  and re-check before saying so. This cost two false alarms on 23 Aug.
+- **Two files whose names both begin `README` in one directory will be
+  confused**, and were: a `sql/history/README.md` upload silently landed
+  as a copy of `sql/README.md`. When delivering more than one README,
+  present them one at a time and verify each before sending the next.

@@ -2654,3 +2654,128 @@ None of that says how it LOOKS. Chart density at 15 games, whether 240px is
 tall enough, whether a section border cut by a page break is acceptable,
 and whether 732px feels too narrow on a desktop screen are all questions
 only a printed PDF can answer.
+
+
+## Versioning the schema — what a capture is worth, and what it caught (23 August 2026)
+
+`MULTI_TENANT_PLAN.md` made schema versioning step zero, and understated
+the gap. Three change-scripts were committed, but there was **not one
+`CREATE TABLE` statement anywhere in the repo**. Every table, column,
+constraint, index, policy and function existed only inside a hosted
+dashboard. `sql/README.md` had described `sql/schema.sql` since 15 August
+as "the only copy of the schema that exists outside a hosted dashboard";
+that file had never been created.
+
+### pg_dump was not available, and the catalog answered instead
+
+`pg_dump` needs a direct database connection, which was not on hand and
+which Supabase has been moving behind a pooler anyway. The database can
+describe itself: `sql/capture/A..G` are seven read-only queries that run
+in the SQL editor and return one cell of JSON each, covering columns,
+constraints, indexes, policies, grants down to the column level, function
+bodies, triggers, extensions, storage and event triggers.
+
+**They were written against a scratch Postgres 16 built to mirror
+StatChat's shape, not written and hoped for.** Six mutations were then
+applied one at a time — a dropped policy, a revoked COLUMN grant, a
+changed default, a dropped PARTIAL index, RLS switched off, a column
+added by hand — and every one was caught, then reverted.
+
+Seven queries rather than one because a single result is easy to truncate
+on paste with no way to tell a short answer from a complete one.
+
+### The gap was found by READING the output, not by a check
+
+D returned `rls_auto_enable()`, which `RETURNS event_trigger`, and
+`create_profile_for_new_user()`, a trigger function with no trigger on
+any public table. Both were captured; neither of the things that FIRE
+them was, because an event trigger is a database-wide object and the
+signup trigger hangs off `auth.users`. A baseline built from A-F would
+have created both functions and wired up neither: new tables would
+silently not get RLS enabled, and a new user would get no profile row and
+therefore no role. Both failures are quiet.
+
+Query G exists because someone read a capture instead of feeding it
+straight into a generator. **A capture tool cannot tell you what it did
+not think to ask for.**
+
+### The rebuild found a fault nothing else would have
+
+`current_user_role()` is `language sql`, and Postgres validates SQL
+function bodies at CREATE time. The first baseline put functions before
+tables, so the function could not be created — `public.profiles` did not
+exist yet. On the live database this was invisible, because the table was
+already there.
+
+The fix was to order the file properly (tables, functions, indexes,
+triggers, RLS, grants, event trigger, storage) rather than to set
+`check_function_bodies = off`, which is what a dump does and which would
+have hidden a genuinely broken body later. **A file that has only ever
+been run against a database that already satisfies it has not been
+tested.**
+
+### The deltas that are accepted, and why naming them matters
+
+A rebuilt database differs from live in three known ways: `profiles`
+column numbering (live has a gap at attnum 3 from a column dropped long
+ago), `storage.buckets` columns that vary by Supabase version, and six
+platform event triggers that are not ours to recreate. All three are
+written into the baseline header. An unnamed accepted delta is
+indistinguishable from a regression the next time somebody runs the diff.
+
+### Four things the capture found that nobody had listed
+
+Worth noting that all four were invisible from the application code —
+they are properties of the database, and nothing but reading the database
+would have surfaced them.
+
+1. **`profiles.is_admin` is a GENERATED STORED column** whose expression
+   is `role = 'admin'`. A hand-written baseline would have made it a
+   plain boolean with a default, and every policy keying on it would have
+   diverged from production while still passing a smoke test.
+2. **`admins set game visibility` restricts nothing.** It and
+   `games_update` are both PERMISSIVE policies on `games` UPDATE, and
+   permissive policies OR together, so the effective rule is just
+   (admin or game_entry). A `game_entry` user can set `is_public` and
+   publish a recap. To restrict rather than widen, a policy has to be
+   `AS RESTRICTIVE`. **A second permissive policy can only ever add
+   permission; it cannot take any away.**
+3. **`games.designator` is globally UNIQUE**, so two schools cannot both
+   create "2025-W1" — a fourth tenancy hazard, and one that fails loudly
+   at insert rather than leaking quietly.
+4. **Hazard 1 is enforced by the database, not the application.**
+   `one_broadcast_game` is a partial unique index. Making broadcast
+   per-tenant is a migration replacing an index, not a change to
+   `api/feed.js`, and should be costed that way.
+
+### `plays.sequence_number` is numeric, and that changes a TODO estimate
+
+Fractional sequence numbers let a play be inserted between two existing
+ones without renumbering. TODO section 3 costs "insert a genuinely missed
+play" as a REAL GAP worth scoping; the schema already supports it.
+
+### The rule that came out of it
+
+**A baseline records what IS.** Both known-wrong things above were
+captured unchanged, with comments saying so and pointing at the migration
+that should fix them. A baseline that quietly corrects things is not a
+baseline — it is an undocumented migration, and the first time it is used
+to rebuild a database it will produce something that never existed.
+
+## Two verification habits that failed today (23 August 2026)
+
+**A CSS assertion must strip comments first.** Two source-text checks
+matched `order:` and `margin-inline` inside the explanatory comments that
+had just been written above the rules being tested, and reported failures
+that were not real. Both were rewritten to strip `/* ... */` before
+testing declarations. A check that a comment can pass or fail is not a
+check.
+
+**`raw.githubusercontent.com` lies about recent commits, and a
+cache-buster does not fix it.** Twice a file was reported as still
+present after it had been deleted, because the raw CDN was serving a
+stale copy — and `?v=<timestamp>` did not defeat it. The codeload tarball
+is better but also lags by up to a minute. The habit: fetch the tarball,
+and if the answer is "the step did not happen", WAIT and re-check before
+saying so. Sending someone back to redo work they already did correctly
+costs more than the wait.

@@ -1,4 +1,5 @@
-# StatChat — session handoff, 22 August 2026
+# StatChat — session handoff
+### Last updated 23 August 2026. Start with "WHERE TO PICK UP" at the foot of this file.
 
 ## The headline: the rail layout is now the live entry page
 
@@ -116,3 +117,48 @@ Nothing above covers the 23 August session: eleven play-through bugs, iPad
 portrait, `statchat.css` reaching 15 of 18 pages, or the season report
 rebuild. `TODO.md` is the current work list; `PROJECT_NOTES.md` carries the
 reasoning. Read those two and treat this file as background.
+
+
+---
+
+# WHERE TO PICK UP — end of 23 August 2026
+
+**Next task: multi-tenancy step 1, design the overlay auth.**
+See `TODO.md`, section "RESUME HERE".
+
+## What closed on 23 August
+
+**Season report.** The per-game charts did not scale from game 1 to
+game 15. Rebuilt as one column at every width; checked against a real
+PDF and accepted. The root cause was not the one in the brief — the
+PRINTED report was running the phone stylesheet, because Letter minus
+default margins falls under 767px, while the Chart.js canvases kept the
+widths they were built at on screen. Screen and printable width are now
+made equal so there is nothing to re-measure.
+
+**Multi-tenancy step 0, versioning the schema.** The real gap was worse
+than the plan said: there was not one `CREATE TABLE` statement in the
+repo. `sql/` now holds a proven baseline, a `schema_migrations` table,
+seven read-only capture queries that work from the Supabase SQL editor
+without a direct connection, and a `history/` folder for the
+pre-baseline scripts.
+
+The capture found four things nobody had listed, including a policy that
+does not restrict what its name says it does — `admins set game
+visibility` is PERMISSIVE alongside `games_update`, and permissive
+policies OR together, so a `game_entry` user can publish a recap.
+`MULTI_TENANT_PLAN.md` now lists six hazards rather than three.
+
+## Standing constraints
+
+- **Do not run anything against the production database.** Andy's call.
+  The baseline exists to be committed and to build scratch databases.
+- **The harness cannot see anything visual.** jsdom has no layout
+  engine, ignores `@media` entirely, and cannot settle `!important`.
+  Batch visual work and ask for one look; do not iterate blind.
+- **Nothing is written to `tests/` during a session** — ad-hoc
+  verification, then one batch at wrap-up. A batch is currently OWED;
+  see TODO.md.
+- **Verify uploads from the codeload tarball**, not
+  `raw.githubusercontent.com`, and wait a minute before concluding a
+  step failed.
