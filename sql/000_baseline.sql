@@ -444,6 +444,12 @@ create policy "games_delete" on public.games for delete to authenticated
   using (current_user_role() = 'admin'::text);
 create policy "anon reads shared games" on public.games for select to anon
   using ((status = 'final'::text) and (is_public = true));
+-- SUPERSEDED BY 004_restrict_game_visibility.sql, which drops this
+-- policy and replaces it with a BEFORE UPDATE trigger -- the only
+-- mechanism that can compare the old row against the new one, and so
+-- tell "is_public changed" from "some other column changed". A baseline
+-- records what WAS, so it stays here.
+--
 -- CAPTURED AS-IS, AND IT DOES NOT DO WHAT ITS NAME SAYS. Both this and
 -- games_update are PERMISSIVE, and permissive policies OR together, so
 -- the effective rule is just (admin or game_entry) -- a game_entry user
