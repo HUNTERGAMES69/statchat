@@ -751,8 +751,15 @@ Supabase dashboard. That is not a restriction in the sense intended here;
 it is the same class as not sawing the branch you are sitting on, and it
 is the reason the guard exists for tenant admins as well.
 
-If Andy wants that removed too, it should be a separate and deliberate
-decision, because it is the one action with no undo.
+**Confirmed by Andy, 24 Aug: no self-delete for the super admin
+either.** So the rule is uniform and needs no exception written into it —
+`userId === callerId` refuses everybody, platform included. The one place
+"no restrictions" does not reach is the one action with no undo.
+
+The interface should match, the way `account.html` now does for tenant
+admins: **the Delete button is not rendered on your own row at all**,
+rather than rendered and refusing. A control that can only ever produce
+an error is not a control.
 
 ### The open question this creates, and it is not a detail
 
