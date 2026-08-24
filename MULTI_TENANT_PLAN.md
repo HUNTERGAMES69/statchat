@@ -913,11 +913,65 @@ round.
 created, by the platform, and `current_tenant_id()` is null for the super
 admin at exactly that moment.
 
+### WHAT HAPPENED WHEN 006-008 WERE RUN — 24 August 2026
+
+Run against production in one sitting, with no games in progress. Pre-flight
+first: trigger name, pgcrypto schema, exactly one `is_our_team` row, no
+triggers outside the baseline, 2,724 plays. All clean.
+
+**006** — 5,372 rows backfilled with no losses: games 14, plays 2724,
+players 200, game_rosters 2426, profiles 7, teams 1. Every table showed
+`rows = with_tenant`. `plays_immutable_when_final` came back ENABLED,
+which was the one thing that could have been left dangerously open.
+
+**007** — four defaults in place, `teams` and `profiles` correctly
+without. Then the test that mattered: three plays saved from a real
+browser, none sending a tenant, all three stamped from the session. That
+proved the whole chain — `current_tenant_id()` resolving from a live
+Supabase JWT, through `security definer`, past RLS on `profiles`, inside
+a column default. Everything before that was simulation.
+
+**008 — A FIX FOR A MISS IN 007, found in production within minutes.**
+Creating a game failed outright: `null value in column "team_id"`.
+
+`006` made `games.team_id` NOT NULL. `007` was written and NAMED "the
+tenant defaults", and that framing is exactly what hid it — `team_id` is
+not a tenant column, so it was not on the list, even though the same
+migration had just made it required. Three paragraphs in `007` explain
+why `teams` gets no default, and none of them looked at the column
+immediately beside it.
+
+**A new NOT NULL column needs a default or a writer. Every time.** After
+the fix, every NOT NULL column across all seven tables was audited:
+`games.team_id` was the only gap, and everything else was a column the
+application has always sent.
+
+Two things reduced the cost. It failed LOUDLY and immediately rather than
+silently — a wrong tenant_id would have been far worse than a missing
+team_id. And `current_team_id()` orders by `created_at` rather than
+taking an unordered `limit 1`, because an unordered limit returns
+whichever row Postgres feels like, which is the precise fault that made
+`is_our_team` Hazard 0.
+
+Verified from a browser after 008: game creation, play entry, roster
+additions.
+
+- [ ] **The vMix feed has NOT been re-tested since the migration.**
+  Deferred on 24 Aug. The four feed endpoints hold the service key, so
+  `auth.uid()` is null for them and `current_tenant_id()` returns null —
+  which is harmless while they only READ and RLS is still `using (true)`.
+  **It stops being harmless at 009.** A policy of `tenant_id =
+  current_tenant_id()` denies every row to a caller with no session, and
+  the overlay would go blank on air with nothing in the app to explain
+  it. Test the feed BEFORE 009, not after.
+
 ### The order now
 
-    006  columns, backfill, functions, signup trigger   <- safe alone
-    007  column defaults                                <- safe alone
-    008  RLS rewritten                                  <- the dangerous one
+    006  columns, backfill, functions, signup trigger   <- DONE 24 Aug
+    007  column defaults                                <- DONE 24 Aug
+    008  games.team_id default                          <- DONE 24 Aug, fixing 007
+    ---  test the vMix feed                             <- OPEN, before 009
+    009  RLS rewritten                                  <- the dangerous one
     ---  then the nineteen is_our_team reads (presentation only)
 
 **008 is held until a real game has been run through 007.** A wrong

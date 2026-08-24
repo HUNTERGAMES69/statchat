@@ -2993,6 +2993,25 @@ Three layout faults fixed, reasoning in PROJECT_NOTES:
 
 ---
 
+## THE vMIX FEED IS UNTESTED SINCE THE TENANCY MIGRATION
+
+Migrations 006-008 ran against production on 24 Aug. Game creation, play
+entry and roster additions were all verified from a browser. **The four
+feed endpoints were not.**
+
+- [ ] **Load a vMix browser input and confirm the overlay still
+  populates.** They hold the service key and read with elevated rights,
+  so `auth.uid()` is null and `current_tenant_id()` returns null for
+  them. Harmless today, because RLS is still `using (true)`.
+
+  **It stops being harmless at 009.** A policy reading `tenant_id =
+  current_tenant_id()` denies every row to a caller with no session —
+  the overlay goes blank on air, and nothing in the app says why. This
+  is the single most likely way 009 breaks something, and the test takes
+  two minutes.
+
+---
+
 ## ACCURACY GOLDEN IS STALE — found 24 August 2026
 
 `node tests/accuracy_check.js` reports **4 changed paths against the
