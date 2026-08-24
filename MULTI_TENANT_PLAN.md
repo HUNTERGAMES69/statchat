@@ -876,9 +876,53 @@ removed, `.limit(1)` becomes `.single()`.
     same session     enter a full test game, export a recap, load a vMix input
     before selling   create a second tenant, confirm it sees none of Neville's
 
-**Steps 2 to 5 land together.** A tenant column with the old policies is
-a column nothing reads; new policies without patched inserts break every
-save.
+**THAT LAST CLAIM IS NOW WRONG, and 007 is why.** It said steps 2 to 5
+had to land together — "a tenant column with the old policies is a column
+nothing reads; new policies without patched inserts break every save."
+That was written when the application was going to supply `tenant_id` on
+every insert.
+
+**007 gives the four tables a column DEFAULT of `current_tenant_id()`,
+so the application never sends a tenant at all.** Eleven insert call
+sites needed no edit. The premise for bundling has gone with them, and
+the steps can now land one at a time — which is much better, because
+each can be verified alone.
+
+Three reasons the default beats patching the call sites, in order of
+weight:
+
+  1. **It is more secure.** A client that supplies a tenant is a client
+     that could supply the wrong one. The value now comes from the
+     session and never from the browser — the same reasoning that makes
+     `api/invite-user.js` ignore a `tenantId` in the request body.
+  2. **It fixes the offline queue**, which was the sharpest risk on the
+     list above. Plays sitting in localStorage from before the migration
+     carry no tenant_id, and patching the insert sites would not have
+     helped them — those rows are already serialised. A column default
+     fills them at insert time, so a surviving queue replays cleanly.
+  3. Eleven fewer edits, four of them in `game.html`.
+
+It depends on `auth.uid()` being present, which it is for every browser
+insert and for none of the service-key endpoints — and none of those
+insert into these tables, verified. If that ever changed, the default
+would evaluate to NULL and hit the NOT NULL constraint: a loud failure
+rather than a row filed under the wrong school, which is the right way
+round.
+
+`teams` deliberately gets NO default. A team is created when a SCHOOL is
+created, by the platform, and `current_tenant_id()` is null for the super
+admin at exactly that moment.
+
+### The order now
+
+    006  columns, backfill, functions, signup trigger   <- safe alone
+    007  column defaults                                <- safe alone
+    008  RLS rewritten                                  <- the dangerous one
+    ---  then the nineteen is_our_team reads (presentation only)
+
+**008 is held until a real game has been run through 007.** A wrong
+policy does not error; it returns fewer rows, or more. Separating it
+means anything that breaks afterwards has exactly one possible cause.
 
 ### The rule for each step
 
