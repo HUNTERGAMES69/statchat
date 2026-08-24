@@ -63,9 +63,6 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // No FEED_KEY configured means the feed is ungated, so there is
-    // nothing to hand out and the addresses work without one. Say so
-    // rather than returning an empty string that looks like a failure.
     // THE CALLER'S OWN TENANT KEY, not an environment variable.
     // ------------------------------------------------------------------
     // This used to return process.env.FEED_KEY — one secret shared by
@@ -76,11 +73,23 @@ module.exports = async (req, res) => {
     // fetch. That is correct rather than an oversight: there is
     // deliberately NO MASTER KEY, so the platform reads another school's
     // feed through the audited path, not by holding a secret.
-    const { data: tenantRows, error: tenantErr } = await adminClient
-      .from('tenants').select('feed_key')
-      .eq('id', profileRows[0].tenant_id).limit(1);
-    if (tenantErr) { res.status(500).json({ error: tenantErr.message }); return; }
-    const tenantKey = ((tenantRows || [])[0] || {}).feed_key || null;
+    // NAMES MATTER, and getting them wrong here failed almost silently.
+    // The first version of this block used `adminClient` and
+    // `profileRows` — the names used in manage-users.js, copied without
+    // reading THIS file, where the client is `admin` and the profile
+    // result is `profile`. The ReferenceError was swallowed by the catch
+    // below into a 500, the page fell back to keyless addresses, and the
+    // only symptom was a feed URL with no key on it.
+    const tenantId = ((profile || [])[0] || {}).tenant_id || null;
+    // A caller with no tenant is the super admin, who has no key of its
+    // own by design. Not an error — there is deliberately no master key.
+    let tenantKey = null;
+    if (tenantId) {
+      const { data: tenantRows, error: tenantErr } = await admin
+        .from('tenants').select('feed_key').eq('id', tenantId).limit(1);
+      if (tenantErr) { res.status(500).json({ error: tenantErr.message }); return; }
+      tenantKey = ((tenantRows || [])[0] || {}).feed_key || null;
+    }
 
     res.status(200).json({
       key: tenantKey,
