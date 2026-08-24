@@ -149,6 +149,11 @@
 <script src="team-icon.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
+  // Roster import limits. HARD caps, not advisories: there is no
+  // legitimate 200+ player football roster, and the cost of guessing
+  // wrong is a support call rather than lost data.
+  const MAX_ROSTER_BYTES = 5 * 1024 * 1024;
+  const MAX_ROSTER_ROWS  = 200;
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
@@ -554,6 +559,23 @@
       return;
     }
     const preview = document.getElementById('uploadPreview');
+      // A HARD SIZE CAP, CHECKED BEFORE THE FILE IS READ.
+      // ---------------------------------------------------------------
+      // XLSX.read loads the whole workbook into memory, so a very large
+      // file freezes this tab before anything could report a problem.
+      // The check has to come first or it never runs at all.
+      //
+      // A 200-player roster is about 20KB. 5MB is 250 times that, so
+      // anything over it is the wrong file rather than a big roster.
+      if (file.size > MAX_ROSTER_BYTES){
+        preview.classList.remove('hidden');
+        preview.innerHTML = '<p style="color:var(--sc-red, #a32d2d); margin:0;">' +
+          'That file is ' + (file.size / 1048576).toFixed(1) + 'MB and the limit is 5MB. ' +
+          'A roster spreadsheet is usually well under 100KB \u2014 this is probably not ' +
+          'the right file.</p>';
+        document.getElementById('rosterFile').value = '';
+        return;
+      }
     preview.classList.remove('hidden');
     preview.innerHTML = '<p style="font-size:13px; color:#888; margin:0;">Reading file…</p>';
 
@@ -566,6 +588,35 @@
         rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
       } catch (err){
         preview.innerHTML = '<p style="color:var(--sc-red, #a32d2d); margin:0;">Could not read that file: ' + err.message + '</p>';
+        return;
+      }
+
+      // A HARD ROW CAP, AND IT REFUSES RATHER THAN TRUNCATING.
+      // ---------------------------------------------------------------
+      // Andy's call, 24 Aug: 200 players, hard. A high school football
+      // roster is 40-120; 200 is generous and 201 means the wrong file or
+      // the wrong sheet.
+      //
+      // REFUSING rather than silently taking the first 200 is the point.
+      // A truncated import LOOKS like it worked, and the missing players
+      // are not discovered until somebody cannot be found in a picker on
+      // a Friday night.
+      //
+      // Counted on the PARSEABLE rows, not the raw sheet: title blocks and
+      // blank rows are normal and are skipped below, so they must not
+      // count against the cap.
+      const parseable = rows.filter(r => {
+        const n0 = r[0], n1 = r[1];
+        return n0 !== undefined && n1 !== undefined &&
+               /^\d+$/.test(String(n0).trim());
+      });
+      if (parseable.length > MAX_ROSTER_ROWS){
+        preview.innerHTML = '<p style="color:var(--sc-red, #a32d2d); margin:0;">' +
+          'That sheet has <strong>' + parseable.length + '</strong> player rows, and the ' +
+          'limit is ' + MAX_ROSTER_ROWS + '. <strong>Nothing has been added.</strong> Check ' +
+          'you have the right file and the right sheet \u2014 a roster this size is almost ' +
+          'always a whole-school export rather than one team.</p>';
+        document.getElementById('rosterFile').value = '';
         return;
       }
 

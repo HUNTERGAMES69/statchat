@@ -164,6 +164,10 @@
 <script src="team-icon.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
+  // Roster import limits, matching roster.html. HARD caps: there is no
+  // legitimate 200+ player football roster.
+  const MAX_ROSTER_BYTES = 5 * 1024 * 1024;
+  const MAX_ROSTER_ROWS  = 200;
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
@@ -926,6 +930,16 @@
   document.getElementById('opponentFile').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    // A HARD SIZE CAP, BEFORE THE FILE IS READ. XLSX.read loads the whole
+    // workbook into memory, so an enormous file freezes this tab before
+    // anything could report it.
+    if (file.size > MAX_ROSTER_BYTES){
+      showMsg('opponentRosterStatus', 'That file is ' +
+        (file.size / 1048576).toFixed(1) + 'MB and the limit is 5MB. A roster ' +
+        'spreadsheet is usually well under 100KB.', 'error');
+      document.getElementById('opponentFile').value = '';
+      return;
+    }
     const statusEl = document.getElementById('opponentRosterStatus');
     statusEl.innerHTML = '<div class="roster-summary" style="color:#888;">Reading file…</div>';
     const reader = new FileReader();
@@ -952,6 +966,22 @@
       // and a header line are still ignored, because those are normal
       // parts of a real spreadsheet; anything with content that cannot be
       // read in full is an error and blocks the import.
+      // A HARD ROW CAP, in the same spirit as the note above: refuse, do
+      // not silently take the first 200. A truncated opponent roster looks
+      // like it worked and the missing players surface mid-game as numbers
+      // with no name -- exactly the failure that comment describes.
+      const countable = rows.filter(r => {
+        const a = r[0], b = r[1];
+        return a !== undefined && b !== undefined && /^\d+$/.test(String(a).trim());
+      });
+      if (countable.length > MAX_ROSTER_ROWS){
+        showMsg('opponentRosterStatus', 'That sheet has ' + countable.length +
+          ' player rows and the limit is ' + MAX_ROSTER_ROWS + '. Nothing has been ' +
+          'loaded \u2014 check you have the right file and the right sheet.', 'error');
+        document.getElementById('opponentFile').value = '';
+        return;
+      }
+
       const entries = [], problems = [];
       let blankPositions = 0;
       const ALL_POS = OFFENSE_POS.concat(DEFENSE_POS, SPECIAL_POS);
