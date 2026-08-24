@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <link rel="icon" href="favicon.ico" sizes="any">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&display=swap" rel="stylesheet">
 <link rel="icon" href="logo.png" type="image/png">
 <!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
      below still wins -- that ordering is what lets a page be converted
@@ -47,7 +50,22 @@
   .team-band .tb-sub { margin-left:auto; font-weight:600; letter-spacing:0.06em;
                        opacity:0.85; text-transform:none; font-size:11px; }
 
-  .player-head { display:flex; align-items:center; gap:16px; }
+  /* position:relative so the StatChat mark can sit in its corner. */
+  .player-head { display:flex; align-items:center; gap:16px; position:relative; }
+  /* THE ONLY REPORT THAT CARRIED NO STATCHAT BRANDING in its header --
+     recap, season and stat package all do. The team logo beside the
+     player's name says whose player it is; this says whose report it is. */
+  .statchat-mark { position:absolute; top:0; right:0; display:flex;
+                   align-items:center; gap:7px; }
+  .statchat-mark img { width:24px; height:24px; border-radius:5px; display:block; }
+  .statchat-mark span { font-family:'Barlow Condensed', -apple-system, BlinkMacSystemFont,
+                        'Segoe UI', Arial, sans-serif;
+                        font-weight:700; font-size:18px; line-height:1; text-transform:uppercase;
+                        letter-spacing:0.04em; color:var(--sc-navy, #1a1a2e); }
+  @media (max-width:640px){
+    .statchat-mark img { width:20px; height:20px; }
+    .statchat-mark span { font-size:15px; }
+  }
   .player-logo { width:52px; height:52px; object-fit:contain; flex-shrink:0; }
   .player-name { font-size:26px; font-weight:800; letter-spacing:-0.02em; line-height:1.1; }
   .player-meta { font-size:13px; color:#7c8794; margin-top:3px; }
@@ -143,8 +161,36 @@
     body { background:#fff; }
     .wrap { max-width:none; padding:0 24px; }
     .no-print { display:none !important; }
-    .card { box-shadow:none; border:1px solid #ddd; page-break-inside:avoid;
-            break-inside:avoid; }
+    /* CARDS MAY BREAK ACROSS PAGES. They used to carry
+       `break-inside:avoid`, and that one declaration caused BOTH faults
+       in the printed report:
+         * page one held the header and nothing else, because the first
+           stat card could not fit beneath it and so moved wholesale to
+           page two;
+         * the end mark landed on a sheet of its own, because the last
+           card filled its page and left nowhere for the mark to sit --
+           and honouring its `break-before:avoid` would have required
+           moving the whole unbreakable card, which the browser declines.
+       A card here is most of a page tall. `break-inside:avoid` on a
+       block taller than the space available is a hope about space, not a
+       rule about a boundary (see PROJECT_NOTES, 15 Aug) -- the browser
+       cannot satisfy it and resolves it however it likes.
+       So the card flows, and the pieces that must NOT be split say so
+       individually below. Those are all short enough that the request
+       can actually be granted. */
+    .card { box-shadow:none; border:1px solid #ddd; }
+    /* A heading never parts from what it introduces. */
+    .sec-head, .team-band { page-break-after:avoid; break-after:avoid; }
+    /* Each of these is a few centimetres at most, so "keep together" is
+       a request a print engine can honour. */
+    .totals, .tot, .splits, .sp, .trend-cols, .trend-bars, .cols,
+    .chart-key, .bar-row { page-break-inside:avoid; break-inside:avoid; }
+    /* Tables may split -- a nine-row game log across a page boundary is
+       ordinary and readable -- but never leave one or two rows stranded. */
+    table { page-break-inside:auto; }
+    tbody tr { page-break-inside:avoid; break-inside:avoid; }
+    thead { display:table-header-group; }
+    tfoot { display:table-footer-group; }
     .sec-eyebrow { display:block; }
     .team-band, .card, tbody tr {
       -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -159,12 +205,17 @@
        break-before:avoid is the part that actually enforces it: it tells
        the browser not to start a new page immediately before the mark, so
        it stays with the content it belongs to. */
-    .print-endmark { display:flex; align-items:center; justify-content:center;
-                     margin:24px 0 0; padding-top:16px;
+    .print-endmark { display:flex; align-items:center; justify-content:center; gap:8px;
+                     margin:14mm 0 0; padding-top:14px;
                      border-top:1px solid var(--sc-rule, #e6e6e6);
                      page-break-before:avoid; break-before:avoid;
                      page-break-inside:avoid; break-inside:avoid; }
-    .print-endmark img { width:38px; height:38px; border-radius:7px; }
+    .print-endmark img { width:24px; height:24px; border-radius:5px; }
+    .print-endmark span { font-family:'Barlow Condensed', -apple-system, BlinkMacSystemFont,
+                          'Segoe UI', Arial, sans-serif;
+                          font-weight:700; font-size:17px; line-height:1;
+                          text-transform:uppercase; letter-spacing:0.04em;
+                          color:var(--sc-ink-muted, #9aa3b2); }
     /* Print gets the columns whatever the screen was doing -- a sheet of
        paper is always wide enough. */
     .trend-cols { display:block !important; }
@@ -724,6 +775,7 @@
 
     let html = '<div class="card">' +
       '<div class="player-head">' +
+        '<div class="statchat-mark"><img src="logo.png" alt=""><span>StatChat</span></div>' +
         (logo ? '<img class="player-logo" src="' + logo + '">' : '') +
         '<div>' +
           '<div class="player-name">' + name + '</div>' +
@@ -841,7 +893,7 @@
         'in the selected season.</p></div>';
     }
 
-    html += '<div class="print-endmark"><img src="logo.png" alt="StatChat"></div>';
+    html += '<div class="print-endmark"><img src="logo.png" alt=""><span>StatChat</span></div>';
     return html;
   }
 
