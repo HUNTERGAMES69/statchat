@@ -988,14 +988,175 @@ RLS will cover the whole application EXCEPT these five files.
   a gate on 009 — it is a gate on selling to a SECOND SCHOOL, which is
   weeks away rather than days.
 
-### The order now### The order now
+### 009 RAN, 24 August 2026 — the app is isolated
+
+Pre-flight: all seven profiles carried a tenant, so nobody lost access.
+
+Verified in the live app afterwards: dashboard (all 14 games), opening a
+game, entering a play, the roster page, adding a player, a recap, and a
+season report. **The recap mattered most** — it is the path deliberately
+left untouched, and a tenant clause leaking into those anon policies
+would have shown a published recap as empty. That is the failure a coach
+finds rather than the developer.
+
+Proven in scratch with two schools before it went near production:
+
+    Neville   sees games 3, plays 3, teams 1, tenants 1
+    Riverside sees games 1, plays 1, teams 1, tenants 1
+    Platform  sees games 4, plays 4, teams 2, tenants 2
+
+Six attacks, all repelled: reading another school's play by exact id,
+updating their game, inserting into it while naming their tenant,
+**moving one's own game into their tenant** (which is what `with check`
+exists for), and setting one's own subscription to 'active'. Editing
+one's own branding still works.
+
+The DOWN was run and proven rather than read: afterwards Riverside saw
+all four games again, so the original `using (true)` policies were
+genuinely restored and not approximately.
+
+Two things were added that this plan had not anticipated:
+
+  * **`tenants` needed its own policies.** It is a 006 table and RLS had
+    never been enabled on it.
+  * **A billing guard trigger.** `tenants_update` lets a school edit its
+    own row, which must not reach `subscription`, `renews_on` or
+    `feed_key`. Postgres has no column-level WITH CHECK, so a trigger is
+    the only mechanism. A customer able to set their own subscription to
+    'active' is not a business.
+
+Also noted: `statchatadmin@statchat.co` does not exist yet and no account
+carries `is_super_admin`. 009 works without one — it just means the
+super-admin path is untested against production, and no account can
+currently reach across schools. Academic with one school; do it before
+the second.
+
+### 010 RAN, 24 August 2026 — hazards 1, 2 and 4 closed
+
+The last real security gap. RLS secured the whole application except the
+five service-key endpoints; this is the hand-written half.
+
+**What it found on the way.** Only `feed.js` checked a key at all.
+`gamedata.js` served the on-air game to anyone with the URL and
+`seasondata.js` served an ENTIRE SEASON — no key, no token, nothing. With
+one school that was a known and accepted position. With two it is a
+cross-tenant leak with nothing behind it.
+
+`feed.js` also read branding through `is_our_team`. That is Hazard 0
+inside a service-key endpoint, where it is worse than in the app: RLS
+would have scoped it there and nothing does here. With two schools it
+matches a row in EACH, and an unordered `limit(1)` returns whichever
+Postgres feels like — the overlay would have worn the wrong school's
+colours with no error anywhere.
+
+`og.js` and `share.js` needed no change: a share token identifies one
+game, and a game belongs to one tenant.
+
+**The schema half.** `one_broadcast_game` became per-tenant and
+`games.designator` unique per tenant. Tested both ways — two schools can
+each run a game called "2026-W1" and each be on air at once, but one
+school still cannot broadcast two games simultaneously.
+
+**Verified end to end in production**: `broadcast_setup.html` served the
+tenant's key, the feed URL returned data with it, and altering one
+character returned `Invalid or missing key`.
+
+### THE BUG THIS SHIPPED WITH, AND WHY
+
+`feedkey.js` was rewritten to return the tenant's key and reached
+production throwing a ReferenceError. It used `adminClient` and
+`profileRows` — **the variable names from `manage-users.js`, copied
+without reading the file being edited**, where the client is `admin` and
+the profile result is `profile`. The surrounding `catch` swallowed it
+into a 500, the page fell back to keyless addresses, and the only visible
+symptom was a feed URL with no key on it.
+
+Two failures, and the second is the one that matters:
+
+  * naming conventions were carried across from a neighbouring file
+    rather than read from this one;
+  * **the endpoint was never executed.** Every other change that day got
+    a functional test; this one got `node --check`, which will happily
+    pass a file full of undefined variables.
+
+It also shipped stale advice: `broadcast_setup.html` told the reader to
+set a `FEED_KEY` environment variable — the exact thing 010 retired. Same
+shape as the `team-icon.js` miss: the mechanism changed and the
+documentation describing the old one was left in place.
+
+- [ ] **Delete `FEED_KEY` from Vercel.** Nothing reads it; 010 replaced
+  the only branch that did. A retired secret in the config is the thing
+  this migration existed to abolish.
+
+### THE CALLERS 010 FORGOT — found in production, 24 Aug
+
+010 scoped the API endpoints and gave the raw feed addresses a key. It
+did **not** touch the three pages that CALL those endpoints, nor the
+overlay addresses handed out on the same setup page. So the feed URLs
+worked and every overlay returned 401.
+
+**Scoping an endpoint is half the job. Finding its callers is the other
+half.** Nothing in the test suite looked for callers, which is why the
+fix shipped with `tests/overlay_key_check.js` rather than a note.
+
+The three overlays now read `?key=` from their own URL and pass it
+through. That is the only mechanism available: an overlay is a browser
+source in vMix with no session, so its key must travel in the address it
+was opened with, exactly like a feed's.
+
+### A bulk edit that got fourteen of fifteen right
+
+`broadcast_setup.html` builds the overlay addresses TWICE — ten for the
+on-screen list, five more for the emailed setup instructions. Andy
+noticed the screenshot showed ten while the conversion reported fifteen,
+and asking about the difference found a bug.
+
+One of the five was written differently:
+
+    overlayUrl('/broadcast_leaders.html?view=') + v
+
+which put the key in the MIDDLE — `?view=&key=abc...rushing` — so the
+email would have handed out six dead addresses. The on-screen list built
+each URL whole and was fine, which is precisely how it would have gone
+unnoticed until somebody followed the emailed instructions.
+
+**A mechanical edit is only as safe as the assumption that every call
+site has the same shape**, and that assumption was never checked before
+the regex ran. The check now rejects any concatenation onto
+`overlayUrl()`.
+
+### Two checks that were wrong rather than the code
+
+Worth recording together, because they are the same mistake:
+
+  * `overlay_key_check.js` first read only the 220 characters AFTER each
+    fetch and reported three failures against correct code — the query
+    string is assembled on the lines ABOVE, which is the ordinary way to
+    write it. **A check that only passes when the code is written the way
+    the check imagined is worse than no check.**
+  * `feedkey.js` was verified with `node --check`, which will happily
+    pass a file full of undefined variables. It reached production
+    throwing a ReferenceError.
+
+Verified in production: page links and emailed links both render.
+
+### The order now
 
     006  columns, backfill, functions, signup trigger   <- DONE 24 Aug
     007  column defaults                                <- DONE 24 Aug
     008  games.team_id default                          <- DONE 24 Aug, fixing 007
     ---  test the vMix feed                             <- OPEN, before 009
-    009  RLS rewritten                                  <- the dangerous one
-    ---  then the nineteen is_our_team reads (presentation only)
+    009  RLS rewritten                                  <- DONE 24 Aug
+    ---  REMAINING, in order of what blocks a second school:
+    010  feed key scoping + per-tenant uniqueness      <- DONE 24 Aug
+
+    NO SECURITY GAP REMAINS. What is left is product, not isolation:
+    ---  create statchatadmin@statchat.co, set is_super_admin
+    ---  the nineteen is_our_team reads (presentation only)
+    ---  the super-admin console and add-a-school screens (mocked)
+    ---  subscription state and read-only lapse
+    ---  audit trail
+    ---  test a vMix browser input when hardware allows
 
 **008 is held until a real game has been run through 007.** A wrong
 policy does not error; it returns fewer rows, or more. Separating it
