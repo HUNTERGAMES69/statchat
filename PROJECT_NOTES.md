@@ -3168,3 +3168,81 @@ Under multi-tenancy the question returns in a different shape: not "which
 role may publish" but "may this user publish THIS school's game". That is
 tenant scoping, which every table needs regardless, and it was not a
 reason to keep a role check here in the meantime.
+
+
+## The printed reports: three faults, one root each (24 August 2026)
+
+All four report surfaces got a StatChat lockup in the header and at the
+foot. Fixing the layout around them turned up three separate faults, and
+each had a single cause worth naming.
+
+### 1. The end mark on a sheet of its own
+
+`.print-endmark` carried `margin:42mm 0 0` in recap, season report and
+stat package. The comment above it admitted the flaw and then chose a
+number anyway:
+
+    "if the content happens to end low on the page the logo moves to the
+     next one. 42mm is chosen to clear the common case without being so
+     large it usually spills."
+
+**A margin cannot anchor anything to the bottom of a sheet.** Every value
+large enough to LOOK like a footer is also large enough to spill, so the
+failure was in the mechanism and no number would have fixed it. Abandoned
+rather than retuned: 14mm plus `break-before:avoid`, which reads as an
+end mark closing the document. The thing that genuinely sits at the foot
+of every page is `.print-footer`, which is `position:fixed` and does
+anchor.
+
+### 2. A near-page-tall block asked to stay whole
+
+`player_report.html` printed a nearly empty first page AND stranded its
+end mark. Both came from `.card { break-inside:avoid }`. A stat card
+there is most of a page tall, so the first one could not fit under the
+header and moved wholesale to page two, and the last one filled its page
+leaving nowhere for the mark — honouring the mark's `break-before:avoid`
+would have meant moving an unbreakable card, which the browser declines.
+
+This is the 15 August lesson again, in a new file: **break-inside:avoid
+is a hope about space, not a rule about a boundary.** The avoid moved
+down onto the blocks short enough to honour it.
+
+### 3. Breaking gracefully is not the same as fitting
+
+Letting the cards break fixed the empty page and produced a new fault:
+each card's closing block stranded at the top of the next page with the
+card border cut across the boundary. The fix was to make the card
+SHORTER rather than to keep choosing where to cut it. Two blocks were
+each spending a whole row on nothing — the top tiles wrapped 5 + 1
+because `auto-fit` at 110px only reaches five columns in the printable
+width, and the closing splits ran two columns by three rows, a screen
+layout carried onto a sheet that is wider than it is tall. Six across and
+three across respectively gave back about the overspill.
+
+### The print/phone breakpoint, again
+
+The season report's four fixed-bar-count charts stopped printing centred.
+`margin-inline:auto` was still there; what removed it was
+`@media (max-width: 767px)` setting `.chart-box.compact { max-width:none }`
+— **and that block fires when printing**, because Letter minus this
+file's 8mm `@page` margins is about 755px of layout width. With no cap
+the box fills the column and auto margins have nothing to distribute.
+
+The first fix was to scope the whole block to `screen`. That was too
+broad: it would also have reverted chart heights and section padding in
+print, changing a report that was already right. Deleting the one
+offending declaration was the correct size of change, and it cost the
+phone nothing — below 430px the cap never binds anyway.
+
+**The same arithmetic has now caused three separate bugs** (the collapsed
+grid in August, the un-centred charts, and this file's phone rules
+applying to paper). Any `@media (max-width: N)` where N is near 760
+should be assumed to fire in print until checked.
+
+### A pattern in the checks themselves
+
+Two mutation tests passed against a broken file this session because the
+assertion confirmed a rule EXISTED rather than what it SAID — a 60px logo
+satisfied "there is a `.statchat-mark img` rule", and a blanked honeypot
+satisfied "the key is present". **Asserting that a declaration exists is
+not asserting what it does.** Both were rewritten to read the value.

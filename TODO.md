@@ -2968,6 +2968,31 @@ thing to check first.**
 
 ---
 
+## PRINTED REPORTS — branding and layout, DONE 24 August 2026
+
+All four report surfaces now carry a StatChat lockup in the header (mark
+plus wordmark, 24-26px, down from a 60-70px bare logo) and at the foot.
+`player_report.html` had no StatChat branding in its header at all; it
+does now.
+
+Three layout faults fixed, reasoning in PROJECT_NOTES:
+
+  * the end mark's 42mm margin, which put it on a sheet of its own -- a
+    margin cannot anchor to the bottom of a page, so the mechanism was
+    abandoned rather than retuned;
+  * `player_report`'s `.card { break-inside:avoid }`, which emptied page
+    one and stranded the end mark;
+  * the season report's compact charts printing flush left, because the
+    767px phone block fires in print and lifts their max-width cap.
+
+- [ ] **Assume any `@media (max-width: N)` with N near 760 fires in
+  print.** Letter minus typical `@page` margins is 739-755px. This has
+  now caused three separate bugs. `recap.html` and `stat_package.html`
+  still have unscoped 767px blocks; they print correctly today, so they
+  were left alone, but that is luck rather than design.
+
+---
+
 ## TOKENIZATION AND DARK MODE — measured 24 Aug, DEFERRED
 
 Not a prerequisite for multi-tenancy; the two do not touch. Deferred on
