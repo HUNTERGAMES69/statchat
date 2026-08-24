@@ -49,18 +49,34 @@ function boot(profileRow, opts) {
   // the LIVE game first and the restore click sent its id. The check
   // failed and the page was correct. A stub that does not do what the
   // query does cannot test a page that depends on the query doing it.
+  // THE STUB PROJECTS COLUMNS, like PostgREST does. Without this a
+  // mutation that stopped selecting logo_url still saw it in the fixture
+  // and passed — the stub was handing back columns the page never asked
+  // for. Embedded resources ("tenants(name)") are kept whole.
+  const project = (rows, cols) => {
+    if (!cols) return rows;
+    const want = cols.split(',').map(c => c.trim()).filter(Boolean);
+    const plain = want.filter(c => !c.includes('('));
+    const embeds = want.filter(c => c.includes('(')).map(c => c.split('(')[0]);
+    return rows.map(r => {
+      const o = {};
+      plain.forEach(c => { if (c in r) o[c] = r[c]; });
+      embeds.forEach(c => { if (c in r) o[c] = r[c]; });
+      return o;
+    });
+  };
   const q = (rows) => {
-    let out = rows;
+    let out = rows, cols = null;
     const api = {
-      select(){ return api; },
+      select(c){ cols = c; return api; },
       eq(col, val){ out = out.filter(r => r[col] === val); return api; },
       not(col, op, val){
         if (op === 'is' && val === null) out = out.filter(r => r[col] != null);
         return api;
       },
-      order(){ return Promise.resolve({ data: out, error: null }); },
-      limit(){ return Promise.resolve({ data: out, error: null }); },
-      then(res){ return Promise.resolve({ data: out, error: null }).then(res); }
+      order(){ return Promise.resolve({ data: project(out, cols), error: null }); },
+      limit(){ return Promise.resolve({ data: project(out, cols), error: null }); },
+      then(res){ return Promise.resolve({ data: project(out, cols), error: null }).then(res); }
     };
     return api;
   };
@@ -99,8 +115,9 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // ---- the platform gets in ------------------------------------------
   b = boot({ id: 'u1', is_super_admin: true, tenant_id: null }, {
     tenants: [{ id:'t1', name:'Neville', full_name:'Neville High School',
+                logo_url:'https://cdn/neville.png',
                 subscription:'active', renews_on:'2027-08-01' },
-              { id:'t2', name:'Riverside', full_name:null,
+              { id:'t2', name:'Riverside', full_name:null, logo_url:null,
                 subscription:'trial', renews_on:null }],
     games: [{ id:'g1', tenant_id:'t1', deleted_at:null },
             { id:'g2', tenant_id:'t1', deleted_at:'2026-08-24T20:00:00Z',
@@ -112,6 +129,18 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   chk(!b.d.getElementById('console').classList.contains('hidden'), 'the platform sees the console');
   chk(/statchatadmin@statchat\.co/.test(b.d.getElementById('whoami').textContent),
       'and the account it is signed in as is named on screen');
+
+  // THE CREST. A school with a logo shows it; one without shows a
+  // monogram rather than a gap or a broken image — and "no logo yet" is
+  // the ordinary state for a new customer, which is exactly the one the
+  // platform is most likely to be looking up.
+  const schoolsHtml = b.d.getElementById('schoolsBody').innerHTML;
+  chk(/<img src="https:\/\/cdn\/neville\.png"/.test(schoolsHtml),
+      'a school WITH a logo shows it');
+  chk(/class="crest">R</.test(schoolsHtml),
+      'a school WITHOUT one shows a monogram, not a gap or a broken image');
+  chk(/onerror=/.test(schoolsHtml),
+      'and a logo that fails to load falls back rather than showing a broken icon');
 
   const schools = b.d.getElementById('schoolsBody').textContent;
   chk(/Neville/.test(schools) && /Riverside/.test(schools), 'both schools are listed');
