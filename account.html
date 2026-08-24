@@ -515,7 +515,19 @@
         '<button class="secondary" data-action="toggleDisabled"' +
           (isSelf ? ' disabled title="You can\'t disable your own account."' : '') + '>' +
           (u.disabled ? 'Enable' : 'Disable') + '</button>' +
-        '<button class="danger" data-action="delete">Delete</button>' +
+        // NOT RENDERED AT ALL FOR YOUR OWN ROW, rather than rendered
+        // disabled like the two controls above it. The endpoint has
+        // always refused to delete the caller, so the button could only
+        // ever produce an error message -- and a red button on your own
+        // account that does nothing invites the question "what happens
+        // if I press it" every time the page is opened.
+        //
+        // The role selector and Disable stay visible-but-disabled
+        // because they are meaningful controls that happen to be
+        // unavailable on this row. Delete is not: there is no
+        // circumstance in which an admin removes their own account from
+        // here, so the honest rendering is absence.
+        (isSelf ? '' : '<button class="danger" data-action="delete">Delete</button>') +
         '</div>' +
         '<div class="set-password-inline hidden" data-role="setPasswordBlock">' +
         '<input type="password" placeholder="New password (min 6 chars)" data-role="newPasswordInput">' +
