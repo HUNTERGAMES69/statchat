@@ -2,6 +2,29 @@
 
 Automated checks that drive the **real** app, not a reimplementation of it.
 
+### A note on the four site checks, and on jsdom
+
+`site_layout_check.js` asserts from **source text**, not `getComputedStyle`.
+jsdom has no layout engine: it ignores `@media` entirely, cannot resolve
+`!important`, and reports a width of zero for everything. A visual check
+written against `getComputedStyle` passes whatever the stylesheet says —
+including `display:none`, which is not hypothetical. A mutation that hid
+the sign-in lockup slipped past a structural check on 24 Aug and had to be
+caught by reading the rule instead.
+
+Reading rules is a weaker check than a browser. It is the strongest one
+that can actually **fail** in this harness, and a check that cannot fail is
+worse than no check.
+
+Two related habits, both learned the hard way on 24 Aug:
+
+* **Strip CSS comments before asserting.** Two checks matched their own
+  explanatory comments — one looking for `order:`, one for `margin-inline`
+  — and reported failures that were not real.
+* **Deleting CSS by class name is only safe when the name means one
+  thing.** A dead-rule sweep removed `.fld`, which the contact form shared
+  with a graphic, and silently unstyled every field on the form.
+
 ```bash
 npm install jsdom      # one-time, from the repo root
 node tests/engine_parity.js       # ~1s   are the duplicated engine copies still in sync?
@@ -33,6 +56,13 @@ node tests/fake_kick_check.js             # ~8s  fake punts and fake field goals
 node tests/accuracy_check.js               # ~90s invariants + golden snapshot over every UI path
 node tests/fuzz_check.js 60               # ~5m  property-based fuzzer (not in the normal suite)
 node tests/full_game_check.js             # ~15s a WHOLE GAME through the UI, nothing injected
+
+# The public site and the way in — added 24 Aug 2026. These drive index.html
+# and login.html, which no other check touches, and api/contact.js.
+node tests/site_layout_check.js           # ~1s   layout rules, read from SOURCE not jsdom
+node tests/login_reset_check.js           # ~2s   a password can actually be reset
+node tests/contact_check.js               # ~2s   a lead is never lost by a broken notifier
+node tests/icon_check.js                  # ~1s   team-icon.js is present and inert
 
 # Not in the normal suite -- slow, needs network on first run:
 node tests/nfl/run_qa.js 5                # ~4m  five real NFL games through the real UI

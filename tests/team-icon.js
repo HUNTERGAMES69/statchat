@@ -29,6 +29,17 @@
 // reasons. Tracked in TODO.md. Until then this file must stay present --
 // deleting it would put a 404 in the console of every page in the app.
 //
+// RESTORED 24 August 2026. The live copy at the repo root was still the
+// pre-22-August version: the neutering was written and never uploaded,
+// so the feature carried on working and an iPhone home screen showed the
+// school's logo. It was briefly re-fixed on 24 Aug as a favicon/home-icon
+// SPLIT before this file was found, which would have reversed a decision
+// already made and argued. Andy's call stands: StatChat everywhere.
+//
+// If a per-team icon is ever wanted again it belongs in the tenancy work,
+// where `is_our_team` -- which picks exactly one row -- has to become a
+// tenant lookup anyway.
+//
 // teams.icon_url is left in the database. Dropping a column is a
 // migration, the value is harmless, and the schema is not yet versioned
 // (see MULTI_TENANT_PLAN.md step 0).
