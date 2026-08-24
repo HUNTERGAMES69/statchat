@@ -58,11 +58,25 @@
   </div>
 
   <div id="setPasswordView" class="hidden">
-    <h1>Set your password</h1>
-    <p class="sub">You're accepting an invite. Choose a password to finish setting up your account.</p>
+    <h1 id="setPasswordTitle">Set your password</h1>
+    <p class="sub" id="setPasswordSub">You're accepting an invite. Choose a password to finish setting up your account.</p>
     <div id="setPasswordMsg"></div>
     <label>New password<input type="password" id="newPassword" minlength="6"></label>
     <button id="setPasswordBtn">Set password</button>
+  </div>
+
+  <!-- REQUESTING a reset. The link Supabase emails lands back on this
+       same page with type=recovery in the hash, which the handler below
+       already recognises -- the receiving half of this flow was built
+       with the invite flow and has been sitting unused because nothing
+       could trigger it. -->
+  <div id="resetRequestView" class="hidden">
+    <h1>Reset your password</h1>
+    <p class="sub">Enter the email address on your account and we'll send you a link to set a new password.</p>
+    <div id="resetRequestMsg"></div>
+    <label>Email<input type="email" id="resetEmailInput" autocomplete="username"></label>
+    <button id="sendResetBtn">Send reset link</button>
+    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="resetBackLink" style="color:#1565c0;">Back to sign in</a></p>
   </div>
 
   <div id="loginView" class="hidden">
@@ -84,7 +98,8 @@
       <button id="mfaLoginBtn" style="margin-top:10px;">Verify</button>
       <button id="mfaCancelBtn" class="secondary" style="margin-top:10px; margin-left:8px;">Cancel</button>
     </div>
-    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="haveCodeLink" style="color:#1565c0;">Have an invite code?</a></p>
+    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="forgotLink" style="color:#1565c0;">Forgot your password?</a></p>
+    <p class="sub" style="margin-top:6px; margin-bottom:0;"><a href="#" id="haveCodeLink" style="color:#1565c0;">Have an invite code?</a></p>
   </div>
 
   <div id="loggedInView" class="hidden">
@@ -103,7 +118,7 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-  const views = ['loading', 'enterCodeView', 'setPasswordView', 'loginView', 'loggedInView'];
+  const views = ['loading', 'enterCodeView', 'setPasswordView', 'resetRequestView', 'loginView', 'loggedInView'];
   function showView(name){
     views.forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
   }
@@ -138,6 +153,17 @@
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY' || (isInviteOrRecovery && session)){
+      // The same screen serves two arrivals and must not lie about which
+      // one this is. A returning user told "you're accepting an invite"
+      // reasonably wonders whether they are about to create a second
+      // account. linkType is already parsed from the hash above; the
+      // PASSWORD_RECOVERY event covers the case where Supabase fires it
+      // without a type= marker.
+      if (linkType === 'recovery' || event === 'PASSWORD_RECOVERY'){
+        document.getElementById('setPasswordTitle').textContent = 'Choose a new password';
+        document.getElementById('setPasswordSub').textContent =
+          'Enter a new password for your account. You will be signed in once it is saved.';
+      }
       showView('setPasswordView');
     } else if (event === 'INITIAL_SESSION'){
       // Fires once automatically right after the client loads and finishes
@@ -211,6 +237,64 @@
   document.getElementById('haveCodeLink').addEventListener('click', (e) => {
     e.preventDefault();
     showView('enterCodeView');
+  });
+
+  // ---- requesting a password reset ------------------------------------
+
+  document.getElementById('forgotLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    // Carry across whatever was already typed, so nobody types their
+    // address twice.
+    document.getElementById('resetEmailInput').value =
+      document.getElementById('loginEmail').value.trim();
+    showView('resetRequestView');
+    document.getElementById('resetEmailInput').focus();
+  });
+
+  document.getElementById('resetBackLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    showView('loginView');
+  });
+
+  document.getElementById('sendResetBtn').addEventListener('click', async () => {
+    const email = document.getElementById('resetEmailInput').value.trim();
+    if (!email){
+      showMsg('resetRequestMsg', 'Enter the email address on your account.', 'error');
+      return;
+    }
+    const btn = document.getElementById('sendResetBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    // redirectTo is built from the CURRENT origin rather than hardcoded.
+    // The app answers on three hostnames -- the apex, www, and the
+    // vercel.app deploy URL -- and a hardcoded value would bounce a
+    // scorer who started on one of the other two. All three are on the
+    // Supabase allow list; an origin that is not on it is rejected by
+    // Supabase and falls back to the Site URL, which is this page.
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/login.html'
+    });
+
+    // THE SAME ANSWER EITHER WAY, deliberately. Saying "no account with
+    // that email" turns this box into a way to find out who has an
+    // account, and a school's staff list is not ours to confirm to a
+    // stranger. Rate limiting is Supabase's; the wording here is ours.
+    // A real error is still logged so a genuine outage is not silently
+    // reported as success to the person who has to debug it.
+    if (error) console.warn('resetPasswordForEmail:', error.message);
+    showMsg('resetRequestMsg',
+      'If there is an account for that address, a reset link is on its way. ' +
+      'It expires after an hour — check your spam folder if it has not arrived.',
+      'success');
+    btn.textContent = 'Send reset link';
+    // Left DISABLED after a send. The button is the only thing stopping
+    // someone tapping it five times and then wondering which of the five
+    // emails is the live one -- only the newest link works.
+  });
+
+  document.getElementById('resetEmailInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('sendResetBtn').click();
   });
 
   document.getElementById('backToLoginLink').addEventListener('click', (e) => {
