@@ -52,6 +52,29 @@ function run() {
     }
 
     if (!/LOGO_TYPES\.includes\(/.test(s)) bad(file, 'the type allowlist is never applied');
+
+    // THE MESSAGE MUST APPEAR AT THE CONTROL. Reported 24 Aug: the error
+    // was shown at the top of the form, about a button several fields
+    // down, and was missed entirely. A message the reader is not looking
+    // at is not a message.
+    if (!/function showLogoError\(/.test(s)) {
+      bad(file, 'no showLogoError() — the refusal would be written to the page-level ' +
+                'message area, away from the control it is about');
+    }
+    if (!/showLogoError\(/.test(s) || (s.match(/showLogoError\(/g) || []).length < 3) {
+      bad(file, 'showLogoError is not used for both refusals and the clear-on-success');
+    }
+    // COUNTING USES IS NOT ENOUGH. A mutation that sent ONE of the two
+    // refusals back to the page-level message area left three uses
+    // standing and passed. What matters is that no LOGO message goes to
+    // the page-level banner at all — so the text is what gets checked,
+    // not the number of calls.
+    (s.match(/showMsg\([^;]{0,400}/g) || []).forEach(call => {
+      if (/Invalid file type|limit is 2MB|PNG, JPEG, WebP or SVG/.test(call)) {
+        bad(file, 'a logo message is sent to the page-level banner instead of the field: ' +
+                  call.slice(0, 70).replace(/\s+/g, ' '));
+      }
+    });
     if (!/\.size > LOGO_MAX_BYTES/.test(s)) bad(file, 'the size cap is never applied');
 
     // The check must run at SELECTION, which means before the upload call.
@@ -98,6 +121,17 @@ function run() {
   if (!/logoFailed \? 6000 : 800/.test(cg)) {
     bad('create_game.html', 'the redirect is not held back when a logo failed. 800ms is ' +
         'enough to register a green tick and nowhere near enough to read a failure.');
+  }
+
+  // and the slot has to exist in the markup, with role="alert" so it is
+  // announced rather than only seen.
+  for (const [file, id] of [['create_game.html','oppLogoError'], ['customize.html','logoError']]) {
+    const raw = fs.readFileSync(path.join(ROOT, file), 'utf8');
+    if (!new RegExp('id="' + id + '"').test(raw)) {
+      bad(file, 'no <div id="' + id + '"> beside the logo control to render the error into');
+    } else if (!new RegExp('id="' + id + '"[^>]*role="alert"').test(raw)) {
+      bad(file, '#' + id + ' has no role="alert", so a screen reader will not announce it');
+    }
   }
 
   return fails;
