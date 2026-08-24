@@ -16,24 +16,43 @@ remembers deciding, HIS memory wins — flag it rather than proceeding.
 Sell StatChat to schools other than Neville. Everything below serves
 that; nothing here is worth doing for its own sake.
 
-## Step 0 — VERSION THE SCHEMA. Do this before anything else.
+## Step 0 — VERSION THE SCHEMA — **DONE 23 August 2026**
 
-`supabase/migrations` does not exist in this repo. The tables, the RLS
-policies and the database functions live **only** in the live Supabase
-project (id `pboushzlcyfkssojpuut`).
+*This section previously said the work belonged in `supabase/migrations`.
+That is the Supabase CLI default, not this repo's convention: migrations
+live in `sql/`, settled 15 Aug and written up in `sql/README.md`.
+Following the old wording would have created a second migrations
+directory beside the one that already existed.*
 
-Tenancy IS a schema change, and it has to be applied identically to dev,
-staging and production. Without migration files there is no mechanism to
-do that — and no way to review a change before it lands on live data.
+The gap was real and worse than stated. Three change-scripts were
+committed, but there was **not one `CREATE TABLE` statement anywhere in
+the repo** — every table, column, constraint and index existed only in
+the dashboard.
 
-It is also a standalone risk, independent of tenancy: **if the Supabase
-project were lost today, the application code would survive and the
-shape of the data would not.**
+What was built:
 
-The work: capture tables, policies and functions into
-`supabase/migrations`, verify by rebuilding a scratch database from
-those files alone, and commit. Nothing else in this document should
-start first.
+    sql/capture/A..G      seven READ-ONLY queries that dump the live
+                          schema from the SQL editor. pg_dump needs a
+                          direct connection; these need a browser.
+    sql/000_baseline.sql  the schema, captured. 562 lines.
+    sql/002_schema_migrations.sql
+                          an instance can be asked what it is missing.
+
+**Proven, not asserted.** The baseline was applied to an empty Postgres
+16 twice (it is idempotent), captured with the same seven queries, and
+compared field by field against the live capture: 21 constraints, 16
+indexes, 21 policies with identical USING and WITH CHECK, the 14
+column-level `anon` SELECT grants on `games`, 8 functions with the same
+6 SECURITY DEFINER, `is_admin` generated-stored, `sequence_number`
+numeric. Each of those checks was then broken to confirm it can fail.
+
+The rebuild found a fault nothing else would have: `current_user_role()`
+is `language sql`, whose body Postgres validates at CREATE time, so it
+could not be created before `profiles` existed. Invisible on the live
+database, where the table was already there.
+
+Still open, and all repo work rather than database work: the visibility
+policy fix (see hazard 6 below) and the redundant `plays` indexes.
 
 ## The decisions
 
@@ -71,13 +90,19 @@ record the same game from their own side. Trying to merge them means
 deciding whose entry is authoritative during a live broadcast, which is
 a much worse problem than two rows.
 
-## Three hazards that exist TODAY
+## Six hazards that exist TODAY
 
-These are live bugs waiting for a second tenant, not future work:
+These are live bugs waiting for a second tenant, not future work.
+Hazards 4-6 were found by the Step 0 capture on 23 Aug.
 
 1. **The broadcast flag is globally unique.** One game is "on air" for
    the whole system. With two schools broadcasting simultaneously, the
    second to go live takes the first off air. Must become per-tenant.
+
+   **Enforced by the DATABASE, not the application** — `one_broadcast_game`
+   is a partial unique index on `games (is_broadcast) WHERE is_broadcast`.
+   So this is a migration replacing an index, not a change to
+   `api/feed.js`. Cost it accordingly.
 
 2. **The overlay endpoints bypass RLS.** `api/gamedata.js`,
    `api/feed.js` and `api/seasondata.js` read with elevated rights
@@ -89,9 +114,34 @@ These are live bugs waiting for a second tenant, not future work:
    Fine within one school; across tenants it means a URL guessed or
    forwarded exposes another school's game.
 
+4. **`games.designator` is globally UNIQUE.** Two schools cannot both
+   create a game designated "2025-W1" — the second insert is rejected by
+   the database. More visible than the others, because it fails loudly at
+   game creation rather than leaking quietly, but it blocks the second
+   tenant outright. Must become unique per tenant.
+
+5. **Storage is one flat, world-readable bucket.** `team-logos` is
+   `public: true` with no size limit, no MIME allowlist, no DELETE policy
+   and no path scoping — the read policy is `bucket_id = 'team-logos'`
+   and nothing else. Any authenticated user can upload a file of any type
+   and any size, and every school's logos share one namespace. Per-tenant
+   isolation needs a path prefix and a policy that checks it. The size
+   cap and MIME allowlist are dashboard settings and worth doing now,
+   independently of tenancy.
+
+6. **`admins set game visibility` restricts nothing.** It and
+   `games_update` are both PERMISSIVE policies on `games` UPDATE, and
+   permissive policies OR together — so the effective rule is just
+   (admin or game_entry), and a `game_entry` user can set `is_public` and
+   `share_token` and publish a recap. Whatever `public_recap_sharing.sql`
+   intended, admin-only visibility is not what is enforced. It would have
+   to be `AS RESTRICTIVE`, or `is_public`/`share_token` come out of the
+   column-level UPDATE grant. **This one is wrong regardless of tenancy**
+   and is the only hazard worth fixing before a second school exists.
+
 ## Order
 
-    0. Version the schema          <- gate on everything
+    0. Version the schema          <- DONE 23 Aug 2026
     1. Design the overlay auth     <- hazard 2, before tenancy touches it
     2. Tenant column + RLS
     3. Per-tenant broadcast flag   <- hazard 1

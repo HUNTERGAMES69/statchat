@@ -2140,9 +2140,11 @@ watch for.
 
 ## SEASON REPORT — formatting does not scale with the season
 
-**REBUILT 23 Aug — AWAITING ONE VISUAL CHECK.** Everything below the rule
-is the original brief, kept because the reasoning still reads true; two of
-its findings turned out to be wrong and are corrected here first.
+**REBUILT AND CLOSED 23 Aug.** Andy checked the output and confirmed it,
+including the follow-up change to centre the four fixed-bar-count charts.
+Everything below the rule is the original brief, kept because the reasoning
+still reads true; two of its findings turned out to be wrong and are
+corrected here first.
 
 **Two corrections to the brief:**
 
@@ -2178,16 +2180,23 @@ its findings turned out to be wrong and are corrected here first.
   once a section exceeds a sheet) onto `.chart-unit`, which can honour it.
   Table sections keep the old rule.
 
-**Still needs Andy's eye — cannot be settled in the harness:**
+**Checked and accepted 23 Aug.** Density, heights, the centred compact
+charts and the narrower 732px page all confirmed by eye against a real PDF.
 
-- Density at 15 games, and whether 240px is tall enough.
-- Whether a section border cut by a page break looks acceptable, or the
-  border should be dropped from chart sections in print.
-- Whether 732px feels too narrow on a desktop screen.
-- If 15 games is still tight, the lever not yet pulled is **landscape
-  paper** (`@page { size: Letter landscape }`), worth ~1010px instead of
-  755 -- a real option, not yet taken because it changes the character of
-  the document.
+Two things were accepted rather than proven, and would only surface later:
+
+- **Fifteen games has not actually been printed.** Ten was the longest
+  season available. Fifteen labels need roughly 450px of the 732 there are,
+  so it should hold, but that is arithmetic rather than a look. Worth one
+  glance the first time a season passes twelve games.
+- **A section border cut by a page break** was accepted as-is. If it ever
+  reads wrong, dropping the border from `.section.chart-section` in print
+  is a one-line change.
+
+The lever not pulled, if a longer season does turn out tight: **landscape
+paper** (`@page { size: Letter landscape }`), worth about 1010px against
+755. Left alone because it changes the character of the document, and that
+is a decision rather than a fix.
 
 ---
 
@@ -2321,9 +2330,21 @@ Still open, in rough order of value:
 ## ORDER OF WORK — decided 23 Aug
 
     1. iPad PORTRAIT   -- DONE 23 Aug (landscape/rails deferred, below)
-    2. SEASON REPORT   -- rebuilt 23 Aug, awaiting one visual check
-    3. Multi-tenant    <- NEXT, starting with Step 0 (schema versioning)
+    2. SEASON REPORT   -- DONE 23 Aug, checked against a real PDF
+    3. Multi-tenant    -- Step 0 (schema versioning) DONE 23 Aug
+                          <- NEXT: step 1, design the overlay auth
     4. Everything else
+
+**Step 0 is done.** `sql/000_baseline.sql` exists and was proven by
+rebuilding an empty database from it and diffing the capture field by
+field; `sql/capture/A..G` can re-dump the live schema from the SQL editor
+without a direct connection; `sql/002_schema_migrations.sql` lets an
+instance be asked what it is missing. See `MULTI_TENANT_PLAN.md`.
+
+The capture found three hazards nobody had listed — `games.designator` is
+globally unique, storage is one flat world-readable bucket, and the
+`admins set game visibility` policy restricts nothing because permissive
+policies OR together. Only the third is wrong independently of tenancy.
 
 Season report jumped the queue by Andy's call on 23 Aug: it is the report a
 coach actually hands to someone, it was already flagged as worth doing
@@ -2577,10 +2598,10 @@ Collapsing these IS a visual change, however small, so none were touched:
   in markup. The tag is harmless but the file must STAY PRESENT until the
   tags go, or every page logs a 404. Do it whenever those files are next
   touched for other reasons; it is not worth 21 manual uploads on its own.
-- [ ] **Drop `teams.icon_url`** once the schema is versioned (see
-  MULTI_TENANT_PLAN.md step 0). Nothing reads it now. Left in place
-  because dropping a column is a migration and there is no migration
-  mechanism yet.
+- [ ] **Drop `teams.icon_url`.** Nothing reads it. It was blocked on
+  there being no migration mechanism; as of 23 Aug there is one, so this
+  is now just an unwritten `003_`. Recorded in `000_baseline.sql` with a
+  comment saying why it is still there.
 - [x] **Delete `gametest3.html` from the repo** — DONE. Verified 22 Aug:
   `gametest3.html`, `gametest.html`, `gametest2.html` and the three
   `layout_mockup*.html` files all return 404 from GitHub. They were never
@@ -2785,3 +2806,35 @@ Collapsing these IS a visual change, however small, so none were touched:
   sack fumble was recorded under the old two-play model and carries a
   phantom down attempt. Still undecided whether to re-derive or leave.
 - [ ] `.gitignore` and `sql/schema.sql` still absent from the repo.
+
+
+## Migrations now possible — a short list, opened 23 Aug 2026
+
+Step 0 built the mechanism; these are the changes that were waiting on
+it. None is urgent and none should be run against production without a
+scratch rebuild first.
+
+- [ ] **`003_restrict_game_visibility.sql`** — make `admins set game
+  visibility` `AS RESTRICTIVE`, or take `is_public` and `share_token` out
+  of the column-level UPDATE grant for `authenticated`. Today a
+  `game_entry` user can publish a recap. Hazard 6 in
+  `MULTI_TENANT_PLAN.md`, and the only one wrong regardless of tenancy.
+- [ ] **Drop the redundant `plays` indexes.** `plays_game_sequence_idx`
+  duplicates the unique `plays_game_seq_unique` on identical columns, and
+  `plays_game_idx` is covered by both. `plays` is the highest-write table
+  in the app — every play entered writes five index entries.
+- [ ] **Drop `teams.icon_url`.**
+- [ ] **Settle three column inconsistencies on `games`**: `is_preseason`
+  is nullable where `is_broadcast` and `is_public` are NOT NULL with the
+  same default; `game_phase` is nullable and has no CHECK where `status`
+  has both; `plays.roles` is nullable with no default where
+  `plays.effect` is NOT NULL defaulted to `{}`.
+- [ ] **Storage: a size cap and a MIME allowlist** on `team-logos`. Not
+  SQL — dashboard settings. Also no DELETE policy exists, so replaced
+  logos are never removed.
+
+Two things NOT on this list, deliberately. The broad `anon` grants
+(including TRUNCATE) are Supabase's default posture with RLS as the gate
+and are not reachable through PostgREST. And the `profiles` attnum gap at
+position 3 is a dropped column that a rebuild renumbers; it is invisible
+to the application and is recorded as an accepted delta.
