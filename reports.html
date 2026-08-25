@@ -15,34 +15,72 @@
 <style>
   /* THE SAME DASHBOARD BUTTON AS every other page. */
   .backlink { text-decoration:none; padding:8px 14px; border-radius:6px;
-              border:1px solid #ccc; color:#444; font-size:13px; font-weight:600;
+              border:1px solid var(--sc-rule-strong); color:var(--sc-ink); font-size:13px; font-weight:600;
               display:inline-block; }
   /* THE STATCHAT MARK, identical on every page reachable from the
      dashboard. */
   .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
-  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block; }
+  /* Dark-on-light artwork needs a plate on a #191f27 card. */
+  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block;
+                  background:#fff; padding:2px; box-sizing:border-box; }
 
   html, body { margin:0; padding:0; }
+  /* DARK, 25 August 2026. Recipe in DARK_THEME_PLAN.md.
+     Every --sc-* this page reads is defined, including those only written
+     as var(--x, #fallback): an undefined token silently becomes the
+     fallback, and every fallback here was chosen for a white page. */
+  :root{ color-scheme:dark; }
+  :root{
+    --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+    --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+    --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+    --sc-navy:#2f3a47;   --sc-green:#a3d93f;  --sc-green-dark:#8ac53e;
+    --sc-green-tint:rgba(124,181,24,.14);
+    --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
+    --sc-amber:#ffc72c;  --sc-blue:#5aa9f0;   --sc-link:#7cb518;
+  }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); color:var(--sc-ink, #1a1a1a); }
   .wrap { max-width:640px; margin:0 auto; padding:24px; box-sizing:border-box; }
   .hidden { display:none !important; }
   .topbar { margin-bottom:18px; }
-  .topbar a { color:#555; text-decoration:none; font-size:14px; font-weight:600; }
+  .topbar a { color:var(--sc-ink); text-decoration:none; font-size:14px; font-weight:600; }
   .msg { padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:14px; }
   .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
   h1 { font-size:20px; margin:0 0 14px; }
-  select#seasonPicker { font-size:14px; padding:8px 10px; border:1px solid #ddd; border-radius:8px; background:#fff; margin-bottom:18px; width:100%; box-sizing:border-box; }
-  .card { background:#fff; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 2px 10px rgba(0,0,0,0.06); }
-  .card h2 { font-size:14px; margin:0 0 4px; color:#444; }
-  .card p { font-size:13px; color:#777; margin:0 0 10px; }
-  .card a.season-report-link { display:inline-block; background:var(--sc-green-dark, #0f6e56); color:#fff; padding:10px 18px; border-radius:8px; text-decoration:none; font-weight:700; font-size:14px; }
+  /* THE CHEVRON LIVES IN THIS RULE, not a separate `select` one.
+     This rule uses the `background` shorthand, and a shorthand resets
+     background-image -- so a chevron declared anywhere above would be
+     wiped by it. That exact fault hit the dashboard's picker and then the
+     roster's. Declared together, it cannot happen.
+     appearance:none because the browser paints a select's face natively
+     and ignores the background; the chevron is STROKED because a fill on
+     an open path renders as a wedge; and `select option` is styled
+     separately because the option list is drawn by the OS. */
+  select#seasonPicker {
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    font-size:14px; padding:8px 34px 8px 10px;
+    border:1px solid var(--sc-rule-strong); border-radius:8px;
+    color:var(--sc-ink); cursor:pointer; margin-bottom:18px;
+    background:var(--sc-raise) url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 9'%3E%3Cpath d='M1 1.5L7 7.5L13 1.5' stroke='%23eef1f4' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 11px center;
+    background-size:12px;
+  }
+  select#seasonPicker option { background:var(--sc-card); color:var(--sc-ink); }
+  select#seasonPicker:focus-visible, a:focus-visible {
+    outline:2px solid var(--sc-link); outline-offset:2px;
+  }
+  .card { background:var(--sc-card); border:1px solid var(--sc-rule); color:var(--sc-ink); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .card h2 { font-size:14px; margin:0 0 4px; color:var(--sc-ink); }
+  .card p { font-size:13px; color:var(--sc-ink-muted); margin:0 0 10px; }
+  /* --sc-green-dark is a LIGHT green now, so white text on it would be
+     unreadable. Dark ink on a light fill. */
+  .card a.season-report-link { display:inline-block; background:var(--sc-green-dark); color:#0d1117; padding:7px 12px; border-radius:6px; text-decoration:none; font-size:13px; font-weight:700; }
   .game-row { display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--sc-rule-strong, #c8c8c8); }
   .game-row:last-child { border-bottom:none; }
   .game-row .game-info { font-size:14px; }
   .game-row .game-info .opp { font-weight:600; }
-  .game-row .game-info .date { color:#888; font-size:12px; margin-top:2px; }
+  .game-row .game-info .date { color:var(--sc-ink-muted); font-size:12px; margin-top:2px; }
   .game-row a.report-link { color:var(--sc-blue, #1565c0); text-decoration:none; font-size:13px; font-weight:600; white-space:nowrap; }
-  .hint { color:#999; font-size:13px; }
+  .hint { color:var(--sc-ink-muted); font-size:13px; }
 </style>
 </head>
 <body>
