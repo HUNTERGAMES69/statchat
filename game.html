@@ -917,7 +917,8 @@
              Deliberately the smallest instance in the app -- a scorer works
              this screen one-handed at a stadium, and every pixel of header is
              a pixel not showing the play list. -->
-        <img src="logo.png" alt="StatChat" class="scMark-inline">
+        <img src="logo.png" alt="StatChat" class="scMark-inline" width="30" height="30"
+             style="height:30px;width:30px;flex:0 0 auto;align-self:center;display:block;">
       <a class="hdr-btn" href="dashboard.html">&larr; Dashboard</a>
       <button type="button" id="onAirBanner" style="display:none;">&#9679; ON AIR</button>
     </div>
@@ -7450,25 +7451,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         c.style.setProperty('justify-content', 'center', 'important');
       });
 
-      // AND THEN MATCH THE MARK TO WHAT THE ROW ACTUALLY BECAME.
-      // -------------------------------------------------------------------
-      // 30px is .hdr-btn's desktop box. On touch these controls are taller
-      // -- ON AIR runs to two lines -- so a fixed height would be right on
-      // one screen and wrong on the other, which is the whole complaint.
-      //
-      // Measured, not assumed: whatever the buttons settled on is what the
-      // mark becomes. getBoundingClientRect after the styles above forces
-      // the reflow, so this reads the row as it now is rather than as it
-      // was.
-      const markEl = left.querySelector('.scMark-inline');
-      const anyBtn = left.querySelector('.hdr-btn');
-      if (markEl && anyBtn){
-        const h = Math.round(anyBtn.getBoundingClientRect().height);
-        if (h > 0){
-          markEl.style.setProperty('height', h + 'px', 'important');
-          markEl.style.setProperty('width', h + 'px', 'important');
-        }
-      }
+      // NO MEASURING. An earlier version read a button's height and copied
+      // it. That is wrong here: the banner sync gives #headerLeft an
+      // explicit height, and align-items:stretch then makes every .hdr-btn
+      // fill it -- so "the same height as the buttons" can mean "as tall as
+      // the score banner". The mark is a fixed 30px, which is .hdr-btn's
+      // own box (18px line + 10px padding + 2px border) at rest.
     } else {
       // DESKTOP. Put the links back, clear everything the touch branch set.
       links.forEach(el => {
