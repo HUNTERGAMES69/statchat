@@ -243,7 +243,28 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // was. Asserted here rather than in its own file because it is the same
   // decision as the Users tab: this data belongs on the console, grouped.
   const acct = fs.readFileSync(path.join(__dirname, '..', 'account.html'), 'utf8')
+
+  // EVERY 'Dashboard' LINK IN THE APP POINTS AT dashboard.html -- sixteen
+  // of them across twelve files. Rather than patch sixteen, dashboard.html
+  // bounces the platform to the console, which repairs all of them at once.
+  // Asserted here because the symptom is invisible in normal use: it only
+  // shows for the one account that has no tenant.
+  const dash = fs.readFileSync(path.join(__dirname, '..', 'dashboard.html'), 'utf8')
     .replace(/\/\/[^\n]*/g, '');
+  chk(/is_super_admin[\s\S]{0,60}location\.replace\('platform\.html'\)/.test(dash),
+      'dashboard.html bounces the platform to the console');
+  // THE BYPASS IS PART OF THE DESIGN, not a hole. Support and the Open
+  // button both need to see a school's dashboard AS THE PLATFORM, and a
+  // bounce with no way past it would be the thing that has to be unpicked
+  // when that ships. Asserted so it is not 'tidied away' as dead code.
+  chk(/get\('as'\)/.test(dash) && /&& !viewingAs/.test(dash),
+      'and has a named bypass (?as=) so viewing a school is not blocked later');
+  chk(!/id="platformLink"/.test(dash),
+      'and the menu link it replaced is gone, not left as dead markup the platform ' +
+      'can never reach');
+  chk(/id="backLink"/.test(acct) && /back\.href = 'platform\.html'/.test(acct),
+      "account.html's back link goes to the console for the platform, so it does not " +
+      'flash a dashboard under a label naming one it does not have');
   chk(/role === 'admin' && !profile\.is_super_admin/.test(acct),
       'account.html hides user management from the platform account');
   chk(/select\('display_name, avatar_url, role, is_super_admin'\)/.test(acct),
