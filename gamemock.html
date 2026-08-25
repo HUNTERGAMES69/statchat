@@ -19,18 +19,6 @@
 <meta name="apple-mobile-web-app-title" content="StatChat">
 <title>StatChat — Game Entry</title>
 <style>
-  /* DIAGNOSTIC BUILD. The mark, plus a readout of what the browser
-     actually computes for it -- because seven attempts were reasoned from
-     the source and every one of them was wrong about something the source
-     does not say. */
-  .scMarkBox { display:block; flex:0 0 auto; align-self:center;
-               width:32px; height:32px; border-radius:6px;
-               background:url('logo.png') center/contain no-repeat;
-               outline:2px solid magenta; }
-  #scDiag { position:fixed; left:0; bottom:0; z-index:99999;
-            background:#111; color:#0f0; font:11px/1.45 ui-monospace, Menlo, monospace;
-            padding:8px 10px; max-width:100vw; white-space:pre; }
-
 
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
   /* THE ENTRY CARD'S WIDTH, AND THE RAILS THAT MEASURE OFF IT.
@@ -419,6 +407,9 @@
       top:auto !important; height:auto !important;
       flex:0 1 auto !important; margin:0 !important;
       padding:8px 14px !important; }
+
+    /* Same answer, same specificity, for the two properties this block
+       forces with !important. */
     #headerLeft > .scMarkBox { padding:0 !important; height:32px !important; }
   }
 
@@ -560,6 +551,48 @@
        weight and tracking -- and 0.04em here broke it. */
     font-weight:800; letter-spacing:0.06em; white-space:nowrap;
     text-decoration:none; }
+
+  /* THE MARK OPTS OUT OF `#headerLeft > *`, AND THAT RULE IS THE WHOLE
+     STORY OF SEVEN FAILED ATTEMPTS.
+     ===================================================================
+     Directly above:  #headerLeft > * { flex:1 1 0; min-width:0; display:flex; }
+
+     `flex:1 1 0` means every child SPLITS THE ROW EQUALLY. The comment on
+     that rule says so plainly -- it was written for exactly two children,
+     each taking half the width and the full banner height. Adding a third
+     made it thirds, which is why ON AIR deformed the moment a mark went in
+     front of it. `min-width:0` then let the mark collapse to nothing,
+     which is why it kept vanishing.
+
+     And `#headerLeft > *` is specificity (1,0,0). A class rule is (0,1,0),
+     so `.scMarkBox { display:block; width:32px }` never stood a chance --
+     not in a stylesheet, not inline-with-!important-somewhere-else, and no
+     amount of arguing with layoutHeader() was ever going to help. Every
+     attempt was overruled here, silently, and nothing in the file said so.
+
+     `#headerLeft > .scMarkBox` is (1,1,0) and wins. Each property that the
+     rule above sets has to be answered explicitly:
+       flex        0 0 auto  -- do not take a share of the width
+       min-width   32px      -- and do not collapse
+       display     block     -- flex on an empty span with a background is
+                                harmless, but block is what it is
+       align-self  center    -- not stretched to the banner's height, which
+                                on a square would also make it banner-WIDE */
+  #headerLeft > .scMarkBox {
+    /* No !important needed for these three: the rule above sets them
+       plainly, so higher specificity is enough. */
+    flex:0 0 auto; min-width:32px; width:32px;
+    display:block; align-self:center;
+    /* !important IS needed for these three, because the rule above marks
+       them !important too -- and an important declaration beats a normal
+       one no matter how specific the normal one is. Specificity only
+       decides between two importants.
+         height:auto !important     would collapse the box to nothing
+         padding:0 12px !important  would add 24px of width to a 32px mark
+         border-radius:10px         is simply the wrong shape for it */
+    height:32px !important; padding:0 !important; border-radius:6px !important;
+    background:url('logo.png') center/contain no-repeat;
+  }
 
   /* Dashboard, filled like the buttons on the right rather than left as a
      bare link -- it was inheriting only the browser's anchor colour. */
@@ -13663,50 +13696,5 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
      title="How to use StatChat">HELP!</a>
   <a id="launchViewLink" href="#" target="_blank">CREW VIEW &#8599;</a>
 </div>
-<div id="scDiag">measuring…</div>
-<script>
-// WHAT THE BROWSER ACTUALLY THINKS, reported from the page itself.
-// Reasoning from the source has been wrong seven times: the rule was in a
-// comment, then script overwrote it, then #headerLeft > * outranked it,
-// then a span was inline, then the row had no width. Each was invisible in
-// the file and obvious in getComputedStyle.
-(function(){
-  function report(){
-    const el = document.querySelector('.scMarkBox');
-    const hl = document.getElementById('headerLeft');
-    const btn = hl && hl.querySelector('.hdr-btn');
-    const out = [];
-    out.push('viewport      ' + window.innerWidth + ' x ' + window.innerHeight);
-    out.push('mark element  ' + (el ? 'FOUND' : 'NOT IN THE DOM'));
-    if (el){
-      const c = getComputedStyle(el);
-      const r = el.getBoundingClientRect();
-      out.push('  display     ' + c.display);
-      out.push('  size        ' + Math.round(r.width) + ' x ' + Math.round(r.height));
-      out.push('  position    x=' + Math.round(r.left) + ' y=' + Math.round(r.top));
-      out.push('  visibility  ' + c.visibility + '  opacity=' + c.opacity);
-      out.push('  background  ' + c.backgroundImage.slice(0, 60));
-      out.push('  inline attr ' + (el.getAttribute('style') || '(none)'));
-    }
-    if (hl){
-      const c = getComputedStyle(hl), r = hl.getBoundingClientRect();
-      out.push('#headerLeft   ' + Math.round(r.width) + 'w x ' + Math.round(r.height) + 'h  at x=' + Math.round(r.left));
-      out.push('  position    ' + c.position + '  overflow=' + c.overflow);
-      out.push('  children    ' + hl.children.length);
-      out.push('  scrollWidth ' + hl.scrollWidth + ' (overflowing if > ' + Math.round(r.width) + ')');
-    }
-    if (btn){
-      const r = btn.getBoundingClientRect();
-      out.push('.hdr-btn      ' + Math.round(r.width) + 'w x ' + Math.round(r.height) + 'h');
-    }
-    out.push('media <=1219  ' + window.matchMedia('(max-width:1219px)').matches);
-    out.push('coarse ptr    ' + window.matchMedia('(hover:none) and (pointer:coarse)').matches);
-    out.push('1220-1439     ' + window.matchMedia('(min-width:1220px) and (max-width:1439px)').matches);
-    document.getElementById('scDiag').textContent = out.join('\n');
-  }
-  window.addEventListener('load', () => setTimeout(report, 400));
-  window.addEventListener('resize', () => setTimeout(report, 150));
-})();
-</script>
 </body>
 </html>
