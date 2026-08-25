@@ -234,6 +234,24 @@ function audit(file) {
   // so the exemption is now scoped to that context rather than granted to
   // the colour everywhere it appears.
   const keep = new Set(['#ffc72c', '#7cb518', '#a3d93f']);
+  // A BACKGROUND CAN BE LIGHT VIA A FALLBACK, NOT ONLY A LITERAL.
+  // `background:var(--sc-amber-soft, #fff8e6)` renders cream when the
+  // token is undefined -- which is exactly how a light panel shipped into
+  // create_game.html after two earlier undefined-token bugs had already
+  // been caught. The scan only matched bare hex, so it never looked.
+  for (const m of src.matchAll(/background(?:-color)?\s*:\s*var\(\s*(--[a-z-]+)\s*,\s*(#[0-9a-fA-F]{3,6})\s*\)/g)) {
+    // "DEFINED" MEANS DEFINED AT ALL, not defined as a hex.
+    // The token map only stores hex values, because that is what contrast
+    // needs. But most tints in this theme are rgba(), so checking the map
+    // reported nine pages as having undefined tokens that are defined on
+    // every one of them. Ask the source whether the name is declared.
+    if (new RegExp('(^|[;{\\s])' + m[1] + '\\s*:').test(src)) continue;
+    if (inPrintBlock(src, m.index)) continue;
+    if (lum(m[2]) <= 0.5) continue;
+    findings.push({ kind: 'FAIL', msg: 'background uses ' + m[1] +
+      ', which is UNDEFINED here, so it falls back to the light ' + m[2] });
+  }
+
   for (const m of src.matchAll(/background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,6})\b/g)) {
     const c = m[1].toLowerCase();
     if (keep.has(c) || lum(c) <= 0.5) continue;
