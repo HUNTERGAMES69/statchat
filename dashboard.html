@@ -30,13 +30,24 @@
   .card { background:#fff; border-radius:12px; padding:20px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:22px; margin:0; line-height:1.15; }
   #teamHeading { font-size:20px; }
-  /* PHONE FIRST. One column, each part on its own line, tenant at the top. */
-.topbar { display:flex; flex-direction:column; align-items:stretch; gap:12px; margin-bottom:4px; }
-  /* The tenant claims the leftover width, so its name starts hard left and
-   the rest of the row is pushed away from it. min-width:0 lets a long name
-   ellipsis rather than forcing the row wider. */
-.brandline { display:flex; align-items:center; gap:10px; min-width:0; flex:1 1 auto; }
-#teamHeading { min-width:0; overflow-wrap:anywhere; }
+  /* TOOLS ON TOP, TENANT UNDERNEATH, ON ITS OWN LINE.
+   The tenant used to share the top row with four buttons and the account,
+   which left a long name three words tall in a narrow column. Given the
+   full width it sits on one line and reads as the heading it is.
+   A wrapping flex row rather than a grid: .brandline is forced to 100%
+   below, so it always takes a line of its own however many buttons the
+   role happens to show. */
+.topbar { display:flex; flex-wrap:wrap; align-items:center; gap:12px 16px;
+          margin-bottom:4px; }
+  /* Its own full-width row, hard left. flex-basis:100% is what forces the
+   wrap -- without it the tenant would rejoin the button row whenever there
+   happened to be space, so the layout would change with the role. */
+.brandline { display:flex; align-items:center; gap:10px; min-width:0;
+             flex:1 1 100%; order:2; }
+#teamHeading { min-width:0; overflow-wrap:anywhere; margin:0; }
+/* The tools take the top line and push the account to its end. */
+.navlinks { order:1; }
+.headerRight { order:1; margin-left:auto; }
 /* App chrome: product mark, hairline, account. Never wraps, never grows. */
 .headerRight { display:flex; align-items:center; gap:10px; flex:0 0 auto; }
 .scMark-dash { width:24px; height:24px; border-radius:5px; display:block; flex:none;
@@ -57,11 +68,9 @@
     h1 { font-size:24px; }
     #teamHeading { font-size:24px; }
     #teamLogo { height:36px; width:36px; }
-    /* ONE ROW: tenant | tools | chrome. No justify-content -- the tenant
-       carries flex:1 1 auto and pushes the other two right itself, which
-       keeps its name hard left instead of centring the gap between three
-       groups. */
-    .topbar { flex-direction:row; align-items:center; flex-wrap:nowrap; gap:16px; }
+    /* Still two lines at every width -- the tenant is a heading, not a
+       chip beside the buttons. nowrap here would put it back in the row. */
+    .topbar { flex-direction:row; flex-wrap:wrap; align-items:center; gap:12px 16px; }
     /* Back to natural widths here: there is room, so four equal cells would
        stretch "How to use" to the width of "Customize team" for no reason.
        auto-flow keeps them on one line and lets each be its own size. */
@@ -73,11 +82,10 @@
      this page is mobile-first -- these were duplicating them. What remains
      is only what phones need and wider screens do not. */
   @media (max-width: 767px) {
-    /* The tenant and the app chrome share the top line: the mark and
-       avatar are small, and giving them a line of their own wasted one. */
-    .topbar { flex-direction:row; flex-wrap:wrap; align-items:center; }
-    .brandline { flex:1 1 60%; }
-    .navlinks { order:3; }
+    /* Phones: the same two lines, and the buttons become the grid defined
+       in the base rules. Nothing extra needed -- the ordering above already
+       puts the tenant underneath. */
+    .navlinks { flex:1 1 100%; }
     /* Games, the season picker and Refresh read as one line -- the h1 is
        block-level, which is what was breaking them apart. */
     .games-head { align-items:center; }
@@ -265,11 +273,6 @@
 
              Now: tenant, then tools, then app chrome. The tenant claims the
              leftover space, so its name is hard left at every width. -->
-        <div class="brandline">
-          <img id="teamLogo" alt="">
-          <h1 id="teamHeading">StatChat</h1>
-        </div>
-
         <nav class="navlinks">
           <a class="button-link secondary" id="helpLink" href="help.html">How to use</a>
           <a class="button-link secondary" id="rosterLink" href="roster.html">Team Roster</a>
@@ -303,8 +306,13 @@
             </div>
           </div>
         </div>
+
+        <div class="brandline">
+          <img id="teamLogo" alt="">
+          <h1 id="teamHeading">StatChat</h1>
+        </div>
+        </div>
       </div>
-      <p class="sub" id="signedInAs"></p>
       <!-- Season record AND the Stats/Reports button's home. Always
            visible once renderSeasonRecord runs -- "hidden" here is only
            the pre-JS state, removed on first render regardless of
@@ -393,7 +401,9 @@
       if (session){
         currentUserId = session.user.id;
         currentUserEmail = session.user.email;
-        document.getElementById('signedInAs').textContent = 'Signed in as ' + session.user.email;
+        // The signed-in line was removed on 25 Aug: the avatar menu shows
+        // the same address, and a header that names the tenant, the tools
+        // and the account does not also need a sentence about who you are.
 
         // THE PLATFORM IS TURNED AWAY BEFORE ANYTHING RENDERS.
         // -----------------------------------------------------------------
