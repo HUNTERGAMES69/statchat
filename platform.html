@@ -131,6 +131,7 @@
     <div class="tabs">
       <button id="tabSchools" class="on">Schools</button>
       <button id="tabRestore">Deleted games</button>
+      <button id="tabUsers">Users</button>
     </div>
 
     <div id="panelSchools" class="card">
@@ -150,6 +151,17 @@
          Deleted games are hidden from the school by the same policy that hides them from
          everyone, and showing them there would mean every game list in the app had to
          learn to filter. Restoring is a support action, so it lives with support.</p>
+    </div>
+
+    <div id="panelUsers" class="card hidden">
+      <h1>Users</h1>
+      <p class="sub">Everyone with an account, grouped by school. This is the platform's
+         view; a school's own admin manages their people from their account page.</p>
+      <div id="usersBody"><p class="empty">Loading…</p></div>
+      <p class="note"><strong>Read-only, deliberately.</strong> Changing somebody's role,
+         resetting their password or removing them is a school's own admin's job, and doing
+         it from here would be acting on a customer's staff with nothing recording that it
+         was the platform. That belongs with the audit trail, not before it.</p>
     </div>
   </div>
 </div>
@@ -210,6 +222,7 @@
 
     loadSchools();
     loadDeleted();
+    loadUsers(session.access_token);
   }
 
   // Signing out is wired unconditionally, not inside the gate: an account
@@ -220,15 +233,21 @@
   });
 
   // ---- tabs -------------------------------------------------------------
+  // GENERALISED FROM A BOOLEAN. It was `isSchools` and two toggles, which
+  // is exactly the shape that stops working the moment a third tab exists
+  // -- and adding one was the first thing asked for after it shipped.
+  const TABS = ['schools', 'restore', 'users'];
   function selectTab(which){
-    const isSchools = which === 'schools';
-    document.getElementById('tabSchools').classList.toggle('on', isSchools);
-    document.getElementById('tabRestore').classList.toggle('on', !isSchools);
-    document.getElementById('panelSchools').classList.toggle('hidden', !isSchools);
-    document.getElementById('panelRestore').classList.toggle('hidden', isSchools);
+    TABS.forEach(t => {
+      const cap = t.charAt(0).toUpperCase() + t.slice(1);
+      document.getElementById('tab' + cap).classList.toggle('on', t === which);
+      document.getElementById('panel' + cap).classList.toggle('hidden', t !== which);
+    });
   }
-  document.getElementById('tabSchools').addEventListener('click', () => selectTab('schools'));
-  document.getElementById('tabRestore').addEventListener('click', () => selectTab('restore'));
+  TABS.forEach(t => {
+    const cap = t.charAt(0).toUpperCase() + t.slice(1);
+    document.getElementById('tab' + cap).addEventListener('click', () => selectTab(t));
+  });
 
   // ---- schools ----------------------------------------------------------
   async function loadSchools(){
@@ -328,6 +347,70 @@
           '<td>' + fmtWhen(g.deleted_at) + '</td>' +
           '<td class="right"><button class="act" data-restore="' + esc(g.id) + '">Restore</button></td>' +
         '</tr>').join('') + '</table>';
+  }
+
+  // ---- users ------------------------------------------------------------
+  // Through api/manage-users.js rather than a direct query, because
+  // auth.users is not readable from the browser at all -- email,
+  // last sign-in and the banned flag live there, and only the service key
+  // can see them. The endpoint already returns every user to the platform
+  // and refuses cross-tenant ACTIONS; this only ever reads.
+  async function loadUsers(accessToken){
+    const body = document.getElementById('usersBody');
+    let payload;
+    try {
+      const r = await fetch('/api/manage-users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json',
+                   Authorization: 'Bearer ' + accessToken },
+        body: JSON.stringify({ action: 'list' })
+      });
+      payload = await r.json();
+      if (!r.ok) throw new Error(payload.error || ('HTTP ' + r.status));
+    } catch (err){
+      body.innerHTML = '<p class="empty">Could not load users: ' + esc(err.message) + '</p>';
+      return;
+    }
+    const users = payload.users || [];
+    if (!users.length){ body.innerHTML = '<p class="empty">No users.</p>'; return; }
+
+    // GROUPED BY SCHOOL, because a flat roll of every account on the
+    // platform is precisely the merged view this console exists to avoid.
+    // Two buckets get their own heading and sort to the ends: the platform
+    // itself, and anyone with no school at all -- who is invisible on every
+    // other screen and is usually somebody invited and never assigned.
+    const groups = new Map();
+    users.forEach(u => {
+      const key = u.isSuperAdmin ? '\u0000platform'
+                : !u.tenantId    ? '\uffffunassigned'
+                : u.tenantName || u.tenantId;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(u);
+    });
+
+    const heading = k => k === '\u0000platform' ? 'StatChat platform'
+                       : k === '\uffffunassigned' ? 'No school assigned'
+                       : k;
+    body.innerHTML = [...groups.keys()].sort().map(k => {
+      const rows = groups.get(k).sort((a, b) =>
+        (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
+      return '<h2 style="font-size:14px; margin:18px 0 8px; ' +
+               'color:var(--sc-ink-soft, #3a3a3a);">' + esc(heading(k)) +
+               ' <span style="font-weight:400; color:#6b7680;">(' + rows.length + ')</span></h2>' +
+        '<table><tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th></tr>' +
+        rows.map(u =>
+          '<tr>' +
+            '<td class="name">' + esc(u.displayName || '—') + '</td>' +
+            '<td>' + esc(u.email) + '</td>' +
+            '<td>' + esc(u.role === 'game_entry' ? 'Game entry'
+                       : u.role.charAt(0).toUpperCase() + u.role.slice(1)) + '</td>' +
+            '<td>' + (u.lastSignInAt ? fmtWhen(u.lastSignInAt) : 'never') + '</td>' +
+            '<td class="right">' +
+              (u.disabled ? '<span class="pill lapsed">Disabled</span>' : '') +
+              (!u.emailConfirmedAt ? '<span class="pill trial">Invited</span>' : '') +
+            '</td>' +
+          '</tr>').join('') + '</table>';
+    }).join('');
   }
 
   // Delegated, because the rows are rebuilt after every restore and a

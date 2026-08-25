@@ -214,12 +214,26 @@
   async function init(){
     document.getElementById('accountEmail').textContent = currentUserEmail;
     const { data, error } = await supabaseClient
-      .from('profiles').select('display_name, avatar_url, role').eq('id', currentUserId).limit(1);
+      .from('profiles').select('display_name, avatar_url, role, is_super_admin').eq('id', currentUserId).limit(1);
     if (!error && data && data.length > 0){
       const profile = data[0];
       if (profile.display_name) document.getElementById('fullNameInput').value = profile.display_name;
       if (profile.avatar_url) document.getElementById('avatarPreview').src = profile.avatar_url;
-      if (profile.role === 'admin'){
+      // USER MANAGEMENT IS FOR A SCHOOL'S OWN ADMIN, NOT THE PLATFORM.
+      // -----------------------------------------------------------------
+      // This page is "my account". The card below manages the people in
+      // YOUR school, and api/manage-users.js returns every user on the
+      // system to the platform account -- so on this page the platform
+      // saw Neville's staff under a heading about its own account.
+      //
+      // Not a leak: the platform is entitled to that data. It is in the
+      // wrong place, with nothing saying whose staff it is. It belongs on
+      // the Users tab of the platform console, grouped by school.
+      //
+      // Same shape as the reset button removed earlier today: a page
+      // written when every account had a tenant, meeting an account that
+      // deliberately has none.
+      if (profile.role === 'admin' && !profile.is_super_admin){
         document.getElementById('userMgmtCard').classList.remove('hidden');
         setTimeout(() => {
           document.getElementById('inviteEmailInput').value = '';
@@ -396,8 +410,9 @@
     showMsg('passwordMsg', 'Password changed.', 'success');
   });
 
-  // --- Reset for production: password re-entry, then a typed agreement,
-  // before anything is actually touched. ---
+    // --- Inviting a user. The tenant travels in the invite metadata, not
+    // in this form: api/invite-user.js stamps the CALLER's tenant and
+    // refuses any other, so a school can only ever invite into itself. ---
   document.getElementById('sendInviteBtn').addEventListener('click', async () => {
     const email = document.getElementById('inviteEmailInput').value.trim();
     const fullName = document.getElementById('inviteNameInput').value.trim();
