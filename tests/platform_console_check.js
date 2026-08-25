@@ -42,7 +42,7 @@ function boot(profileRow, opts) {
     runScripts: 'outside-only', url: 'https://www.statchat.co/platform.html'
   });
   const w = dom.window;
-  const calls = { rpc: [], from: [] };
+  const calls = { rpc: [], from: [], fetch: [] };
   let authCb = null;
   // THE STUB HAS TO ACTUALLY FILTER. A first version ignored .not() and
   // returned every game for the deleted-games query, so the list rendered
@@ -90,12 +90,21 @@ function boot(profileRow, opts) {
       if (t === 'games')    return q(opts.games || []);
       return q([]); }
   }) };
+  // The users tab goes through api/manage-users.js, not a table query --
+  // auth.users is not readable from the browser at all.
+  w.fetch = async (url, init) => {
+    calls.fetch.push({ url, body: JSON.parse(init.body), auth: init.headers.Authorization });
+    return { ok: !opts.usersError, status: opts.usersError ? 500 : 200,
+             json: async () => opts.usersError
+               ? { error: opts.usersError }
+               : { users: opts.users || [] } };
+  };
   w.eval([...w.document.querySelectorAll('script')].map(s => s.textContent).join('\n;\n'));
   return { w, d: w.document, calls,
            fire: (s) => authCb && authCb('INITIAL_SESSION', s) };
 }
 const wait = () => new Promise(r => setTimeout(r, 40));
-const session = { user: { id: 'u1', email: 'statchatadmin@statchat.co' } };
+const session = { access_token: 'tok-abc', user: { id: 'u1', email: 'statchatadmin@statchat.co' } };
 
 let fails = 0;
 const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fails++; };
@@ -119,6 +128,20 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
                 subscription:'active', renews_on:'2027-08-01' },
               { id:'t2', name:'Riverside', full_name:null, logo_url:null,
                 subscription:'trial', renews_on:null }],
+    users: [
+      { id:'u1', email:'statchatadmin@statchat.co', displayName:'Platform',
+        role:'admin', lastSignInAt:'2026-08-24T23:00:00Z', emailConfirmedAt:'x',
+        disabled:false, tenantId:null, tenantName:null, isSuperAdmin:true },
+      { id:'u2', email:'andy@neville.edu', displayName:'Andy Martin',
+        role:'admin', lastSignInAt:'2026-08-24T20:00:00Z', emailConfirmedAt:'x',
+        disabled:false, tenantId:'t1', tenantName:'Neville', isSuperAdmin:false },
+      { id:'u3', email:'coach@riverside.edu', displayName:'Dana Whitfield',
+        role:'game_entry', lastSignInAt:null, emailConfirmedAt:null,
+        disabled:false, tenantId:'t2', tenantName:'Riverside', isSuperAdmin:false },
+      { id:'u4', email:'orphan@nowhere.edu', displayName:null,
+        role:'view', lastSignInAt:null, emailConfirmedAt:'x',
+        disabled:true, tenantId:null, tenantName:null, isSuperAdmin:false }
+    ],
     games: [{ id:'g1', tenant_id:'t1', deleted_at:null },
             { id:'g2', tenant_id:'t1', deleted_at:'2026-08-24T20:00:00Z',
               designator:'2026-W2', home_team_name:'Neville', away_team_name:'Oak Grove',
@@ -172,6 +195,45 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // A LANDING PAGE MUST BE LEAVABLE. The platform account lands here
   // rather than on the dashboard, so this is the only page it sees. It
   // shipped with no sign-out and no route to change its own password.
+  // ---- the users tab ---------------------------------------------------
+  // It reads through api/manage-users.js because auth.users is not visible
+  // to the browser: email, last sign-in and the disabled flag only exist
+  // there, behind the service key.
+  const uf = b.calls.fetch.find(f => /manage-users/.test(f.url));
+  chk(!!uf, 'the users tab calls api/manage-users');
+  chk(uf && uf.body && uf.body.action === 'list', 'with the list action');
+  chk(uf && /^Bearer /.test(uf.auth || ''), 'and the session token, which the endpoint requires');
+
+  const usersHtml = b.d.getElementById('usersBody').innerHTML;
+  chk(/Neville/.test(usersHtml) && /Riverside/.test(usersHtml),
+      'users are GROUPED BY SCHOOL — a flat roll of every account is the merged view this ' +
+      'console exists to avoid');
+  chk(/StatChat platform/.test(usersHtml),
+      'the platform account is its own group, not filed under a customer');
+  chk(/No school assigned/.test(usersHtml),
+      'and a user with NO school is surfaced — invisible on every other screen, and ' +
+      'usually somebody invited and never assigned');
+  chk(/never/.test(usersHtml), 'a user who has never signed in says so');
+  chk(/Invited/.test(usersHtml), 'an unconfirmed invite is marked');
+
+  // READ-ONLY, DELIBERATELY. Acting on a customer's staff from here would
+  // be the platform changing a school's people with nothing recording it.
+  chk(!/data-action=/.test(usersHtml) && !/setRole|setPassword|Delete/.test(usersHtml),
+      'the users tab offers no actions — that waits for the audit trail');
+
+  // ---- and the OTHER half of this: account.html --------------------------
+  // The platform saw every school's users on its own account page, under a
+  // heading about its own account. Not a leak -- the platform is entitled
+  // to that data -- but the wrong place, with nothing saying whose staff it
+  // was. Asserted here rather than in its own file because it is the same
+  // decision as the Users tab: this data belongs on the console, grouped.
+  const acct = fs.readFileSync(path.join(__dirname, '..', 'account.html'), 'utf8')
+    .replace(/\/\/[^\n]*/g, '');
+  chk(/role === 'admin' && !profile\.is_super_admin/.test(acct),
+      'account.html hides user management from the platform account');
+  chk(/select\('display_name, avatar_url, role, is_super_admin'\)/.test(acct),
+      'and actually fetches the column it gates on');
+
   chk(/id="signOutBtn"/.test(raw), 'there is a sign-out control');
   chk(/href="account\.html"/.test(raw), 'and a route to account settings');
   // Wired OUTSIDE the gate: an account that fails the is_super_admin
