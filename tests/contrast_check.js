@@ -376,6 +376,27 @@ function audit(file) {
     }
   }
 
+  // ---- SVG PAINT, which no stylesheet can reach -------------------------
+  // `fill="#1a1a2e"` and `stroke="..."` are ATTRIBUTES. No CSS rule, token
+  // or override touches them, so they survive every recolouring pass
+  // untouched. That is twice on this page: the field strip stayed a pale
+  // green pitch, and then the direction arrow under it stayed near-black
+  // at 1.03:1 after the pitch was fixed, because the arrow sits on the
+  // CARD rather than inside the field.
+  //
+  // The pitch itself is legitimately dark, so paint inside a rect that
+  // forms the field is exempt -- listed explicitly rather than inferred.
+  const FIELD_PAINT = new Set(['#1c2a17', '#243318', '#4e6b3a', '#173404', '#eaf3de', '#c0dd97']);
+  for (const m of src.matchAll(/(?:fill|stroke)=\\?["'](#[0-9A-Fa-f]{3,6})/g)) {
+    const c = m[1].toLowerCase();
+    if (FIELD_PAINT.has(c)) continue;
+    if (lum(c) > 0.4) continue;                  // light paint reads fine on dark
+    if (ratio(c, CARD) >= 3) continue;
+    findings.push({ kind: 'FAIL', msg: 'SVG paint ' + c + ' is ' + ratio(c, CARD).toFixed(2) +
+      ':1 on the card — a fill= attribute is not reachable by any stylesheet, ' +
+      'so it survives every recolouring pass' });
+  }
+
   // ---- BORDERS, the third surface ---------------------------------------
   // The audit checked text and backgrounds and not borders, so 51
   // near-white hairlines survived every clean run on gamedark.html --
