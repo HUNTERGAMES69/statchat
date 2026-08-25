@@ -38,8 +38,7 @@ const live = f => fs.readFileSync(path.join(ROOT, f), 'utf8')
 const raw = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
 const MUST_HAVE = ['roster.html', 'create_game.html', 'customize.html',
-                   'account.html', 'broadcast_setup.html', 'help.html',
-                   'dashboard.html'];
+                   'account.html', 'broadcast_setup.html', 'help.html'];
 
 // Excluded, each for a stated reason — so a future reader knows the
 // omission was a decision rather than an oversight.
@@ -84,6 +83,49 @@ function run() {
     if (!rowHasBoth) bad(f, 'the mark and the page heading are not in the same row');
     if (!/<img src="logo\.png" alt="StatChat">/.test(s)) {
       bad(f, 'the mark is not logo.png with alt="StatChat"');
+    }
+  }
+
+  // THE DASHBOARD CARRIES THE MARK DIFFERENTLY, and on purpose.
+  // -------------------------------------------------------------------
+  // Everywhere else the mark sits beside the page heading. On the
+  // dashboard the heading is the TENANT'S name, and the mark was in front
+  // of it -- the one place a customer's own identity should begin. It now
+  // sits on the right with the account control, as app chrome, while the
+  // tenant runs hard left.
+  const dash2 = live('dashboard.html');
+  if (!/class="scMark-dash"/.test(dash2)) {
+    bad('dashboard.html', 'has no StatChat mark');
+  }
+  if (!/\.headerRight[^}]*\}/.test(dash2)) {
+    bad('dashboard.html', 'no .headerRight group — the mark and the account belong together, ' +
+        'away from the tenant');
+  }
+  if (/class="brandline"[\s\S]{0,200}?scMark/.test(dash2)) {
+    bad('dashboard.html', 'the mark is back inside .brandline, in front of the tenant name');
+  }
+  // The avatar must NOT be a nav item: as a flex child of .navlinks with
+  // margin-left:auto it wrapped to a line of its own when the row ran
+  // short, which is the layout Andy reported.
+  // ASKED OF THE DOM. A character-window regex spanned straight past
+  // </nav> and reported a false positive -- the same distance-based
+  // mistake as the "beside the heading" check earlier. Containment is a
+  // structural question, so it gets a structural answer.
+  {
+    const { JSDOM } = require('jsdom');
+    const doc = new JSDOM(raw('dashboard.html')).window.document;
+    const nav = doc.querySelector('.navlinks');
+    if (nav && nav.querySelector('#accountBtn')) {
+      bad('dashboard.html', 'the account button is inside .navlinks again — as a flex child ' +
+          'with margin-left:auto it wraps to a line of its own when the row runs short');
+    }
+    if (!doc.querySelector('.headerRight #accountBtn')) {
+      bad('dashboard.html', 'the account button is not in .headerRight');
+    }
+    const first = doc.querySelector('.topbar') && doc.querySelector('.topbar').children[0];
+    if (!first || !first.classList.contains('brandline')) {
+      bad('dashboard.html', 'the tenant is not the first thing in the header — it should run ' +
+          'hard left, with everything else pushed off it');
     }
   }
 
