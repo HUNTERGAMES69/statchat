@@ -288,6 +288,28 @@ function audit(file) {
       ' (luminance ' + lum(c).toFixed(2) + ') — converted pages should have none' });
   }
 
+  // ---- BORDERS, the third surface ---------------------------------------
+  // The audit checked text and backgrounds and not borders, so 51
+  // near-white hairlines survived every clean run on gamedark.html --
+  // #ccc control edges and #f2f2f2 row dividers, each invisible on white
+  // by design and the brightest thing in the tile on charcoal. Andy
+  // reported the Live totals rules; the other 49 were the same fault
+  // nobody had looked at yet.
+  // Deliberate accent edges: an amber or green border on a coloured chip is
+  // the signal, not an oversight. Listed rather than inferred, so adding one
+  // is a decision somebody makes on purpose.
+  const BORDER_OK = new Set(['#e0b84c', '#a3d93f', '#ffc72c', '#ffd964',
+                             '#c8455c', '#c8922f', '#c26a3a', '#6f9f22']);
+  for (const m of src.matchAll(/border[a-z-]*:\s*[^;}"']*?(#[0-9a-fA-F]{3,6})\b/g)) {
+    const c = m[1].toLowerCase();
+    if (BORDER_OK.has(c) || lum(c) <= 0.5) continue;
+    if (inPrintBlock(src, m.index)) continue;
+    const around = src.slice(Math.max(0, m.index - 300), m.index + 60);
+    if (/sheetMock|mfaQr|scMark|logoPreview/.test(around)) continue;
+    findings.push({ kind: 'FAIL', msg: 'near-white border ' + c +
+      ' — invisible on white by design, the brightest thing in the tile on dark' });
+  }
+
   // ---- the prerequisites ------------------------------------------------
   const needs = [
     [/color-scheme\s*:\s*dark/, 'color-scheme:dark — without it the browser paints ' +
