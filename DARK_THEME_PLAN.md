@@ -347,7 +347,26 @@ else): the row ran straight into the content beneath it.
 
 A header that touches its content is not a header.
 
-### The header row must WRAP
+### The header row must WRAP — enforced by `tests/header_row_check.js`
+
+**Run that check, do not eyeball this.** I twice told Andy it was handled
+when it was not: account.html was fixed specifically, then I audited the
+other pages for `flex-wrap` and `gap`, reported all clear, and help.html
+was still `align-items:baseline` at a 10px gap — the exact fault I had
+just finished writing up. The audit tested two of the three things that
+matter and I trusted it.
+
+The canonical row, identical on all seven pages that have one:
+
+```
+display:flex; justify-content:space-between; align-items:center;
+flex-wrap:wrap; gap:12px; margin-bottom:18px;
+```
+
+`dashboard.html` and `platform.html` use `.topbar` instead and keep their
+own gaps for stated reasons — the dashboard's 26px row gap separates the
+tools from the tenant name. The check asserts their behaviour, not their
+numbers.
 
 Reported on the account page and it applies to every one. That row holds
 a logo, a title and one or two controls; without `flex-wrap:wrap` they all
