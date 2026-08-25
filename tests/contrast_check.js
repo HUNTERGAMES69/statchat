@@ -293,12 +293,25 @@ function audit(file) {
   // chevron, then look for a later rule matching `select` that uses the
   // shorthand.
   {
-    const chevron = rules.find(r => /background-image:\s*url\(["']?data:image\/svg/.test(r.body)
+    // A CHEVRON CAN BE DECLARED EITHER WAY -- `background-image:url(...)`
+    // or inside the `background` shorthand. The detector only recognised
+    // the first, so reports.html, which uses the shorthand deliberately to
+    // make the reset impossible, was invisible to it. A check that only
+    // sees one of two correct spellings will eventually bless the wrong
+    // one.
+    const chevron = rules.find(r => /background(?:-image)?:[^;]*url\(["']?data:image\/svg/.test(r.body)
                                  && /select/.test(r.sel));
     if (chevron) {
+      // Only a rule targeting the SELECT ITSELF can reset it. A rule for
+      // `select option` styles a different element entirely -- flagging it
+      // is a false positive, and a check that cries wolf gets ignored.
       const wiped = rules.find(r => r.at > chevron.at &&
         /(^|[;{\s])background\s*:/.test(r.body) &&
-        r.sel.split(',').some(one => /(^|[\s>])select$/.test(one.trim())));
+        !/url\(/.test(r.body) &&
+        r.sel.split(',').some(one => {
+          const t = one.trim();
+          return /select/.test(t) && !/\boption\b|::/.test(t);
+        }));
       if (wiped) {
         findings.push({ kind: 'FAIL', msg: 'a later `background:` shorthand on "' +
           wiped.sel + '" resets the chevron drawn by "' + chevron.sel +
