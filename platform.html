@@ -216,11 +216,13 @@
       <h1>Users</h1>
       <p class="sub">Everyone with an account, grouped by tenant. This is the platform's
          view; a tenant's own admin manages their people from their account page.</p>
+      <button id="refreshUsersBtn" class="topAct" type="button" style="margin-bottom:10px;">Refresh</button>
       <div id="usersBody"><p class="empty">Loading…</p></div>
-      <p class="note"><strong>Read-only, deliberately.</strong> Changing somebody's role,
-         resetting their password or removing them is a tenant's own admin's job, and doing
-         it from here would be acting on a customer's staff with nothing recording that it
-         was the platform. That belongs with the audit trail, not before it.</p>
+      <p class="note"><strong>These actions have no audit trail yet.</strong> Resending an
+         invite, sending a reset, setting a temporary password or disabling an account are
+         all things a tenant's own admin can do from their account page — doing them from
+         here is the platform acting on a customer's staff with nothing recording that it
+         was. The reversible ones are offered on that basis; deleting a user is not.</p>
     </div>
 
     <!-- RECOVERY TOOLS, plural and deliberately open-ended. Deleted games
@@ -233,6 +235,7 @@
       <p class="sub">A deleted tenant still has every game, play and roster row it ever
          had — deleting hides it rather than destroying it, because `tenants` cascades to
          five tables. Restoring puts the tenant back exactly as it was.</p>
+      <button id="refreshRecoveryBtn" class="topAct" type="button" style="margin-bottom:10px;">Refresh</button>
       <div id="delTenantsBody"><p class="empty">Loading…</p></div>
 
       <h2 style="font-size:15px; margin:22px 0 4px;">Deleted games</h2>
@@ -258,10 +261,33 @@
   // when a listener is added above it later.
   let signedInUserId = null;
 
-  function showMsg(text, type){
-    document.getElementById('msg').innerHTML =
-      text ? '<div class="msg ' + type + '">' + text + '</div>' : '';
-  }
+    // A MESSAGE CLEARS ITSELF.
+    // ------------------------------------------------------------------
+    // These sit above the tabs and nothing ever took them down, so a line
+    // like "Test School deleted" stayed on screen through every later
+    // action and every tab switch until the page was reloaded -- describing
+    // something that had happened ten minutes ago as though it had just
+    // happened.
+    //
+    // SUCCESS AND INFO TIME OUT. They confirm something the operator just
+    // did and watched happen; once read they are noise.
+    //
+    // ERRORS DO NOT. An error is the one thing that might be read after
+    // looking away, and a failure that erases its own explanation is worse
+    // than no message at all. It clears on the next action or refresh.
+    let msgTimer = null;
+    function showMsg(text, type){
+      if (msgTimer){ clearTimeout(msgTimer); msgTimer = null; }
+      document.getElementById('msg').innerHTML =
+        text ? '<div class="msg ' + type + '">' + text + '</div>' : '';
+      if (text && type !== 'error'){
+        msgTimer = setTimeout(() => {
+          const el = document.getElementById('msg');
+          if (el) el.innerHTML = '';
+          msgTimer = null;
+        }, 6000);
+      }
+    }
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const fmtDate = d => d ? new Date(d).toLocaleDateString(undefined,
@@ -401,6 +427,10 @@
   // -- and adding one was the first thing asked for after it shipped.
   const TABS = ['tenants', 'users', 'recovery'];   // order here is wiring; the DOM decides display order
   function selectTab(which){
+    // AND A TAB SWITCH CLEARS IT TOO. A message describes something that
+    // happened on the tab you were on; carrying it to a different one makes
+    // it look like it belongs there.
+    showMsg('', '');
     TABS.forEach(t => {
       const cap = t.charAt(0).toUpperCase() + t.slice(1);
       document.getElementById('tab' + cap).classList.toggle('on', t === which);
@@ -415,16 +445,33 @@
   // ---- tenants ----------------------------------------------------------
   // A tenant may field several sports, so the embedded `teams` is a list.
   // The first one with a logo wins; a tenant whose teams have none gets a
-  document.getElementById('refreshTenantsBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('refreshTenantsBtn');
-    btn.disabled = true;
-    btn.textContent = 'Refreshing\u2026';
-    // Users too: a refresh that updated the tenant list and left the Users
-    // tab showing something older would be a worse kind of stale than the
-    // one it fixes.
-    await Promise.all([loadTenants(), loadUsers(accessToken), loadRecovery()]);
-    btn.disabled = false;
-    btn.textContent = 'Refresh';
+  // ONE HANDLER FOR ALL THREE REFRESH BUTTONS.
+  // Every tab reloads everything, which the Tenants button already did: a
+  // refresh that updated one list and left another showing something older
+  // is a worse kind of stale than the one it fixes. Three copies of that
+  // would be three chances for one of them to fall behind.
+  //
+  // It also CLEARS THE MESSAGE. A status line from the last action sat above
+  // the tabs until the whole page was reloaded, so "Test School deleted" was
+  // still on screen ten minutes and three tabs later, describing something
+  // that had already happened.
+  ['Tenants', 'Users', 'Recovery'].forEach(which => {
+    const btn = document.getElementById('refresh' + which + 'Btn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const others = ['Tenants', 'Users', 'Recovery']
+        .map(w => document.getElementById('refresh' + w + 'Btn')).filter(Boolean);
+      others.forEach(b => { b.disabled = true; });
+      btn.textContent = 'Refreshing\u2026';
+      showMsg('', '');
+      try {
+        await Promise.all([loadTenants(), loadUsers(accessToken), loadRecovery()]);
+      } catch (e) {
+        showMsg('Could not refresh: ' + esc(e.message), 'error');
+      }
+      others.forEach(b => { b.disabled = false; });
+      btn.textContent = 'Refresh';
+    });
   });
 
   // monogram, which is the ordinary state for a new customer.
