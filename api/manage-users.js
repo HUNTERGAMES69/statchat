@@ -118,7 +118,7 @@ module.exports = async function handler(req, res) {
 
     const ids = data.users.map(u => u.id);
     const { data: profiles, error: profilesErr } = await adminClient
-      .from('profiles').select('id, display_name, role, tenant_id').in('id', ids);
+      .from('profiles').select('id, display_name, role, tenant_id, is_super_admin').in('id', ids);
     if (profilesErr) { res.status(500).json({ error: profilesErr.message }); return; }
     const profileById = {};
     (profiles || []).forEach(p => { profileById[p.id] = p; });
@@ -133,6 +133,18 @@ module.exports = async function handler(req, res) {
       return p && p.tenant_id === caller.tenant_id;
     });
 
+    // Resolved in ONE query rather than one per user. Only for the
+    // platform: a tenant admin's list is a single school by construction.
+    let tenantNameById = {};
+    if (isSuper) {
+      const tIds = [...new Set((profiles || []).map(p => p.tenant_id).filter(Boolean))];
+      if (tIds.length) {
+        const { data: tRows } = await adminClient
+          .from('tenants').select('id, name').in('id', tIds);
+        (tRows || []).forEach(t => { tenantNameById[t.id] = t.name; });
+      }
+    }
+
     const users = visible.map(u => ({
       id: u.id,
       email: u.email,
@@ -143,7 +155,20 @@ module.exports = async function handler(req, res) {
       emailConfirmedAt: u.email_confirmed_at,
       // banned_until comes back as a timestamp when set. Anything in the
       // future means the account is locked out.
-      disabled: !!(u.banned_until && new Date(u.banned_until) > new Date())
+      disabled: !!(u.banned_until && new Date(u.banned_until) > new Date()),
+      // WHICH SCHOOL EACH USER BELONGS TO.
+      // ------------------------------------------------------------------
+      // A tenant admin never needs this: everyone they can see is in their
+      // own school by definition, so it comes back null for them.
+      //
+      // The PLATFORM does need it. Without it the list is a flat roll of
+      // every user on the system with no way to tell whose staff is whose
+      // -- the same fault the schools list exists to prevent.
+      tenantId: (profileById[u.id] && profileById[u.id].tenant_id) || null,
+      tenantName: isSuper
+        ? ((profileById[u.id] && tenantNameById[profileById[u.id].tenant_id]) || null)
+        : null,
+      isSuperAdmin: !!(profileById[u.id] && profileById[u.id].is_super_admin)
     }));
     res.status(200).json({ users });
     return;
