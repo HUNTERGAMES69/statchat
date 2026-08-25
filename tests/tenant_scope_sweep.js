@@ -51,7 +51,11 @@ const ALLOWED = {
 
 function run() {
   const fails = [];
-  const files = fs.readdirSync(ROOT).filter(f => f.endsWith('.html'))
+  // MOCKS ARE NOT THE APPLICATION. The *_mock.html files are throwaway
+  // previews of the dark conversion and each is deleted as its real page
+  // is converted. Auditing them reports faults in code that is on its way
+  // out, which trains people to ignore the run.
+  const files = fs.readdirSync(ROOT).filter(f => f.endsWith('.html') && !f.includes('_mock'))
     .concat(fs.readdirSync(path.join(ROOT, 'api')).filter(f => f.endsWith('.js')).map(f => 'api/' + f));
 
   for (const f of files) {

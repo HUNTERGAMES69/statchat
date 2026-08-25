@@ -244,6 +244,12 @@ function audit(file) {
     // a coach knows what file to build. Rendered dark it stops being a
     // picture of the thing it is describing.
     if (/sheetMock|sheetNote/.test(around)) continue;
+    // THE TENANT'S OWN LOGO also needs a plate. It is usually a
+    // transparent PNG drawn for a white page, so a dark crest vanishes on
+    // a dark card -- the same problem as logo.png, for artwork we do not
+    // control at all. Same exemption, on the preview and anywhere it is
+    // shown at size.
+    if (/logoPreview|teamLogo|team-summary-logo/.test(around)) continue;
     findings.push({ kind: 'FAIL', msg: 'light background ' + c +
       ' (luminance ' + lum(c).toFixed(2) + ') — converted pages should have none' });
   }
