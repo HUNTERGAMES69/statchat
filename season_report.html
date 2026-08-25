@@ -684,7 +684,16 @@ function isAdminMarker(p){
 
   document.getElementById('downloadXlsBtn').addEventListener('click', () => {
     const wb = buildWorkbook();
-    const filename = 'Neville_' + seasonYearLabel + '_season_stats.xlsx';
+    // THE TENANT'S OWN NAME, not a hardcoded one. Every tenant's season
+    // export downloaded as "Neville_2026_season_stats.xlsx" -- somebody
+    // else's school, in a file a coach sends to local media.
+    //
+    // Non-alphanumerics are collapsed so a name like "St. Mary's" does
+    // not produce a filename an operating system argues with.
+    const ourLabel = (seasonAgg.ourBranding && seasonAgg.ourBranding.name)
+      || (TEAMS && TEAMS.teamA && TEAMS.teamA.name) || 'season';
+    const filename = String(ourLabel).replace(/[^A-Za-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '') + '_' + seasonYearLabel + '_season_stats.xlsx';
     XLSX.writeFile(wb, filename.replace(/[^a-z0-9._-]+/gi, '_'));
   });
 
@@ -707,7 +716,7 @@ function isAdminMarker(p){
       // loudly for the platform, which is the right outcome for a page
       // that cannot tell whose season it is showing.
     const { data: teamRows } = await supabaseClient
-      .from('teams').select('primary_color, secondary_color, logo_url').maybeSingle();
+      .from('teams').select('name, primary_color, secondary_color, logo_url').maybeSingle();
       seasonAgg.ourBranding = teamRows || {};
 
     const { data: gameRows, error: gameError } = await supabaseClient

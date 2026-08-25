@@ -1256,40 +1256,12 @@
       img.src = dataUrl;
     });
   }
-  // WCAG contrast, the same rule engine.js uses for safeTextColor. This
-  // page does not load engine.js -- it has no game to compute -- so the
-  // few lines are repeated rather than pulling the whole engine in for
-  // one function. If the rule ever changes, it changes in both.
+  // relLum(), contrastRatioOf() and contrastingColor() were removed on
+  // 25 Aug 2026. They computed a readable secondary from the primary --
+  // white when white could be read, near-black when it could not.
   //
-  // The old version compared Rec.601 luma against 0.6, which is a
-  // perceptual brightness rather than a contrast measure and put grey
-  // text on navy earlier this week.
-  function relLum(hex){
-    const v = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#000000';
-    const ch = [v.slice(1,3), v.slice(3,5), v.slice(5,7)].map(x => {
-      const n = parseInt(x, 16) / 255;
-      return n <= 0.03928 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4);
-    });
-    return 0.2126*ch[0] + 0.7152*ch[1] + 0.0722*ch[2];
-  }
-  function contrastRatioOf(a, b){
-    const x = relLum(a), y = relLum(b);
-    return (Math.max(x,y) + 0.05) / (Math.min(x,y) + 0.05);
-  }
-
-  // A TEAM'S SECONDARY IS WHITE WHENEVER WHITE CAN BE READ.
-  // ---------------------------------------------------------------------
-  // Andy's call, 16 Aug 2026. The secondary colour is what text is drawn
-  // in on the team's own bar, and white on a school colour is what almost
-  // every scoreboard in the sport does. Sampling a second colour out of a
-  // logo produced pairings nobody chose -- a gold-on-red that happened to
-  // be in the crest.
-  //
-  // Near-black only when white genuinely fails: a pale primary (gold,
-  // silver, white-and-something) cannot carry white text at all.
-  function contrastingColor(hex){
-    return contrastRatioOf(hex, '#ffffff') >= 4.5 ? '#ffffff' : '#1a1a1a';
-  }
+  // Andy's call: the secondary is WHITE on every logo upload, no
+  // exceptions. The tradeoff is stated at the assignment below.
 
   document.getElementById('oppLogoInput').addEventListener('change', async (e) => {
     pendingOppLogoFile = e.target.files[0] || null;
@@ -1336,9 +1308,19 @@
     const detected = await detectLogoColors(dataUrl);
     if (detected.primary){
       document.getElementById('oppPrimaryColorInput').value = detected.primary;
-      // NOT detected.secondary. The logo's second colour is a colour that
-      // appears in the crest, not a colour anybody chose to write in.
-      document.getElementById('oppSecondaryColorInput').value = contrastingColor(detected.primary);
+      // WHITE, ALWAYS, ON EVERY LOGO UPLOAD. Andy's call, 25 Aug.
+      // -----------------------------------------------------------------
+      // This used to derive the secondary from the logo -- either its second
+      // detected colour or whatever contrasted with the primary -- so two
+      // tenants uploading crests got two different answers, neither of which
+      // anybody chose.
+      //
+      // White is the one that is right almost always: the secondary is text
+      // and trim over the primary, and a school colour dark enough to be a
+      // primary carries white. It is still a plain colour input directly
+      // below, so a school with a pale primary can change it in one click --
+      // which is a better default than a guess that is confidently wrong.
+      document.getElementById('oppSecondaryColorInput').value = '#ffffff';
     }
   });
 
