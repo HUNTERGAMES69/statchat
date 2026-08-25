@@ -379,9 +379,13 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   chk(/is_demo, teams/.test(code),
       'is_demo is SELECTED, not just read — an unselected column is undefined, ' +
       'which would hide the badge and the controls on every tenant');
-  chk(/pill trial">Demo/.test(code),
-      'and a demo tenant is badged, so the console says which rows those ' +
-      'controls can touch');
+  chk(/esc\(t\.name\)[\s\S]{0,60}t\.is_demo[\s\S]{0,120}DEMO/.test(code),
+      'a demo tenant is tagged BESIDE ITS NAME — status is subscription state, ' +
+      'and a school can be a demo AND lapsed, so the two are not the same column');
+  chk(/data-demo=/.test(code) && /set_tenant_demo/.test(code),
+      'and the flag can be SET from the console — 019 gated the seed and reset ' +
+      'controls on it and gave no way to turn it on, so a tenant created to be a ' +
+      'demo showed no demo controls and nothing said why');
 
   chk(/msgTimer = setTimeout/.test(code),
       'a status message clears itself — nothing took them down before');
