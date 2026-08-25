@@ -39,8 +39,12 @@
      colour stored -- the green and grey they used to be fixed at said
      nothing about the game, and a reader had to check the heading to see
      whose drive they were looking at. */
-  .drive-card { --drive-accent:#8a8f98; --drive-heading:#5b6068; --drive-tint:#edeef0; }
-  .drive-current { --drive-accent:var(--sc-green, #1a7a4c); --drive-heading:var(--sc-green, #1a7a4c); --drive-tint:#e6f4ea; }
+  .drive-card { --drive-accent:#8a8f98; --drive-heading:#5b6068; --drive-tint:#20272f; }
+  /* THE STATIC DEFAULTS WERE LIGHT TOO. These apply before a team colour
+     is known -- which is what a spectator sees on first paint, and on any
+     drive card whose team has no colour set. #edeef0 and #e6f4ea are near
+     white. */
+  .drive-current { --drive-accent:var(--sc-green, #1a7a4c); --drive-heading:var(--sc-green, #1a7a4c); --drive-tint:rgba(124,181,24,.14); }
   .drive-card { border-left-color:var(--drive-accent); }
   .drive-card h2 { color:var(--drive-heading); }
   .drive-current h2::before { content:"● LIVE  "; font-size:10px; letter-spacing:0.05em; }
@@ -760,7 +764,19 @@ function extractNameTag(rawName){
       // exactly these two phases; see the module-level `phase` variable
       // above for why it is not local to renderAll().
       const highlightLeader = phase === 'HALFTIME' || phase === 'FINAL';
-      const leaderTint = highlightLeader && team && team.bg ? mixHex(team.bg, '#ffffff', 0.88) : null;
+        // MIXED TOWARD THE CARD, NOT TOWARD WHITE.
+        // This tint only exists at HALFTIME and FINAL -- the two states the
+        // dark conversion never rendered, because a live game shows
+        // neither. Mixed 88% toward #ffffff it produced #fff8e6 for a gold
+        // school: a near-white row on a dark card, carrying light ink at
+        // 1.07:1. Invisible.
+        //
+        // Toward the card colour instead, the team's hue survives as a wash
+        // and the ink stays readable whatever the school picked -- 9.6:1
+        // for gold, 12.3:1 for a dark green, 9.5:1 for a pale silver. That
+        // matters because the colour comes from the database and we do not
+        // choose it.
+      const leaderTint = highlightLeader && team && team.bg ? mixHex(team.bg, '#191f27', 0.82) : null;
       // Built into named holders rather than appended straight to the
       // columns, because the display order is not the order the sections
       // are computed in -- rushing is calculated before receiving but
@@ -1660,8 +1676,17 @@ function extractNameTag(rawName){
               const bg = t.bg || '#1a1a2e';
               return '<div class="score-row">' +
                 '<span class="score-q">' + (r.quarter >= 5 ? 'OT' : 'Q' + r.quarter) + '</span>' +
-                '<span class="score-team" style="background:' + bg + '; color:' +
-                  safeTextColor(bg, t.text || '#fff') + ';">' + (t.name || '') + '</span>' +
+                  // A SPINE, NOT A FILL -- the same rule as the team summary
+                  // header and the box-score headings. The colour comes from
+                  // the database, so a pale primary fills a bright block into
+                  // a dark card, and safeTextColor then flips the label to
+                  // near-black -- leaving the two teams' rows with different
+                  // contrast. As an edge it works for every colour a school
+                  // might pick. These rows only render at HALFTIME and FINAL,
+                  // which is why the pattern survived here.
+                  '<span class="score-team" style="background:#171d25; color:var(--v-paper); ' +
+                    'border-left:4px solid ' + bg + '; border-radius:0 5px 5px 0;">' +
+                    (t.name || '') + '</span>' +
                 '<span class="score-text">' + r.text +
                   (r.detail ? '<span class="score-detail">(' + r.detail + ')</span>' : '') + '</span>' +
                 // The running score after this play, which is the column a
@@ -1696,8 +1721,17 @@ function extractNameTag(rawName){
           return;
         }
         card.style.setProperty('--drive-accent', bg);
-        card.style.setProperty('--drive-heading', safeTextColor('#ffffff', bg));
-        card.style.setProperty('--drive-tint', mixHex(bg, '#ffffff', 0.88));
+          // AGAINST THE CARD, NOT AGAINST WHITE. safeTextColor('#ffffff', bg)
+          // asks "what reads on a white background" -- so for a dark team
+          // colour it returned that colour unchanged, and the drive heading
+          // came out near-black on a #191f27 card. Only visible at HALFTIME
+          // and FINAL alongside the rest of this block, which is why it
+          // survived the conversion.
+          card.style.setProperty('--drive-heading', safeTextColor('#191f27', bg));
+          // Same reason as the leader tint above: toward the card, not away
+          // from it. This one feeds --drive-tint, the chip background in the
+          // drive cards.
+        card.style.setProperty('--drive-tint', mixHex(bg, '#191f27', 0.82));
       };
       paintDrive('.drive-current', currentSummary);
       paintDrive('.drive-previous', prevSummary);
