@@ -40,6 +40,8 @@ function run(page, {w, h, coarse, dismissed}) {
     getItem: k => store[k] || null, setItem: (k, v) => { store[k] = v; }
   }, configurable: true });
   w2.getComputedStyle = () => ({ position: 'static' });
+  Object.defineProperty(d.getElementById(host), 'offsetHeight', { value: 400, configurable: true });
+  w2.ResizeObserver = undefined;
 
   const m = /\n  \(function\(\)\{\n    var KEY = 'sc_rotate_dismissed';[\s\S]*?\n  \}\)\(\);/.exec(src);
   w2.__w = w2; w2.__d = d;
@@ -50,6 +52,12 @@ function run(page, {w, h, coarse, dismissed}) {
   // before either had run made every "shows on a phone" case fail. The
   // harness was wrong, not the page.
   if (d.readyState === 'loading') d.dispatchEvent(new w2.Event('DOMContentLoaded'));
+  // THE HOST MUST HAVE HEIGHT. The overlay is absolutely positioned inside
+  // the report container, and that container is hidden until the data
+  // loads -- appended to a zero-height host it renders as nothing, which
+  // is why the prompt appeared on one page out of four in production.
+  // jsdom reports 0 for offsetHeight always, so it is stubbed here to
+  // model a loaded report.
   const gate = d.querySelector('.rotateGate');
   return { shown: !!gate && gate.classList.contains('show'), store };
 }
@@ -78,6 +86,13 @@ for (const page of PAGES) {
       page + ': it is appended to the report container, not to the body');
   chk(/Download PDF and XLS work either way/.test(src),
       page + ': and says so, so nobody dismisses it just to reach the exports');
+  chk(/host\.offsetHeight > 0/.test(src),
+      page + ': waits for the host to have HEIGHT before showing — a fixed timeout was a ' +
+      'guess about fetch duration and was wrong on three pages out of four');
+  chk(/ResizeObserver/.test(src) && /setInterval/.test(src),
+      page + ': with a ResizeObserver and a bounded poll fallback');
+  chk(!/setTimeout\(maybeShow, 600\)/.test(src),
+      page + ': and no longer relies on a 600ms guess');
 }
 
 for (const page of PAGES) {
