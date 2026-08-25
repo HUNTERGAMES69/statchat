@@ -40,6 +40,16 @@
     --sc-amber:#ffc72c;  --sc-amber-tint:rgba(255,199,44,.13);
     --sc-amber-text:#ffc72c; --sc-amber-soft:rgba(255,199,44,.10);
     --sc-link:#7cb518;
+    /* Defined because the row menu uses var(--sc-blue, #1565c0) and that
+       fallback is a link blue chosen for white -- 2.9:1 on a dark menu.
+       An undefined token silently becomes its fallback, which is how a
+       colour nobody chose ends up on screen. */
+    --sc-blue:#5aa9f0;
+    /* Same reason: the row menu's Stat package link uses
+       var(--sc-green-dark, #0f6e56), a deep green for white at 2.67:1
+       here. Found by the audit only after it learned to resolve
+       fallbacks -- before that it skipped undefined tokens silently. */
+    --sc-green-dark:#8ac53e;
   }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
   .wrap { max-width:760px; margin:0 auto; }
@@ -132,11 +142,17 @@
     background-color:var(--sc-raise) !important;
     color:var(--sc-ink) !important;
     border:1px solid var(--sc-rule-strong) !important;
-    background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%238d99a6' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    /* A STROKED chevron, not a filled path. `fill` on an open three-point
+       path renders as a solid wedge, which reads as a blob at this size.
+       Drawn in --sc-ink rather than the muted grey so it is obviously a
+       control and not decoration -- the complaint was that the field did
+       not look like a dropdown. */
+    background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 9'%3E%3Cpath d='M1 1.5L7 7.5L13 1.5' stroke='%23eef1f4' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat:no-repeat;
-    background-position:right 10px center;
-    background-size:11px;
-    padding-right:30px !important;
+    background-position:right 11px center;
+    background-size:12px;
+    padding:5px 34px 5px 10px !important;
+    cursor:pointer;
   }
   select option { background:var(--sc-card); color:var(--sc-ink); }
 
@@ -231,7 +247,12 @@
      has already sunk the game ladder and the login wordmark.
      A panel wants to be darker than the card it sits on, not lighter, so
      the record band is the page colour with its own edge. */
-  .season-record { background:#0f141a; border:1px solid var(--sc-rule);
+  /* RAISED, not sunk. This was #0f141a -- darker than the card -- on the
+     reasoning that a panel should recede. On a near-black page that reads
+     as a hole rather than as a band: there is nothing below the page
+     colour to recede INTO. It is the season's headline number, so it
+     should sit above the card, not below it. */
+  .season-record { background:#2b3542; border:1px solid var(--sc-rule-strong);
                    color:var(--sc-ink); border-radius:10px; padding:14px 18px;
                    display:flex; align-items:center; margin:14px 0 0; }
   /* The stats moved one level deeper in the DOM (see renderSeasonRecord)
@@ -356,8 +377,8 @@
               <img id="accountAvatarImg" style="display:none; width:100%; height:100%; object-fit:cover;">
               <span id="accountInitial" style="font-weight:700; font-size:14px;">?</span>
             </button>
-            <div id="accountMenu" class="hidden" style="position:absolute; right:0; top:110%; background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:20; min-width:200px; padding:6px 0;">
-              <div id="accountMenuEmail" style="padding:8px 14px; font-size:12px; color:#888; border-bottom:1px solid #f0f0f0;"></div>
+            <div id="accountMenu" class="hidden" style="position:absolute; right:0; top:110%; background:var(--sc-card); border:1px solid var(--sc-rule-strong); border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,0.55); z-index:20; min-width:200px; padding:6px 0;">
+              <div id="accountMenuEmail" style="padding:8px 14px; font-size:12px; color:var(--sc-ink-muted); border-bottom:1px solid var(--sc-rule);"></div>
               <a href="account.html" class="accountMenuItem" style="display:block; padding:9px 14px; color:var(--sc-ink); font-size:14px; text-decoration:none;">Account settings</a>
               <button id="signOutBtn" class="accountMenuItem" style="display:block; width:100%; text-align:left; padding:9px 14px; color:var(--sc-red, #a32d2d); font-size:14px; background:none; border:none;">Sign out</button>
             </div>
@@ -385,7 +406,16 @@
       <div class="games-head" style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
         <div>
           <h1 style="font-size:20px; margin:0;">Games</h1>
-          <select id="seasonPicker" style="font-size:13px; color:var(--sc-ink); background:var(--sc-raise); border:1px solid var(--sc-rule-strong); border-radius:6px; padding:3px 6px; background:#fff;"></select>
+          <!-- TWO background declarations in one inline style, and the LATER one
+                 wins. The original ended with `background:#fff` and my conversion
+                 added another earlier in the list, so the white survived and the
+                 picker stayed washed out. The stylesheet rule could not save it:
+                 inline beats a stylesheet. One declaration now. -->
+            <!-- background-COLOR, not the `background` shorthand: the shorthand
+                 resets background-image, and the chevron that shows this is a
+                 dropdown is drawn as one in the stylesheet. Inline beats the
+                 stylesheet, so the shorthand silently removed it. -->
+            <select id="seasonPicker" style="font-size:13px; color:var(--sc-ink); background-color:var(--sc-raise); border:1px solid var(--sc-rule-strong); border-radius:6px;"></select>
           <button type="button" id="refreshGamesBtn" class="secondary" style="font-size:13px; padding:3px 10px; margin-left:6px;">Refresh</button>
         </div>
       </div>
@@ -900,7 +930,7 @@
         (currentIsAdmin || g.status === 'in_progress' || g.status === 'final'
           ? '<div style="position:relative;">' +
             '<button class="secondary rowMenuBtn" data-id="' + g.id + '" style="padding:4px 10px; font-size:16px; line-height:1;">⋮</button>' +
-            '<div class="rowMenu hidden" data-id="' + g.id + '" style="position:absolute; right:0; top:100%; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:10; min-width:140px;">' +
+            '<div class="rowMenu hidden" data-id="' + g.id + '" style="position:absolute; right:0; top:100%; background:var(--sc-card); border:1px solid var(--sc-rule-strong); border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,0.55); z-index:10; min-width:140px; overflow:hidden;">' +
               (currentIsAdmin ? '<a href="create_game.html?edit=' + g.id + '" style="display:block; padding:8px 12px; color:#eef1f4; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game setup</a>' : '') +
               (g.status === 'in_progress' ? '<a href="view.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:var(--sc-blue, #1565c0); font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Crew View</a>' : '') +
               (g.status === 'final' ? '<a href="view.html?id=' + g.id + '&mode=results" style="display:block; padding:8px 12px; color:var(--sc-blue, #1565c0); font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Crew View</a>' : '') +
