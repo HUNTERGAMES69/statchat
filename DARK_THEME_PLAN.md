@@ -281,6 +281,54 @@ screen and any `safeTextColor()` logic then flips the label, so two teams
 end up with different contrast. A 5px spine on a `#171d25` bar works for
 every colour.
 
+### The four faults that survive a "converted" page
+
+Learned on the dashboard, all four after it had already passed an audit.
+Check these explicitly; none is visible in a stylesheet read.
+
+**1. UNDEFINED TOKENS BECOME THEIR FALLBACK, SILENTLY.** The row menu used
+`var(--sc-blue, #1565c0)` and `--sc-blue` was never defined on that page,
+so it rendered as a link blue chosen for white — 2.89:1 on a dark menu.
+Five more of these existed across two pages. An undefined token does not
+fail loudly; it quietly becomes the colour somebody wrote for the old
+design. `tests/contrast_check.js` now resolves fallbacks and flags them.
+
+**2. THE `background:` SHORTHAND RESETS `background-image`.** The season
+picker's inline style used the shorthand, which wiped the chevron drawn by
+a stylesheet rule — and inline always wins, so the field stopped looking
+like a dropdown. Use `background-color:` in inline styles on any element
+whose stylesheet gives it an image.
+
+**3. TWO DECLARATIONS OF THE SAME PROPERTY IN ONE INLINE STYLE.** The
+picker read `background:var(--sc-raise); … background:#fff;`. The later
+wins. Converting by adding a declaration rather than replacing the
+existing one leaves the original in place, still winning.
+
+**4. PANELS BUILT IN JAVASCRIPT ARE NOT IN THE STYLESHEET.** The row menu
+and the account menu were both `background:#fff` inside a template string.
+Their *items* had been recoloured, so light labels sat on white and looked
+washed out while dark ones looked fine. Two menus, one bug, found one at a
+time because the first fix was aimed at the symptom.
+
+### Surfaces: raised, not sunk
+
+The season record band was made `#0f141a` — darker than the card — on the
+principle that a panel recedes. **On a near-black page there is nothing to
+recede into**, so it read as a hole. A secondary surface goes ABOVE the
+card: `#2b3542`, about 1.33:1 against it. Enough to read as its own
+surface, not so light that it competes with an amber button inside it.
+
+Dropdown panels get a heavier shadow than on white —
+`0 6px 20px rgba(0,0,0,.55)` — or they float without appearing to.
+
+### Selects need `appearance:none`
+
+The browser paints a `<select>`'s face natively and ignores `background`.
+Reset the appearance, draw the chevron back as a **stroked** SVG (a `fill`
+on an open path renders as a wedge), and style `select option` separately
+— the option list is drawn by the OS and can only be reached from a
+stylesheet, never from the select's inline style.
+
 ### Spacing: the header must read as a header
 
 Reported on the dashboard 25 Aug and it applies everywhere. Two shapes:

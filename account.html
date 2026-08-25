@@ -24,41 +24,85 @@
      heading. Uniformity is the point -- a mark that moves or resizes
      between screens reads as decoration rather than as the product. */
   .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
-  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block; }
+  /* logo.png is dark-on-light artwork and sinks into a #191f27 card.
+     Same plate as login.html and dashboard.html -- the mark is not being
+     redrawn for a theme. */
+  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block;
+                  background:#fff; padding:2px; box-sizing:border-box; }
 
+  /* DARK, 25 August 2026. Third page. Recipe in DARK_THEME_PLAN.md.
+
+   EVERY --sc-* THIS PAGE READS IS DEFINED BELOW, including the ones only
+   ever written as var(--x, #fallback). An undefined token does not fail
+   loudly -- it silently becomes the fallback, and every fallback in this
+   codebase was chosen for a white page. That put a 2.89:1 link blue on the
+   dashboard's menu and four white-page colours on view.html. */
+  :root{ color-scheme:dark; }
+  :root{
+    --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+    --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+    --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+    --sc-navy:#2f3a47;   /* A BUTTON FILL. Never text, never a panel. */
+    --sc-green:#a3d93f;  --sc-green-tint:rgba(124,181,24,.14);
+    --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
+    --sc-amber:#ffc72c;  --sc-amber-text:#ffc72c;
+    --sc-amber-tint:rgba(255,199,44,.13);
+    --sc-blue:#5aa9f0;   --sc-link:#7cb518;
+  }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
   .wrap { max-width:600px; margin:0 auto; }
-  .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  .card { background:var(--sc-card); border:1px solid var(--sc-rule); color:var(--sc-ink); border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:20px; margin:0; }
-  h2 { font-size:16px; margin:0 0 10px; color:#444; }
-  p.sub { color:#888; margin:0 0 14px; font-size:13px; }
-  label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
-  input { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
-  button { padding:9px 16px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
-  button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
-  button.danger { background:var(--sc-red, #a32d2d); }
+  h2 { font-size:16px; margin:0 0 10px; color:var(--sc-ink); }
+  p.sub { color:var(--sc-ink-muted); margin:0 0 14px; font-size:13px; }
+  label { display:block; font-size:13px; margin-bottom:4px; color:var(--sc-ink-muted); }
+  /* Recessed: a card-coloured input with a hairline looks painted on. */
+  /* AUTOFILL. This page has eight inputs and a browser will fill the
+     email one; WebKit paints that with an inset shadow no background rule
+     reaches, so it has to be told separately. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color:var(--sc-ink);
+    -webkit-box-shadow:0 0 0 1000px var(--sc-raise) inset;
+    caret-color:var(--sc-ink);
+    transition:background-color 9999s ease-out 0s;
+  }
+  /* The default focus outline is dark and vanishes on a dark card. */
+  input:focus-visible, button:focus-visible, a:focus-visible {
+    outline:2px solid var(--sc-link); outline-offset:2px;
+  }
+  input { padding:8px; border:1px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
+  /* border:none works on white and nowhere else -- a dark fill on a dark
+     card has no edge, and no fill clears 3:1 without going light grey. */
+  button { padding:9px 16px; border-radius:6px; border:1px solid var(--sc-rule-strong); background:var(--sc-navy, #1a1a2e); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
+  button.danger { background:rgba(176,0,32,.18); color:var(--sc-red); border-color:#c8455c; }
   button:disabled { opacity:0.5; cursor:default; }
   .row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
   .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
   .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
   .hidden { display:none; }
-  #avatarPreview { width:64px; height:64px; border-radius:50%; object-fit:cover; background:#eee; }
-  .danger-zone { border:1px solid #f0d0a0; background:#fffaf0; border-radius:10px; padding:16px; margin-top:8px; }
-  .user-row { border:1px solid #e5e3dc; border-radius:8px; padding:12px; margin-bottom:10px; }
+  #avatarPreview { width:64px; height:64px; border-radius:50%; object-fit:cover; background:var(--sc-raise); border:1px solid var(--sc-rule); }
+  /* A WARNING PANEL, still warm but raised rather than lit. #fffaf0 on a
+     dark page is a hole; the tint keeps the amber signal and the border
+     carries the edge at 3:1. */
+  .danger-zone { border:1px solid #c8922f; background:rgba(255,199,44,.09); border-radius:10px; padding:16px; margin-top:8px; }
+  .user-row { border:1px solid var(--sc-rule); background:var(--sc-raise); border-radius:8px; padding:12px; margin-bottom:10px; }
   .user-row-head { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:6px; }
   .user-row-name { font-weight:700; font-size:14px; }
-  .user-row-email { color:#777; font-size:13px; }
-  .user-row-meta { color:#999; font-size:12px; margin-top:4px; }
+  .user-row-email { color:var(--sc-ink-soft); font-size:13px; }
+  .user-row-meta { color:var(--sc-ink-muted); font-size:12px; margin-top:4px; }
   .user-row-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
   .user-row-actions button { font-size:12px; padding:6px 10px; }
   .set-password-inline { display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap; }
   .set-password-inline input { width:auto; flex:1; min-width:140px; }
   .badge-admin { display:inline-block; font-size:10px; font-weight:700; color:var(--sc-amber-text, #a37a00); background:var(--sc-amber-tint, #fff3cd); padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
-  .badge-gameentry { display:inline-block; font-size:10px; font-weight:700; color:var(--sc-green, #1a7a4c); background:#e3f7ec; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+  .badge-gameentry { display:inline-block; font-size:10px; font-weight:700; color:var(--sc-green, #1a7a4c); background:rgba(124,181,24,.16); padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
 .badge-disabled { display:inline-block; margin-left:8px; padding:2px 7px; border-radius:4px;
                     background:#8a3a12; color:#fff; font-size:11px; font-weight:700; letter-spacing:0.04em; }
-    .badge-invited { display:inline-block; font-size:10px; font-weight:700; color:var(--sc-blue, #1565c0); background:#e3f2fd; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+    .badge-invited { display:inline-block; font-size:10px; font-weight:700; color:var(--sc-blue, #1565c0); background:rgba(90,169,240,.16); padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
   @media (min-width: 768px) { body { padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); } .card { padding:24px; } }
 </style>
 </head>
@@ -77,8 +121,8 @@
           <h1>Account</h1>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
-          <button id="signOutBtn" style="background:#fff; color:var(--sc-red, #a32d2d); border:1px solid var(--sc-red, #a32d2d); padding:8px 14px; font-size:13px; font-weight:600; border-radius:6px;">Sign out</button>
-          <a href="dashboard.html" id="backLink" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid #ccc; color:#444; font-size:13px; font-weight:600;">← Dashboard</a>
+          <button id="signOutBtn" style="background:rgba(176,0,32,.16); color:var(--sc-red, #a32d2d); border:1px solid #c8455c); padding:8px 14px; font-size:13px; font-weight:600; border-radius:6px;">Sign out</button>
+          <a href="dashboard.html" id="backLink" style="text-decoration:none; padding:8px 14px; border-radius:6px; border:1px solid var(--sc-rule-strong); color:var(--sc-ink); font-size:13px; font-weight:600;">← Dashboard</a>
         </div>
       </div>
       <p class="sub" id="accountEmail"></p>
@@ -121,7 +165,7 @@
     <div class="card">
       <h2>Two-factor authentication</h2>
       <div id="mfaMsg"></div>
-      <p style="color:#666; font-size:13px; margin:0 0 12px;">
+      <p style="color:var(--sc-ink-muted); font-size:13px; margin:0 0 12px;">
         Once enabled, signing in asks for a six-digit code from your
         authenticator app as well as your password. Nothing else changes &mdash;
         entering plays, Undo and everything during a game work exactly as
@@ -130,9 +174,9 @@
       </p>
 
       <div id="mfaEnrolled" style="display:none;">
-        <p style="font-weight:700; color:var(--sc-green-dark, #0f6e56); margin:0 0 10px;">
+        <p style="font-weight:700; color:var(--sc-green); margin:0 0 10px;">
           &#10003; Two-factor is set up on this account.</p>
-        <p style="color:#666; font-size:13px; margin:0 0 10px;">
+        <p style="color:var(--sc-ink-muted); font-size:13px; margin:0 0 10px;">
           You will be asked for a code next time you sign in.</p>
         <button id="mfaRemoveBtn" class="danger" style="margin-top:14px;">Remove two-factor</button>
       </div>
@@ -142,8 +186,13 @@
         <div id="mfaQrBox" style="display:none; margin-top:14px;">
           <p style="font-size:13px; margin:0 0 8px;">Scan this with your
             authenticator app, then enter the six-digit code it shows.</p>
-          <div id="mfaQr" style="background:#fff; padding:8px; display:inline-block; border:1px solid #ddd; border-radius:6px;"></div>
-          <p style="font-size:12px; color:#666; margin:8px 0 0;">
+          <!-- WHITE ON PURPOSE, and it must stay that way. A QR code is read by a
+               camera looking for dark modules on a light field; inverted or tinted,
+               many scanners simply fail. This is the same exception as the logo
+               plate -- a light patch that exists because the ARTWORK needs it, not
+               because the page was missed. -->
+          <div id="mfaQr" style="background:#fff; padding:8px; display:inline-block; border:1px solid var(--sc-rule-strong); border-radius:6px;"></div>
+          <p style="font-size:12px; color:var(--sc-ink-muted); margin:8px 0 0;">
             Cannot scan? Enter this key by hand:
             <code id="mfaSecret" style="font-size:12px; word-break:break-all;"></code></p>
           <label style="margin-top:12px;">Six-digit code
