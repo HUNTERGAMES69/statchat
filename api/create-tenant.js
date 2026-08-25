@@ -65,7 +65,7 @@ module.exports = async (req, res) => {
     return;
   }
   if (!profileRows || !profileRows[0] || !profileRows[0].is_super_admin) {
-    res.status(403).json({ error: 'Only the platform can create a school' });
+    res.status(403).json({ error: 'Only the platform can create a tenant' });
     return;
   }
 
@@ -75,7 +75,7 @@ module.exports = async (req, res) => {
   const adminEmail = String(body.adminEmail || '').trim();
   const adminName = String(body.adminName || '').trim();
 
-  if (!name) { res.status(400).json({ error: 'A school name is required' }); return; }
+  if (!name) { res.status(400).json({ error: 'A tenant name is required' }); return; }
   // The email is checked BEFORE the school is created. Creating a tenant
   // and then discovering the address is malformed leaves exactly the
   // orphan this endpoint is trying not to produce.
@@ -106,7 +106,7 @@ module.exports = async (req, res) => {
     res.status(200).json({
       tenantId,
       invited: false,
-      message: 'School created. Nobody has been invited yet — use Invite when you have an address.'
+      message: 'Tenant created. Nobody has been invited yet — use Invite when you have an address.'
     });
     return;
   }
@@ -125,9 +125,9 @@ module.exports = async (req, res) => {
     res.status(207).json({
       tenantId,
       invited: false,
-      error: 'The school was created, but the invite to ' + adminEmail +
+      error: 'The tenant was created, but the invite to ' + adminEmail +
              ' failed: ' + inviteError.message +
-             ' — the school is in the list; invite them again from there.'
+             ' — the tenant is in the list; invite them again from there.'
     });
     return;
   }
@@ -144,8 +144,8 @@ module.exports = async (req, res) => {
       res.status(207).json({
         tenantId,
         invited: true,
-        error: 'School created and ' + adminEmail + ' invited, but they could not be made ' +
-               'an admin: ' + roleError.message + ' — set their role from the school\'s ' +
+        error: 'Tenant created and ' + adminEmail + ' invited, but they could not be made ' +
+               'an admin: ' + roleError.message + ' — set their role from the tenant\'s ' +
                'own account page once they have signed in.'
       });
       return;
@@ -155,6 +155,6 @@ module.exports = async (req, res) => {
   res.status(200).json({
     tenantId,
     invited: true,
-    message: 'School created and ' + adminEmail + ' invited as its admin.'
+    message: 'Tenant created and ' + adminEmail + ' invited as its admin.'
   });
 };
