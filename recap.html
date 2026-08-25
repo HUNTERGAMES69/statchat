@@ -1092,7 +1092,22 @@ function isAdminMarker(p){
       // row, and asking for '*' here would fail outright for a signed-out
       // visitor. This list must stay a subset of the grant in
       // sql/public_recap_sharing.sql.
-      .from('games').select('id, designator, game_date, home_team_name, away_team_name, ' +
+        // tenant_id IS LOAD-BEARING HERE, not decoration. The branding query
+        // further down reads `game.tenant_id`; without the column it is
+        // undefined, `.eq('tenant_id', undefined)` matches no row, and the
+        // team falls back to #2b3440 -- which is what "Neville lost all its
+        // colours" looked like on screen.
+        //
+        // The OPPONENT survived because its colours live on the game row and
+        // were already in this list. That asymmetry was the tell.
+        //
+        // Introduced today by the is_our_team fix, which changed the filter
+        // to game.tenant_id without adding the column it now depends on.
+        // Same shape as `deleted_at` missing from the dashboard's tenants
+        // query: an unselected column is undefined, not an error.
+        // Every other page doing this filter uses select('*'), so recap was
+        // the only one that could break.
+      .from('games').select('id, tenant_id, designator, game_date, home_team_name, away_team_name, ' +
                             'our_team_is_home, quarter_length_seconds, status, ' +
                             'opponent_logo_url, opponent_primary_color, ' +
                             'opponent_secondary_color, final_score_us, final_score_opp, is_public')
