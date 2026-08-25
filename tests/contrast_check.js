@@ -140,6 +140,22 @@ function audit(file) {
     if (inPrintBlock(src, m.index)) continue;
     tokens[m[1]] = m[2];
   }
+  // ALIASES: A TOKEN POINTING AT ANOTHER TOKEN.
+  // broadcast_setup.html defines `--green: var(--sc-green)` -- a local name
+  // for a shared colour, which is reasonable and common. Resolving only one
+  // hop left --green unknown, so a button using it could not be measured
+  // and its dark ink was reported against the card instead of against the
+  // light green it actually sits on.
+  // Followed to a fixed point, with a hop limit so a circular definition
+  // cannot spin.
+  for (let pass = 0; pass < 5; pass++) {
+    let changed = false;
+    for (const m of src.matchAll(/(--[a-z-]+)\s*:\s*var\(\s*(--[a-z-]+)/g)) {
+      if (inPrintBlock(src, m.index)) continue;
+      if (!tokens[m[1]] && tokens[m[2]]) { tokens[m[1]] = tokens[m[2]]; changed = true; }
+    }
+    if (!changed) break;
+  }
   // AN UNDEFINED TOKEN SILENTLY BECOMES ITS FALLBACK, and every fallback
   // in this codebase was chosen for a white page. `var(--sc-blue, #1565c0)`
   // on the dashboard rendered as #1565c0 -- 2.89:1 on the menu -- because
