@@ -370,6 +370,19 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
     chk(!!b.d.getElementById('refresh' + w + 'Btn'),
         'the ' + w + ' tab has a Refresh button');
   });
+  // ---- demo controls -----------------------------------------------------
+  chk(/data-seed=/.test(code) && /data-resetdemo=/.test(code),
+      'a demo tenant offers seed and reset');
+  chk(/t\.is_demo\s*\?\s*'<button data-seed/.test(code),
+      'and a NON-demo tenant does not — the SQL refuses it anyway, so this is ' +
+      'about not offering a control that would be rejected');
+  chk(/is_demo, teams/.test(code),
+      'is_demo is SELECTED, not just read — an unselected column is undefined, ' +
+      'which would hide the badge and the controls on every tenant');
+  chk(/pill trial">Demo/.test(code),
+      'and a demo tenant is badged, so the console says which rows those ' +
+      'controls can touch');
+
   chk(/msgTimer = setTimeout/.test(code),
       'a status message clears itself — nothing took them down before');
   chk(/type !== 'error'/.test(code),
