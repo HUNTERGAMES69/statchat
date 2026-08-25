@@ -451,6 +451,24 @@
   // chosen from a list: a list would be friendlier, and this is a control
   // used a handful of times by one person who has the ids to hand.
   document.getElementById('tenantsBody').addEventListener('click', async (e) => {
+    const demoBtn = e.target.closest('[data-demo]');
+    if (demoBtn){
+      const turningOn = demoBtn.dataset.on === '0';
+      if (!confirm((turningOn ? 'Mark' : 'Unmark') + ' ' + demoBtn.dataset.name +
+                   ' as a demo school?' +
+                   (turningOn ? '\n\nIts games can then be seeded from a real game ' +
+                                'and reset back afterwards.' : ''))) return;
+      const { error } = await supabaseClient.rpc('set_tenant_demo', {
+        p_tenant: demoBtn.getAttribute('data-demo'),
+        p_demo: turningOn
+      });
+      if (error){ showMsg('Could not change that: ' + esc(error.message), 'error'); return; }
+      showMsg(esc(demoBtn.dataset.name) + (turningOn ? ' is now a demo school.'
+                                                     : ' is no longer a demo school.'), 'success');
+      await loadTenants();
+      return;
+    }
+
     const seedBtn  = e.target.closest('[data-seed]');
     const resetBtn = e.target.closest('[data-resetdemo]');
     if (!seedBtn && !resetBtn) return;
@@ -616,7 +634,14 @@
                 'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),' +
                 '{className:\'crest\', textContent:this.alt||\'\'}))">'
               : '<span class="crest">' + esc(t.name.charAt(0).toUpperCase()) + '</span>') +
+            // THE DEMO TAG SITS WITH THE NAME, not in the status column.
+            // Status is subscription state -- trial, active, lapsed -- and a
+            // demo is not one of those; a school can be a demo AND lapsed.
+            // Beside the name it reads as "what this school IS", which is what
+            // it is, and it is the first thing the eye lands on in the row.
             '<span>' + esc(t.name) +
+              (t.is_demo ? ' <span class="pill trial" style="margin-left:6px; ' +
+                'vertical-align:2px;">DEMO</span>' : '') +
               (t.full_name ? '<div style="font-weight:400; font-size:12.5px; color:#6b7680;">' +
                 esc(t.full_name) + '</div>' : '') +
             '</span></span></td>' +
@@ -625,8 +650,7 @@
           // is this, and the seed/reset controls in the menu. Both the SQL
           // functions refuse any tenant without the flag, so the badge is also
           // the honest indicator of which rows those controls can touch.
-          '<td><span class="pill ' + pill + '">' + esc(label) + '</span>' +
-            (t.is_demo ? ' <span class="pill trial">Demo</span>' : '') + '</td>' +
+          '<td><span class="pill ' + pill + '">' + esc(label) + '</span></td>' +
           '<td>' + fmtDate(t.renews_on) + '</td>' +
           '<td>' + (live[t.id] || 0) + '</td>' +
           '<td>' + (gone[t.id] || 0) + '</td>' +
@@ -641,6 +665,14 @@
               '<div class="menu hidden" data-menu-for="' + esc(t.id) + '">' +
                 '<button data-toggle="' + esc(t.id) + '" data-off="' + (off ? '1' : '0') + '" ' +
                   'data-name="' + esc(t.name) + '">' + (off ? 'Restore access' : 'Suspend') + '</button>' +
+                // MARK AS DEMO. 019 gated the seed and reset controls on this
+                // flag and gave no way to SET it -- so a tenant created to be a
+                // demo showed no demo controls, with nothing on screen saying
+                // why. A flag that gates a feature has to be settable where the
+                // feature lives.
+                '<button data-demo="' + esc(t.id) + '" data-on="' + (t.is_demo ? '1' : '0') + '" ' +
+                  'data-name="' + esc(t.name) + '">' +
+                  (t.is_demo ? 'Unmark as demo' : 'Mark as demo') + '</button>' +
                 '<button class="danger" data-del="' + esc(t.id) + '" ' +
                   'data-name="' + esc(t.name) + '">Delete tenant</button>' +
                 // SEED AND RESET, ON DEMO TENANTS ONLY. The SQL refuses any
