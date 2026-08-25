@@ -186,6 +186,11 @@ function audit(file) {
     // plate rather than a panel that happens to be white.
     const around = src.slice(Math.max(0, m.index - 600), m.index + 120);
     if (/scMark|splashIcon|\.brand img/.test(around) && /padding:\s*2px/.test(around)) continue;
+    // A QR CODE MUST BE DARK-ON-LIGHT. Cameras look for dark modules on a
+    // light field; inverted or tinted, many scanners fail outright. Like
+    // the logo plate, this is a light patch the ARTWORK requires -- not a
+    // page that was missed.
+    if (/mfaQr|qrcode|qr-code/i.test(around)) continue;
     findings.push({ kind: 'FAIL', msg: 'light background ' + c +
       ' (luminance ' + lum(c).toFixed(2) + ') — converted pages should have none' });
   }
