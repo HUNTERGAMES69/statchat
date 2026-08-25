@@ -8,34 +8,41 @@ Ordered roughly by how much it would hurt to leave undone.
 
 ---
 
-## 0. IS_OUR_TEAM IS NOW A LIVE CROSS-TENANT BUG — for the platform account
+## 0. IS_OUR_TEAM — CLOSED, 25 August 2026
 
-A second tenant exists in production as of 25 Aug 2026, which promotes
-this from tidy-up to a real fault.
+Kept as a record because of how it was found and how far it reached.
 
-Twelve files read `.eq('is_our_team', true)`. For a TENANT user that is
-harmless — migration 009 scopes `teams` to their own row, so the query
-returns the right team. For the PLATFORM account it is not: every
-tenant's team carries the flag, `teams_select` ends `or
-is_super_admin()`, so all of them come back, and `.limit(1)` picks
-whichever Postgres feels like.
+`is_our_team` meant "the only team" when there was one tenant. Every
+tenant's team carries the flag, so once a second tenant existed the
+queries reading it returned ALL of them and `.limit(1)` took whichever
+row Postgres felt like.
 
-    customize.html   would show — and let it EDIT — an arbitrary tenant's branding
-    roster.html      would show an arbitrary tenant's players
-    reports.html     would report on an arbitrary tenant's season
+**Twelve files, not the ten a first grep found** — two queries spanned
+two lines. That is why `tests/tenant_scope_sweep.js` parses statements
+rather than grepping for a string.
 
-The dashboard bounce keeps the platform off those pages **by accident,
-not by design**: nothing stops it typing the address, and `?as=` will
-deliberately let it through once Open ships.
+Two paths RLS was never going to scope:
 
-- [ ] **Drop `is_our_team` and select the team by `tenant_id` instead.**
-  Under 009 a tenant sees exactly one team, so `.single()` is both
-  simpler and correct — and it fails loudly if that stops being true,
-  which `.limit(1)` never does. The flag is redundant for tenants and
-  actively wrong for the platform.
-- [ ] Until then, treat any platform visit to a tenant page as unsafe.
+  * `api/og.js` read teams with the SERVICE KEY, so a shared recap's
+    link-preview card — the image iMessage and Slack show — could be
+    painted in another school's colour.
+  * the anon policy on `teams` used `is_our_team = true`, which meant
+    "every team on the platform". Demonstrated in scratch: three tenants'
+    teams visible to an anonymous reader. Fixed by migration 015, which
+    scopes anon reads to tenants with a published game — the same shape
+    009 already used for `tenants`.
+
+Fixed by asking the GAME whose branding it is where a game is loaded
+(exact for a tenant, the platform and an anonymous reader alike), and
+`.maybeSingle()` where none is — correct for a tenant, and failing
+LOUDLY for the platform instead of rendering an arbitrary customer.
+
+- [ ] **Drop the `is_our_team` column.** Nothing reads it. `roster.html`
+  and `create_tenant()` both still WRITE it, kept consistent rather than
+  half-removed. That is a migration, not a code change.
 
 ---
+
 
 ## 0b. UNFILTERED QUERIES THAT RLS USED TO NARROW — sweep needed
 

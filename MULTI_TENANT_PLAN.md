@@ -1185,6 +1185,23 @@ Fixed by building a second client carrying the caller's own JWT, so
 either side. **A lesson learned in one context did not get carried to the
 next one an hour later.**
 
+### 015 — THE ANON BRANDING POLICY, 25 August 2026
+
+`anon reads our branding` on `teams` used `is_our_team = true`, written
+when that meant "the only team". Every tenant's team carries the flag, so
+with a second tenant it meant "every team on the platform" — and
+recap.html, which anonymous viewers open, then took whichever row came
+first.
+
+**A public recap could already be wearing the wrong school's colours.**
+Demonstrated in scratch: under the old policy an anonymous reader saw all
+three tenants' teams; under 015, exactly the one with a published game.
+
+009 had got this right for `tenants` and left `teams` on the old flag,
+because at the time the flag still described reality. That is the shape
+of the whole `is_our_team` problem: rules that were true when written and
+quietly stopped being true.
+
 ### The order now
 
     006  columns, backfill, functions, signup trigger   <- DONE 24 Aug
