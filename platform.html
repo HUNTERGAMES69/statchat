@@ -576,7 +576,7 @@
     const btn = e.target.closest('[data-untenant]');
     if (!btn) return;
     const name = btn.getAttribute('data-name');
-    if (!confirm('Restore ' + name + '? Their users get full access back immediately.')) return;
+    if (!confirm('Restore ' + name + '? Their users are unlocked and get access back immediately \u2014 except anyone disabled separately, who stays disabled.')) return;
     btn.disabled = true;
     const { error } = await supabaseClient.rpc('set_tenant_deleted', {
       p_tenant: btn.getAttribute('data-untenant'), p_deleted: false
@@ -665,7 +665,10 @@
       const id = del.getAttribute('data-del');
       const name = del.getAttribute('data-name');
       const typed = prompt('Delete ' + name + '?\n\n' +
-        'Their users will sign in to an empty application, and any shared recap ' +
+        // CORRECTED with migration 018. This used to read "their users will
+        // sign in to an empty application", which was accurate then and is
+        // the security gap 018 closed -- they cannot sign in at all now.
+        'Their users will be locked out and cannot sign in, and any shared recap ' +
         'links stop working. Nothing is destroyed \u2014 every game, play and roster ' +
         'stays in the database and StatChat support can restore the tenant from ' +
         'Recovery tools.\n\n' +
