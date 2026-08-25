@@ -70,11 +70,10 @@
   .score-text { flex:1 1 auto; min-width:0; font-weight:600; color:var(--sc-ink, #1a1a1a); }
   .score-tally { flex:0 0 auto; font-weight:800; font-variant-numeric:tabular-nums; color:var(--sc-navy, #1a1a2e); }
   .score-detail { font-size:13px; font-weight:600; color:#5b6068; margin-left:6px; }
-  /* The SOP badge. Boxed rather than merely tinted: at label size a
-     colour change alone is easy to miss, and the point is that this one
-     reading is a different kind of thing from the three beside it. */
-  .stat-label-badge { background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400);
-                      color:#7a5c00; border-radius:4px; padding:1px 6px; }
+  /* .stat-label-badge removed 25 Aug. It boxed the SOP label in amber to
+     mark it as a different kind of reading from TOP; the label now reads
+     "Started", which says the same thing in the same place without being
+     the only coloured word on the row. */
   /* Each trailing clause on its own line, indented slightly so a wrapped
      one still reads as belonging to the play above it rather than as a
      new play. */
@@ -1533,14 +1532,19 @@ function extractNameTag(rawName){
               const pending = (state.pendingClockStart || {})[driveTeam];
               if (pending !== null && pending !== undefined){
                 const clk = absSecToClockStr(pending);
-                return ['SOP', clk ? clk.text : '—', true];
+                return ['Started', clk ? clk.text : '—', true];
               }
               return ['TOP', formatDuration(currentSummary.top), false];
             })()
-          ].map(([label, val, sop]) => '<span class="inline-stat-item">' +
+          ].map(([label, val]) => '<span class="inline-stat-item">' +
               '<span class="stat-value">' + val + '</span>' +
-              '<span class="stat-label' + (sop ? ' stat-label-badge' : '') + '">' +
-              label + '</span></span>').join('') + '</div>'
+              // NO BADGE. The label used to be boxed in amber to say that
+              // this reading is a different KIND of number from TOP -- where
+              // the possession started rather than how long it has run. The
+              // word "Started" says that on its own, so the box was carrying
+              // meaning the text now carries, and it was the only label on
+              // the row wearing a colour. Andy's call, 25 Aug.
+              '<span class="stat-label">' + label + '</span></span>').join('') + '</div>'
         : '';
 
       // Null once the interval is the floor: the drive before it belongs
