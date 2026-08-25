@@ -7414,7 +7414,29 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       left.style.setProperty('gap', '8px', 'important');
       left.style.setProperty('margin', '0 0 10px', 'important');
 
+      // THE MARK IS NOT A CONTROL, AND THIS LOOP TREATS EVERY CHILD AS ONE.
+      // -------------------------------------------------------------------
+      // It strips height and width and forces display:flex !important on
+      // whatever it finds. That is right for a <button> or an <a>, whose
+      // size comes from their padding and label. Applied to an <img> it
+      // removes the only thing giving it a size, and the browser falls back
+      // to the image's intrinsic dimensions -- a 512px logo filling the
+      // header, which is the screenshot Andy sent twice.
+      //
+      // The stylesheet was never going to win: these are inline
+      // !important, and the note further up this function says so.
+      //
+      // So the mark is skipped, and its height is set here to the row's
+      // instead -- the one place that actually knows what the buttons
+      // ended up as.
       [...left.children].forEach(c => {
+        if (c.classList.contains('scMark-inline')) {
+          c.style.setProperty('flex', '0 0 auto', 'important');
+          c.style.setProperty('margin', '0', 'important');
+          c.style.setProperty('align-self', 'center', 'important');
+          c.style.setProperty('display', 'block', 'important');
+          return;
+        }
         c.style.setProperty('position', 'static', 'important');
         ['top','left','right','height','width'].forEach(k => c.style.removeProperty(k));
         // Content-sized, shrinkable, never stretched to fill the row --
@@ -7427,6 +7449,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         c.style.setProperty('align-items', 'center', 'important');
         c.style.setProperty('justify-content', 'center', 'important');
       });
+
+      // AND THEN MATCH THE MARK TO WHAT THE ROW ACTUALLY BECAME.
+      // -------------------------------------------------------------------
+      // 30px is .hdr-btn's desktop box. On touch these controls are taller
+      // -- ON AIR runs to two lines -- so a fixed height would be right on
+      // one screen and wrong on the other, which is the whole complaint.
+      //
+      // Measured, not assumed: whatever the buttons settled on is what the
+      // mark becomes. getBoundingClientRect after the styles above forces
+      // the reflow, so this reads the row as it now is rather than as it
+      // was.
+      const markEl = left.querySelector('.scMark-inline');
+      const anyBtn = left.querySelector('.hdr-btn');
+      if (markEl && anyBtn){
+        const h = Math.round(anyBtn.getBoundingClientRect().height);
+        if (h > 0){
+          markEl.style.setProperty('height', h + 'px', 'important');
+          markEl.style.setProperty('width', h + 'px', 'important');
+        }
+      }
     } else {
       // DESKTOP. Put the links back, clear everything the touch branch set.
       links.forEach(el => {
