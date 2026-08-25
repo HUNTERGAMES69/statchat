@@ -200,7 +200,21 @@ function audit(file) {
       const ruleStart = src.lastIndexOf('{', m.index);
       const ruleEnd = src.indexOf('}', m.index);
       const rule = ruleStart > -1 && ruleEnd > -1 ? src.slice(ruleStart, ruleEnd) : '';
-      const fill = /background(?:-color)?:\s*(?:var\(\s*(--[a-z-]+)[^)]*\)|(#[0-9a-fA-F]{3,6}))/.exec(rule);
+      // The fill may sit in the same INLINE style rather than in a rule --
+      // the Penalty button is `style="background:#ffc72c; color:#0d1117"`,
+      // and slicing to the enclosing braces finds no rule at all. Widen to
+      // the surrounding attribute when there is no rule to read.
+      // AN INLINE STYLE IS NOT A RULE. Slicing to the enclosing braces from
+      // inside a style="..." attribute lands on whatever CSS rule happens
+      // to be nearest in the file -- for the Penalty button that was a
+      // rule whose fill is #1a1a2e, so the check measured dark ink against
+      // a dark fill it never touches. Prefer the same style attribute when
+      // the declaration is inside one.
+      const attrStart = src.lastIndexOf('style="', m.index);
+      const attrEnd = attrStart > -1 ? src.indexOf('"', attrStart + 7) : -1;
+      const inAttr = attrStart > -1 && attrEnd > m.index;
+      const ctx = inAttr ? src.slice(attrStart, attrEnd) : rule;
+      const fill = /background(?:-color)?:\s*(?:var\(\s*(--[a-z-]+)[^)]*\)|(#[0-9a-fA-F]{3,6}))/.exec(ctx);
       if (fill) {
         const fc = fill[1] ? tokens[fill[1]] : fill[2];
         if (fc && lum(fc) > 0.4 && ratio(c, fc) >= AA_BODY) continue;
@@ -286,6 +300,80 @@ function audit(file) {
     if (/logoPreview|teamLogo|team-summary-logo/.test(around)) continue;
     findings.push({ kind: 'FAIL', msg: 'light background ' + c +
       ' (luminance ' + lum(c).toFixed(2) + ') — converted pages should have none' });
+  }
+
+  // ---- A BRIGHT FILL MUST BRING ITS OWN INK -----------------------------
+  // `button.primary { background:var(--sc-green) }` set the fill and left
+  // the colour to the base `button` rule -- light ink on a light green,
+  // 1.48:1, across 21 buttons including Save, Start game and End game.
+  // The ladder's active item was right only because it sets BOTH.
+  //
+  // The audit could not see it: it measures each `color:` against the CARD,
+  // and light ink on a dark card is fine. The failure only exists in the
+  // PAIRING, so the pairing is what gets checked.
+  for (const m of rules) {
+    const body = m.body.replace(/\s+/g, ' ');
+    const bgm = /background(?:-color)?:\s*(var\(\s*--[a-z-]+[^)]*\)|#[0-9a-fA-F]{3,6})/.exec(body);
+    if (!bgm) continue;
+    // RESOLVE THE TOKEN, NOT ITS FALLBACK. `var(--sc-red-tint, #fdecea)`
+    // resolves to the dark rgba tint on every converted page; reading the
+    // light fallback reported .msg.error and .msg.success as broken on
+    // eight pages that are correct. resolve() returns the fallback only
+    // when the token is genuinely undefined, which is the real bug -- and
+    // that case is already reported separately.
+    const tokName = /var\(\s*(--[a-z-]+)/.exec(bgm[1]);
+    if (tokName && !tokens[tokName[1]]) continue;   // undefined: reported elsewhere
+    const bg = resolve(bgm[1]);
+    if (!bg || lum(bg) < 0.4) continue;          // only bright fills
+    // A PLATE HOLDS AN IMAGE, NOT TEXT. The logo plate, the QR code and the
+    // spreadsheet picture are deliberately light and contain no ink at all,
+    // so "sets a fill but no colour" is exactly right for them.
+    if (/scMark|logoPreview|mfaQr|sheetMock|splashIcon|\.brand img/.test(m.sel)) continue;
+    // AND AN OVERRIDDEN RULE IS NOT A FINDING -- the same allowance the
+    // text and background scans already make. view.html is themed by an
+    // appended block, so `.card { background:#fff }` higher up is dead
+    // code. Reporting it sends someone to fix a rule that never runs.
+    if (overriddenBy(rules, m.at + 1, 'background', src)) continue;
+    if (inPrintBlock(src, m.at)) continue;
+    const inkm = /(?<![-a-zA-Z])color:\s*(var\(\s*--[a-z-]+[^)]*\)|#[0-9a-fA-F]{3,6})/.exec(body);
+    // no ink at all is the actual bug: the colour comes from elsewhere
+    if (!inkm) {
+      findings.push({ kind: 'FAIL', msg: '"' + m.sel.slice(0, 44) + '" sets a bright fill (' +
+        bg + ') but no colour — the ink comes from a rule written for a dark ' +
+        'background and will be unreadable' });
+      continue;
+    }
+    const ink = resolve(inkm[1]);
+    if (!ink) continue;
+    const r = ratio(ink, bg);
+    if (r < AA_BODY) {
+      findings.push({ kind: 'FAIL', msg: '"' + m.sel.slice(0, 44) + '": ' + ink +
+        ' on ' + bg + ' is ' + r.toFixed(2) + ':1 — a bright fill needs dark ink' });
+    }
+  }
+
+  // INLINE STYLES PAIR FILL AND INK TOO, and the loop above only walks CSS
+  // rules -- so `style="background:#ffc72c; color:#eef1f4"` on the Penalty
+  // button was outside the check entirely. That is the button Andy
+  // reported as hard to read.
+  for (const a of src.matchAll(/style="([^"]*)"/g)) {
+    const decl = a[1];
+    const bgm = /background(?:-color)?:\s*(var\(\s*--[a-z-]+[^)]*\)|#[0-9a-fA-F]{3,6})/.exec(decl);
+    const inkm = /(?<![-a-zA-Z])color:\s*(var\(\s*--[a-z-]+[^)]*\)|#[0-9a-fA-F]{3,6})/.exec(decl);
+    if (!bgm || !inkm) continue;
+    // Resolve the TOKEN, not its light fallback -- the same correction the
+    // rule loop needed. `var(--sc-amber-tint, #fff3cd)` is a dark tint on
+    // every converted page; reading the fallback reported two correct
+    // pages as broken.
+    const bgTok = /var\(\s*(--[a-z-]+)/.exec(bgm[1]);
+    if (bgTok && !tokens[bgTok[1]]) continue;   // undefined: reported elsewhere
+    const bg = resolve(bgm[1]), ink = resolve(inkm[1]);
+    if (!bg || !ink || lum(bg) < 0.4) continue;
+    const r = ratio(ink, bg);
+    if (r < AA_BODY) {
+      findings.push({ kind: 'FAIL', msg: 'inline style pairs ' + ink + ' ink with the bright ' +
+        bg + ' fill — ' + r.toFixed(2) + ':1' });
+    }
   }
 
   // ---- BORDERS, the third surface ---------------------------------------
