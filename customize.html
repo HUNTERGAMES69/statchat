@@ -24,31 +24,65 @@
      heading. Uniformity is the point -- a mark that moves or resizes
      between screens reads as decoration rather than as the product. */
   .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
-  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block; }
+  /* Dark-on-light artwork needs a plate on a #191f27 card. */
+  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block;
+                  background:#fff; padding:2px; box-sizing:border-box; }
 
+  /* DARK, 25 August 2026. Recipe in DARK_THEME_PLAN.md.
+     Every --sc-* this page reads is defined, including those only written
+     as var(--x, #fallback) -- an undefined token silently becomes the
+     fallback, and every fallback here was chosen for a white page. */
+  :root{ color-scheme:dark; }
+  :root{
+    --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+    --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+    --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+    --sc-navy:#2f3a47;   /* A BUTTON FILL. Never text, never a panel. */
+    --sc-green:#a3d93f;  --sc-green-tint:rgba(124,181,24,.14);
+    --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
+    --sc-amber:#ffc72c;  --sc-amber-tint:rgba(255,199,44,.13);
+    --sc-blue:#5aa9f0;   --sc-link:#7cb518;
+  }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
   .wrap { max-width:600px; margin:0 auto; }
-  .card { background:#fff; border-radius:12px; padding:28px; margin-bottom:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  .card { background:var(--sc-card); border:1px solid var(--sc-rule); color:var(--sc-ink); border-radius:12px; padding:28px; margin-bottom:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:22px; margin:0; }
-  p.sub { color:#888; margin:0 0 20px; font-size:14px; }
-  label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
-  input { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; }
-  input[type="color"] { width:64px; height:40px; padding:2px; cursor:pointer; }
-  button { padding:9px 16px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
-  button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
+  p.sub { color:var(--sc-ink-muted); margin:0 0 20px; font-size:14px; }
+  label { display:block; font-size:13px; margin-bottom:4px; color:var(--sc-ink-muted); }
+  /* WebKit paints autofill with an inset shadow no background rule reaches. */
+  input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus {
+    -webkit-text-fill-color:var(--sc-ink);
+    -webkit-box-shadow:0 0 0 1000px var(--sc-raise) inset;
+    caret-color:var(--sc-ink);
+    transition:background-color 9999s ease-out 0s;
+  }
+  /* The default focus outline is dark and vanishes on a dark card. */
+  input:focus-visible, button:focus-visible, a:focus-visible {
+    outline:2px solid var(--sc-link); outline-offset:2px;
+  }
+  input { padding:8px; border:1px solid var(--sc-rule-strong); background-color:var(--sc-raise); color:var(--sc-ink); border-radius:6px; font-size:14px; box-sizing:border-box; }
+  /* A colour input paints its own swatch. On a dark card the frame has to
+     be explicit, and the case that proves it is the DEFAULT secondary --
+     white, which without a border is an unbounded white rectangle. */
+  input[type="color"] { width:64px; height:40px; padding:2px; cursor:pointer;
+                        background-color:var(--sc-raise);
+                        border:1px solid var(--sc-rule-strong); border-radius:6px; }
+  /* Fill for the affordance, border for the edge. */
+  button { padding:9px 16px; border-radius:6px; border:1px solid var(--sc-rule-strong); background:var(--sc-navy, #1a1a2e); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
   /* THE SAME DASHBOARD BUTTON AS every other page. `.backlink`, not
      `a.backlink`, and display:inline-block added: this one is a flex child
      so it was blockified anyway, but help.html's is not, and five copies of
      a rule should be five identical copies. */
   .backlink { text-decoration:none; padding:8px 14px; border-radius:6px;
-              border:1px solid #ccc; color:#444; font-size:13px; font-weight:600;
+              border:1px solid var(--sc-rule-strong); color:var(--sc-ink); font-size:13px; font-weight:600;
               display:inline-block; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
   .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
   .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
   .hidden { display:none; }
   .field-row { display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap; margin-top:14px; }
-  .hint { font-size:12px; color:#999; margin-top:4px; }
+  .hint { font-size:12px; color:var(--sc-ink-muted); margin-top:4px; }
 </style>
 </head>
 <body>
@@ -68,10 +102,17 @@
       <p class="sub">Your team's name, logo, and colors — shown across the dashboard.</p>
       <div id="msg"></div>
 
+      <!-- STACKED, not side by side. Andy's call, 25 Aug. The two names are
+           read together -- "Neville" and "Neville High School" -- and
+           reading them as one column makes the relationship obvious in a
+           way two columns did not. It also removes the one place on this
+           page where a narrow screen had to reflow. -->
       <div class="field-row" style="margin-top:0;">
         <div style="flex:1;">
           <label>Team name (used everywhere in stat entry)<input type="text" id="teamNameInput" style="width:100%;"></label>
         </div>
+      </div>
+      <div class="field-row">
         <div style="flex:1;">
           <label>Full name (shown on the dashboard)<input type="text" id="fullNameInput" style="width:100%;"></label>
         </div>
@@ -97,7 +138,11 @@
         </div>
       </div>
       <div style="margin-top:10px;">
-        <img id="logoPreview" style="display:none; height:56px; border-radius:6px;">
+        <!-- A PLATE HERE TOO. This is the TENANT'S logo, often a transparent
+               PNG drawn for a white page; on a dark card a dark crest
+               disappears. -->
+          <img id="logoPreview" style="display:none; height:56px; border-radius:6px;
+                                       background:#fff; padding:4px; box-sizing:border-box;">
       </div>
 
       <div class="field-row" style="margin-top:14px;">
