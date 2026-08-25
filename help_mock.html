@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Without this every page load logs a 404 for /favicon.ico.
+     Harmless, but a red console error should MEAN something. -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-title" content="StatChat">
+<title>StatChat — How to use it</title>
+<style>
+  /* THE SAME DASHBOARD BUTTON AS customize.html AND roster.html.
+     Those two render a bordered button; this page had a plain green text
+     link, so the way back looked different depending on which page you
+     were on. One control, one appearance. */
+  .backlink { text-decoration:none; padding:8px 14px; border-radius:6px;
+              border:1px solid #ccc; color:#b9c4d0; font-size:13px; font-weight:600;
+              display:inline-block; }
+
+  /* THE STATCHAT MARK, identical on every page reachable from the
+     dashboard. Same element, same size, same place: beside the page's own
+     heading. Uniformity is the point -- a mark that moves or resizes
+     between screens reads as decoration rather than as the product. */
+  .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
+  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block; }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); color:#eef1f4; }
+  .wrap { max-width:820px; margin:0 auto; }
+  .card { background:#20272f; border-radius:12px; padding:22px 24px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:26px; margin:0 0 4px; }
+  h2 { font-size:20px; margin:26px 0 8px; padding-bottom:5px; border-bottom:2px solid var(--sc-green, #1a7a4c); }
+  h2:first-of-type { margin-top:0; }
+  h3 { font-size:16px; margin:18px 0 6px; color:#a3d93f; }
+  p, li { line-height:1.55; font-size:15px; }
+  ol, ul { padding-left:22px; }
+  li { margin-bottom:5px; }
+  code { background:#eef1f4; border-radius:4px; padding:1px 5px; font-size:13px; font-family:ui-monospace, Menlo, Consolas, monospace; }
+  .btn { display:inline-block; background:var(--sc-navy, #1a1a2e); color:#fff; border-radius:6px; padding:2px 9px; font-size:13px; font-weight:600; }
+  .btn.gold { background:#ffc72c; color:var(--sc-navy, #1a1a2e); }
+  .btn.green { background:var(--sc-green, #1a7a4c); }
+  .btn.red { background:#8a3a12; }
+  .note { background:#eef6f1; border-left:3px solid var(--sc-green, #1a7a4c); border-radius:4px; padding:10px 12px; margin:12px 0; font-size:14px; }
+  .warn { background:#fff4d6; border-left:3px solid #a05a00; border-radius:4px; padding:10px 12px; margin:12px 0; font-size:14px; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:14px; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--sc-rule, #e6e6e6); vertical-align:top; }
+  th { color:#a3d93f; font-size:13px; }
+  .toc { columns:2; column-gap:28px; font-size:14px; }
+  .toc a { color:#a3d93f; text-decoration:none; display:block; padding:3px 0; }
+  .toc a:hover { text-decoration:underline; }
+  .back { display:inline-block; margin-bottom:12px; color:#a3d93f; text-decoration:none; font-weight:600; font-size:14px; }
+  /* .backlink, not .back: the class changed and this rule is the only
+     thing keeping the button off a printed page. */
+  @media print { .card { box-shadow:none; } .backlink { display:none; } }
+</style>
+<!-- DARK MOCK. The theme is a separate stylesheet linked last, so it
+     overrides by source order and this page's own CSS is untouched.
+     See DARK_THEME_PLAN.md: the shipping version retrofits the tokens
+     rather than layering overrides. -->
+<link rel="stylesheet" href="statchat-dark.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <!-- SAME ROW, SAME PLACE AS EVERY OTHER PAGE: heading left, the way
+         back top-right. This button used to float above the card as a
+         loose child of .wrap, so it sat in a different place here than
+         on roster or customize -- the one control a reader looks for
+         when they are lost was the one that moved. -->
+    <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:10px;">
+      <div class="scMark">
+        <img src="logo.png" alt="StatChat">
+      <h1>StatChat — how to use it</h1>
+      </div>
+      <a class="backlink" href="dashboard.html" style="white-space:nowrap; flex-shrink:0;">&larr; Dashboard</a>
+    </div>
+    <p style="color:#b9c4d0; margin-top:2px;">Live high-school football stat tracking. Built for one person entering plays from the sideline or the press box.</p>
+    <div class="toc" style="margin-top:14px;">
+      <a href="#start">1. Before the first game</a>
+      <a href="#setup">2. Setting up a game</a>
+      <a href="#kickoff">3. Starting the game</a>
+      <a href="#entering">4. Entering plays</a>
+      <a href="#calc">5. The yardage calculator</a>
+      <a href="#spots">6. Field position and spots</a>
+      <a href="#clock">7. The clock</a>
+      <a href="#special">8. Special teams</a>
+      <a href="#utilities">9. Utilities</a>
+      <a href="#fixing">10. Fixing mistakes</a>
+      <a href="#half">11. Halftime, overtime, ending</a>
+      <a href="#reports">12. Reports</a>
+      <a href="#rules">13. How stats are counted</a>
+      <a href="#broadcast">14. Broadcasting (ON AIR)</a>
+      <a href="#trouble">15. If something looks wrong</a>
+    </div>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="start">1. Before the first game</h2>
+
+    <h3>Accounts and roles</h3>
+    <p>Everyone signs in with an email and password. There are three roles:</p>
+    <table>
+      <tr><th>Role</th><th>Can do</th></tr>
+      <tr><td><strong>Admin</strong></td><td>Everything — create games, edit rosters, delete plays, reopen a finished game.</td></tr>
+      <tr><td><strong>Scorer</strong></td><td>Enter plays and run games. Cannot delete games or change roles.</td></tr>
+      <tr><td><strong>View</strong></td><td>Watch the live view and read reports.</td></tr>
+    </table>
+
+    <div class="note"><strong>Disabling an account.</strong> An admin can disable a user from
+    the account page. They keep their role and their history but cannot sign in until they are
+    enabled again — useful when someone leaves mid-season and you would rather not delete the
+    record. You cannot disable your own account, for the obvious reason.</div>
+
+    <h3>Your team roster</h3>
+    <p>From the dashboard, open <span class="btn">Team Roster</span>. This is your own squad and carries over from game to game. For each player enter a jersey number, a name, and a position.</p>
+    <div class="note"><strong>Positions matter.</strong> They decide which players appear in which picker during a game — quarterbacks in the passer list, backs and receivers in the carrier list, and so on. Two-way players can be entered as <code>RB/LB</code> or <code>WR, DB</code>; the app understands both.</div>
+
+    <h3>Uploading a roster from a spreadsheet</h3>
+    <p>Both <span class="btn">Team Roster</span> and the opponent roster on
+    <span class="btn">New Game</span> take an <strong>.xlsx</strong> or <strong>.xls</strong>
+    file. Pressing the upload button shows a picture of the layout before it asks for the
+    file: <strong>column A</strong> is the jersey number, <strong>column B</strong> the
+    name, <strong>column C</strong> the position. A header row is ignored, and a player
+    with no position is fine — they simply appear in every picker rather than a few.</p>
+    <div class="note"><strong>Two limits, and both refuse rather than trim.</strong>
+    A file over <strong>5MB</strong>, or a sheet with more than <strong>200 player
+    rows</strong>, is rejected and nothing is imported. A roster that size is almost always
+    a whole-school export rather than one team — and a partial import that <em>looks</em>
+    like it worked is worse than one that plainly did not, because the missing players only
+    surface mid-game.</div>
+
+    <h3>Rosters are kept per season</h3>
+    <p>A <strong>Season</strong> picker sits at the top of the roster page. The current season is the only one you can change — add, edit, remove, upload, or clear. Pick an earlier season from the dropdown and everything on it becomes <strong>read-only</strong>: no controls at all, just the squad exactly as it was, kept for reference.</p>
+    <div class="note"><strong>Nothing is ever deleted by moving to a new season.</strong> When it is time for a new year's squad, <span class="btn red">Clear this season's roster</span> only ever touches the season you are currently looking at — last year's roster, and every year before it, stays exactly where it was, browsable any time from the same picker. A player who returns from one season to the next is entered fresh each year, and can carry a different number if it changed — nothing links the two seasons' entries together, so a number meaning someone else last year causes no confusion this year.</div>
+    <p>A game always uses the roster from <strong>its own season</strong> — reopening an old game to fix an unrelated detail pulls up that game's own historical squad, never whatever is loaded as current today.</p>
+
+    <h3>Your team's look</h3>
+    <div class="note"><strong>Logos must be PNG, JPEG, WebP or SVG, and under 2MB.</strong>
+    Anything else is refused the moment you choose it, with the reason shown beside the
+    button rather than at the top of the page. Uploading a logo also sets your
+    <strong>secondary colour to white</strong> — change it afterwards if your crest needs
+    something else.</div>
+    <p><span class="btn">Customize team</span> sets your logo and colours. These appear on the banner, the live view and every report.</p>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="setup">2. Setting up a game</h2>
+    <p>Dashboard &rarr; <span class="btn">+ New game</span>.</p>
+    <ol>
+      <li><strong>Name and opponent.</strong> Give the game a designator you will recognise later — it is what you type to confirm a delete or reset.</li>
+      <li><strong>Opponent roster.</strong> Upload an <code>.xlsx</code> if you have one, or choose <span class="btn">Skip roster</span> and type numbers by hand during the game. A programme with just names and numbers is worth entering; positions are optional.</li>
+      <li><strong>Likely starters.</strong> Fill in QB, RB1, RB2, WR1, WR2, WR3 for the opponent if you know them.</li>
+      <li><strong>Opponent branding.</strong> Logo and colours, so the banner and reports look right.</li>
+    </ol>
+    <div class="note"><strong>Likely starters are the single most useful field here.</strong> Anyone you name is guaranteed to appear in the pickers for the roles that slot plays — regardless of what position they were filed under, or whether they have a position at all. Without them, an opponent's first few plays mean typing numbers by hand.</div>
+    <p>Players you type in by hand during the game are added to the picker from then on, so a number never has to be typed twice.</p>
+
+    <h3>Marking a game as preseason</h3>
+    <p>Tick <strong>This is a preseason game</strong> for a scrimmage or anything else that should not count toward the year's numbers. Everything about the game works exactly as normal — you enter it, view it, and export its own recap and stat package the usual way. The only difference is that <strong>Season Report</strong> and <strong>Player Report</strong> skip it entirely, so a scrimmage never quietly shifts a season average.</p>
+    <p>The dashboard's game list shows a small <strong>PRESEASON</strong> tag on any game marked this way, so it stays easy to spot months later, long after the reason for excluding it has been forgotten.</p>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="kickoff">3. Starting the game</h2>
+    <p>Open the game from the dashboard and press <span class="btn green">Start game</span>. The app walks you through the opening kickoff:</p>
+    <ol>
+      <li><strong>Who kicks off?</strong> Pick the kicking team.</li>
+      <li><strong>Kicker, and which way they are kicking.</strong> The direction arrow sets up the field-position strip; it flips automatically each quarter after this.</li>
+      <li><strong>What happened.</strong> A return, a <span class="btn">Touchback</span>, or a <span class="btn">Muffed / fumbled catch</span>.</li>
+      <li><strong>Where the ball ended up</strong>, then the clock.</li>
+    </ol>
+    <p>Then you are in normal play entry.</p>
+    <div class="warn"><strong>Direction wording.</strong> The question asks which way the <em>kicking</em> team is kicking, because that is how it looks from the sideline. The strip works it out from there.</div>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="entering">4. Entering plays</h2>
+    <div class="note"><strong>A number that is not on the roster.</strong> Type it anyway — the play records correctly against the number. The confirm box then offers a name field and <span class="btn green">Add to roster</span>: fill it in and the player is saved to this game, so he appears by name from then on, on the view page on any other device, and <em>on the plays you have already entered for him</em>. Only the log lines already written keep the bare number.</div>
+    <p>Every play follows the same three steps:</p>
+    <ol>
+      <li>Pick the <strong>play type</strong> — Rush, Pass, or one of the special-teams buttons.</li>
+      <li>Fill in the panel that appears.</li>
+      <li><span class="btn green">Review play</span>, check the sentence, then <span class="btn green">Save</span>.</li>
+    </ol>
+    <p>The Review step exists so you read back what will be stored before it is stored. It is worth the half-second.</p>
+
+    <h3>Rush</h3>
+    <p>Pick the ball carrier, enter yards (or use the calculator), then any of <span class="btn">LOSS</span>, <span class="btn">Fumbled</span>, <span class="btn">Safety</span>, <span class="btn">Touchdown</span>. Tackler is optional, and folded behind a <strong>+ Tackled by</strong> button — tap it when you want it. Punts and kickoffs fold their returner the same way, behind <strong>+ Returned by</strong>.</p>
+
+    <h3>Pass</h3>
+    <p>Same shape, with a passer and receiver. The extra outcome is <span class="btn">Incomplete</span>.</p>
+    <p>Along the top of the panel are three switches — <span class="btn">Completed / incomplete</span>, <span class="btn">Sacked</span>, <span class="btn">Intercepted</span> — which change the panel to suit. The one you are on stays gold with a tick, and you can move between them freely until you save, so picking the wrong one costs nothing.</p>
+    <p>On <span class="btn">Intercepted</span> there is a <span class="btn">Downed in the end zone — touchback</span> option: the defence takes over at their own 20, with no return to record.</p>
+    <p><strong>The receiver is optional.</strong> If you did not catch the number on a deep ball, leave it blank — the completion, the yardage and the passer's line are all still right. The catch is credited to <em>Unknown</em> in the receiving table so the columns still add up: passing yards always equal the sum of receiving yards, which is the first thing anyone checks on a stat sheet.</p>
+
+    <h3>What is on the screen</h3>
+    <p>The play-type ladder is a fixed column down the left. Whatever you pick opens <em>beside</em> it, always at the top of the frame, so the panel never moves depending on which button you pressed. With nothing open that space reads <strong>Make a selection to begin</strong>.</p>
+    <p>Either side of the entry card are two margins that do not scroll away:</p>
+    <ul>
+      <li><strong>Left</strong> — the current drive, with Undo and Redo at the top of it.</li>
+      <li><strong>Right</strong> — <strong>Checks</strong> and <strong>Live totals</strong>. See below.</li>
+    </ul>
+    <p>Pressing <strong>Review play</strong> collapses the tree so only the confirm box is left, which saves scrolling back down a long panel to reach Save. <strong>Edit</strong> brings the tree back with everything you entered still in it. There is a <strong>Clear</strong> on the confirm box, and another on the top row beside Quarter marker — that one throws away whatever is open from wherever you are.</p>
+
+    <h3>Pickers</h3>
+    <p>Player buttons are ordered by <strong>who did it most recently</strong>, so the back who just carried is first next time. Type a number into the box if the player is not offered. On the longer lists — ball carrier, receiver, kicker, punter — that box sits at the <strong>end of the list</strong> rather than off to one side, so the names get the full width and take fewer rows.</p>
+    <p>If a number is shared by two players, you will be asked which one — that choice applies to <em>that play only</em>, so a mis-tap cannot rename the jersey for the rest of the game.</p>
+
+    <h3>Typing a number opens a pop-up keypad</h3>
+    <p>Tap any yardage or jersey-number box and a large number pad opens over the field, rather than the device's own keyboard. Type on it, or on a connected physical keyboard — either way updates the same box, so switching between them mid-entry never loses what you have already typed. A checkmark commits the number and closes the pad.</p>
+    <div class="note">On an iPad or iPhone with no keyboard attached, this is the <em>only</em> way in — the system keyboard is deliberately suppressed on those fields, since fighting for space with the pop-up pad was worse than not having it at all. Add <code>?softkb=1</code> to the end of the page address to switch that field back to the ordinary keyboard instead, on that device, for that visit.</div>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="calc">5. The yardage calculator</h2>
+    <p>On the Rush, Pass, Sack and Punt panels you can enter the play two ways:</p>
+    <table>
+      <tr><th>Either</th><th>Or</th></tr>
+      <tr><td><strong>Enter yards</strong> — type the gain, tap LOSS if it went backwards.</td>
+          <td><strong>Or enter tackled on</strong> — pick a side of the field and a yard line. The app works out the gain.</td></tr>
+    </table>
+    <ol>
+      <li>Tap the side of the field the play ended on. <em>Your current side is already selected</em>, so most plays need only a number.</li>
+      <li>Type the yard line.</li>
+      <li>The green bar shows the working: <code>from own 25 to own 44 = +19</code>.</li>
+    </ol>
+    <div class="note"><strong>Crossing midfield needs nothing special.</strong> Own 20 to the opponent's 20 is <code>+60</code> — just tap the other team's side before typing the yard line.</div>
+    <ul>
+      <li>A backwards play sets <span class="btn gold">LOSS</span> for you.</li>
+      <li><span class="btn">Touchdown</span> fills in the distance to the goal line automatically.</li>
+      <li>Typing in the yards box clears the calculator, so the two can never disagree.</li>
+      <li>On a fumble the label changes to <em>ball came loose on</em>, because that is a different spot from where anyone was tackled.</li>
+    </ul>
+    <p>On a punt the calculator reads <em>Or enter downed/received on</em> and gives you the punt distance. A touchback or a block turns it off — there is no landing spot to measure.</p>
+    <p>On a sack it reads <em>Or enter sacked on</em>, and the box beside it is <strong>Yards lost</strong> — so there is no LOSS button, because a sack is always a loss. If you enter a yard line <em>ahead</em> of where the ball was, the app refuses it and says so rather than recording a loss you did not mean. A quarterback dragged down on the line of scrimmage is fine: that is a sack for no gain.</p>
+
+    <h3>A second spot for the return, on punts and kickoffs</h3>
+    <p>Below the punt distance (and on the kickoff panel, where there is no distance to give), two more fields work the same way: <em>Or enter fielded at</em>, then <em>Or enter returned to</em>. Give both and the app fills in the return yards for you, and moves the takeover spot to match the return rather than the catch. Leave <em>returned to</em> blank and that <strong>is</strong> the answer for no return at all — a fair catch, a kick that was downed, nothing further to enter.</p>
+    <p>Fielded at defaults to the receiving team's side of the field, since that is where a kick almost always comes down. Tap the other side if a mishit kick landed short.</p>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="spots">6. Field position and spots</h2>
+    <p>The strip under the banner shows where the ball is, the line to gain, and which way the offense is going. Hide it with <span class="btn">Hide</span> if you want the room.</p>
+    <div class="warn"><strong>If the banner says SPOT NOT SET</strong>, the app does not know where the ball is and will refuse to record a scrimmage play. Use <span class="btn">Adjust Down/Distance</span> to set it. This is deliberate: without a spot, yardage cannot be tracked or checked.</div>
+    <h3>Sides of the field</h3>
+    <p>Everywhere you enter a spot you pick a <em>side</em> first. "Own 30" means 30 yards from the goal the offense is defending; "opp 30" means 30 yards from the one they are attacking. The buttons are labelled with the team names to keep it concrete.</p>
+    <h3>Change of possession</h3>
+    <p>Any play that hands the ball over asks where the other team takes over — punts, interceptions, fumbles, missed field goals, muffed kicks. Fill it in, or field position is lost for the whole next drive.</p>
+    <div class="warn"><strong>On kickoffs and punts the spot is required.</strong> You must give <em>both</em> the side of the field and the yard line; Review will refuse the play and tell you which half is missing. This used to be optional, and a half-filled spot was thrown away silently — the kick saved, the ball had no position, and you only found out several plays later when the app refused a run. Two things need nothing from you: a <strong>touchback</strong> fills in the 20 for you, and a kick <strong>returned for a touchdown</strong> has no ensuing spot to give.</div>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="clock">7. The clock</h2>
+    <p>You are asked for the clock when a possession starts or ends. It is what drives <strong>time of possession</strong>.</p>
+    <table>
+      <tr><th>Type this</th><th>Means</th></tr>
+      <tr><td><code>9:47</code></td><td>9 minutes 47 seconds</td></tr>
+      <tr><td><code>947</code></td><td>the same — the last two digits are always the seconds</td></tr>
+      <tr><td><code>04</code></td><td>4 seconds</td></tr>
+      <tr><td><code>400</code></td><td>4 minutes</td></tr>
+    </table>
+    <div class="warn">A single digit like <code>4</code> is rejected, because it could mean four seconds or four minutes and guessing wrong would corrupt time of possession. The app tells you both ways to write it.</div>
+    <p><strong>On a scoring drive the clock is asked at the touchdown, not at the try.</strong> Enter it when the ball crosses the line, and again at the kickoff. That way the drive's time of possession is the time the DRIVE took, rather than the drive plus the PAT.</p>
+    <p>Every box that asks for a clock shows <strong>the last value you entered</strong> beside it, with the quarter it belonged to — for example <em>Last entered 8:42 (Q2)</em>. The same line, in the same shape, sits on the main game screen too, on the row above the play buttons — so the last clock is visible even when no clock box happens to be open. If that quarter is not the one you are in now, the number turns amber: the same 8:42 means a very different moment in Q1 and Q3, and the colour is the whole warning, on purpose, to keep the line short.</p>
+    <p>The clock is optional everywhere. Skipping it does not block anything — that possession's time simply is not counted, and the app says so under the field.</p>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="special">8. Special teams</h2>
+    <div class="note"><strong>On a punt, the calculator fills in the takeover spot for you.</strong> Enter where the ball was downed or received and the app works out both the punt distance and where the next drive starts, flipping the side for you &mdash; the kicking team's &ldquo;opp 13&rdquo; is the receiving team's &ldquo;own 13&rdquo;. Edit it if there was a return. On a <strong>fake</strong>, the calculator moves down beside the fake's own yards box and works that out instead.</div>
+
+    <h3>Kickoff</h3>
+    <p>Kicker, return yards (or the two-spot calculator above), and where the ball ended up. <span class="btn">Touchback</span> fills the receiving team's own 20 for you. <span class="btn">Muffed / fumbled catch</span> asks who recovered — if the <em>kicking</em> team recovers, possession does not change and they get a fresh set of downs.</p>
+    <p><span class="btn">Fumbled during the return</span> is separate from a muff: the return happened cleanly, and the ball came loose afterward. Return yards are unaffected either way — they are measured to where the ball was lost, not to wherever it was finally recovered. Say who recovered it and the takeover spot follows automatically: the receiving team's own field, or a spot of its own for the kicking team, in their frame, since nothing needs flipping if they end up keeping it.</p>
+    <h3>Safeties on a punt</h3>
+    <p>Two ways, and both live where the play actually went wrong. <span class="btn">Blocked</span> &rarr; <em>Recovered by own team</em> gives you <span class="btn">In the end zone — safety</span>; <span class="btn">Muffed / fumbled catch</span> &rarr; <em>Recovered by the kicking team</em> now gives you the same button, for a bad snap chased down into your own end zone. Either way it is two points to the other team, the drive ends, and no takeover spot is asked for &mdash; a free kick follows, so where the next drive starts has not happened yet.</p>
+    <p>The safety option only appears once the <em>kicking</em> team is the recoverer. If the receiving team recovers in the kicking team's end zone that is a touchdown, not a safety.</p>
+
+    <p><span class="btn">Out of bounds</span> is for a kick that goes out untouched: the receiving team takes over at their own 35, filled in for you and still editable if they elect the inbounds spot instead. No returner and no return yards, because nobody touched the ball. Available on the opening and second-half kickoffs too.</p>
+    <div class="note">The four kickoff outcomes — Touchback, Muffed, Onside, Out of bounds — are mutually exclusive. Picking one clears the others.</div>
+
+    <h3>Punt</h3>
+    <p>Punter and distance (or the calculator). Then <span class="btn">Touchback</span>, <span class="btn">Blocked</span> or <span class="btn">Muffed / fumbled catch</span> as needed, the returner, and the spot the other team takes over.</p>
+    <p><span class="btn">Fumbled during the return</span> works the same way it does on a kickoff: return yards stay put, and only the takeover spot depends on who recovers it.</p>
+
+    <h3>Field goal</h3>
+    <p>Kicker, distance, Good or Missed. A miss pre-fills the defense's own 20, which is right for a kick that reaches the end zone — type over it for a short miss that lands in the field of play.</p>
+    <p><span class="btn">Blocked</span> and <span class="btn">Muffed hold</span> both force the result to Missed. A muffed hold means no kick was attempted at all, so the kicker is charged with nothing.</p>
+
+    <h3>PAT and 2PT</h3>
+    <p>Straightforward: kicker or ball carrier, and the result. A kickoff always follows a try, whatever the outcome.</p>
+
+    <h3>The kicker and punter are remembered</h3>
+    <p>After your team's first kick, the app pre-selects whoever did it last — the same way the quarterback is pre-selected on a pass. The player is highlighted and the list collapses to just him, with <strong>+N more</strong> beside it if you want somebody else — so if it is the right man you need do nothing. Tapping him <em>confirms</em>; <strong>+N more</strong> opens the full list, and typing a number overrides it. The number box stays empty and reads &ldquo;or type #&rdquo;: the highlight is what tells you who is suggested, and a number already sitting in the box looked like something you had typed.</p>
+    <p>Three separate memories, not one: <strong>kickoffs</strong>, <strong>field goals and PATs</strong> together, and <strong>punts</strong>. That is deliberate — plenty of teams have a kickoff specialist who is not the placekicker, and a wrong suggestion is worse than none because it looks deliberate and gets confirmed with a tap. Field goals and PATs share, because that really is the same player. Nothing is suggested until your team has actually done that kind of kick once, and each team has its own memory.</p>
+    <div class="note"><strong>The defense cannot score on a try under NFHS rules.</strong> The play is dead the moment they get the ball, so there is no return to enter.</div>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="utilities">9. Utilities</h2>
+    <table>
+      <tr><th>Button</th><th>What it does</th></tr>
+      <tr><td><span class="btn gold">Penalty</span></td><td>Which team, then an optional <strong>penalty type</strong>, then how many yards. The type list appears once you pick a side and only offers fouls that side can commit — you will not be shown "Roughing the passer" as an offensive foul. Leave it as <em>not specified</em> if you did not catch the call.
+      <p style="margin:8px 0;">Picking a foul <strong>fills in the NFHS yardage for you</strong>, and ticks <span class="btn">Automatic first down</span> or <span class="btn">Loss of down</span> on its own where the foul always carries one — under NFHS that is a short list: the four roughing fouls get the automatic first down, a handful of passing fouls carry loss of down, and almost nothing else does, whatever the NFL does with the same foul. The number is a suggestion, not a lock: type over it and it stops being tinted.</p>
+      <p style="margin:8px 0;"><span class="btn">Half the distance</span> replaces whatever is in the yards box with half the distance to the relevant goal line, rounded up, worked out from where the ball actually is right now. It is a deliberate tap, not something the app decides for you — the app cannot always tell when the situation calls for it, and a wrong number that fills itself in looks more trustworthy than it is.</p>
+      <p style="margin:8px 0;"><span class="btn">Dead-ball</span>, <span class="btn">Automatic first down</span> and <span class="btn">Loss of down</span> are three different answers to the same question — what happens to the down — so only one can be lit at a time. Picking one turns the other two off.</p></td></tr>
+      <tr><td><span class="btn">Bad snap</span></td><td>Yards lost, and whether your team recovered or the defense did. Charged to the team, not to a player.</td></tr>
+      <tr><td><span class="btn">Fumble</span></td><td>A fumble that was not part of a rush or pass — a muffed handoff, say.</td></tr>
+      <tr><td><span class="btn">Safety</span></td><td>A safety with no other play attached.</td></tr>
+      <tr><td><span class="btn">QB kneel</span></td><td>Victory formation. Charged to the team; the quarterback's rushing line is untouched.</td></tr>
+      <tr><td><span class="btn">Timeout</span></td><td>Three per half, one per overtime. Shown in the line under the banner.</td></tr>
+      <tr><td><span class="btn">Adjust Down/Distance</span></td><td>Correct the down, distance or spot without recording a play. Fill in only the parts you want to change.</td></tr>
+      <tr><td><span class="btn">Flip possession</span></td><td>Hand the ball over when nothing else fits.</td></tr>
+      <tr><td><span class="btn">Set clock</span></td><td>Records the clock at the <strong>start of the current team's possession</strong> — for when a change of possession got saved without one. It does not change the down, the spot or the score. <strong>Only use it on a new possession:</strong> used mid-drive it restarts the count and that drive's time of possession comes out short.</td></tr>
+      <tr><td><span class="btn">Quarter marker</span></td><td>Marks the start of the next quarter. Only ever offers the <em>one</em> quarter that can legally start next — Q2 from the first quarter, Q4 from the third. At the end of either half it is <strong>greyed out</strong>, because a half has to be closed with <span class="btn">End 1st half</span> or <span class="btn">End game</span> rather than marked. Hover it to see why it is unavailable.</td></tr>
+      <tr><td><span class="btn red">⚠ Manual entry</span></td><td><strong>Last resort.</strong> Free text only — no stats, no yardage, no down change. Use it when the app cannot model a play, then correct it after the game.</td></tr>
+    </table>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="fixing">10. Fixing mistakes</h2>
+
+    <h3>During the game</h3>
+    <ul>
+      <li><span class="btn">Undo last</span> removes the most recent play. Press it repeatedly to walk back. <span class="btn">Redo last</span> puts it back. Ending a half writes two entries — a clock line and the divider — and Undo removes them together, so one press takes you back across the interval cleanly.</li>
+      <li><span class="btn">Clear</span> on any panel closes it without saving.</li>
+      <li><span class="btn">Adjust Down/Distance</span> corrects the situation without adding a play.</li>
+    </ul>
+    <div class="note">Undoing back past the start of the second half returns the game to halftime, and <span class="btn green">Start 2nd half</span> reappears so you can run the kickoff again. Keep going and you are back in the first half.</div>
+
+    <h3>After the game</h3>
+    <p>Once a game is finished, Undo is disabled — the database will not delete plays from a finished game. To correct something, an admin uses <span class="btn">Unlock to edit</span> on the finalized banner. That reopens the game and gives every play its own <strong>Delete</strong> and <strong>Delete &amp; re-enter</strong> controls. Press <span class="btn green">End game</span> again when you are done.</p>
+
+    <div class="note"><strong>An unlocked game leaves the season report.</strong>
+    Unlocking reverts the game to in-progress, and season stats only count
+    <em>finished</em> games — so while it is open, that game disappears from the
+    season report and from season totals. Nothing is lost: press
+    <span class="btn green">End game</span> and it comes straight back. This is
+    deliberate, so a half-corrected game cannot drag season averages around, but
+    it does look alarming if you are not expecting it.</div>
+
+    <div class="note"><strong>A game marked Preseason leaves the season report too</strong> —
+    on purpose, and permanently rather than while a box is checked. It is unaffected
+    everywhere else: its own recap and stat package are exactly the same as any
+    other game's, and it still shows up on the dashboard, with a <strong>PRESEASON</strong>
+    tag so it stays easy to tell apart from the games that count.</div>
+
+    <h3>Checks — while the game is on</h3>
+    <p>The <strong>Checks</strong> panel in the right margin runs the same tests as the button below, but continuously, a moment after you stop typing. It reads <em>clear</em> in green when nothing is wrong, or a red count when something is. An error found in the second quarter is a ten-second fix; the same error found after the whistle is an unlock and a re-entry.</p>
+    <p>It never blocks anything, and it never interrupts entry — it waits until the page is quiet before it runs.</p>
+
+    <h3>Live totals</h3>
+    <p>Under it are both teams' score, total, pass and rush yards, possessions, time of possession and timeouts, then each team's passing, rushing and receiving leaders and a team defence line. It is there so you can check against the stadium scoreboard without leaving the page — a timeout or clock discrepancy caught in Q2 is a small fix.</p>
+
+    <h3>Checks — at the end</h3>
+    <p><span class="btn">Run checks again</span> looks for impossible entries — a down that jumped, a gain longer than the field allows, a touchdown that did not reach the goal line, plays with no spot, punts on the wrong down. It <em>warns</em> and never blocks; you decide.</p>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="half">11. Halftime, overtime, ending</h2>
+    <ul>
+      <li><span class="btn green">Quarter marker</span> at the end of the 1st and 3rd quarters. It offers only the quarter that can legally start next, and is greyed out at the end of either half — those close with a button of their own.</li>
+      <li><span class="btn green">End 1st half</span> at the interval. It asks you to confirm and shows the score at the half, so check it before you say yes: a missed PAT caught here is a ten-second fix, and caught after the interval it means unlocking the game. Both pages then read <strong>HALFTIME</strong>.</li>
+      <li><span class="btn green">Start 2nd half</span> runs the second-half kickoff.</li>
+      <li><span class="btn green">End game</span> finalizes it and runs the checks. It will refuse on a tie.</li>
+      <li><span class="btn">Start overtime</span> if the scores are level. It writes <em>End of regulation</em> into the log and asks who gets the ball first.</li>
+    </ul>
+
+    <h3>How overtime runs</h3>
+    <p>Overtime is played in <strong>series</strong>, not as continuous football. Each side gets the ball from the same spot, and the app walks you through it:</p>
+    <ul>
+      <li>You pick who starts. The spot is <strong>prefilled to the opponent's 10</strong> — edit it if your association uses a different one.</li>
+      <li>When a series ends — a score, a turnover, or a failure on downs — the same panel comes back by itself: <em>&ldquo;Sterlington starts their series.&rdquo;</em> The spot is prefilled again.</li>
+      <li>That panel also carries <span class="btn green">End game</span> once one side is ahead, so you can finish there rather than setting up a series nobody is going to play. While the scores are level it says so instead.</li>
+      <li>The header reads <strong>OT1</strong>, <strong>OT2</strong>, <strong>OT3</strong> — one round is a series each way.</li>
+    </ul>
+    <p><strong>Kickoff and Punt are greyed out.</strong> There are no kickoffs in overtime, and a series starting on the opponent's 10 has nowhere to punt to. Field goal stays available: it is how most overtime series end.</p>
+    <p><strong>You are not asked for the clock.</strong> There is no game clock in overtime, so time of possession stops at the end of regulation and no overtime time is counted toward it.</p>
+    <div class="note">A half or an overtime always ends the drive in progress, even when the same team gets the ball back. Overtime possessions are kept out of the game's possession totals, so per-possession numbers stay comparable between games.</div>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="reports">12. Reports</h2>
+    <table>
+      <tr><th>Page</th><th>For</th></tr>
+      <tr><td><strong>Crew view</strong> (<span class="btn">CREW VIEW ↗</span>)</td><td>A full-screen scoreboard for a second monitor or a TV. Updates as you enter plays. Nobody needs to touch it.</td></tr>
+      <tr><td><strong>Game recap</strong></td><td>Post-game summary with leaders and drive-by-drive detail.</td></tr>
+      <tr><td><strong>Stat package</strong></td><td>The official single-game box score. Exports to PDF and Excel.</td></tr>
+      <tr><td><strong>Season report</strong></td><td>Everything across a season, with charts. Reached from <span class="btn gold">Stats / Reports</span>, on the dashboard's record band.</td></tr>
+    </table>
+    <p>All four update live while a game is running, so a page left open stays current.</p>
+
+    <h3>Halftime totals on the crew view</h3>
+    <p>From the first play of the second half, the <strong>Total Yards</strong>,
+    <strong>Pass Yards</strong> and <strong>Rush Yards</strong> tiles show the game total
+    followed by the figure as it stood at halftime — <strong>487 [284]</strong>. In the
+    first half there is nothing to compare against, so only the running total shows.</p>
+    <div class="note"><strong>The first half is always quarters 1 and 2.</strong> Overtime
+    adds to the game total and leaves the bracketed figure alone — it is a fixed reference
+    point, and one that moved would not be. The halftime figure is recalculated from the
+    plays each time, so correcting a first-half play <em>after</em> halftime updates it.</div>
+
+    <h3>Coming back from a report</h3>
+    <p><span class="btn">← Back to reports</span> returns you to the season you were
+    reading, not to the current one. Opening three reports from the 2023 season no longer
+    means picking 2023 three times.</p>
+
+
+    <h3>Time of possession</h3>
+    <p>Shown on all four: on the live view it sits under the timeouts at the right of each team's coloured bar, and on the recap, stat package and season report it appears with the team totals. The season report also gives a per-game average.</p>
+    <p>It is built entirely from the clock values you enter, so it shows <strong>nothing at all rather than 0:00</strong> when none were entered — a zero would claim the team never had the ball, rather than admitting nobody recorded it. For the same reason, the season average is over the games that actually recorded a clock, and says how many that was.</p>
+
+    <h3>What the reports show now</h3>
+    <ul>
+      <li><strong>An OT column</strong> in the recap's and the stat package's quarter line, but only when the game went to overtime. Overtime points used to be folded into Q4.</li>
+      <li><strong>Comp before Att</strong>, and <strong>Rec before Tgt</strong>, on every surface. A coach reads &ldquo;12 of 19&rdquo;, not &ldquo;19 with 12 of them caught&rdquo;.</li>
+      <li>The previous drive tile shows <strong>plays/yards</strong> like the live one, rather than yards alone. If that drive ended in a touchdown, a second line underneath it shows the PAT or 2-point result too — green for good, red for anything else — once it has been entered.</li>
+      <li>The recap's leader cards read the same shape as each other &mdash; volume then touchdowns. The longest single play was a highlight, not a summary.</li>
+    </ul>
+
+    <h3>Checking the totals against each other</h3>
+    <p>On the live view, each of the <strong>Passing</strong>, <strong>Rushing</strong> and <strong>Receiving</strong> tables shows its category total beside the header. Those are there to be compared with the team tiles in the top-left panel: passing should match <em>Comp / Pass Yds</em>, rushing should match <em>Att / Rush Yds</em>, and <strong>receiving should equal passing</strong>. If any pair disagrees, something is wrong and it is worth stopping to find out.</p>
+    <p>The totals cover every player, not just the handful of rows on screen — those tables show the top few, so a total added up from the visible rows would disagree with the tile it is meant to check.</p>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="rules">13. How stats are counted</h2>
+    <p>Player buttons lead with the <strong>jersey number</strong>, larger than the name, because that is what you are looking for. The yardage that used to sit on each button is gone: it read &ldquo;0 yds&rdquo; for most of them and made every button wider.</p>
+    <p>StatChat follows <strong>NFHS</strong> scoring, which matches NCAA on the points below and differs from the NFL. This matters if you are comparing against a source that uses professional conventions.</p>
+    <table>
+      <tr><th>Situation</th><th>How it is recorded</th></tr>
+      <tr><td>Sack</td><td>Yardage comes off <strong>team rushing</strong>, not passing. The quarterback's individual passing yards are unaffected; he gets a sack on his line.</td></tr>
+      <tr><td>QB kneel</td><td>A <strong>team</strong> rush. No individual attempt or yardage.</td></tr>
+      <tr><td>Bad snap</td><td>Also a team rush.</td></tr>
+      <tr><td>Defense on a try</td><td>Cannot score. The try ends when they gain possession.</td></tr>
+      <tr><td>Missed field goal into the end zone</td><td>Touchback — the defense takes over at their own 20.</td></tr>
+      <tr><td>Penalty yardage</td><td>Counts toward drive totals, both directions, so the total matches the field.</td></tr>
+      <tr><td>Sack, in the play log</td><td>Reads <em>&ldquo;sacked for a loss of 12&rdquo;</em>, or <em>&ldquo;sacked for no gain&rdquo;</em> if he went down on the line. The same wording a rush for a loss uses.</td></tr>
+      <tr><td>Penalty, in the play log</td><td>Reads <code>PENALTY, Holding, on West Monroe, -10 yards</code>. The yardage is signed by <em>which way the ball moved</em>, so a foul on the defense shows <code>+15</code> even though they are the team being punished — that way the number agrees with the down and distance printed beside it.</td></tr>
+      <tr><td>The 50-yard line</td><td>Shown as <em>&ldquo;the 50&rdquo;</em>, never &ldquo;own 50&rdquo;. Nobody owns the 50.</td></tr>
+      <tr><td>A catch with no receiver named</td><td>Credited to <strong>Unknown</strong> in the receiving table, so passing yards still equal total receiving yards. No real player is credited with a catch nobody saw him make. Unknown always sorts last and can never be a &ldquo;leader&rdquo;.</td></tr>
+      <tr><td>Time of possession</td><td>Accrues only between a clock entered at the start of a possession and one at the end. Skip either and that possession contributes nothing — which is why it is left blank rather than shown as zero.</td></tr>
+      <tr><td>Time of possession in overtime</td><td>Not counted. Overtime has no game clock, so the figure stops at the end of regulation.</td></tr>
+      <tr><td>A muffed punt or kickoff the kicking team recovers</td><td>A turnover, charged to the <strong>receiving</strong> team — they had the ball, however briefly, and lost it. A muff the receiving team recovers itself is not a turnover.</td></tr>
+      <tr><td>An onside kick the kicking team recovers</td><td><strong>Not</strong> a turnover for either team. Nobody has possession of a kicked ball until someone controls it, so recovering your own onside kick is not taking anything away from a team that never had it — it is simply a recovery, the same distinction football statistics have always drawn between a muff (possession lost) and an onside kick (possession never established).</td></tr>
+      <tr><td>Drive total yards</td><td>NET yards, penalties included both ways &mdash; it is the distance the offence actually moved the ball. This will not match rushing plus passing on a drive that had a foul, and the stat package's &ldquo;Total yds&rdquo; is the other kind (rushing + passing only).</td></tr>
+    </table>
+    <p>Team rushing therefore shows a <strong>TEAM</strong> line covering kneels, bad snaps and sack yardage. That is intended — it is how the individual rows add up to the team total.</p>
+
+    <h3>Stats that depend on what you chose to enter</h3>
+
+    <p>Some fields are optional during entry, so a few numbers count
+    <em>what was recorded</em> rather than <em>what happened</em>. None of these is
+    a fault — each answers exactly the question it was given — but it is worth
+    knowing which is which before handing a report to a coach.</p>
+
+    <table>
+      <tr><th>Stat</th><th>What it actually counts</th></tr>
+      <tr><td><strong>Targets</strong> (Tgt)</td><td>Passes where you <em>named a receiver</em> — not passes thrown at someone. The receiver is optional on both completions and incompletions.</td></tr>
+      <tr><td><strong>Catch %</strong></td><td>Catches divided by <em>named</em> targets. If you tend to name the receiver on completions but not on incompletions, this trends towards 100% — the incompletions were never counted as targets.</td></tr>
+      <tr><td><strong>Tackles</strong> and per-player <strong>TFL</strong></td><td>Plays where you <em>named a tackler</em>. A minimum, not a total.</td></tr>
+      <tr><td><strong>Team TFL</strong></td><td>Every scrimmage play that lost yardage, tackler named or not. This is why it can be higher than the per-player figures — they are counting different things, and both are correct.</td></tr>
+    </table>
+
+    <div class="note"><strong>You decide how complete these are.</strong> Naming the
+    receiver on an incompletion, or the tackler on a routine stop, is entirely
+    optional and costs a second or two each time. Skip them and the game still
+    scores correctly — only these particular columns thin out. Capture them and
+    they are as good as any other stat on the page.</div>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="broadcast">14. Broadcasting (ON AIR)</h2>
+
+    <p>StatChat can feed your broadcast software live &mdash; the score, down and
+    distance, and every stat &mdash; so the on-screen graphics update themselves as
+    plays are entered.</p>
+
+    <h3>The short version</h3>
+
+    <ol>
+      <li>Set one game <strong>ON AIR</strong> from the dashboard.</li>
+      <li>The production team points their software at the feed addresses on the
+      <strong>Broadcast setup</strong> page.</li>
+      <li>That&rsquo;s it. The addresses never change, so this only happens once.</li>
+    </ol>
+
+    <h3>Setting a game ON AIR</h3>
+
+    <p>On the dashboard, open the <strong>&#8942;</strong> menu on a game and choose
+    <strong>Set as ON AIR</strong>. Admin and game-entry accounts can both do this.</p>
+
+    <p>A flagged game shows a red <strong>&#9679; ON AIR</strong> badge on the
+    dashboard row, and a banner across the top of the game page while you are
+    entering plays.</p>
+
+    <div class="note"><strong>You can do this the day before.</strong> A game does not
+    have to be started, or even played, to be set ON AIR. Flag it as soon as it is
+    created so the production team can set up in advance.</div>
+
+    <h3>Only one game at a time</h3>
+
+    <p>Setting a game ON AIR automatically takes any other game off. This is enforced
+    by the database, not just the screen, so two people cannot accidentally flag two
+    games at once.</p>
+
+    <h3>Why it asks so many times</h3>
+
+    <p>This one flag decides what the entire broadcast is showing, so the app makes it
+    deliberately awkward to change by accident:</p>
+
+    <ul>
+      <li>Every prompt <strong>names the game</strong>, because picking the wrong one
+      is the real risk.</li>
+      <li>Switching to a game that is <strong>in progress</strong> asks twice &mdash;
+      it changes what viewers see immediately.</li>
+      <li>Taking a <strong>live</strong> game off air makes you <strong>type
+      &ldquo;OFF AIR&rdquo;</strong>. A click is too easy to do by reflex during a
+      game.</li>
+      <li>Taking a <em>finished</em> game off air only asks once. The friction is
+      where the risk is.</li>
+    </ul>
+
+    <p>The app also records who changed the flag and when, so if the wrong game is on
+    air there is an answer to &ldquo;who did that?&rdquo;</p>
+
+    <h3>The Broadcast setup page</h3>
+
+    <p>In the account menu, <strong>Broadcast setup</strong> lists every feed address
+    with a copy button, and shows what is on air right now. Send that link to the
+    production team and they can set themselves up without anyone reading a web
+    address down the phone.</p>
+
+    <p>It is available to admin and game-entry accounts only, because it displays the
+    feed key.</p>
+
+    <h3>What the production team gets</h3>
+
+    <table>
+      <tr><th>Feed</th><th>Contains</th></tr>
+      <tr><td>Scoreboard</td><td>Score, quarter, down &amp; distance, ball on, possession, timeouts</td></tr>
+      <tr><td>Current drive</td><td>Plays, yards and time of possession on the drive in progress</td></tr>
+      <tr><td>Play ticker</td><td>The text of the most recent play</td></tr>
+      <tr><td>Team comparison</td><td>Two rows, one per team: yards, first downs, third downs, turnovers</td></tr>
+      <tr><td>Rushing / Passing / Receiving / Defence</td><td>One row per player, best first</td></tr>
+    </table>
+
+    <h3>The ready-made overlay</h3>
+
+    <p>If the crew would rather not build their own graphics, there is a finished
+    transparent scoreboard. It is added differently from the feeds &mdash; as a
+    <strong>web browser input at 1920&times;1080</strong>, not as a data source. The
+    background is transparent, so it keys straight over the programme feed and needs
+    no mapping.</p>
+
+    <div class="note"><strong>The trade-off.</strong> The broadcast software receives a
+    picture, not data. That means it cannot be restyled, and the numbers are not
+    available to any other graphic. Adding it as a <em>data source</em> by mistake will
+    fail with a parsing error &mdash; it is a web page, not XML.</div>
+
+    <h3>The team stats graphic</h3>
+    <p><code>/broadcast_stats.html</code> is a second full graphic for holding between drives: the team-versus-team comparison on top — total, pass and rush yards, time of possession, turnovers, third down — and each side's passing, rushing and receiving leaders underneath.</p>
+    <p>Add <code>?layout=portrait</code> for a tall narrow version for a lower third or a side panel; in that one the two leader panels stack with your team on top. Both carry the sponsor bar; <code>?sponsor=none</code> drops it. Like the scoreboard it reads whichever game is ON AIR and refreshes on its own, so it is current whenever the director cuts to it.</p>
+
+    <h3>Caveats worth knowing</h3>
+
+    <div class="note"><strong>The feed is only as live as the entry.</strong> If you
+    are three plays behind, so is the broadcast. Nothing can fix that but keeping up.</div>
+
+    <div class="note"><strong>If no game is flagged</strong>, the feed falls back to
+    the most recent game in progress. That is usually right &mdash; but it is a guess.
+    Flag the game and it is not guessing.</div>
+
+    <div class="note"><strong>Taking a game off air mid-broadcast may leave the
+    graphics blank.</strong> With nothing flagged the feed falls back to a live game,
+    and if there is not one it returns nothing at all. Usually you want to leave a
+    game on air until the broadcast has finished, not when the game has.</div>
+
+    <div class="note"><strong>The feed shows the flagged game whatever its
+    state.</strong> Flag a finished game and the graphics show its final score. Flag
+    one that has not started and they show 0&ndash;0. Neither is a fault &mdash; but
+    check which game is flagged before kickoff.</div>
+
+    <div class="note"><strong>Undo reaches the broadcast within a couple of
+    seconds.</strong> Correcting a mistake corrects the graphics too, so there is no
+    need to leave a wrong play standing.</div>
+
+    <h3>If the graphics stop updating</h3>
+
+    <ol>
+      <li>Open one of the feed addresses in a browser. If it shows current data, the
+      feed is fine and the problem is in the broadcast software.</li>
+      <li>The usual cause is a <strong>refresh interval that was never set</strong>.
+      A data source that fetches once looks exactly like a frozen feed. One to two
+      seconds is right.</li>
+      <li>If it says <code>No game is on air</code>, nothing is flagged and no game is
+      in progress.</li>
+      <li>If the scoreboard is right but stats are missing, check the software is
+      reading the correct feed &mdash; each graphic uses its own address.</li>
+    </ol>
+
+    <h3>Between seasons</h3>
+
+    <p>Nothing needs redoing. The addresses do not change, so last season&rsquo;s
+    setup still works &mdash; flag the first game of the new season and the graphics
+    follow.</p>
+
+    <h2 id="trouble">15. If something looks wrong</h2>
+
+    <h3>A play will not save</h3>
+    <p>Look for an amber message inside the panel. The usual cause is <strong>SPOT NOT SET</strong> — use Adjust Down/Distance first.</p>
+
+    <h3>A player is missing from a picker</h3>
+    <p>Type the number in the box. They join the list from then on. To have them there from the start next time, add a position to the roster or name them as a likely starter.</p>
+
+    <h3>The pages disagree with each other</h3>
+    <p>Reload the report page. All pages update live, but a tab left open through a network drop can fall behind.</p>
+
+    <h3>Losing the connection</h3>
+
+    <p>Two things appear, and they mean different things.</p>
+
+    <p><strong>A red banner: "No connection to the server."</strong> This appears
+    as soon as the connection drops, before any play has failed &mdash; the app
+    checks the database every few seconds rather than trusting the laptop's own
+    idea of whether it is online. A laptop joined to venue wifi with a dead
+    uplink will happily report that it is connected.</p>
+
+    <p><strong>A yellow banner: "N plays not yet saved."</strong> This appears
+    once plays are actually waiting. <span class="btn">Retry now</span> forces
+    an attempt, though it retries by itself anyway.</p>
+
+    <p><strong>Undo is limited while offline.</strong> A play you entered
+    <em>during</em> the outage can be undone as normal &mdash; it never left this
+    laptop. A play saved <em>before</em> the connection dropped cannot: removing
+    it here would look right and then the play would reappear when the
+    connection returns, because the deletion never reached the server. The app
+    refuses that one and says so. Once you are back online it undoes normally,
+    and any play can be deleted from a finished game via
+    <span class="btn">Unlock to edit</span>.</p>
+
+    <p><strong>Keep entering plays either way.</strong> They are stored on this
+    laptop and upload automatically when the connection returns. The game scores
+    correctly throughout &mdash; the only thing missing is the trip to the
+    server.</p>
+
+    <div class="note"><strong>Do not refresh or close the tab while the red
+    banner is showing.</strong> Nothing is lost if you do &mdash; the queued
+    plays are on this laptop and survive &mdash; but the page cannot
+    <em>reload</em> without a connection. You would be looking at a browser
+    error page, unable to enter anything, until the wifi comes back. The browser
+    will ask you to confirm if you try, which is your last warning.</div>
+
+    <p>If you do get stranded on an error page: wait for the connection, reload,
+    and the queued plays upload on their own. Do not clear the browser data,
+    and do not switch to another laptop &mdash; the queue lives in <em>this</em>
+    browser and moving away is the one thing that would actually lose it.</p>
+
+    <h3>The wrong team has the ball</h3>
+    <p>Use <span class="btn">Flip possession</span>, then Adjust Down/Distance to set the spot.</p>
+
+    <h3>Starting over</h3>
+    <p>An admin can <strong>Reset game</strong> from the three-dot menu on the dashboard. It clears every play and returns the game to not-started. You must type the game designator to confirm — there is no undo.</p>
+  </div>
+
+  <div class="card" style="text-align:center; color:#b9c4d0; font-size:14px;">
+    <p style="margin:0;">Something unclear or missing from this guide? It is worth saying so — the confusing parts are usually the parts that cause bad data.</p>
+  </div>
+</div>
+</body>
+</html>

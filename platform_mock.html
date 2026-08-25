@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StatChat — platform</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<link rel="apple-touch-icon" href="logo.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="StatChat">
+
+<!-- THE PLATFORM CONSOLE — for statchatadmin@statchat.co only.
+     ======================================================================
+     WHY THIS PAGE EXISTS, and it is not really about restore.
+
+     The super-admin account has no tenant. Every other page in this app
+     asks "what is MY team" and works outward from there, so signing in as
+     the platform and landing on dashboard.html shows a MERGED VIEW of
+     every tenant at once, with nothing on screen saying whose data any of
+     it is. With one customer that is invisible. With two it is actively
+     misleading, and the person most likely to be misled is the one who can
+     change anything.
+
+     So this is the platform's landing page: it names the tenant before it
+     shows you anything belonging to one.
+
+     NO NEW SQL. Everything here reads through policies that already exist
+     -- `tenants_select` and `games_select` both carry `or is_super_admin()`
+     -- and restore calls `restore_game()`, added in migration 012. If this
+     page were deleted tomorrow nothing else would change.
+
+     WHAT THIS IS NOT: it is not "Act As". MULTI_TENANT_PLAN.md defers
+     impersonation until there is a real audit trail, and this page must
+     not quietly become it. Everything here reads a tenant's data AS THE
+     PLATFORM. There is no button that makes you a member of a tenant, and
+     adding one is a decision, not a convenience. -->
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="statchat.css">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+         background:var(--sc-page, #f4f3ef); margin:0;
+         padding-top:env(safe-area-inset-top); color:var(--sc-ink, #1a1a1a); }
+  .wrap { max-width:960px; margin:0 auto; padding:20px 16px 60px; }
+
+  .topbar { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+  .brand { display:flex; align-items:center; gap:9px; }
+  .brand img { width:26px; height:26px; border-radius:5px; display:block; }
+  .brand span { font-weight:800; font-size:18px; letter-spacing:-0.01em; }
+  /* THE ACCOUNT IS NAMED, ALWAYS. The whole hazard this page addresses is
+     not knowing whose data is on screen; the second half of that is not
+     remembering who you are signed in as. */
+  .whoami { margin-left:auto; margin-right:4px; font-size:12.5px;
+            color:var(--sc-ink-muted, #9aa3b2); }
+  .whoami strong { color:var(--sc-ink-soft, #3a3a3a); }
+
+  /* The row menu. Anchored to the cell so it opens beside its own row and
+     cannot be mistaken for the row above or below -- which is the entire
+     risk with a destructive action in a list. */
+  .menuWrap { position:relative; display:inline-block; }
+  .dots { border:1px solid var(--sc-rule-strong, #c8c8c8); background:#20272f;
+          color:var(--sc-ink-soft, #3a3a3a); border-radius:var(--sc-radius-sm, 6px);
+          padding:4px 10px; font-size:16px; line-height:1; cursor:pointer; }
+  .menu { position:absolute; right:0; top:calc(100% + 4px); z-index:30;
+          background:#20272f; border:1px solid var(--sc-rule, #e6e6e6);
+          border-radius:var(--sc-radius-sm, 6px); box-shadow:0 4px 14px rgba(0,0,0,0.14);
+          min-width:172px; padding:5px 0; text-align:left; }
+  .menu button { display:block; width:100%; text-align:left; background:none;
+                 border:none; padding:9px 14px; font-size:13.5px; cursor:pointer;
+                 color:var(--sc-ink-soft, #3a3a3a); }
+  .menu button:hover { background:var(--sc-page, #f4f3ef); }
+  .menu button.danger { color:var(--sc-red, #a32d2d); border-top:1px solid #f2f2f0; }
+  .topAct { padding:6px 12px; border-radius:var(--sc-radius-sm, 6px);
+            border:1px solid var(--sc-rule-strong, #c8c8c8); background:#20272f;
+            color:var(--sc-ink-soft, #3a3a3a); font-size:13px; font-weight:600;
+            cursor:pointer; text-decoration:none; line-height:1.6; }
+  .topAct.danger { color:var(--sc-red, #a32d2d); }
+  .card { background:var(--sc-card, #fff); border-radius:var(--sc-radius, 10px);
+          padding:18px; box-shadow:0 2px 10px rgba(0,0,0,0.06); margin-bottom:16px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { color:#6b7680; margin:0 0 16px; font-size:13.5px; }
+
+  .tabs { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; }
+  .tabs button { padding:8px 14px; border-radius:var(--sc-radius-sm, 6px);
+                 border:1px solid var(--sc-rule-strong, #c8c8c8); background:#20272f;
+                 color:var(--sc-ink-soft, #3a3a3a); font-size:14px; font-weight:600; cursor:pointer; }
+  .tabs button.on { background:var(--sc-navy, #1a1a2e); color:#fff; border-color:var(--sc-navy, #1a1a2e); }
+
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+       color:var(--sc-ink-muted, #9aa3b2); font-weight:700; padding:0 10px 8px;
+       border-bottom:1px solid var(--sc-rule, #e6e6e6); }
+  td { padding:10px; border-bottom:1px solid #f2f2f0; color:var(--sc-ink-soft, #3a3a3a); }
+  tr:last-child td { border-bottom:none; }
+  td.name { color:var(--sc-ink, #1a1a1a); font-weight:600; }
+  td.right { text-align:right; }
+
+  /* The stand-in for a tenant with no crest yet. Deliberately plain: it
+     should read as "not set" rather than as a design decision. */
+  .crest { width:28px; height:28px; border-radius:5px; flex:none;
+           background:var(--sc-rule, #e6e6e6); color:#6b7680;
+           display:flex; align-items:center; justify-content:center;
+           font-weight:700; font-size:13px; }
+  label { display:block; font-size:13px; margin:10px 0 4px; color:#b9c4d0; font-weight:600; }
+  label input { display:block; width:100%; box-sizing:border-box; padding:8px;
+                border:1px solid var(--sc-rule-strong, #c8c8c8);
+                border-radius:var(--sc-radius-sm, 6px); font-size:14px; font-weight:400;
+                margin-top:4px; }
+  .fieldnote { font-size:12px; color:#6b7680; margin:4px 0 0; }
+  .pill { display:inline-block; font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:20px; }
+  .pill.live   { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
+  .pill.trial  { background:#eef2f8; color:#5aa9f0; }
+  .pill.lapsed { background:var(--sc-amber-tint, #fff3cd); color:#8a6a00; }
+
+  button.act { padding:6px 12px; border-radius:var(--sc-radius-sm, 6px); border:none;
+               background:var(--sc-green, #1a7a4c); color:#fff; font-size:13px;
+               font-weight:700; cursor:pointer; }
+  button.act:disabled { opacity:.55; cursor:default; }
+  .msg { padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:14px; }
+  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
+  .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
+  .empty { color:#6b7680; font-size:14px; padding:6px 2px; }
+  .hidden { display:none; }
+  .note { font-size:12.5px; color:#6b7680; margin-top:12px; line-height:1.5; }
+</style>
+<!-- DARK MOCK. The theme is a separate stylesheet linked last, so it
+     overrides by source order and this page's own CSS is untouched.
+     See DARK_THEME_PLAN.md: the shipping version retrofits the tokens
+     rather than layering overrides. -->
+<link rel="stylesheet" href="statchat-dark.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="brand"><img src="logo.png" alt=""><span>StatChat</span></span>
+    <span class="whoami" id="whoami"></span>
+    <!-- SIGN OUT AND ACCOUNT, because this is a LANDING PAGE now.
+         The platform account lands here rather than on the dashboard, so
+         this is the only page it sees — and it had no way to sign out or
+         change its own password without typing another address. A landing
+         page that cannot be left is not finished. -->
+    <a href="account.html" class="topAct">Account</a>
+    <button id="signOutBtn" class="topAct danger" type="button">Sign out</button>
+  </div>
+
+  <div id="msg"></div>
+
+  <!-- Shown while the session is checked, and left showing if the account
+       turns out not to be the platform. Rendering the console first and
+       hiding it afterwards would flash real data at the wrong person. -->
+  <div id="gate" class="card">
+    <h1>Platform</h1>
+    <p class="sub" id="gateText">Checking your account…</p>
+  </div>
+
+  <div id="console" class="hidden">
+    <div class="tabs">
+      <button id="tabTenants" class="on">Tenants</button>
+      <button id="tabUsers">Users</button>
+      <button id="tabRecovery">Recovery tools</button>
+    </div>
+
+    <div id="panelTenants" class="card">
+      <div style="display:flex; align-items:baseline; gap:12px;">
+        <h1 style="margin:0;">Tenants</h1>
+        <!-- REFRESH, because this list goes stale while you watch it.
+             A tenant admin uploads a logo or finishes a game in another
+             window and nothing here knows. Reloading the whole page also
+             works; a button that reloads only the list is faster and does
+             not lose which tab you were on. -->
+        <button id="refreshTenantsBtn" class="topAct" type="button">Refresh</button>
+      </div>
+      <p class="sub">Every tenant on the platform. Counts are live games only —
+         deleted ones are under Recovery tools.</p>
+      <div id="tenantsBody"><p class="empty">Loading…</p></div>
+
+      <!-- ADDING A SCHOOL. Collapsed behind a button rather than sitting
+           open: this list is read many times a week and a tenant is added
+           a handful of times a year, so the common case should not be
+           looking past a form. -->
+      <div style="margin-top:18px; border-top:1px solid var(--sc-rule, #e6e6e6); padding-top:14px;">
+        <button id="showAddBtn" class="act" type="button">Add a tenant</button>
+        <div id="addPanel" class="hidden" style="margin-top:12px; max-width:460px;">
+          <div id="addMsg"></div>
+          <label>Tenant name<input type="text" id="addName"></label>
+          <p class="fieldnote">Short, the way it appears on a scoreboard.</p>
+          <label>Full name<input type="text" id="addFullName"></label>
+          <p class="fieldnote">Optional. Used on printed reports.</p>
+          <label>First admin's email<input type="email" id="addEmail"></label>
+          <p class="fieldnote">Optional — they get an invite and become the tenant's admin.
+             Leave it blank to create the tenant now and invite somebody later.</p>
+          <label>Their name<input type="text" id="addAdminName"></label>
+          <p class="fieldnote">Optional. Without it they appear as their email address
+             everywhere in the app.</p>
+          <div style="margin-top:12px;">
+            <button id="createBtn" class="act" type="button">Create tenant</button>
+            <button id="cancelAddBtn" class="topAct" type="button" style="margin-left:6px;">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="panelUsers" class="card hidden">
+      <h1>Users</h1>
+      <p class="sub">Everyone with an account, grouped by tenant. This is the platform's
+         view; a tenant's own admin manages their people from their account page.</p>
+      <div id="usersBody"><p class="empty">Loading…</p></div>
+      <p class="note"><strong>Read-only, deliberately.</strong> Changing somebody's role,
+         resetting their password or removing them is a tenant's own admin's job, and doing
+         it from here would be acting on a customer's staff with nothing recording that it
+         was the platform. That belongs with the audit trail, not before it.</p>
+    </div>
+
+    <!-- RECOVERY TOOLS, plural and deliberately open-ended. Deleted games
+         are the only thing recoverable today; rosters and plays are still
+         hard deletes. Naming the tab after the one thing it currently does
+         would mean renaming it the moment a second thing arrives. -->
+    <div id="panelRecovery" class="card hidden">
+      <h1>Recovery tools</h1>
+      <h2 style="font-size:15px; margin:0 0 4px;">Deleted tenants</h2>
+      <p class="sub">A deleted tenant still has every game, play and roster row it ever
+         had — deleting hides it rather than destroying it, because `tenants` cascades to
+         five tables. Restoring puts the tenant back exactly as it was.</p>
+      <div id="delTenantsBody"><p class="empty">Loading…</p></div>
+
+      <h2 style="font-size:15px; margin:22px 0 4px;">Deleted games</h2>
+      <div id="recoveryBody"><p class="empty">Loading…</p></div>
+      <p class="note"><strong>Why this is here and not on their dashboard.</strong>
+         Deleted games are hidden from the tenant by the same policy that hides them from
+         everyone, and showing them there would mean every game list in the app had to
+         learn to filter. Restoring is a support action, so it lives with support.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  function showMsg(text, type){
+    document.getElementById('msg').innerHTML =
+      text ? '<div class="msg ' + type + '">' + text + '</div>' : '';
+  }
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const fmtDate = d => d ? new Date(d).toLocaleDateString(undefined,
+    { year:'numeric', month:'short', day:'numeric' }) : '—';
+  const fmtWhen = d => d ? new Date(d).toLocaleString(undefined,
+    { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+
+  // THE AUTH LISTENER IS THE REAL ENTRY POINT on any page that has one --
+  // the standing rule for this codebase. Nothing runs before it fires.
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION'){
+      if (session){ init(session); } else { window.location.href = '/login.html'; }
+    } else if (event === 'SIGNED_OUT'){
+      window.location.href = '/login.html';
+    }
+  });
+
+  let accessToken = null;
+  async function init(session){
+    const email = (session.user && session.user.email) || '';
+
+    // THE GATE IS A COURTESY, NOT THE CONTROL. Every query below is scoped
+    // by RLS whatever this check says, and restore_game() makes its own
+    // is_super_admin() test regardless of who calls it. This exists so a
+    // tenant admin who lands here by accident gets an explanation instead
+    // of an empty page.
+    const { data: me, error: meErr } = await supabaseClient
+      .from('profiles').select('is_super_admin, tenant_id').eq('id', session.user.id).limit(1);
+    if (meErr){
+      document.getElementById('gateText').textContent =
+        'Could not check your account: ' + meErr.message;
+      return;
+    }
+    const profile = (me || [])[0] || {};
+    if (!profile.is_super_admin){
+      document.getElementById('gateText').innerHTML =
+        'This page is for the StatChat platform account. ' +
+        '<a href="dashboard.html">Go to your dashboard</a> instead.';
+      return;
+    }
+
+    document.getElementById('whoami').innerHTML =
+      '<strong>' + esc(email) + '</strong> · platform';
+    document.getElementById('gate').classList.add('hidden');
+    document.getElementById('console').classList.remove('hidden');
+
+    loadTenants();
+    loadRecovery();
+    // KEPT for the calls that need it. api/manage-users and
+    // api/create-tenant are server endpoints, not database queries, so
+    // they take the bearer token rather than riding on the client.
+    accessToken = session.access_token;
+    loadUsers(accessToken);
+  }
+
+  // Signing out is wired unconditionally, not inside the gate: an account
+  // that fails the is_super_admin check still needs to be able to leave.
+  document.getElementById('signOutBtn').addEventListener('click', async () => {
+    await supabaseClient.auth.signOut();
+    window.location.href = '/login.html';
+  });
+
+  // ---- adding a tenant --------------------------------------------------
+  document.getElementById('showAddBtn').addEventListener('click', () => {
+    document.getElementById('addPanel').classList.remove('hidden');
+    document.getElementById('showAddBtn').classList.add('hidden');
+    document.getElementById('addName').focus();
+  });
+  document.getElementById('cancelAddBtn').addEventListener('click', resetAddForm);
+
+  function resetAddForm(){
+    ['addName','addFullName','addEmail','addAdminName']
+      .forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('addMsg').innerHTML = '';
+    document.getElementById('addPanel').classList.add('hidden');
+    document.getElementById('showAddBtn').classList.remove('hidden');
+  }
+
+  document.getElementById('createBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('createBtn');
+    const msg = document.getElementById('addMsg');
+    const name = document.getElementById('addName').value.trim();
+    if (!name){
+      msg.innerHTML = '<div class="msg error">A tenant needs a name.</div>';
+      return;
+    }
+    // DISABLED WHILE IT RUNS. Creating a tenant is two steps and the second
+    // sends an email; a double-click would make two tenants, and
+    // create_tenant's duplicate-name check would refuse the second with a
+    // message about a tenant the operator did not know they had just made.
+    btn.disabled = true;
+    btn.textContent = 'Creating\u2026';
+    msg.innerHTML = '';
+    try {
+      const r = await fetch('/api/create-tenant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json',
+                   Authorization: 'Bearer ' + accessToken },
+        body: JSON.stringify({
+          name,
+          fullName:   document.getElementById('addFullName').value.trim(),
+          adminEmail: document.getElementById('addEmail').value.trim(),
+          adminName:  document.getElementById('addAdminName').value.trim()
+        })
+      });
+      const out = await r.json();
+      if (!r.ok && r.status !== 207) throw new Error(out.error || ('HTTP ' + r.status));
+      if (r.status === 207){
+        // PARTIAL: the tenant exists, something after it did not. Said
+        // plainly, and the form is cleared, because retrying the whole
+        // thing would hit the duplicate-name check.
+        msg.innerHTML = '<div class="msg error">' + esc(out.error) + '</div>';
+        loadTenants();
+        loadUsers(accessToken);
+        return;
+      }
+      showMsg(esc(out.message), 'success');
+      resetAddForm();
+      loadTenants();
+      loadUsers(accessToken);
+    } catch (err){
+      msg.innerHTML = '<div class="msg error">' + esc(err.message) + '</div>';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Create tenant';
+    }
+  });
+
+  // ---- tabs -------------------------------------------------------------
+  // GENERALISED FROM A BOOLEAN. It was `isTenants` and two toggles, which
+  // is exactly the shape that stops working the moment a third tab exists
+  // -- and adding one was the first thing asked for after it shipped.
+  const TABS = ['tenants', 'users', 'recovery'];   // order here is wiring; the DOM decides display order
+  function selectTab(which){
+    TABS.forEach(t => {
+      const cap = t.charAt(0).toUpperCase() + t.slice(1);
+      document.getElementById('tab' + cap).classList.toggle('on', t === which);
+      document.getElementById('panel' + cap).classList.toggle('hidden', t !== which);
+    });
+  }
+  TABS.forEach(t => {
+    const cap = t.charAt(0).toUpperCase() + t.slice(1);
+    document.getElementById('tab' + cap).addEventListener('click', () => selectTab(t));
+  });
+
+  // ---- tenants ----------------------------------------------------------
+  // A tenant may field several sports, so the embedded `teams` is a list.
+  // The first one with a logo wins; a tenant whose teams have none gets a
+  document.getElementById('refreshTenantsBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('refreshTenantsBtn');
+    btn.disabled = true;
+    btn.textContent = 'Refreshing\u2026';
+    // Users too: a refresh that updated the tenant list and left the Users
+    // tab showing something older would be a worse kind of stale than the
+    // one it fixes.
+    await Promise.all([loadTenants(), loadUsers(accessToken), loadRecovery()]);
+    btn.disabled = false;
+    btn.textContent = 'Refresh';
+  });
+
+  // monogram, which is the ordinary state for a new customer.
+  const tenantLogo = t => {
+    const withLogo = (t.teams || []).find(x => x && x.logo_url);
+    return withLogo ? withLogo.logo_url : null;
+  };
+
+  async function loadTenants(){
+    const body = document.getElementById('tenantsBody');
+    const { data: tenants, error } = await supabaseClient
+      // THE CREST COMES FROM `teams`, NOT FROM HERE.
+      // -----------------------------------------------------------------
+      // 006 copied branding onto `tenants` and the application was never
+      // repointed at it, so that copy has been stale since the day it was
+      // made -- a tenant uploaded a logo on Customize, it saved to `teams`,
+      // and this console kept showing the August one.
+      //
+      // 017 drops the stale columns; this reads the live ones through the
+      // foreign key. `teams` comes back as an ARRAY because a tenant may
+      // field several sports.
+      .from('tenants').select('id, name, full_name, subscription, renews_on, created_at, disabled_at, disabled_reason, deleted_at, teams(logo_url)')
+      .order('name');
+    if (error){
+      body.innerHTML = '<p class="empty">Could not load tenants: ' + esc(error.message) + '</p>';
+      return;
+    }
+    // A deleted tenant belongs under Recovery tools, not in the live list.
+    // SPLIT ON A COLUMN THAT MUST BE IN THE SELECT ABOVE. `deleted_at`
+    // was added by 016 and never added to the query, so every tenant
+    // read as undefined -- meaning `!t.deleted_at` was true for all of
+    // them. A deleted tenant stayed in this list and never appeared
+    // under Recovery tools, while the database had it right all along.
+    //
+    // An unselected column and a null one are indistinguishable in JS,
+    // which is why this asserts rather than trusting the shape.
+    if (tenants && tenants.length && !('deleted_at' in tenants[0])){
+      showMsg('The tenant list is missing deleted_at — deleted tenants cannot be ' +
+        'told apart from live ones. This is a bug; please report it.', 'error');
+    }
+    const liveTenants = (tenants || []).filter(t => !t.deleted_at);
+    if (!liveTenants.length){
+      body.innerHTML = '<p class="empty">No tenants yet.</p>';
+      return;
+    }
+
+    // Counted in ONE query rather than one per tenant. Two tenants makes
+    // no difference; twenty would, and this page is the one that has to
+    // still work when there are twenty.
+    const { data: games } = await supabaseClient
+      .from('games').select('tenant_id, deleted_at, season_year');
+    const live = {}, gone = {};
+    (games || []).forEach(g => {
+      const bucket = g.deleted_at ? gone : live;
+      bucket[g.tenant_id] = (bucket[g.tenant_id] || 0) + 1;
+    });
+
+    // The deleted ones come off the same fetch rather than a second query.
+    renderDeletedTenants(tenants);
+
+    body.innerHTML =
+      '<table><tr><th>Tenant</th><th>Status</th><th>Renews</th>' +
+      '<th>Games</th><th>Deleted</th><th></th></tr>' +
+      liveTenants.map(t => {
+        // SUSPENDED OUTRANKS EVERYTHING. A tenant can be paid up and
+        // still suspended; showing 'Active' next to an account that
+        // cannot write is the status line lying about the thing the
+        // operator is looking it up to find out.
+        const off = !!t.disabled_at;
+        const pill = off ? 'lapsed'
+                   : t.subscription === 'active' ? 'live'
+                   : t.subscription === 'lapsed' ? 'lapsed' : 'trial';
+        const label = off ? 'Suspended'
+                    : t.subscription === 'lapsed' ? 'Lapsed \u2014 read only'
+                    : t.subscription.charAt(0).toUpperCase() + t.subscription.slice(1);
+        return '<tr>' +
+          // THE CREST, ONCE THEY HAVE ONE. A tenant is recognised by its
+          // badge long before its name is read, and this list is the one
+          // place the platform decides which customer it is looking at.
+          //
+          // A MISSING LOGO GETS A MONOGRAM, not a broken image and not a
+          // blank. New tenants have no crest until somebody visits
+          // Customize, so "no logo yet" is the ordinary state for exactly
+          // the customer you are most likely to be looking up.
+          //
+          // onerror clears the row rather than leaving a broken-image
+          // icon: storage refuses non-images now, but a logo deleted from
+          // the bucket would still leave a live logo_url behind.
+          '<td class="name"><span style="display:flex; align-items:center; gap:10px;">' +
+            (tenantLogo(t)
+              ? '<img src="' + esc(tenantLogo(t)) + '" alt="" ' +
+                'style="width:28px; height:28px; object-fit:contain; border-radius:5px; flex:none;" ' +
+                'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),' +
+                '{className:\'crest\', textContent:this.alt||\'\'}))">'
+              : '<span class="crest">' + esc(t.name.charAt(0).toUpperCase()) + '</span>') +
+            '<span>' + esc(t.name) +
+              (t.full_name ? '<div style="font-weight:400; font-size:12.5px; color:#6b7680;">' +
+                esc(t.full_name) + '</div>' : '') +
+            '</span></span></td>' +
+          '<td><span class="pill ' + pill + '">' + esc(label) + '</span></td>' +
+          '<td>' + fmtDate(t.renews_on) + '</td>' +
+          '<td>' + (live[t.id] || 0) + '</td>' +
+          '<td>' + (gone[t.id] || 0) + '</td>' +
+          // A MENU, because a row now has more than one action and one of
+          // them is destructive. Suspend and Delete sitting side by side as
+          // buttons is a misclick waiting to happen on a list.
+          '<td class="right">' +
+            '<div class="menuWrap">' +
+              '<button class="dots" data-menu="' + esc(t.id) + '" aria-haspopup="true" ' +
+                'aria-expanded="false" aria-label="Actions for ' + esc(t.name) + '">' +
+                '\u22EF</button>' +
+              '<div class="menu hidden" data-menu-for="' + esc(t.id) + '">' +
+                '<button data-toggle="' + esc(t.id) + '" data-off="' + (off ? '1' : '0') + '" ' +
+                  'data-name="' + esc(t.name) + '">' + (off ? 'Restore access' : 'Suspend') + '</button>' +
+                '<button class="danger" data-del="' + esc(t.id) + '" ' +
+                  'data-name="' + esc(t.name) + '">Delete tenant</button>' +
+              '</div>' +
+            '</div>' +
+            (off && t.disabled_reason
+              ? '<div style="font-size:12px; color:#6b7680; margin-top:4px;">' +
+                esc(t.disabled_reason) + '</div>' : '') +
+          '</td>' +
+        '</tr>';
+      }).join('') + '</table>';
+  }
+
+  // ---- deleted games ----------------------------------------------------
+  // Deleted tenants. Rendered from the SAME tenants query the Tenants tab
+  // uses -- the platform sees deleted rows there too, because
+  // tenants_select ends `or is_super_admin()`. Nothing extra is fetched.
+  function renderDeletedTenants(tenants){
+    const body = document.getElementById('delTenantsBody');
+    const gone = (tenants || []).filter(t => t.deleted_at);
+    if (!gone.length){ body.innerHTML = '<p class="empty">No tenants have been deleted.</p>'; return; }
+    body.innerHTML =
+      '<table><tr><th>Tenant</th><th>Deleted</th><th></th></tr>' +
+      gone.map(t =>
+        '<tr>' +
+          '<td class="name">' + esc(t.name) +
+            (t.full_name ? '<div style="font-weight:400; font-size:12.5px; color:#6b7680;">' +
+              esc(t.full_name) + '</div>' : '') + '</td>' +
+          '<td>' + fmtWhen(t.deleted_at) + '</td>' +
+          '<td class="right"><button class="act" data-untenant="' + esc(t.id) + '" ' +
+            'data-name="' + esc(t.name) + '">Restore</button></td>' +
+        '</tr>').join('') + '</table>';
+  }
+
+  document.getElementById('delTenantsBody').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-untenant]');
+    if (!btn) return;
+    const name = btn.getAttribute('data-name');
+    if (!confirm('Restore ' + name + '? Their users get full access back immediately.')) return;
+    btn.disabled = true;
+    const { error } = await supabaseClient.rpc('set_tenant_deleted', {
+      p_tenant: btn.getAttribute('data-untenant'), p_deleted: false
+    });
+    if (error){
+      showMsg('Could not restore: ' + esc(error.message), 'error');
+      btn.disabled = false;
+      return;
+    }
+    showMsg(esc(name) + ' restored.', 'success');
+    loadTenants();
+  });
+
+  async function loadRecovery(){
+    const body = document.getElementById('recoveryBody');
+    // The join is what makes this readable: a designator on its own says
+    // nothing about WHOSE game it is, and two tenants may legitimately
+    // both have a "2026-W1" since migration 010.
+    const { data: rows, error } = await supabaseClient
+      .from('games')
+      .select('id, designator, season_year, game_date, status, deleted_at, ' +
+              'home_team_name, away_team_name, tenants(name)')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false });
+    if (error){
+      body.innerHTML = '<p class="empty">Could not load deleted games: ' + esc(error.message) + '</p>';
+      return;
+    }
+    if (!rows || !rows.length){
+      body.innerHTML = '<p class="empty">Nothing has been deleted.</p>';
+      return;
+    }
+    body.innerHTML =
+      '<table><tr><th>Tenant</th><th>Game</th><th>Played</th><th>Deleted</th><th></th></tr>' +
+      rows.map(g =>
+        '<tr data-game="' + esc(g.id) + '">' +
+          '<td class="name">' + esc((g.tenants && g.tenants.name) || '—') + '</td>' +
+          '<td>' + esc(g.designator) +
+            '<div style="font-size:12.5px; color:#6b7680;">' +
+              esc(g.away_team_name) + ' at ' + esc(g.home_team_name) + '</div></td>' +
+          '<td>' + fmtDate(g.game_date) + '</td>' +
+          '<td>' + fmtWhen(g.deleted_at) + '</td>' +
+          '<td class="right"><button class="act" data-restore="' + esc(g.id) + '">Restore</button></td>' +
+        '</tr>').join('') + '</table>';
+  }
+
+  // Delegated: the rows are rebuilt after every change, so a listener
+  // bound to a button that no longer exists does nothing.
+  // ONE MENU OPEN AT A TIME, and clicking anywhere else closes it. A
+  // menu that stays open while another opens is how a destructive action
+  // gets clicked against the wrong row.
+  function closeMenus(except){
+    document.querySelectorAll('.menu').forEach(m => {
+      if (m !== except) m.classList.add('hidden');
+    });
+    document.querySelectorAll('.dots').forEach(d => d.setAttribute('aria-expanded', 'false'));
+    if (except){
+      const owner = document.querySelector('[data-menu="' + except.getAttribute('data-menu-for') + '"]');
+      if (owner) owner.setAttribute('aria-expanded', 'true');
+    }
+  }
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.menuWrap')) closeMenus(null);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMenus(null);
+  });
+
+  document.getElementById('tenantsBody').addEventListener('click', async (e) => {
+    const dots = e.target.closest('[data-menu]');
+    if (dots){
+      const menu = document.querySelector('[data-menu-for="' + dots.getAttribute('data-menu') + '"]');
+      const wasOpen = menu && !menu.classList.contains('hidden');
+      closeMenus(null);
+      if (menu && !wasOpen){ menu.classList.remove('hidden'); closeMenus(menu); }
+      return;
+    }
+
+    // DELETING A TENANT. Typed confirmation, not a yes/no: this row is
+    // chosen from a list and lists are misclicked. Typing the name means
+    // reading it, which is the only thing that reliably catches the wrong
+    // row.
+    const del = e.target.closest('[data-del]');
+    if (del){
+      closeMenus(null);
+      const id = del.getAttribute('data-del');
+      const name = del.getAttribute('data-name');
+      const typed = prompt('Delete ' + name + '?\n\n' +
+        'Their users will sign in to an empty application, and any shared recap ' +
+        'links stop working. Nothing is destroyed \u2014 every game, play and roster ' +
+        'stays in the database and StatChat support can restore the tenant from ' +
+        'Recovery tools.\n\n' +
+        'Type the tenant name exactly (' + name + ') to confirm:');
+      if (typed === null) return;
+      if (typed.trim() !== name){
+        showMsg('That did not match \u201c' + esc(name) + '\u201d \u2014 nothing was changed.', 'error');
+        return;
+      }
+      const { data, error } = await supabaseClient.rpc('set_tenant_deleted', {
+        p_tenant: id, p_deleted: true
+      });
+      if (error){ showMsg('Could not delete that tenant: ' + esc(error.message), 'error'); return; }
+      if (data === false){
+        showMsg('That tenant no longer exists \u2014 the list was out of date.', 'error');
+      } else {
+        showMsg(esc(name) + ' deleted. Restore it from Recovery tools.', 'success');
+      }
+      loadTenants(); loadRecovery();
+      return;
+    }
+
+    const btn = e.target.closest('[data-toggle]');
+    if (!btn) return;
+    closeMenus(null);
+    const id = btn.getAttribute('data-toggle');
+    const off = btn.getAttribute('data-off') === '1';
+    const name = btn.getAttribute('data-name');
+
+    let reason = null;
+    if (!off){
+      // A REASON IS ASKED FOR, not required. The first question in the
+      // support call is always why, and 'nobody wrote it down' is a bad
+      // answer -- but refusing to suspend without one would mean somebody
+      // typing 'x' to get past the box.
+      reason = prompt('Suspend ' + name + '?\n\n' +
+        'They keep full read access -- reports, recaps and the broadcast overlay all ' +
+        'keep working -- but nobody can enter plays, edit games or change the roster ' +
+        'until it is restored.\n\nReason (optional, shown to nobody but you):');
+      if (reason === null) return;   // cancelled
+    } else if (!confirm('Restore ' + name + '? They will be able to write again immediately.')){
+      return;
+    }
+
+    btn.disabled = true;
+    const { data, error } = await supabaseClient.rpc('set_tenant_disabled', {
+      p_tenant: id, p_disabled: !off, p_reason: reason || null
+    });
+    if (error){
+      showMsg('Could not change that tenant: ' + esc(error.message), 'error');
+      btn.disabled = false;
+      return;
+    }
+    if (data === false){
+      showMsg('That tenant no longer exists — the list was out of date.', 'error');
+    } else {
+      showMsg(off
+        ? esc(name) + ' restored. They can write again.'
+        : esc(name) + ' suspended. They can still read everything, including their ' +
+          'broadcast overlay, but cannot enter or change anything.', 'success');
+    }
+    loadTenants();
+  });
+
+  // ---- users ------------------------------------------------------------
+  // Through api/manage-users.js rather than a direct query, because
+  // auth.users is not readable from the browser at all -- email,
+  // last sign-in and the banned flag live there, and only the service key
+  // can see them. The endpoint already returns every user to the platform
+  // and refuses cross-tenant ACTIONS; this only ever reads.
+  async function loadUsers(accessToken){
+    const body = document.getElementById('usersBody');
+    let payload;
+    try {
+      const r = await fetch('/api/manage-users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json',
+                   Authorization: 'Bearer ' + accessToken },
+        body: JSON.stringify({ action: 'list' })
+      });
+      payload = await r.json();
+      if (!r.ok) throw new Error(payload.error || ('HTTP ' + r.status));
+    } catch (err){
+      body.innerHTML = '<p class="empty">Could not load users: ' + esc(err.message) + '</p>';
+      return;
+    }
+    const users = payload.users || [];
+    if (!users.length){ body.innerHTML = '<p class="empty">No users.</p>'; return; }
+
+    // GROUPED BY SCHOOL, because a flat roll of every account on the
+    // platform is precisely the merged view this console exists to avoid.
+    // Two buckets get their own heading and sort to the ends: the platform
+    // itself, and anyone with no tenant at all -- who is invisible on every
+    // other screen and is usually somebody invited and never assigned.
+    const groups = new Map();
+    users.forEach(u => {
+      const key = u.isSuperAdmin ? '\u0000platform'
+                : !u.tenantId    ? '\uffffunassigned'
+                : u.tenantName || u.tenantId;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(u);
+    });
+
+    const heading = k => k === '\u0000platform' ? 'StatChat platform'
+                       : k === '\uffffunassigned' ? 'No tenant assigned'
+                       : k;
+    body.innerHTML = [...groups.keys()].sort().map(k => {
+      const rows = groups.get(k).sort((a, b) =>
+        (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
+      return '<h2 style="font-size:14px; margin:18px 0 8px; ' +
+               'color:var(--sc-ink-soft, #3a3a3a);">' + esc(heading(k)) +
+               ' <span style="font-weight:400; color:#6b7680;">(' + rows.length + ')</span></h2>' +
+        '<table><tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th></tr>' +
+        rows.map(u =>
+          '<tr>' +
+            '<td class="name">' + esc(u.displayName || '—') + '</td>' +
+            '<td>' + esc(u.email) + '</td>' +
+            '<td>' + esc(u.role === 'game_entry' ? 'Game entry'
+                       : u.role.charAt(0).toUpperCase() + u.role.slice(1)) + '</td>' +
+            '<td>' + (u.lastSignInAt ? fmtWhen(u.lastSignInAt) : 'never') + '</td>' +
+            '<td class="right">' +
+              (u.disabled ? '<span class="pill lapsed">Disabled</span>' : '') +
+              (!u.emailConfirmedAt ? '<span class="pill trial">Invited</span>' : '') +
+            '</td>' +
+          '</tr>').join('') + '</table>';
+    }).join('');
+  }
+
+  // Delegated, because the rows are rebuilt after every restore and a
+  // listener bound to a button that no longer exists does nothing.
+  document.getElementById('recoveryBody').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-restore]');
+    if (!btn) return;
+    const gameId = btn.getAttribute('data-restore');
+    btn.disabled = true;
+    btn.textContent = 'Restoring…';
+    showMsg('', '');
+
+    const { data, error } = await supabaseClient.rpc('restore_game', { p_game_id: gameId });
+    if (error){
+      showMsg('Could not restore: ' + esc(error.message), 'error');
+      btn.disabled = false; btn.textContent = 'Restore';
+      return;
+    }
+    if (data === false){
+      // The function returns false when the row was not there to restore.
+      // Distinguished from an error on purpose: nothing went wrong, the
+      // game simply is not deleted any more -- most likely restored in
+      // another tab.
+      showMsg('That game was not deleted — the list was out of date.', 'error');
+    } else {
+      showMsg('Game restored. It is back on that tenant\'s dashboard, with every play ' +
+              'and its roster snapshot.', 'success');
+    }
+    loadRecovery();
+    loadTenants();
+  });
+</script>
+</body>
+</html>

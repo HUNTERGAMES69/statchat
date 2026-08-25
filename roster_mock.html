@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- Without this every page load logs a 404 for /favicon.ico.
+     Harmless, but a red console error should MEAN something. -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<!-- Apple renamed this; the old tag warns in the console on every
+     page load. Both are kept so older iOS still honours it. -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StatChat">
+<title>StatChat — Team Roster</title>
+<style>
+  /* THE SAME DASHBOARD BUTTON AS every other page. These exact values were
+     inline on the anchor; the class is what the other four use, so there is
+     one definition to change rather than five. */
+  .backlink { text-decoration:none; padding:8px 14px; border-radius:6px;
+              border:1px solid #ccc; color:#b9c4d0; font-size:13px; font-weight:600;
+              display:inline-block; }
+
+  /* THE SPREADSHEET EXAMPLE. Deliberately looks like a spreadsheet --
+     column letters, row numbers, grey gutters -- because that is the thing
+     the reader is about to go and build. A plain three-column table left
+     people guessing which column was which. */
+  .sheetMock { margin:0 0 12px; }
+  .sheetMock table { border-collapse:collapse; font-size:13px;
+                     font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+                     background:#20272f; border:1px solid #b9c0c7; }
+  .sheetMock td { border:1px solid #d8dde2; padding:4px 12px; min-width:64px;
+                  white-space:nowrap; color:#eef1f4; }
+  .sheetMock .colhead td { background:#eceff1; text-align:center; font-weight:700;
+                           color:#b9c4d0; padding:3px 12px; }
+  .sheetMock .corner { background:#dfe4e8; min-width:26px; }
+  .sheetMock .rownum { background:#eceff1; text-align:center; font-weight:700;
+                       color:#b9c4d0; min-width:26px; padding:4px 6px; }
+  .sheetNote { margin:6px 0 0; font-size:12.5px; color:#b9c4d0; }
+
+  /* THE STATCHAT MARK, identical on every page reachable from the
+     dashboard. Same element, same size, same place: beside the page's own
+     heading. Uniformity is the point -- a mark that moves or resizes
+     between screens reads as decoration rather than as the product. */
+  .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
+  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block; }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
+  .wrap { max-width:720px; margin:0 auto; }
+  .card { background:#20272f; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:20px; margin:0 0 6px; }
+  h2 { font-size:16px; margin:0 0 14px; color:#b9c4d0; }
+  p.sub { color:#8d99a6; margin:0 0 20px; font-size:14px; }
+  label { display:block; font-size:13px; margin-bottom:4px; color:#b9c4d0; }
+  input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
+  button { padding:8px 12px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+  button.secondary { background:#20272f; color:#b9c4d0; border:1px solid #ccc; }
+  button.danger { background:#20272f; color:var(--sc-red, #a32d2d); border:1px solid var(--sc-red, #a32d2d); }
+  button:disabled { opacity:0.5; cursor:default; }
+  .rosterList { display:flex; flex-direction:column; }
+  .rosterRow { padding:10px 0; border-bottom:1px solid #f2f2f2; }
+  .rosterLine1, .rosterLine2 { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .rosterLine1 { margin-bottom:4px; }
+  .rosterNameNum { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .rosterPos { font-size:13px; color:#8d99a6; flex-shrink:0; }
+  .rosterActions { display:flex; gap:6px; flex-wrap:wrap; flex-shrink:0; }
+  .unit-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; flex-shrink:0; }
+  .unit-offense { background:#e3f2fd; color:var(--sc-blue, #1565c0); }
+  .unit-defense { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
+  .unit-special { background:var(--sc-amber-soft, #fff8e6); color:var(--sc-amber-text, #a37a00); }
+  .unit-none { background:#eee; color:#8d99a6; }
+  .add-row { display:flex; gap:8px; align-items:flex-end; margin-top:16px; flex-wrap:wrap; }
+  .add-row > div { flex:1 1 100%; }
+  .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
+  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
+  .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
+  .hidden { display:none; }
+  @media (min-width: 768px) {
+    body { padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
+    .card { padding:28px; }
+    h1 { font-size:22px; }
+    button { padding:9px 16px; font-size:14px; }
+    .add-row > div { flex:1 1 auto; }
+    .add-row > div:last-child { flex:0 0 auto; }
+  }
+</style>
+<!-- DARK MOCK. The theme is a separate stylesheet linked last, so it
+     overrides by source order and this page's own CSS is untouched.
+     See DARK_THEME_PLAN.md: the shipping version retrofits the tokens
+     rather than layering overrides. -->
+<link rel="stylesheet" href="statchat-dark.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div id="loading" class="card">
+    <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:14px;">
+      <img src="logo.png" alt="StatChat" style="width:48px; height:auto; border-radius:8px;">
+      <img id="splashTeamIcon" style="display:none; width:48px; height:48px; border-radius:8px; object-fit:cover;">
+    </div>
+    <h1>Loading…</h1>
+  </div>
+
+  <div id="teamSetupView" class="hidden card">
+    <h1>Set up your team</h1>
+    <p class="sub">One-time setup — this is your team's identity for the whole season. You can add a logo and colors afterward from "Customize team" on the dashboard.</p>
+    <div id="teamSetupMsg"></div>
+    <label>Team name<input type="text" id="teamNameInput" style="width:100%;"></label>
+    <button id="createTeamBtn" style="margin-top:16px;">Create team</button>
+  </div>
+
+  <div id="rosterView" class="hidden">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:10px;">
+        <div class="scMark">
+          <img src="logo.png" alt="StatChat">
+        <h1 id="rosterTitle" style="min-width:0;">Team Roster</h1>
+        </div>
+        <a class="backlink" href="dashboard.html" style="white-space:nowrap; flex-shrink:0;">← Dashboard</a>
+      </div>
+      <p class="sub">This roster is used every week — no need to re-upload it per game.</p>
+      <div id="rosterMsg"></div>
+
+      <div style="margin-bottom:16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <label for="rosterSeasonPicker" style="margin:0; display:inline; font-size:13px;">Season</label>
+        <select id="rosterSeasonPicker" style="width:auto; min-width:100px;"></select>
+      </div>
+      <div id="rosterReadOnlyBanner" class="hidden" style="background:#eef1f4; border:1px solid #cfd6dc; border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:13px; color:#b9c4d0;">
+        <strong>Read-only.</strong> Past seasons are kept exactly as they were, for reference — nothing here can be added, edited, or removed. Switch to the current season above to make changes.
+      </div>
+
+      <div id="rosterEditingControls" style="margin-bottom:16px;">
+        <button id="uploadRosterBtn" class="secondary">Upload roster spreadsheet (.xlsx)</button>
+        <input type="file" id="rosterFile" accept=".xlsx,.xls" style="display:none;">
+<div id="rosterFormatCard" style="display:none; margin-top:10px; padding:14px 16px; border:2px solid #1a4d2e; border-radius:8px; background:#f2f8f4;">
+          <p style="margin:0 0 8px; font-weight:700; font-size:15px; color:#a3d93f;">Roster file format</p>
+          <p style="margin:0 0 8px; font-size:14px;">A spreadsheet (.xlsx or .xls) with <strong>three columns</strong>, in this order. A header row is fine &mdash; it will be ignored.</p>
+          <!-- A PICTURE OF THE FILE, not a description of it. The three-column
+               table below it says the same thing in words, and people were
+               still getting the shape wrong -- because "column A" means
+               nothing until you have seen it in a spreadsheet, with the
+               letters and row numbers a spreadsheet actually shows.
+               Drawn in HTML rather than shipped as an image so it stays
+               legible at any zoom and needs no asset. -->
+          <div class="sheetMock" role="img"
+               aria-label="Spreadsheet example: column A holds jersey numbers, column B holds names, column C holds positions. Row 1 is an optional header reading number, name, position.">
+            <table>
+              <tr class="colhead">
+                <td class="corner"></td><td>A</td><td>B</td><td>C</td>
+              </tr>
+              <tr><td class="rownum">1</td><td>#</td><td>Name</td><td>Position</td></tr>
+              <tr><td class="rownum">2</td><td>7</td><td>Alpha Ates</td><td>RB</td></tr>
+              <tr><td class="rownum">3</td><td>12</td><td>Bravo Boone</td><td>QB</td></tr>
+              <tr><td class="rownum">4</td><td>21</td><td>Charlie Cole</td><td></td></tr>
+            </table>
+            <p class="sheetNote">Row 1 is optional &mdash; a header row is ignored.
+               Row 4 shows a player with no position, which is fine.</p>
+          </div>
+          <table style="border-collapse:collapse; font-size:14px; margin-bottom:10px;">
+            <tr><th style="text-align:left; padding:4px 14px 4px 0;">A &mdash; Number</th><th style="text-align:left; padding:4px 14px 4px 0;">B &mdash; Name</th><th style="text-align:left; padding:4px 0;">C &mdash; Position</th></tr>
+            <tr><td style="padding:2px 14px 2px 0;">7</td><td style="padding:2px 14px 2px 0;">Alpha Ates</td><td style="padding:2px 0;">RB</td></tr>
+            <tr><td style="padding:2px 14px 2px 0;">12</td><td style="padding:2px 14px 2px 0;">Bravo Boone</td><td style="padding:2px 0;">QB</td></tr>
+          </table>
+          <p style="margin:0 0 8px; font-size:14px;"><strong>Position is optional.</strong> Leave column C blank for anyone you do not have a position for &mdash; a roster with positions for the starters only imports fine. <strong>List more than one if you like &mdash; only the first is used.</strong> <em>RB/WR</em>, <em>RB, WR</em> and <em>RB-WR</em> all read as <strong>RB</strong>. Put the position they mostly play first. Two players may share a number; you will be asked which is which.</p>
+          <p style="margin:0 0 10px; font-size:13px; color:#b9c4d0;"><strong>Offense:</strong> QB RB FB HB TB WR SE FL SLOT TE OL OT OG G T C ATHLETE<br><strong>Defense:</strong> DB CB S FS SS LB OLB ILB MLB WLB DE DT NG NT EDGE DL<br><strong>Special teams:</strong> K P LS DS H KR PR RET</p>
+          <button type="button" id="rosterFormatContinue">Choose file&hellip;</button>
+          <button type="button" id="rosterFormatCancel" class="secondary" style="margin-left:8px;">Cancel</button>
+        </div>
+        <button id="clearRosterBtn" class="danger" style="margin-left:8px;">Clear this season's roster</button>
+      </div>
+
+      <div id="clearRosterPanel" class="hidden" style="border:1px solid #f0d0a0; background:#fffaf0; border-radius:10px; padding:16px; margin-bottom:16px;">
+        <p style="font-weight:700; margin:0 0 8px;">Clear this season's roster</p>
+        <p class="sub" style="margin:0 0 8px;">Removes <strong id="clearRosterCount">every player</strong> from the currently selected season. Uploading normally MERGES into what is already here, which is right during a season and wrong when you want a clean start &mdash; use this to wipe a wrong upload and try again.</p>
+        <p class="sub" style="margin:0 0 8px;"><strong>Other seasons are never affected</strong> by this, or by anything else on this page &mdash; each season's roster is its own, separate list. Every finished game also keeps its own roster snapshot, taken when the game was created, and all stats are calculated from the plays themselves. Old recaps, stat packages and season reports read exactly the same afterwards.</p>
+        <p class="sub" style="margin:0 0 10px;">Type <strong>CLEAR</strong> to confirm.</p>
+        <input type="text" id="clearRosterInput" placeholder="CLEAR" style="width:140px;">
+        <div class="row" style="margin-top:10px;">
+          <button class="danger" id="clearRosterConfirmBtn">Clear roster</button>
+          <button class="secondary" id="clearRosterCancelBtn">Cancel</button>
+        </div>
+      </div>
+      <div id="uploadPreview" class="hidden" style="background:#f7f6f2; border-radius:8px; padding:14px; margin-bottom:16px;"></div>
+      <div class="rosterList" id="rosterBody"></div>
+      <div class="add-row" id="rosterAddRow">
+        <div><label>#</label><input type="text" id="newNumber" style="width:100%;"></div>
+        <div style="flex:2;"><label>Name</label><input type="text" id="newName" style="width:100%;"></div>
+        <div><label>Position</label>
+          <select id="newPosition" style="width:100%;">
+            <option value="">—</option>
+            <optgroup label="Offense">
+              <option value="QB">QB</option><option value="RB">RB</option><option value="FB">FB</option>
+              <option value="WR">WR</option><option value="TE">TE</option><option value="OL">OL</option>
+              <option value="C">C</option>
+            </optgroup>
+            <optgroup label="Defense">
+              <option value="DB">DB</option><option value="CB">CB</option><option value="S">S</option>
+              <option value="LB">LB</option><option value="DE">DE</option><option value="DT">DT</option>
+              <option value="NT">NT</option>
+            </optgroup>
+            <optgroup label="Special Teams">
+              <option value="K">K</option><option value="P">P</option><option value="LS">LS</option>
+            </optgroup>
+          </select>
+        </div>
+        <div><button id="addPlayerBtn">Add player</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <button class="secondary" id="backBtn">← Back to dashboard</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="team-icon.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+  // Roster import limits. HARD caps, not advisories: there is no
+  // legitimate 200+ player football roster, and the cost of guessing
+  // wrong is a support call rather than lost data.
+  const MAX_ROSTER_BYTES = 5 * 1024 * 1024;
+  const MAX_ROSTER_ROWS  = 200;
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  // Same position vocabulary as the live entry app, so a roster built
+  // here resolves identically once games start using it.
+  const OFFENSE_POS = ['QB','RB','FB','HB','TB','WR','SE','FL','SLOT','SB','TE','OL','OT','OG','G','T','C','ATHLETE','ATH'];
+  const DEFENSE_POS = ['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE','DL'];
+  const SPECIAL_POS = ['K','P','LS','DS','H','KR','PR','RET'];
+  function posToUnit(pos){
+    if (!pos) return null;
+    const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
+    if (SPECIAL_POS.includes(first)) return 'special';
+    if (OFFENSE_POS.includes(first)) return 'offense';
+    if (DEFENSE_POS.includes(first)) return 'defense';
+    return null;
+  }
+  function unitBadge(unit){
+    const label = unit === 'offense' ? 'Offense' : unit === 'defense' ? 'Defense' : unit === 'special' ? 'Special' : '—';
+    const cls = unit ? 'unit-' + unit : 'unit-none';
+    return '<span class="unit-badge ' + cls + '">' + label + '</span>';
+  }
+
+  let ourTeamId = null;
+  // The season this roster page is actively working with -- the value
+  // new uploads and manual adds get tagged with, and the one WITHOUT
+  // which the "current" comparison below has nothing to compare
+  // against. Distinct from viewingSeasonYear: a coach can look at a
+  // past season's roster (read-only) while this stays pointed at the
+  // real, active one throughout.
+  let currentSeasonYear = null;
+  // Whichever season the picker is showing right now. Starts equal to
+  // currentSeasonYear and only differs once the coach deliberately
+  // switches it.
+  let viewingSeasonYear = null;
+
+  function showView(name){
+    ['loading', 'teamSetupView', 'rosterView'].forEach(v => {
+      document.getElementById(v).classList.toggle('hidden', v !== name);
+    });
+  }
+  function showMsg(elId, text, type){
+    document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+  }
+  function clearMsg(elId){
+    document.getElementById(elId).innerHTML = '';
+  }
+
+  async function guardMinRoleOrRedirect(userId, minRole){
+    const ROLE_RANK = { view: 0, game_entry: 1, admin: 2 };
+    const { data, error } = await supabaseClient
+      .from('profiles').select('role').eq('id', userId).limit(1);
+    const role = (!error && data && data.length > 0 && data[0].role) || 'view';
+    const ok = (ROLE_RANK[role] || 0) >= (ROLE_RANK[minRole] || 0);
+    if (!ok) window.location.href = 'dashboard.html';
+    return ok;
+  }
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION'){
+      if (session){
+        guardMinRoleOrRedirect(session.user.id, 'admin').then(ok => {
+          if (ok) loadTeam();
+        });
+      } else {
+        window.location.href = '/login.html';
+      }
+    } else if (event === 'SIGNED_OUT'){
+      window.location.href = '/login.html';
+    }
+  });
+
+  async function loadTeam(){
+    const { data, error } = await supabaseClient
+      .from('teams')
+      // EXACTLY ONE ROW, OR AN ERROR. maybeSingle() rather than limit(1):
+      // migration 009 scopes `teams` to the caller's tenant, so a tenant
+      // user has precisely one team and this is simply correct. The
+      // PLATFORM account sees every tenant's team, and this now FAILS
+      // LOUDLY instead of silently rendering an arbitrary customer's data
+      // -- which is what `.eq('is_our_team', true).limit(1)` did, because
+      // that flag is true for every tenant.
+      //
+      // A page that cannot tell which tenant it is showing should not
+      // show one.
+      .select('id, name, current_season_year')
+      .maybeSingle();
+    if (error){
+      showView('teamSetupView');
+      showMsg('teamSetupMsg', 'Could not check for an existing team: ' + error.message, 'error');
+      return;
+    }
+    // maybeSingle(): the row itself, or null.
+    if (data){
+      const team = data;
+      ourTeamId = team.id;
+      // Falls back to the calendar year rather than leaving this null
+      // outright. A team that has never set a season year is a real,
+      // if unlikely, state -- customize.html has always allowed it --
+      // and null here would mean nothing is ever "current", the
+      // upload and clear-roster controls would have no season to
+      // attach to, and the whole page would read as broken rather
+      // than as unconfigured.
+      currentSeasonYear = team.current_season_year || new Date().getFullYear();
+      viewingSeasonYear = currentSeasonYear;
+      document.getElementById('rosterTitle').textContent = team.name + ' Roster';
+      showView('rosterView');
+      loadRoster();
+    } else {
+      showView('teamSetupView');
+    }
+  }
+
+  document.getElementById('createTeamBtn').addEventListener('click', async () => {
+    const name = document.getElementById('teamNameInput').value.trim();
+    if (!name){
+      showMsg('teamSetupMsg', 'Enter a team name first.', 'error');
+      return;
+    }
+    const { data, error } = await supabaseClient
+      .from('teams')
+      .insert({ name, is_our_team: true })
+      .select('id, name')
+      .single();
+    if (error){
+      showMsg('teamSetupMsg', error.message, 'error');
+      return;
+    }
+    ourTeamId = data.id;
+    // A team just created has no current_season_year set at all --
+    // same fallback loadTeam() uses, for the same reason.
+    currentSeasonYear = new Date().getFullYear();
+    viewingSeasonYear = currentSeasonYear;
+    document.getElementById('rosterTitle').textContent = data.name + ' Roster';
+    showView('rosterView');
+    loadRoster();
+  });
+
+  async function refreshSeasonPicker(){
+    // No DB-level DISTINCT here, matching the same pattern
+    // player_report.html already uses for its own season list:
+    // select the column, dedupe client-side. Rosters are small enough
+    // that the extra round trip costs nothing.
+    const { data } = await supabaseClient
+      .from('players').select('season_year').eq('team_id', ourTeamId);
+    const years = new Set((data || []).map(p => p.season_year).filter(y => y !== null && y !== undefined));
+    // currentSeasonYear is ALWAYS an option, even with zero players
+    // tagged for it yet -- the moment right after clearing (or right
+    // after bumping the season on customize.html) a coach needs to be
+    // able to select the new, empty season to start uploading into it,
+    // not just the years that already have rows.
+    years.add(currentSeasonYear);
+    const sorted = [...years].sort((a, b) => b - a);
+    const picker = document.getElementById('rosterSeasonPicker');
+    picker.innerHTML = sorted.map(y =>
+      '<option value="' + y + '"' + (y === viewingSeasonYear ? ' selected' : '') + '>' + y +
+      (y === currentSeasonYear ? ' (current)' : '') + '</option>').join('');
+  }
+
+  document.getElementById('rosterSeasonPicker').addEventListener('change', () => {
+    viewingSeasonYear = parseInt(document.getElementById('rosterSeasonPicker').value, 10);
+    loadRoster();
+  });
+
+  async function loadRoster(){
+    clearMsg('rosterMsg');
+    await refreshSeasonPicker();
+    const { data, error } = await supabaseClient
+      .from('players')
+      .select('id, name, primary_position, default_jersey_number')
+      .eq('team_id', ourTeamId)
+      .eq('season_year', viewingSeasonYear)
+      .order('default_jersey_number', { ascending: true });
+    if (error){
+      showMsg('rosterMsg', 'Could not load roster: ' + error.message, 'error');
+      return;
+    }
+    // Past seasons are read-only: kept exactly as they were, for
+    // reference, with no add/edit/remove/upload/clear control shown at
+    // all. Deliberately decided this way, not left implicit -- a
+    // control that is merely disabled still invites a click and a
+    // confusing rejection; one that never renders asks nothing of the
+    // coach that a past season could not honestly answer.
+    const isReadOnly = viewingSeasonYear !== currentSeasonYear;
+    document.getElementById('rosterReadOnlyBanner').classList.toggle('hidden', !isReadOnly);
+    document.getElementById('rosterEditingControls').classList.toggle('hidden', isReadOnly);
+    document.getElementById('rosterAddRow').classList.toggle('hidden', isReadOnly);
+    renderRoster(data || [], isReadOnly);
+  }
+
+  function renderRoster(players, isReadOnly){
+    const body = document.getElementById('rosterBody');
+    if (players.length === 0){
+      body.innerHTML = isReadOnly
+        ? '<div style="color:#8d99a6; padding:10px 0;">No players recorded for this season.</div>'
+        : '<div style="color:#8d99a6; padding:10px 0;">No players yet — add your first one below.</div>';
+      return;
+    }
+    body.innerHTML = players.map(p => {
+      const unit = posToUnit(p.primary_position);
+      return '<div class="rosterRow" data-id="' + p.id + '">' +
+        '<div class="rosterLine1">' +
+          '<span class="rosterNameNum">#' + (p.default_jersey_number || '—') + ' ' + p.name + '</span>' +
+          unitBadge(unit) +
+        '</div>' +
+        '<div class="rosterLine2">' +
+          '<span class="rosterPos">' + (p.primary_position || '') + '</span>' +
+          // Read-only means no controls at all, not disabled ones --
+          // see loadRoster()'s own comment for why that distinction
+          // matters here.
+          (isReadOnly ? '' :
+          '<span class="rosterActions">' +
+            '<button class="secondary editBtn" data-id="' + p.id + '">Edit</button>' +
+            '<button class="danger removeBtn" data-id="' + p.id + '">Remove</button>' +
+          '</span>') +
+        '</div>' +
+      '</div>';
+    }).join('');
+    if (isReadOnly) return;
+    body.querySelectorAll('.editBtn').forEach(b => b.addEventListener('click', () => startEdit(b.dataset.id, players)));
+    body.querySelectorAll('.removeBtn').forEach(b => b.addEventListener('click', () => removePlayer(b.dataset.id)));
+  }
+
+  function startEdit(id, players){
+    // Defensive, not the primary guard -- renderRoster never attaches
+    // this listener to a button at all when read-only, so this should
+    // be unreachable in practice. Kept anyway: the cost of one extra
+    // check is nothing next to what a wrongly-edited past season would
+    // cost to notice and undo.
+    if (viewingSeasonYear !== currentSeasonYear) return;
+    const p = players.find(pl => pl.id === id);
+    if (!p) return;
+    const row = document.querySelector('.rosterRow[data-id="' + id + '"]');
+    row.innerHTML =
+      '<div class="rosterLine1">' +
+        '<input type="text" class="editNumber" value="' + (p.default_jersey_number || '') + '" style="width:50px; flex-shrink:0;">' +
+        '<input type="text" class="editName" value="' + p.name + '" style="flex:1;">' +
+      '</div>' +
+      '<div class="rosterLine2">' +
+        '<input type="text" class="editPosition" value="' + (p.primary_position || '') + '" style="width:70px; flex-shrink:0;">' +
+        '<span class="rosterActions"><button class="saveEditBtn">Save</button><button class="secondary" onclick="location.reload()">Cancel</button></span>' +
+      '</div>';
+    row.querySelector('.saveEditBtn').addEventListener('click', async () => {
+      const newNumber = row.querySelector('.editNumber').value.trim();
+      const newName = row.querySelector('.editName').value.trim();
+      const newPosition = row.querySelector('.editPosition').value.trim().toUpperCase();
+      const { error } = await supabaseClient
+        .from('players')
+        .update({ name: newName, primary_position: newPosition, default_jersey_number: newNumber })
+        .eq('id', id);
+      if (error){
+        showMsg('rosterMsg', error.message, 'error');
+        return;
+      }
+      loadRoster();
+    });
+  }
+
+  async function removePlayer(id){
+    if (viewingSeasonYear !== currentSeasonYear) return;
+    if (!confirm('Remove this player from the roster? This does not affect any past game data.')) return;
+    const { error } = await supabaseClient.from('players').delete().eq('id', id);
+    if (error){
+      showMsg('rosterMsg', error.message, 'error');
+      return;
+    }
+    loadRoster();
+  }
+
+  document.getElementById('addPlayerBtn').addEventListener('click', async () => {
+    if (viewingSeasonYear !== currentSeasonYear){
+      showMsg('rosterMsg', 'Switch to the current season before adding a player.', 'error');
+      return;
+    }
+    const number = document.getElementById('newNumber').value.trim();
+    const name = document.getElementById('newName').value.trim();
+    const position = document.getElementById('newPosition').value;
+    if (!name){
+      showMsg('rosterMsg', 'Enter a name before adding a player.', 'error');
+      return;
+    }
+    const { error } = await supabaseClient
+      .from('players')
+      .insert({ team_id: ourTeamId, name, primary_position: position || null, default_jersey_number: number || null, season_year: currentSeasonYear });
+    if (error){
+      showMsg('rosterMsg', error.message, 'error');
+      return;
+    }
+    document.getElementById('newNumber').value = '';
+    document.getElementById('newName').value = '';
+    document.getElementById('newPosition').value = '';
+    loadRoster();
+  });
+
+  // CLEAR ROSTER FOR A NEW SEASON
+  // ===================================================================
+  // Upload MERGES, which is correct during a season -- a mid-year
+  // call-up should not wipe everyone else. At the start of a season it
+  // is exactly wrong: last year's leavers stay in every picker all
+  // autumn, and a coach has to delete them one at a time.
+  //
+  // PAST SEASONS MUST SURVIVE THIS, and they do, because nothing in the
+  // reporting path reads the `players` table. Checked, not assumed:
+  // - Stats are computed from `plays`, which carry the jersey number and
+  //   (since 13 Aug) the resolved player NAME on the play itself.
+  // - Names and units for a finished game come from `game_rosters`, the
+  //   snapshot taken when that game was created, which stores
+  //   `player_name` and `jersey_number` denormalised.
+  // - Only account.html, create_game.html and this page read `players`
+  //   at all, and none of them render a past game.
+  //
+  // The one real danger is the FOREIGN KEY. `game_rosters.player_id`
+  // points at `players`, and if that constraint were ever declared
+  // ON DELETE CASCADE, deleting a player would take the historical
+  // snapshot row with it -- silently destroying the roster of a game
+  // played last October.
+  //
+  // So the link is severed FIRST: player_id is set to null on every
+  // snapshot row that references these players, and only then are the
+  // players deleted. The column is nullable (create_game.html writes
+  // `entry.playerId || null`), the snapshots keep the name and number
+  // that actually matter, and no cascade can fire because by the time
+  // the delete runs nothing references them.
+  //
+  // If that first step fails -- a NOT NULL constraint, an RLS refusal --
+  // it ABORTS rather than pressing on. Failing to unlink is precisely
+  // the case where deleting would do the damage this is guarding
+  // against.
+  document.getElementById('clearRosterBtn').addEventListener('click', async () => {
+    const { data: current } = await supabaseClient
+      .from('players').select('id').eq('team_id', ourTeamId).eq('season_year', currentSeasonYear);
+    const n = (current || []).length;
+    if (!n){
+      showMsg('rosterMsg', 'This season\'s roster is already empty.', 'success');
+      return;
+    }
+    document.getElementById('clearRosterCount').textContent =
+      'all ' + n + ' player' + (n === 1 ? '' : 's');
+    document.getElementById('clearRosterPanel').classList.remove('hidden');
+  });
+  document.getElementById('clearRosterCancelBtn').addEventListener('click', () => {
+    document.getElementById('clearRosterPanel').classList.add('hidden');
+    document.getElementById('clearRosterInput').value = '';
+  });
+
+  document.getElementById('clearRosterConfirmBtn').addEventListener('click', async () => {
+    if (document.getElementById('clearRosterInput').value.trim() !== 'CLEAR'){
+      showMsg('rosterMsg', 'Type CLEAR to confirm — nothing has been changed.', 'error');
+      return;
+    }
+    const btn = document.getElementById('clearRosterConfirmBtn');
+    btn.disabled = true;
+
+    // season_year IS REQUIRED HERE, on every one of the three queries
+    // below. Without it, "clear this season" silently goes back to
+    // being "clear every season this team has ever had" -- the exact
+    // thing this whole feature exists to stop.
+    const { data: current, error: loadError } = await supabaseClient
+      .from('players').select('id').eq('team_id', ourTeamId).eq('season_year', currentSeasonYear);
+    if (loadError){
+      showMsg('rosterMsg', 'Could not read the roster: ' + loadError.message +
+        ' — nothing has been changed.', 'error');
+      btn.disabled = false;
+      return;
+    }
+    const ids = (current || []).map(p => p.id);
+    if (ids.length){
+      // Sever the link before deleting. See the note above.
+      const { error: unlinkError } = await supabaseClient
+        .from('game_rosters').update({ player_id: null }).in('player_id', ids);
+      if (unlinkError){
+        showMsg('rosterMsg', 'Could not detach this roster from past games: ' +
+          unlinkError.message + '<br><br>Nothing has been deleted. Clearing without ' +
+          'detaching first could remove the roster snapshots those games depend on, ' +
+          'so this stopped instead.', 'error');
+        btn.disabled = false;
+        return;
+      }
+      const { error: deleteError } = await supabaseClient
+        .from('players').delete().eq('team_id', ourTeamId).eq('season_year', currentSeasonYear);
+      if (deleteError){
+        showMsg('rosterMsg', 'Could not clear the roster: ' + deleteError.message, 'error');
+        btn.disabled = false;
+        return;
+      }
+    }
+    document.getElementById('clearRosterPanel').classList.add('hidden');
+    document.getElementById('clearRosterInput').value = '';
+    btn.disabled = false;
+    // loadRoster() opens with clearMsg('rosterMsg'), so the confirmation
+    // has to come AFTER the reload or it is wiped the instant it appears.
+    // Found by the test, not by looking.
+    await loadRoster();
+    showMsg('rosterMsg', 'Roster cleared for ' + currentSeasonYear + ' — ' + ids.length + ' player' +
+      (ids.length === 1 ? '' : 's') + ' removed. Every other season is unaffected.', 'success');
+  });
+
+  // THE FORMAT CARD FIRST, then the picker -- the same two steps as the
+  // opponent upload on create_game.html. This button used to open the file
+  // dialog immediately, so the only page explaining the file format was
+  // the one for the OPPONENT roster. A coach uploading their own squad,
+  // which is the first thing anybody does, got no guidance at all.
+  document.getElementById('uploadRosterBtn').addEventListener('click', () => {
+    document.getElementById('rosterFormatCard').style.display = 'block';
+    showMsg('rosterMsg', '', '');
+  });
+  document.getElementById('rosterFormatCancel').addEventListener('click', () => {
+    document.getElementById('rosterFormatCard').style.display = 'none';
+  });
+  document.getElementById('rosterFormatContinue').addEventListener('click', () => {
+    document.getElementById('rosterFormatCard').style.display = 'none';
+    document.getElementById('rosterFile').click();
+  });
+
+  let pendingUploadRows = null;
+
+  document.getElementById('rosterFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    // Same defensive reasoning as addPlayerBtn above: the file input
+    // has no visual state of its own to hide, so this is the one place
+    // that genuinely needs the check rather than just restating one
+    // that renderRoster's own markup already enforces.
+    if (viewingSeasonYear !== currentSeasonYear){
+      showMsg('rosterMsg', 'Switch to the current season before uploading a roster.', 'error');
+      return;
+    }
+    const preview = document.getElementById('uploadPreview');
+      // A HARD SIZE CAP, CHECKED BEFORE THE FILE IS READ.
+      // ---------------------------------------------------------------
+      // XLSX.read loads the whole workbook into memory, so a very large
+      // file freezes this tab before anything could report a problem.
+      // The check has to come first or it never runs at all.
+      //
+      // A 200-player roster is about 20KB. 5MB is 250 times that, so
+      // anything over it is the wrong file rather than a big roster.
+      if (file.size > MAX_ROSTER_BYTES){
+        preview.classList.remove('hidden');
+        preview.innerHTML = '<p style="color:var(--sc-red, #a32d2d); margin:0;">' +
+          'That file is ' + (file.size / 1048576).toFixed(1) + 'MB and the limit is 5MB. ' +
+          'A roster spreadsheet is usually well under 100KB \u2014 this is probably not ' +
+          'the right file.</p>';
+        document.getElementById('rosterFile').value = '';
+        return;
+      }
+    preview.classList.remove('hidden');
+    preview.innerHTML = '<p style="font-size:13px; color:#8d99a6; margin:0;">Reading file…</p>';
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      let rows;
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      } catch (err){
+        preview.innerHTML = '<p style="color:var(--sc-red, #a32d2d); margin:0;">Could not read that file: ' + err.message + '</p>';
+        return;
+      }
+
+      // A HARD ROW CAP, AND IT REFUSES RATHER THAN TRUNCATING.
+      // ---------------------------------------------------------------
+      // Andy's call, 24 Aug: 200 players, hard. A high school football
+      // roster is 40-120; 200 is generous and 201 means the wrong file or
+      // the wrong sheet.
+      //
+      // REFUSING rather than silently taking the first 200 is the point.
+      // A truncated import LOOKS like it worked, and the missing players
+      // are not discovered until somebody cannot be found in a picker on
+      // a Friday night.
+      //
+      // Counted on the PARSEABLE rows, not the raw sheet: title blocks and
+      // blank rows are normal and are skipped below, so they must not
+      // count against the cap.
+      const parseable = rows.filter(r => {
+        const n0 = r[0], n1 = r[1];
+        return n0 !== undefined && n1 !== undefined &&
+               /^\d+$/.test(String(n0).trim());
+      });
+      if (parseable.length > MAX_ROSTER_ROWS){
+        preview.innerHTML = '<p style="color:var(--sc-red, #a32d2d); margin:0;">' +
+          'That sheet has <strong>' + parseable.length + '</strong> player rows, and the ' +
+          'limit is ' + MAX_ROSTER_ROWS + '. <strong>Nothing has been added.</strong> Check ' +
+          'you have the right file and the right sheet \u2014 a roster this size is almost ' +
+          'always a whole-school export rather than one team.</p>';
+        document.getElementById('rosterFile').value = '';
+        return;
+      }
+
+      const parsed = [];
+      rows.forEach(row => {
+        const num = row[0], name = row[1], pos = row[2];
+        if (num === undefined || name === undefined) return;
+        if (!/^\d+$/.test(String(num).trim())) return; // skip header row / junk
+        parsed.push({
+          default_jersey_number: String(num).trim(),
+          name: String(name).trim(),
+          primary_position: pos ? String(pos).trim().toUpperCase() : null
+        });
+      });
+
+      if (parsed.length === 0){
+        preview.innerHTML = '<p style="color:var(--sc-red, #a32d2d); margin:0;">No valid rows found. Expected column A = number, column B = name, column C = position.</p>';
+        return;
+      }
+
+      // Skip anyone already on THIS SEASON's roster by name, so
+      // re-uploading the same (or an updated) file doesn't create
+      // duplicates. Scoped to season_year deliberately: players
+      // overlap between seasons constantly, and a name that already
+      // exists in a PAST season must never suppress adding that same,
+      // returning player to the CURRENT one -- a name match only means
+      // something within one season.
+      const { data: existing, error } = await supabaseClient
+        .from('players')
+        .select('name')
+        .eq('team_id', ourTeamId)
+        .eq('season_year', currentSeasonYear);
+      if (error){
+        preview.innerHTML = '<p style="color:var(--sc-red, #a32d2d); margin:0;">Could not check existing roster: ' + error.message + '</p>';
+        return;
+      }
+      const existingNames = new Set((existing || []).map(p => p.name.trim().toLowerCase()));
+      const newRows = parsed.filter(p => !existingNames.has(p.name.toLowerCase()));
+      const skipped = parsed.length - newRows.length;
+
+      pendingUploadRows = newRows;
+      preview.innerHTML =
+        '<p style="font-size:14px; margin:0 0 8px;"><strong>' + newRows.length + '</strong> new player(s) will be added.' +
+        (skipped > 0 ? ' <strong>' + skipped + '</strong> already on this season\'s roster and will be skipped.' : '') + '</p>' +
+        (newRows.length > 0 ? '<button id="confirmUploadBtn">Add ' + newRows.length + ' players</button> ' : '') +
+        '<button class="secondary" id="cancelUploadBtn">Cancel</button>';
+
+      const confirmBtn = document.getElementById('confirmUploadBtn');
+      if (confirmBtn) confirmBtn.addEventListener('click', async () => {
+        const toInsert = pendingUploadRows.map(p => Object.assign({ team_id: ourTeamId, season_year: currentSeasonYear }, p));
+        const { error: insertError } = await supabaseClient.from('players').insert(toInsert);
+        if (insertError){
+          preview.innerHTML = '<p style="color:var(--sc-red, #a32d2d); margin:0;">' + insertError.message + '</p>';
+          return;
+        }
+        preview.classList.add('hidden');
+        preview.innerHTML = '';
+        document.getElementById('rosterFile').value = '';
+        loadRoster();
+      });
+      document.getElementById('cancelUploadBtn').addEventListener('click', () => {
+        preview.classList.add('hidden');
+        preview.innerHTML = '';
+        document.getElementById('rosterFile').value = '';
+        pendingUploadRows = null;
+      });
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  document.getElementById('backBtn').addEventListener('click', () => {
+    window.location.href = 'dashboard.html';
+  });
+</script>
+</body>
+</html>
