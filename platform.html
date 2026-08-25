@@ -116,6 +116,14 @@
                 border-radius:var(--sc-radius-sm, 6px); font-size:14px; font-weight:400;
                 margin-top:4px; }
   .fieldnote { font-size:12px; color:#6b7680; margin:4px 0 0; }
+  /* Row actions. platform.html is deliberately LIGHT, so these are light --
+     see "What is NOT converted" in DARK_THEME_PLAN.md. */
+  .uact { font-size:12px; padding:5px 9px; border-radius:5px; border:1px solid #ccc;
+          background:#fff; color:#1a1a2e; cursor:pointer; margin-left:5px;
+          font-weight:600; }
+  .uact:hover { background:#f4f6f9; }
+  .uact:disabled { opacity:.55; cursor:default; }
+
   .pill { display:inline-block; font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:20px; }
   .pill.live   { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
   .pill.trial  { background:#eef2f8; color:#3d5a80; }
@@ -242,6 +250,14 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+  // WHO IS SIGNED IN. Declared HERE, above the auth listener that writes it,
+  // rather than beside the user list that reads it. A `let` is in its
+  // temporal dead zone until the declaration executes, so a declaration
+  // further down the file only works while nothing runs before it -- which
+  // is true today and is exactly the kind of ordering that breaks silently
+  // when a listener is added above it later.
+  let signedInUserId = null;
+
   function showMsg(text, type){
     document.getElementById('msg').innerHTML =
       text ? '<div class="msg ' + type + '">' + text + '</div>' : '';
@@ -272,6 +288,11 @@
     // is_super_admin() test regardless of who calls it. This exists so a
     // tenant admin who lands here by accident gets an explanation instead
     // of an empty page.
+      // WHO IS SIGNED IN, kept so the user list can refuse to offer the
+      // control that would lock this operator out. The endpoint refuses
+      // it too -- hiding a button stops a mis-tap, not an API call --
+      // but the control should not be there to tap.
+      signedInUserId = session.user.id;
     const { data: me, error: meErr } = await supabaseClient
       .from('profiles').select('is_super_admin, tenant_id').eq('id', session.user.id).limit(1);
     if (meErr){
@@ -715,6 +736,72 @@
   // last sign-in and the banned flag live there, and only the service key
   // can see them. The endpoint already returns every user to the platform
   // and refuses cross-tenant ACTIONS; this only ever reads.
+
+  // ONE DELEGATED HANDLER, because the rows are rebuilt on every refresh.
+  // Per-button listeners would be re-attached each time -- or attached twice
+  // and fire twice, which on setDisabled means enable then disable and a row
+  // that looks like it ignored you.
+  document.getElementById('usersBody').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button.uact');
+    if (!btn) return;
+    const act = btn.dataset.act;
+    const sess = await supabaseClient.auth.getSession();
+    const token = sess && sess.data && sess.data.session && sess.data.session.access_token;
+    if (!token){ alert('Your session has expired -- please sign in again.'); return; }
+
+    const email = btn.dataset.email || '';
+    const payload = { action: act };
+
+    if (act === 'resendInvite' || act === 'sendReset'){
+      payload.email = email;
+      // NAMED IN THE PROMPT. A bare "are you sure?" prevents nothing when
+      // the risk is acting on the WRONG ROW.
+      if (!confirm((act === 'sendReset' ? 'Send a password reset link to'
+                                        : 'Resend the invite to') +
+                   '\n\n    ' + email + '\n\nGo ahead?')) return;
+
+    } else if (act === 'setPassword'){
+      const pw = prompt('Temporary password for\n\n    ' + email +
+        '\n\nThey are forced to choose their own the first time they use it, ' +
+        'and this one stops working at that point.\n\nAt least 6 characters:');
+      if (pw === null) return;
+      if (!pw || pw.length < 6){ alert('That needs to be at least 6 characters.'); return; }
+      payload.userId = btn.dataset.id;
+      payload.newPassword = pw;
+
+    } else if (act === 'setDisabled'){
+      const turningOff = btn.dataset.disabled === '1';
+      if (!confirm((turningOff ? 'Disable' : 'Enable') + ' this account?\n\n    ' + email +
+                   (turningOff ? '\n\nThey will not be able to sign in.' : '') +
+                   '\n\nGo ahead?')) return;
+      payload.userId = btn.dataset.id;
+      payload.disabled = turningOff;
+    }
+
+    const label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Working...';
+    try {
+      const r = await fetch('/api/manage-users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify(payload)
+      });
+      const out = await r.json();
+      if (!r.ok) throw new Error(out.error || ('HTTP ' + r.status));
+      if (act === 'setPassword'){
+        alert('Temporary password set for ' + email +
+              '.\n\nThey must choose their own the first time they sign in.');
+      }
+      // RELOADED FROM THE SERVER rather than patched in place. The row now
+      // shows state the server owns -- disabled, temp password pending --
+      // and guessing at it locally is how a console starts disagreeing with
+      // what is actually true.
+      await loadUsers(token);
+    } catch (err){
+      alert('That did not work: ' + err.message);
+      btn.disabled = false; btn.textContent = label;
+    }
+  });
   async function loadUsers(accessToken){
     const body = document.getElementById('usersBody');
     let payload;
@@ -757,7 +844,7 @@
       return '<h2 style="font-size:14px; margin:18px 0 8px; ' +
                'color:var(--sc-ink-soft, #3a3a3a);">' + esc(heading(k)) +
                ' <span style="font-weight:400; color:#6b7680;">(' + rows.length + ')</span></h2>' +
-        '<table><tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th></tr>' +
+        '<table><tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th><th></th></tr>' +
         rows.map(u =>
           '<tr>' +
             '<td class="name">' + esc(u.displayName || '—') + '</td>' +
@@ -768,6 +855,32 @@
             '<td class="right">' +
               (u.disabled ? '<span class="pill lapsed">Disabled</span>' : '') +
               (!u.emailConfirmedAt ? '<span class="pill trial">Invited</span>' : '') +
+              (u.mustChangePassword ? '<span class="pill trial">Temp password</span>' : '') +
+            '</td>' +
+            // ACTIONS, EACH SHOWN ONLY WHERE IT MEANS SOMETHING. A button
+            // that silently does nothing is worse than no button: it teaches
+            // an operator the console is unreliable.
+            //   Resend invite  only before the email is confirmed -- after
+            //                  that there is no invite to resend.
+            //   Send reset     only after it is confirmed -- before then the
+            //                  invite IS the way in.
+            //   Temp password  always; it exists for the person who cannot
+            //                  reach their email at all.
+            //   Disable/Enable reads the current state, so a row never
+            //                  offers what has already happened.
+            '<td class="right" style="white-space:nowrap;">' +
+              (!u.emailConfirmedAt
+                ? '<button class="uact" data-act="resendInvite" data-email="' + esc(u.email) + '">Resend invite</button>'
+                : '<button class="uact" data-act="sendReset" data-email="' + esc(u.email) + '">Send reset</button>') +
+              '<button class="uact" data-act="setPassword" data-id="' + esc(u.id) +
+                '" data-email="' + esc(u.email) + '">Temp password</button>' +
+              // SELF-DISABLE IS NOT OFFERED AT ALL. One mis-tap would lock
+              // this operator out of the only console that could undo it.
+              (u.id === signedInUserId
+                ? '<span style="font-size:11.5px; color:#6b7680;">you</span>'
+                : '<button class="uact" data-act="setDisabled" data-id="' + esc(u.id) +
+                  '" data-disabled="' + (u.disabled ? '0' : '1') + '">' +
+                  (u.disabled ? 'Enable' : 'Disable') + '</button>') +
             '</td>' +
           '</tr>').join('') + '</table>';
     }).join('');

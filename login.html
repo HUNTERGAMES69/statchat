@@ -328,6 +328,44 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
       // factor guards against a stolen password, not against a network
       // blip on the way to reading the assurance level.
     }
+    // A TEMPORARY PASSWORD MUST BE CHANGED BEFORE ANYTHING ELSE.
+    // ---------------------------------------------------------------------
+    // An admin who sets a password for somebody stamps must_change_password
+    // (see api/manage-users.js). That password exists to be read out over
+    // the phone once, so the session it opens is not allowed to go anywhere
+    // until a new one is chosen.
+    //
+    // Placed HERE, above the routing block, for the same reason the MFA
+    // check is here rather than in the sign-in handler: this function is
+    // every route in -- a fresh sign-in, a restored session on page load,
+    // anything added later. A check in the sign-in handler alone would be
+    // skipped by a reload.
+    //
+    // UNLIKE the two guards around it, a failure to CHECK is NOT waved
+    // through. Those decide where somebody lands; this one decides whether
+    // a password an operator knows keeps working. If the flag cannot be
+    // read, the safe answer is to ask for a new password anyway -- the cost
+    // is one extra password change, and the cost of the other choice is a
+    // shared password that stays live.
+    try {
+      const { data: { user: pwUser } } = await supabaseClient.auth.getUser();
+      const meta = (pwUser && pwUser.user_metadata) || {};
+      if (meta.must_change_password){
+        showView('setPasswordView');
+        document.getElementById('setPasswordTitle').textContent = 'Choose your own password';
+        document.getElementById('setPasswordSub').textContent =
+          'The password you just used was set for you and only works once. ' +
+          'Pick one nobody else knows.';
+        return;
+      }
+    } catch (e) {
+      showView('setPasswordView');
+      document.getElementById('setPasswordTitle').textContent = 'Choose your own password';
+      document.getElementById('setPasswordSub').textContent =
+        'We could not confirm whether your password is a temporary one. ' +
+        'Setting a new one now is the safe way through.';
+      return;
+    }
     // WHERE A SESSION LANDS DEPENDS ON WHETHER IT HAS A SCHOOL.
     // ---------------------------------------------------------------------
     // dashboard.html is built around "what is MY team" and works outward
@@ -453,7 +491,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
       showMsg('setPasswordMsg', 'Password needs to be at least 6 characters.', 'error');
       return;
     }
-    const { data, error } = await supabaseClient.auth.updateUser({ password: pw });
+    // THE FLAG IS CLEARED IN THE SAME CALL THAT SETS THE PASSWORD.
+    // Not in a second request: if that one failed, the user would land back
+    // on this screen next time they signed in, with a password that now
+    // works, and no way out of the loop. One call either does both or
+    // neither.
+    const { data, error } = await supabaseClient.auth.updateUser({
+      password: pw,
+      data: { must_change_password: false }
+    });
     if (error){
       showMsg('setPasswordMsg', error.message, 'error');
     } else {
