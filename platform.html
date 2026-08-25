@@ -129,39 +129,44 @@
 
   <div id="console" class="hidden">
     <div class="tabs">
-      <button id="tabSchools" class="on">Schools</button>
-      <button id="tabRestore">Deleted games</button>
+      <button id="tabTenants" class="on">Tenants</button>
       <button id="tabUsers">Users</button>
+      <button id="tabRecovery">Recovery tools</button>
     </div>
 
-    <div id="panelSchools" class="card">
-      <h1>Schools</h1>
-      <p class="sub">Every tenant on the platform. Counts are live games only —
-         deleted ones are on the other tab.</p>
-      <div id="schoolsBody"><p class="empty">Loading…</p></div>
-    </div>
-
-    <div id="panelRestore" class="card hidden">
-      <h1>Deleted games</h1>
-      <p class="sub">A game deleted from a school's dashboard is hidden, not destroyed.
-         Its plays and roster snapshot are untouched, so restoring puts the whole thing
-         back exactly as it was.</p>
-      <div id="restoreBody"><p class="empty">Loading…</p></div>
-      <p class="note"><strong>Why this is here and not on their dashboard.</strong>
-         Deleted games are hidden from the school by the same policy that hides them from
-         everyone, and showing them there would mean every game list in the app had to
-         learn to filter. Restoring is a support action, so it lives with support.</p>
+    <div id="panelTenants" class="card">
+      <h1>Tenants</h1>
+      <p class="sub">Every school on the platform. Counts are live games only —
+         deleted ones are under Recovery tools.</p>
+      <div id="tenantsBody"><p class="empty">Loading…</p></div>
     </div>
 
     <div id="panelUsers" class="card hidden">
       <h1>Users</h1>
-      <p class="sub">Everyone with an account, grouped by school. This is the platform's
+      <p class="sub">Everyone with an account, grouped by tenant. This is the platform's
          view; a school's own admin manages their people from their account page.</p>
       <div id="usersBody"><p class="empty">Loading…</p></div>
       <p class="note"><strong>Read-only, deliberately.</strong> Changing somebody's role,
          resetting their password or removing them is a school's own admin's job, and doing
          it from here would be acting on a customer's staff with nothing recording that it
          was the platform. That belongs with the audit trail, not before it.</p>
+    </div>
+
+    <!-- RECOVERY TOOLS, plural and deliberately open-ended. Deleted games
+         are the only thing recoverable today; rosters and plays are still
+         hard deletes. Naming the tab after the one thing it currently does
+         would mean renaming it the moment a second thing arrives. -->
+    <div id="panelRecovery" class="card hidden">
+      <h1>Recovery tools</h1>
+      <h2 style="font-size:15px; margin:0 0 4px;">Deleted games</h2>
+      <p class="sub">A game deleted from a tenant's dashboard is hidden, not destroyed.
+         Its plays and roster snapshot are untouched, so restoring puts the whole thing
+         back exactly as it was.</p>
+      <div id="recoveryBody"><p class="empty">Loading…</p></div>
+      <p class="note"><strong>Why this is here and not on their dashboard.</strong>
+         Deleted games are hidden from the tenant by the same policy that hides them from
+         everyone, and showing them there would mean every game list in the app had to
+         learn to filter. Restoring is a support action, so it lives with support.</p>
     </div>
   </div>
 </div>
@@ -220,8 +225,8 @@
     document.getElementById('gate').classList.add('hidden');
     document.getElementById('console').classList.remove('hidden');
 
-    loadSchools();
-    loadDeleted();
+    loadTenants();
+    loadRecovery();
     loadUsers(session.access_token);
   }
 
@@ -236,7 +241,7 @@
   // GENERALISED FROM A BOOLEAN. It was `isSchools` and two toggles, which
   // is exactly the shape that stops working the moment a third tab exists
   // -- and adding one was the first thing asked for after it shipped.
-  const TABS = ['schools', 'restore', 'users'];
+  const TABS = ['tenants', 'users', 'recovery'];   // order here is wiring; the DOM decides display order
   function selectTab(which){
     TABS.forEach(t => {
       const cap = t.charAt(0).toUpperCase() + t.slice(1);
@@ -250,8 +255,8 @@
   });
 
   // ---- schools ----------------------------------------------------------
-  async function loadSchools(){
-    const body = document.getElementById('schoolsBody');
+  async function loadTenants(){
+    const body = document.getElementById('tenantsBody');
     const { data: tenants, error } = await supabaseClient
       .from('tenants').select('id, name, full_name, logo_url, subscription, renews_on, created_at')
       .order('name');
@@ -316,8 +321,8 @@
   }
 
   // ---- deleted games ----------------------------------------------------
-  async function loadDeleted(){
-    const body = document.getElementById('restoreBody');
+  async function loadRecovery(){
+    const body = document.getElementById('recoveryBody');
     // The join is what makes this readable: a designator on its own says
     // nothing about WHOSE game it is, and two schools may legitimately
     // both have a "2026-W1" since migration 010.
@@ -415,7 +420,7 @@
 
   // Delegated, because the rows are rebuilt after every restore and a
   // listener bound to a button that no longer exists does nothing.
-  document.getElementById('restoreBody').addEventListener('click', async (e) => {
+  document.getElementById('recoveryBody').addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-restore]');
     if (!btn) return;
     const gameId = btn.getAttribute('data-restore');
@@ -439,8 +444,8 @@
       showMsg('Game restored. It is back on that school\'s dashboard, with every play ' +
               'and its roster snapshot.', 'success');
     }
-    loadDeleted();
-    loadSchools();
+    loadRecovery();
+    loadTenants();
   });
 </script>
 </body>
