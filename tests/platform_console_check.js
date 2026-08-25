@@ -361,6 +361,25 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   chk(/data-act="resendInvite"/.test(usersHtml) && /data-act="sendReset"/.test(usersHtml) &&
       /data-act="setPassword"/.test(usersHtml) && /data-act="setDisabled"/.test(usersHtml),
       'the users tab offers resend-invite, send-reset, temp-password and disable');
+  // ---- every tab can refresh, and messages go away -----------------------
+  // Both reported after the console shipped: the user list needed a hard
+  // page reload to update, and a status line from the last action sat above
+  // the tabs until the whole page was reloaded -- describing something that
+  // had happened ten minutes and three tabs ago.
+  ['Tenants', 'Users', 'Recovery'].forEach(w => {
+    chk(!!b.d.getElementById('refresh' + w + 'Btn'),
+        'the ' + w + ' tab has a Refresh button');
+  });
+  chk(/msgTimer = setTimeout/.test(code),
+      'a status message clears itself — nothing took them down before');
+  chk(/type !== 'error'/.test(code),
+      "but an ERROR does not time out: it is the one message that might be read " +
+      'after looking away, and a failure that erases its own explanation is worse ' +
+      'than no message');
+  chk(/function selectTab[\s\S]{0,320}?showMsg\(''/.test(code),
+      'and switching tabs clears it — a message describes what happened on the ' +
+      'tab you were on');
+
   chk(!/data-act="delete"/.test(usersHtml),
       'and NOT delete — the one action nothing can undo stays off this tab while ' +
       'there is no audit trail');
