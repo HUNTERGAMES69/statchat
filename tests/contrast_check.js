@@ -59,55 +59,64 @@ const ratio = (a, b) => {
 
 // Is the declaration at `at` inside a rule whose selector is repeated
 // later with an !important for the same property? If so it is dead.
-function isOverridden(src, at) {
-  const open = src.lastIndexOf('{', at);
-  if (open === -1) return false;
-  const selStart = Math.max(src.lastIndexOf('}', open), src.lastIndexOf(';', open)) + 1;
-  const sel = src.slice(selStart, open).trim().split('\n').pop().trim();
-  if (!sel || sel.length > 120) return false;
-  const after = src.slice(src.indexOf('}', at) + 1);
-  // GROUPED AND RE-SCOPED SELECTORS COUNT. A first version required the
-  // override to repeat the selector verbatim, so it missed
-  //   table.stattable th, table.player-stat-table th { ... !important }
-  // overriding `table.stattable th`, and `.stat-label` overriding
-  // `.inline-stat-item .stat-label`. It then reported two dead rules as
-  // failures -- which is how a checker teaches people to ignore it.
-  //
-  // Matching on the LAST simple selector in the chain: an override written
-  // for a broader or grouped form of the same target still wins.
-  const key = sel.split(',').pop().trim().split(/\s+/).pop();
-  if (!key) return false;
-  const esc = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp('(^|[,{}\\s])[^{}]*' + esc + '[^{}]*\\{[^}]*color\\s*:[^;}]*!important', 'm').test(after);
+// OVERRIDE DETECTION BY PARSING, NOT BY REGEX.
+// The first version built a pattern like
+//   (^|[,{}\s])[^{}]*<selector>[^{}]*\{[^}]*color\s*:[^;}]*!important
+// and ran it against the rest of the file once per colour declaration.
+// Two unbounded [^{}]* segments with no match is textbook catastrophic
+// backtracking: it was fine on small pages and hung outright on help.html,
+// which is 60k and has 22 declarations. **A checker nobody can wait for is
+// a checker nobody runs.**
+//
+// Rules are parsed once per file instead, then looked up. Linear, and it
+// cannot blow up on a selector that happens to be long.
+// Is this declaration inside an @media print block? Counted by braces
+// from the block's opening, which is exact -- a "does the word print
+// appear nearby" test would exempt anything written next to a comment
+// about printing.
+function inPrintBlock(src, at) {
+  let i = src.indexOf('@media print');
+  while (i !== -1 && i < at) {
+    const open = src.indexOf('{', i);
+    if (open === -1) break;
+    let depth = 0, j = open;
+    for (; j < src.length; j++) {
+      if (src[j] === '{') depth++;
+      else if (src[j] === '}') { depth--; if (depth === 0) break; }
+    }
+    if (at > open && at < j) return true;
+    i = src.indexOf('@media print', j);
+  }
+  return false;
 }
 
-// The background twin of the above. isOverriddenBg only matched an
-// override repeating the selector verbatim, so it missed
-//   .quad, .card{ background:... !important }
-// overriding `.quad` and `.card` separately -- and reported two dead rules
-// on view.html as live failures.
-function overriddenBgGrouped(src, at) {
-  const open = src.lastIndexOf('{', at);
-  if (open === -1) return false;
-  const selStart = Math.max(src.lastIndexOf('}', open), src.lastIndexOf(';', open)) + 1;
-  const sel = src.slice(selStart, open).trim().split('\n').pop().trim();
-  if (!sel || sel.length > 120) return false;
-  const key = sel.split(',').pop().trim().split(/\s+/).pop();
-  if (!key) return false;
-  const esc = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const after = src.slice(src.indexOf('}', at) + 1);
-  return new RegExp('(^|[,{}\\s])[^{}]*' + esc + '[^{}]*\\{[^}]*background[^;}]*!important', 'm').test(after);
+function parseRules(src) {
+  const rules = [];
+  const re = /([^{}]+)\{([^}]*)\}/g;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    rules.push({ at: m.index, sel: m[1].trim().replace(/\s+/g, ' '), body: m[2] });
+  }
+  return rules;
 }
 
-function isOverriddenBg(src, at) {
-  const open = src.lastIndexOf('{', at);
-  if (open === -1) return false;
-  const selStart = Math.max(src.lastIndexOf('}', open), src.lastIndexOf(';', open)) + 1;
-  const sel = src.slice(selStart, open).trim().split('\n').pop().trim();
-  if (!sel || sel.length > 120) return false;
-  const after = src.slice(src.indexOf('}', at) + 1);
-  const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(esc + '\\s*\\{[^}]*background[^;}]*!important').test(after);
+// Does a rule LATER in the file, whose selector targets the same last
+// simple selector, set `prop` with !important?
+function overriddenBy(rules, at, prop, src) {
+  const inPrintBlockCache = (i) => src ? inPrintBlock(src, i) : false;
+  const mine = rules.find(r => at >= r.at && at <= r.at + r.sel.length + r.body.length + 2);
+  if (!mine) return false;
+  const key = mine.sel.split(',').pop().trim().split(/\s+/).pop();
+  if (!key) return false;
+  // A RULE INSIDE @media print DOES NOT OVERRIDE THE SCREEN RULE.
+  // help.html's print block restates `.note { background:#eef6f1
+  // !important }`, which made the screen rule look overridden -- so a
+  // light note panel on screen was silently exempt. The two live in
+  // different media; neither overrides the other.
+  return rules.some(r =>
+    r.at > at && !inPrintBlockCache(r.at) &&
+    new RegExp(prop + '\\s*:[^;]*!important').test(r.body) &&
+    r.sel.split(',').some(one => one.trim().split(/\s+/).pop() === key));
 }
 
 function audit(file) {
@@ -119,8 +128,18 @@ function audit(file) {
                  .replace(/\/\*[\s\S]*?\*\//g, '')
                  .replace(/^\s*\/\/[^\n]*$/gm, '');
 
+  // TOKENS FROM THE SCREEN THEME ONLY.
+  // A page that prints re-points the same token names inside @media print
+  // -- that is the whole reason the conversion went through tokens. Built
+  // from the whole file, the print block's --sc-ink:#1a1a1a overwrote the
+  // dark one, and then every `color:var(--sc-ink)` on the page resolved to
+  // near-black and failed. The page was correct; the checker was reading
+  // the wrong half of it.
   const tokens = {};
-  for (const m of src.matchAll(/(--[a-z-]+)\s*:\s*(#[0-9a-fA-F]{3,6})\b/g)) tokens[m[1]] = m[2];
+  for (const m of src.matchAll(/(--[a-z-]+)\s*:\s*(#[0-9a-fA-F]{3,6})\b/g)) {
+    if (inPrintBlock(src, m.index)) continue;
+    tokens[m[1]] = m[2];
+  }
   // AN UNDEFINED TOKEN SILENTLY BECOMES ITS FALLBACK, and every fallback
   // in this codebase was chosen for a white page. `var(--sc-blue, #1565c0)`
   // on the dashboard rendered as #1565c0 -- 2.89:1 on the menu -- because
@@ -140,6 +159,7 @@ function audit(file) {
     return /^#[0-9a-fA-F]{3,6}$/.test(v) ? v : null;
   };
 
+  const rules = parseRules(src);
   const findings = [];
 
   // ---- text colours -----------------------------------------------------
@@ -149,12 +169,29 @@ function audit(file) {
     const r = ratio(c, CARD);
     if (r >= AA_BODY) continue;
     if (ALLOWED_LOW[c.toLowerCase()]) continue;
+    // INK ON AN INVERTED CHIP. An amber or white fill takes near-black
+    // text by design; measuring it against the CARD says 1.14:1 and means
+    // nothing, because it never touches the card. Recognised by the fill
+    // sitting in the same rule.
+    {
+      const ruleStart = src.lastIndexOf('{', m.index);
+      const ruleEnd = src.indexOf('}', m.index);
+      const rule = ruleStart > -1 && ruleEnd > -1 ? src.slice(ruleStart, ruleEnd) : '';
+      const fill = /background(?:-color)?:\s*(?:var\(\s*(--[a-z-]+)[^)]*\)|(#[0-9a-fA-F]{3,6}))/.exec(rule);
+      if (fill) {
+        const fc = fill[1] ? tokens[fill[1]] : fill[2];
+        if (fc && lum(fc) > 0.4 && ratio(c, fc) >= AA_BODY) continue;
+      }
+    }
     // OVERRIDDEN DECLARATIONS ARE NOT FINDINGS. view.html is themed by an
     // appended block, so a rule earlier in the file may be entirely dead.
     // Reporting it sends someone to fix code that never runs -- and worse,
     // it buries the findings that are real: the one that mattered on that
     // page was a MISSING color-scheme, hidden among six false positives.
-    if (isOverridden(src, m.index)) continue;
+    if (overriddenBy(rules, m.index, 'color', src)) continue;
+    // @media print again: dark ink on white paper is correct there, and
+    // measuring it against the dark card is meaningless.
+    if (inPrintBlock(src, m.index)) continue;
     findings.push({
       kind: r < AA_LARGE ? 'FAIL' : 'large-only',
       msg: c + ' is ' + r.toFixed(2) + ':1 on the card' +
@@ -177,7 +214,11 @@ function audit(file) {
   for (const m of src.matchAll(/background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,6})\b/g)) {
     const c = m[1].toLowerCase();
     if (keep.has(c) || lum(c) <= 0.5) continue;
-    if (isOverriddenBg(src, m.index) || overriddenBgGrouped(src, m.index)) continue;
+    if (overriddenBy(rules, m.index, 'background', src)) continue;
+    // INSIDE @media print, LIGHT IS THE POINT. Paper is white, so the
+    // print block deliberately undoes every dark surface. Reporting those
+    // as failures would mean a page that prints correctly can never pass.
+    if (inPrintBlock(src, m.index)) continue;
     // The logo plate: white behind dark artwork, within ~200 chars of the
     // mark's own selector or filename.
     // The logo plate. The selector can sit some way above the colour --
@@ -207,6 +248,15 @@ function audit(file) {
     needs.push([/:focus-visible(?![a-zA-Z])/, 'a visible focus ring — the default outline is dark ' +
       'and disappears on a dark card']);
   }
+  // THE LOGO PLATE, asserted POSITIVELY. Removing it leaves no light
+  // background, so a check that only hunts light colours cannot see the
+  // mark vanish into the card. logo.png is dark-on-light artwork.
+  if (/class="scMark"|class='scMark'/.test(src) &&
+      !/\.scMark\s*>\s*img\s*\{[^}]*background:\s*#(?:fff|ffffff)/.test(src)) {
+    findings.push({ kind: 'FAIL', msg: 'the StatChat mark has no white plate — logo.png is ' +
+      'dark artwork and sinks into the card without one' });
+  }
+
   needs.forEach(([re, what]) => {
     if (!re.test(src)) findings.push({ kind: 'FAIL', msg: 'missing ' + what });
   });

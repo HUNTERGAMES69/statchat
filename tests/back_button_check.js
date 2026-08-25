@@ -85,11 +85,22 @@ function run() {
     }
   }
 
-  const seen = [...new Set(Object.values(rules))];
+  // COLOURS MAY DIFFER DURING THE DARK MIGRATION, and that is not a fault.
+  // Pages are converted one at a time, so a converted page's .backlink uses
+  // tokens while an unconverted one still has #ccc and #444. Comparing the
+  // literal rule made this fail the moment help.html went dark -- reporting
+  // a correct mid-migration state as a regression.
+  //
+  // What must stay identical is the SHAPE: same properties, same geometry.
+  // A colour difference is expected; a padding difference is a real drift.
+  const geometry = r => r.split('; ')
+    .filter(d => !/^(color|background|border(-color)?):/.test(d))
+    .join('; ');
+  const seen = [...new Set(Object.values(rules).map(geometry))];
   if (seen.length > 1) {
-    bad('all', 'the .backlink rule differs between pages — ' +
+    bad('all', 'the .backlink GEOMETRY differs between pages (colour differences are fine mid-migration) — ' +
         Object.entries(rules).map(([f, r]) =>
-          f + ': ' + (seen.indexOf(r) + 1)).join(', ') +
+          f + ': ' + (seen.indexOf(geometry(r)) + 1)).join(', ') +
         ' (numbers are distinct variants; they should all be 1)');
   }
 
