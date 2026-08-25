@@ -32,11 +32,35 @@ const PROFILES = {
 
 function load(callerId, opts) {
   opts = opts || {};
+  const optsRef = opts;
   const calls = { rpc: [], invite: [], update: [] };
   const real = Module._resolveFilename;
   Module._resolveFilename = function (r, ...a) {
     if (r === '@supabase/supabase-js') return '@supabase/supabase-js';
     return real.call(this, r, ...a);
+  };
+  // TWO CLIENTS, DISTINGUISHED. The first version of this harness returned
+  // one stub from createClient() regardless of the key, so it could not
+  // tell the service-key client from the user-acting one -- and the bug it
+  // was blind to shipped: create_tenant() was called with the service key,
+  // where auth.uid() is NULL, so its own is_super_admin() check refused
+  // the platform account.
+  //
+  // createClient is now recorded per call, and the rpc records WHICH key
+  // it went through.
+  const created = [];
+  const makeClient = (key, opts) => {
+    const isService = key === 'k';
+    created.push({ isService, auth: opts && opts.global && opts.global.headers &&
+                                    opts.global.headers.Authorization });
+    return Object.assign({}, client, {
+      rpc: async (name, args) => {
+        calls.rpc.push({ name, args, viaService: isService });
+        if (opts && opts.rpcError) return { data: null, error: { message: opts.rpcError } };
+        if (optsRef.rpcError) return { data: null, error: { message: optsRef.rpcError } };
+        return { data: 'tenant-new', error: null };
+      }
+    });
   };
   const client = {
     auth: {
@@ -66,11 +90,11 @@ function load(callerId, opts) {
     })
   };
   require.cache['@supabase/supabase-js'] = { id: '@supabase/supabase-js', loaded: true,
-    exports: { createClient: () => client } };
+    exports: { createClient: (url, key, o) => makeClient(key, o) } };
   delete require.cache[require.resolve(API)];
   const h = require(API);
   Module._resolveFilename = real;
-  return { h, calls };
+  return { h, calls, created };
 }
 function res() { const r = { code: null, body: null };
   r.setHeader = () => {}; r.status = c => { r.code = c; return r; };
@@ -86,11 +110,11 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   process.env.SUPABASE_SECRET_KEY = 'k';
 
   // ---- only the platform ---------------------------------------------
-  let { h, calls } = load('admin-a');
+  let { h, calls, created } = load('admin-a');
   let r = res();
   await h(post({ name: 'Sneaky High' }, true), r);
   chk(r.code === 403 && calls.rpc.length === 0,
-      'a SCHOOL admin cannot create a school (' + r.code + ')');
+      'a SCHOOL admin cannot create a tenant (' + r.code + ')');
 
   ({ h, calls } = load(null));
   r = res();
@@ -98,11 +122,28 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   chk(r.code === 401 && calls.rpc.length === 0, 'an invalid session is refused (' + r.code + ')');
 
   // ---- the happy path -------------------------------------------------
-  ({ h, calls } = load('super'));
+  ({ h, calls, created } = load('super'));
   r = res();
   await h(post({ name: 'Riverside', fullName: 'Riverside High School',
                  adminEmail: 'coach@riverside.edu', adminName: 'Dana Whitfield' }, true), r);
-  chk(r.code === 200, 'the platform creates a school (' + r.code + ')');
+  chk(r.code === 200, 'the platform creates a tenant (' + r.code + ')');
+  // THE CALL MUST NOT GO THROUGH THE SERVICE KEY.
+  // -------------------------------------------------------------------
+  // create_tenant() is SECURITY DEFINER and checks is_super_admin(),
+  // which reads `profiles where id = auth.uid()`. The service role has
+  // NO auth.uid(), so through that client the function refuses the one
+  // account allowed to call it -- reported from production as "only the
+  // platform can create a tenant", by the platform.
+  //
+  // Same trap as running restore_game() in the SQL editor. This is the
+  // only function in the app called from a server rather than a browser,
+  // which is why it is the only one that hit it.
+  chk(calls.rpc[0] && calls.rpc[0].viaService === false,
+      'create_tenant is called AS THE USER, not with the service key — the service role ' +
+      'has no auth.uid() and the function would refuse the platform account');
+  chk(created.some(c => !c.isService && /^Bearer /.test(c.auth || '')),
+      "and that client carries the caller's own token");
+
   chk(calls.rpc[0] && calls.rpc[0].name === 'create_tenant',
       'through create_tenant(), so the tenant and its team are atomic');
   chk(calls.rpc[0] && calls.rpc[0].args.p_name === 'Riverside', 'with the name');
@@ -118,10 +159,10 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   r = res();
   await h(post({ name: 'Later High' }, true), r);
   chk(r.code === 200 && calls.invite.length === 0,
-      'a school can be created with NO admin — staffing it later is legitimate');
+      'a tenant can be created with NO admin — staffing it later is legitimate');
   chk(r.body && r.body.invited === false, 'and the response says nobody was invited');
 
-  // ---- the email is checked BEFORE the school exists -------------------
+  // ---- the email is checked BEFORE the tenant exists -------------------
   ({ h, calls } = load('super'));
   r = res();
   await h(post({ name: 'Typo High', adminEmail: 'not-an-email' }, true), r);
@@ -132,8 +173,8 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   ({ h, calls } = load('super', { inviteError: 'mailbox full' }));
   r = res();
   await h(post({ name: 'Orphan High', adminEmail: 'x@y.edu' }, true), r);
-  chk(r.code === 207, 'a failed invite returns 207, not 500 — the school DID get created (' + r.code + ')');
-  chk(r.body && /school is in the list/i.test(r.body.error || ''),
+  chk(r.code === 207, 'a failed invite returns 207, not 500 — the tenant DID get created (' + r.code + ')');
+  chk(r.body && /tenant is in the list/i.test(r.body.error || ''),
       'and says so, so the operator knows to invite again rather than re-create');
   chk(!/delete/i.test(JSON.stringify(calls)),
       'and the tenant is NOT deleted to tidy up — that turns a typo into destroying a record');
