@@ -55,6 +55,22 @@
             color:var(--sc-ink-muted, #9aa3b2); }
   .whoami strong { color:var(--sc-ink-soft, #3a3a3a); }
 
+  /* The row menu. Anchored to the cell so it opens beside its own row and
+     cannot be mistaken for the row above or below -- which is the entire
+     risk with a destructive action in a list. */
+  .menuWrap { position:relative; display:inline-block; }
+  .dots { border:1px solid var(--sc-rule-strong, #c8c8c8); background:#fff;
+          color:var(--sc-ink-soft, #3a3a3a); border-radius:var(--sc-radius-sm, 6px);
+          padding:4px 10px; font-size:16px; line-height:1; cursor:pointer; }
+  .menu { position:absolute; right:0; top:calc(100% + 4px); z-index:30;
+          background:#fff; border:1px solid var(--sc-rule, #e6e6e6);
+          border-radius:var(--sc-radius-sm, 6px); box-shadow:0 4px 14px rgba(0,0,0,0.14);
+          min-width:172px; padding:5px 0; text-align:left; }
+  .menu button { display:block; width:100%; text-align:left; background:none;
+                 border:none; padding:9px 14px; font-size:13.5px; cursor:pointer;
+                 color:var(--sc-ink-soft, #3a3a3a); }
+  .menu button:hover { background:var(--sc-page, #f4f3ef); }
+  .menu button.danger { color:var(--sc-red, #a32d2d); border-top:1px solid #f2f2f0; }
   .topAct { padding:6px 12px; border-radius:var(--sc-radius-sm, 6px);
             border:1px solid var(--sc-rule-strong, #c8c8c8); background:#fff;
             color:var(--sc-ink-soft, #3a3a3a); font-size:13px; font-weight:600;
@@ -189,10 +205,13 @@
          would mean renaming it the moment a second thing arrives. -->
     <div id="panelRecovery" class="card hidden">
       <h1>Recovery tools</h1>
-      <h2 style="font-size:15px; margin:0 0 4px;">Deleted games</h2>
-      <p class="sub">A game deleted from a tenant's dashboard is hidden, not destroyed.
-         Its plays and roster snapshot are untouched, so restoring puts the whole thing
-         back exactly as it was.</p>
+      <h2 style="font-size:15px; margin:0 0 4px;">Deleted tenants</h2>
+      <p class="sub">A deleted tenant still has every game, play and roster row it ever
+         had — deleting hides it rather than destroying it, because `tenants` cascades to
+         five tables. Restoring puts the tenant back exactly as it was.</p>
+      <div id="delTenantsBody"><p class="empty">Loading…</p></div>
+
+      <h2 style="font-size:15px; margin:22px 0 4px;">Deleted games</h2>
       <div id="recoveryBody"><p class="empty">Loading…</p></div>
       <p class="note"><strong>Why this is here and not on their dashboard.</strong>
          Deleted games are hidden from the tenant by the same policy that hides them from
@@ -366,7 +385,9 @@
       body.innerHTML = '<p class="empty">Could not load tenants: ' + esc(error.message) + '</p>';
       return;
     }
-    if (!tenants || !tenants.length){
+    // A deleted tenant belongs under Recovery tools, not in the live list.
+    const liveTenants = (tenants || []).filter(t => !t.deleted_at);
+    if (!liveTenants.length){
       body.innerHTML = '<p class="empty">No tenants yet.</p>';
       return;
     }
@@ -382,10 +403,13 @@
       bucket[g.tenant_id] = (bucket[g.tenant_id] || 0) + 1;
     });
 
+    // The deleted ones come off the same fetch rather than a second query.
+    renderDeletedTenants(tenants);
+
     body.innerHTML =
       '<table><tr><th>Tenant</th><th>Status</th><th>Renews</th>' +
       '<th>Games</th><th>Deleted</th><th></th></tr>' +
-      tenants.map(t => {
+      liveTenants.map(t => {
         // SUSPENDED OUTRANKS EVERYTHING. A tenant can be paid up and
         // still suspended; showing 'Active' next to an account that
         // cannot write is the status line lying about the thing the
@@ -425,11 +449,21 @@
           '<td>' + fmtDate(t.renews_on) + '</td>' +
           '<td>' + (live[t.id] || 0) + '</td>' +
           '<td>' + (gone[t.id] || 0) + '</td>' +
+          // A MENU, because a row now has more than one action and one of
+          // them is destructive. Suspend and Delete sitting side by side as
+          // buttons is a misclick waiting to happen on a list.
           '<td class="right">' +
-            '<button class="topAct' + (off ? '' : ' danger') + '" ' +
-              'data-toggle="' + esc(t.id) + '" data-off="' + (off ? '1' : '0') + '" ' +
-              'data-name="' + esc(t.name) + '">' +
-              (off ? 'Restore' : 'Suspend') + '</button>' +
+            '<div class="menuWrap">' +
+              '<button class="dots" data-menu="' + esc(t.id) + '" aria-haspopup="true" ' +
+                'aria-expanded="false" aria-label="Actions for ' + esc(t.name) + '">' +
+                '\u22EF</button>' +
+              '<div class="menu hidden" data-menu-for="' + esc(t.id) + '">' +
+                '<button data-toggle="' + esc(t.id) + '" data-off="' + (off ? '1' : '0') + '" ' +
+                  'data-name="' + esc(t.name) + '">' + (off ? 'Restore access' : 'Suspend') + '</button>' +
+                '<button class="danger" data-del="' + esc(t.id) + '" ' +
+                  'data-name="' + esc(t.name) + '">Delete tenant</button>' +
+              '</div>' +
+            '</div>' +
             (off && t.disabled_reason
               ? '<div style="font-size:12px; color:#6b7680; margin-top:4px;">' +
                 esc(t.disabled_reason) + '</div>' : '') +
@@ -439,6 +473,44 @@
   }
 
   // ---- deleted games ----------------------------------------------------
+  // Deleted tenants. Rendered from the SAME tenants query the Tenants tab
+  // uses -- the platform sees deleted rows there too, because
+  // tenants_select ends `or is_super_admin()`. Nothing extra is fetched.
+  function renderDeletedTenants(tenants){
+    const body = document.getElementById('delTenantsBody');
+    const gone = (tenants || []).filter(t => t.deleted_at);
+    if (!gone.length){ body.innerHTML = '<p class="empty">No tenants have been deleted.</p>'; return; }
+    body.innerHTML =
+      '<table><tr><th>Tenant</th><th>Deleted</th><th></th></tr>' +
+      gone.map(t =>
+        '<tr>' +
+          '<td class="name">' + esc(t.name) +
+            (t.full_name ? '<div style="font-weight:400; font-size:12.5px; color:#6b7680;">' +
+              esc(t.full_name) + '</div>' : '') + '</td>' +
+          '<td>' + fmtWhen(t.deleted_at) + '</td>' +
+          '<td class="right"><button class="act" data-untenant="' + esc(t.id) + '" ' +
+            'data-name="' + esc(t.name) + '">Restore</button></td>' +
+        '</tr>').join('') + '</table>';
+  }
+
+  document.getElementById('delTenantsBody').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-untenant]');
+    if (!btn) return;
+    const name = btn.getAttribute('data-name');
+    if (!confirm('Restore ' + name + '? Their users get full access back immediately.')) return;
+    btn.disabled = true;
+    const { error } = await supabaseClient.rpc('set_tenant_deleted', {
+      p_tenant: btn.getAttribute('data-untenant'), p_deleted: false
+    });
+    if (error){
+      showMsg('Could not restore: ' + esc(error.message), 'error');
+      btn.disabled = false;
+      return;
+    }
+    showMsg(esc(name) + ' restored.', 'success');
+    loadTenants();
+  });
+
   async function loadRecovery(){
     const body = document.getElementById('recoveryBody');
     // The join is what makes this readable: a designator on its own says
@@ -474,9 +546,72 @@
 
   // Delegated: the rows are rebuilt after every change, so a listener
   // bound to a button that no longer exists does nothing.
+  // ONE MENU OPEN AT A TIME, and clicking anywhere else closes it. A
+  // menu that stays open while another opens is how a destructive action
+  // gets clicked against the wrong row.
+  function closeMenus(except){
+    document.querySelectorAll('.menu').forEach(m => {
+      if (m !== except) m.classList.add('hidden');
+    });
+    document.querySelectorAll('.dots').forEach(d => d.setAttribute('aria-expanded', 'false'));
+    if (except){
+      const owner = document.querySelector('[data-menu="' + except.getAttribute('data-menu-for') + '"]');
+      if (owner) owner.setAttribute('aria-expanded', 'true');
+    }
+  }
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.menuWrap')) closeMenus(null);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMenus(null);
+  });
+
   document.getElementById('tenantsBody').addEventListener('click', async (e) => {
+    const dots = e.target.closest('[data-menu]');
+    if (dots){
+      const menu = document.querySelector('[data-menu-for="' + dots.getAttribute('data-menu') + '"]');
+      const wasOpen = menu && !menu.classList.contains('hidden');
+      closeMenus(null);
+      if (menu && !wasOpen){ menu.classList.remove('hidden'); closeMenus(menu); }
+      return;
+    }
+
+    // DELETING A TENANT. Typed confirmation, not a yes/no: this row is
+    // chosen from a list and lists are misclicked. Typing the name means
+    // reading it, which is the only thing that reliably catches the wrong
+    // row.
+    const del = e.target.closest('[data-del]');
+    if (del){
+      closeMenus(null);
+      const id = del.getAttribute('data-del');
+      const name = del.getAttribute('data-name');
+      const typed = prompt('Delete ' + name + '?\n\n' +
+        'Their users will sign in to an empty application, and any shared recap ' +
+        'links stop working. Nothing is destroyed \u2014 every game, play and roster ' +
+        'stays in the database and StatChat support can restore the tenant from ' +
+        'Recovery tools.\n\n' +
+        'Type the tenant name exactly (' + name + ') to confirm:');
+      if (typed === null) return;
+      if (typed.trim() !== name){
+        showMsg('That did not match \u201c' + esc(name) + '\u201d \u2014 nothing was changed.', 'error');
+        return;
+      }
+      const { data, error } = await supabaseClient.rpc('set_tenant_deleted', {
+        p_tenant: id, p_deleted: true
+      });
+      if (error){ showMsg('Could not delete that tenant: ' + esc(error.message), 'error'); return; }
+      if (data === false){
+        showMsg('That tenant no longer exists \u2014 the list was out of date.', 'error');
+      } else {
+        showMsg(esc(name) + ' deleted. Restore it from Recovery tools.', 'success');
+      }
+      loadTenants(); loadRecovery();
+      return;
+    }
+
     const btn = e.target.closest('[data-toggle]');
     if (!btn) return;
+    closeMenus(null);
     const id = btn.getAttribute('data-toggle');
     const off = btn.getAttribute('data-off') === '1';
     const name = btn.getAttribute('data-name');
