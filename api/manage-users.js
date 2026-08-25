@@ -156,6 +156,12 @@ module.exports = async function handler(req, res) {
       // banned_until comes back as a timestamp when set. Anything in the
       // future means the account is locked out.
       disabled: !!(u.banned_until && new Date(u.banned_until) > new Date()),
+        // A TEMPORARY PASSWORD IS PENDING UNTIL IT IS USED.
+        // Surfaced so the list can say so: an operator who set one and
+        // read it out needs to know whether the person has actually been
+        // in yet, and a flag still set weeks later means they never did.
+        mustChangePassword: !!(u.user_metadata && u.user_metadata.must_change_password),
+        passwordSetAt: (u.user_metadata && u.user_metadata.password_set_at) || null,
       // WHICH SCHOOL EACH USER BELONGS TO.
       // ------------------------------------------------------------------
       // A tenant admin never needs this: everyone they can see is in their
@@ -201,9 +207,36 @@ module.exports = async function handler(req, res) {
     }
     const wrongTenant = await refuseIfOtherTenant(userId);
     if (wrongTenant) { res.status(403).json({ error: wrongTenant }); return; }
-    const { error } = await adminClient.auth.admin.updateUserById(userId, { password: newPassword });
+    // A PASSWORD SET BY SOMEBODY ELSE IS TEMPORARY, ALWAYS.
+    // --------------------------------------------------------------------
+    // Andy's call, 25 August 2026. The reasoning is specific to this product
+    // rather than general hygiene: an operator who can set a LASTING password
+    // can sign in as a school's admin and enter or alter plays as them, and
+    // the record would show that coach doing it. For an application whose
+    // whole value is that the numbers are trustworthy, that is the hole worth
+    // closing.
+    //
+    // So every admin-set password stamps must_change_password. login.html
+    // refuses to let the session go anywhere until a new one is chosen, and
+    // clears the flag at that point. The temporary password can be read out
+    // over the phone and stops working the moment it is used.
+    //
+    // password_set_by / _at are kept because "who gave this account a
+    // password, and when" is exactly the question asked after something looks
+    // wrong. Merged into existing metadata rather than replacing it --
+    // updateUserById overwrites user_metadata wholesale.
+    const { data: existing } = await adminClient.auth.admin.getUserById(userId);
+    const priorMeta = (existing && existing.user && existing.user.user_metadata) || {};
+    const { error } = await adminClient.auth.admin.updateUserById(userId, {
+      password: newPassword,
+      user_metadata: Object.assign({}, priorMeta, {
+        must_change_password: true,
+        password_set_by: callerId,
+        password_set_at: new Date().toISOString()
+      })
+    });
     if (error) { res.status(400).json({ error: error.message }); return; }
-    res.status(200).json({ success: true });
+    res.status(200).json({ success: true, mustChange: true });
     return;
   }
 
