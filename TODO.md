@@ -8,6 +8,35 @@ Ordered roughly by how much it would hurt to leave undone.
 
 ---
 
+## 0. THE STATCHAT MARK ON game.html — REMOVED, revisit with the layout code
+
+Every page reachable from the dashboard carries the mark (see
+`tests/brand_mark_check.js`). **game.html does not**, after four attempts
+that all worked in the file and none in the browser.
+
+That page lays its header out from JavaScript:
+
+  * `layoutHeader()` walks every child of `#headerLeft` and, on touch,
+    strips `height` and `width` and sets `display:flex !important`. Right
+    for a button, fatal for an `<img>` — it falls back to its intrinsic
+    512px.
+  * a separate banner sync sets an explicit `height` on `#headerLeft`,
+    and `align-items:stretch` passes that to the children, so anything
+    measured off a button can be as tall as the score banner.
+
+A stylesheet rule, an inline style, an exemption inside the loop, and a
+measured height were each tried. All four looked correct in the file.
+
+- [ ] **Revisit from inside `layoutHeader()`**, not from CSS. The mark has
+  to be something that function creates and sizes itself, in the same pass
+  that sizes the buttons — anything applied from outside is overwritten by
+  design.
+- [ ] Verify by RENDERING, not by reading. Three of the four failures were
+  confirmed "fixed" by a check that read the file.
+
+---
+
+
 ## 0. IS_OUR_TEAM — CLOSED, 25 August 2026
 
 Kept as a record because of how it was found and how far it reached.
