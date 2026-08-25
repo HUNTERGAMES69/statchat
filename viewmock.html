@@ -1,0 +1,2636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- Without this every page load logs a 404 for /favicon.ico.
+     Harmless, but a red console error should MEAN something. -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<!-- Apple renamed this; the old tag warns in the console on every
+     page load. Both are kept so older iOS still honours it. -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StatChat">
+<title>StatChat — Crew View</title>
+<style>
+  html, body { height:100%; margin:0; box-sizing:border-box; overflow:hidden; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; padding:0; padding-top:env(safe-area-inset-top); }
+  .wrap { width:1920px; height:1080px; max-width:none; margin:0; padding:8px; box-sizing:border-box; flex-shrink:0; transform-origin:center center; }
+  #mainView.hidden, #loading, #errorView { height:auto; overflow:visible; }
+  #mainView { height:100%; }
+  .quad-grid { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:8px; height:100%; position:relative; }
+  #centerLogoLink { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:20; }
+  #centerLogo { display:block; width:56px; height:auto; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.25); }
+  #mobileBackLink { display:none; }
+  .quad { min-height:0; overflow-y:hidden; display:flex; flex-direction:column; background:#fff; border:2px solid var(--sc-ink, #1a1a1a); border-radius:4px; padding:8px; box-sizing:border-box; }
+  .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  .card.compact { padding:0 0 8px; margin-bottom:16px; background:none; box-shadow:none; border-radius:0; border-bottom:2px solid #d5d2c8; }
+  .card.compact:last-child { border-bottom:none; margin-bottom:0; }
+  .drive-card { border-left:5px solid transparent; padding-left:10px !important; }
+  /* Both drive cards take their colour from WHOEVER HAD THE BALL, set as
+     custom properties at render time. The literals below are only
+     fallbacks, for the moment before a drive exists or if a team has no
+     colour stored -- the green and grey they used to be fixed at said
+     nothing about the game, and a reader had to check the heading to see
+     whose drive they were looking at. */
+  .drive-card { --drive-accent:#8a8f98; --drive-heading:#5b6068; --drive-tint:#edeef0; }
+  .drive-current { --drive-accent:var(--sc-green, #1a7a4c); --drive-heading:var(--sc-green, #1a7a4c); --drive-tint:#e6f4ea; }
+  .drive-card { border-left-color:var(--drive-accent); }
+  .drive-card h2 { color:var(--drive-heading); }
+  .drive-current h2::before { content:"● LIVE  "; font-size:10px; letter-spacing:0.05em; }
+  .drive-card .inline-stat-item { background:var(--drive-tint); }
+  /* Requested directly: Previous Drive used to sit right under whatever
+     height Current Drive's own content happened to take, leaving a
+     variable, often large, gap of empty space below it -- since the
+     quad itself has a fixed height (matching the other three
+     quadrants) but Previous Drive's own content rarely fills it.
+     Originally fixed with margin-top:auto (pushing it all the way to
+     the bottom, regardless of how long Current Drive's own last play
+     read) -- but that put ALL the leftover space above Previous Drive
+     instead, which then read as too much of a gap in the other
+     direction. Changed to a fixed, moderate gap instead: Previous
+     Drive sits a consistent distance below Current Drive's content
+     rather than glued to either edge, and whatever space remains
+     falls below it, near the tile's own bottom edge, where
+     padding-bottom below already accounts for it. The border-top
+     gives it a visible edge to sit against either way. */
+  #scoringCard { border-left-color:#8a8f98; }
+  #scoringCard h2 { color:#5b6068; }
+  .score-row { display:flex; align-items:baseline; gap:10px; padding:7px 0;
+               border-bottom:1px solid #f0f0f0; font-size:19px; }
+  .score-row:last-child { border-bottom:none; }
+  .score-q { flex:0 0 34px; font-size:13px; font-weight:700; color:#8a8f98; }
+  .score-team { flex:0 0 auto; font-weight:800; padding:1px 8px; border-radius:5px; font-size:15px; }
+  .score-text { flex:1 1 auto; min-width:0; font-weight:600; color:var(--sc-ink, #1a1a1a); }
+  .score-tally { flex:0 0 auto; font-weight:800; font-variant-numeric:tabular-nums; color:var(--sc-navy, #1a1a2e); }
+  .score-detail { font-size:13px; font-weight:600; color:#5b6068; margin-left:6px; }
+  /* The SOP badge. Boxed rather than merely tinted: at label size a
+     colour change alone is easy to miss, and the point is that this one
+     reading is a different kind of thing from the three beside it. */
+  .stat-label-badge { background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400);
+                      color:#7a5c00; border-radius:4px; padding:1px 6px; }
+  /* Each trailing clause on its own line, indented slightly so a wrapped
+     one still reads as belonging to the play above it rather than as a
+     new play. */
+  .play-clause { display:block; padding-left:0.9em; }
+    .drive-card.drive-previous { margin-top:30px; padding-top:14px; padding-bottom:16px; border-top:1px solid #eee; }
+  .team-summary-row { display:flex; gap:28px; flex:1; min-height:0; }
+  .team-summary-col { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .team-summary-header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:8px; font-weight:800; font-size:20px; margin-bottom:10px; }
+  /* Small enough not to compete with the team name, large enough to read
+     from the back of a room. */
+  .poss-ball { font-size:18px; line-height:1; margin-left:-2px; }
+  .team-summary-logo { height:36px; width:36px; object-fit:contain; border-radius:6px; background:rgba(255,255,255,0.85); flex-shrink:0; }
+  .stat-tile-grid { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr 1fr; gap:8px; flex:1; min-height:0; }
+  .stat-tile { background:#f5f7fa; border-radius:8px; padding:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+  .stat-tile-value { font-size:34px; font-weight:500; color:var(--sc-navy, #1a1a2e); line-height:1.1; }
+  /* The halftime figure. Option A: same line, smaller, muted -- it is a
+     reference for the number beside it, not a number in its own right.
+     25px against 34px (was 19px, raised 30% on 25 Aug): still clearly
+     subordinate, but readable from across a room, which is where this
+     screen is actually read from. Full size would be treatment C, which
+     wraps at four digits -- 1042 [518] is the case that decides it. */
+  .stat-tile-half { font-size:25px; font-weight:500; color:#8a94a0; margin-left:7px; }
+  .stat-tile-label { font-size:16px; font-weight:700; color:#777; text-transform:uppercase; letter-spacing:0.03em; margin-top:3px; }
+  .inline-stat-line { display:flex; gap:5px; margin-bottom:5px; }
+  .inline-stat-item { flex:1; white-space:nowrap; text-align:center; background:#f5f7fa; border-radius:6px; padding:7px 4px; display:flex; flex-direction:column; align-items:center; }
+  .inline-stat-item .stat-value { font-size:28px; font-weight:700; color:var(--sc-navy, #1a1a2e); line-height:1.1; }
+  .inline-stat-item .stat-label { font-size:13px; font-weight:800; color:#5b6068; text-transform:uppercase; letter-spacing:0.03em; margin-top:2px; }
+  .card.compact h2 { font-size:13px; margin:0 0 6px; }
+  h1 { font-size:20px; margin:0; }
+  h2 { font-size:16px; margin:0 0 10px; color:#444; }
+  h3 { font-size:14px; font-weight:700; margin:12px 0 6px; color:var(--sc-ink, #1a1a1a); letter-spacing:0.02em; }
+  p.sub { color:#888; margin:0 0 14px; font-size:13px; }
+  .banner { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border-radius:10px; padding:12px 16px; margin-bottom:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
+  .banner .score { font-size:20px; font-weight:700; }
+  .banner .downdist { font-size:15px; font-weight:500; }
+  .banner.compact { padding:8px 12px; margin-bottom:6px; }
+  /* One size across the whole bar. The three parts used to be 16px, 12px
+     and 12px, which made the down-and-distance -- the most-glanced-at
+     line on the page -- the SMALLEST text in it. Levelling them means
+     nothing here has to be squinted at, and the eye is not led to the
+     score just because it happens to be biggest. */
+  .banner.compact .score,
+  .banner.compact .downdist { font-size:19px; font-weight:700; }
+  /* Below roughly 1100px the three parts stop fitting on one line, so the
+     down-and-distance wraps to its own full-width row rather than being
+     squeezed. */
+  @media (max-width: 1219px){
+    .banner.compact .score,
+    .banner.compact .downdist { font-size:17px; }
+  }
+  .hint { font-size:12px; color:#888; margin:6px 0; }
+  .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
+  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
+  .hidden { display:none; }
+  .logline { font-size:14px; padding:6px 0; border-bottom:1px solid #f2f2f2; }
+  table.stattable { width:100%; border-collapse:collapse; font-size:11px; margin:0; }
+  table.stattable th { text-align:right; font-size:9px; color:#5b7ca8; font-weight:600; padding:2px 6px; border-bottom:1px solid #d8dde3; white-space:nowrap; }
+  table.stattable th:first-child, table.stattable td:first-child { text-align:left; }
+  table.stattable td { text-align:right; padding:2px 6px; border-bottom:none; }
+  table.stattable tbody tr:nth-child(even) { background:rgba(0,0,0,0.03); }
+  table.stattable tr.totalRow { font-weight:700; border-top:1px solid #333; }
+  .stat-category-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:start; }
+  .stat-category-col { display:flex; flex-direction:column; min-width:0; }
+  .stat-category-tile { background:#eef1f5; border:1px solid #c9d0d9; border-radius:6px; padding:calc(6px * var(--stat-scale, 1)) 8px calc(4px * var(--stat-scale, 1)); margin-bottom:calc(6px * var(--stat-scale, 1)); min-width:0; break-inside:avoid; }
+  /* Header row for a category tile: the chip, then its total a short gap
+     to the right of it -- LEFT justified, not pushed to the far edge.
+     Sitting beside the label reads as "PASSING: 310"; sitting at the far
+     right read as a separate column that happened to share a line.
+     baseline alignment so the two read as one line.
+     justify-content is deliberately absent: the default flex-start is
+     what keeps the total next to the chip whatever the tile's width. */
+  .stat-category-head { display:flex; align-items:baseline; gap:14px; margin:0 0 3px; }
+  .stat-category-head .stat-category-label { margin:0; }
+  /* Same size as the label, no background, muted. A cross-check, not a
+     headline -- it must not compete with the players' own numbers. */
+  .stat-category-total { font-size:calc(11px * var(--stat-scale, 1)); font-weight:600; color:#8a94a6; letter-spacing:0.02em; }
+  .stat-category-label { font-size:calc(11px * var(--stat-scale, 1)); font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:0.02em; margin:0 0 3px; background:#4a5568; display:inline-block; padding:2px 7px; border-radius:3px; }
+  table.player-stat-table { width:100%; border-collapse:collapse; font-size:calc(13px * var(--stat-scale, 1)); }
+  table.player-stat-table th { text-align:right; font-size:calc(10px * var(--stat-scale, 1)); color:#5b7ca8; font-weight:600; padding:1px 4px; white-space:nowrap; }
+  table.player-stat-table th:first-child, table.player-stat-table td:first-child { text-align:left; }
+  table.player-stat-table td { text-align:right; padding:calc(2px * var(--stat-scale, 1)) 4px; white-space:nowrap; }
+  table.player-stat-table td:first-child { font-weight:700; color:var(--sc-navy, #1a1a2e); white-space:nowrap; }
+  .live-badge { display:inline-block; font-size:11px; font-weight:700; color:var(--sc-amber-text, #a37a00); background:var(--sc-amber-tint, #fff3cd); padding:2px 8px; border-radius:10px; margin-left:8px; vertical-align:middle; }
+  @media (min-width: 768px) { body { padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); } .card { padding:24px; } }
+
+  /* Mobile: drop the fixed 1920x1080 desktop layout entirely. Show only
+     the team-summary tiles and per-category stat tiles, stacked in one
+     column -- drop the drive quadrant, which needs the wider desktop
+     layout to be useful. */
+  @media (max-width: 767px) {
+    html, body { height:auto; overflow:visible; }
+    body { width:auto; height:auto; display:block; padding:10px; padding-top:calc(10px + env(safe-area-inset-top)); }
+    .wrap { width:auto; height:auto; max-width:none; padding:0; transform:none !important; }
+    .quad-grid { display:flex; flex-direction:column; height:auto; gap:12px; }
+    .quad { border:1px solid var(--sc-ink, #1a1a1a); overflow-y:visible; padding:10px; }
+    #quadTR { order:99; }
+    .team-summary-row { flex-direction:column; gap:16px; }
+    .stat-category-grid { grid-template-columns:1fr; }
+    #centerLogoLink { display:none; }
+    #mobileBackLink { display:block; }
+    .inline-stat-line { flex-wrap:wrap; }
+    .inline-stat-item { flex:1 1 45%; white-space:normal; }
+    .inline-stat-item .stat-value { font-size:16px; }
+  }
+
+/* =====================================================================
+   DARK THEME — VARIANT B, appended so it wins on source order.
+   =====================================================================
+   Nothing above is deleted. This block only re-colours; every size,
+   position and scaling rule the page already has is left alone, because
+   view.html is a fixed 1920x1080 surface with a transform scale and its
+   geometry is load-bearing.
+
+   Tokens are the brochure site's own (index.html), not new ones.
+
+   THE TENANT'S COLOUR IS AN ACCENT, NEVER A FILL. It comes from the
+   database and a school may pick something pale; a 5px spine survives
+   that, a filled panel becomes a hole in a dark screen somebody reads
+   for two hours. See the JS change at the team-stats heading too.
+   ===================================================================== */
+:root{
+  --v-ink:#10141a; --v-panel:#191f27; --v-raise:#20272f; --v-edge:#2b333d;
+  --v-mute:#8d99a6; --v-paper:#eef1f4; --v-brand:#7cb518; --v-brand-hi:#a3d93f;
+  --v-data:#ffc72c; --v-live:#b00020;
+}
+body{ background:var(--v-ink) !important; color:var(--v-paper) !important; }
+
+.quad, .card{ background:var(--v-panel) !important; border-color:var(--v-edge) !important;
+              box-shadow:none !important; color:var(--v-paper) !important; }
+.compact{ background:none !important; border-bottom-color:var(--v-edge) !important; }
+
+/* the stat tiles: darker than the panel, so each number sits in a well */
+.stat-tile{ background:#0f141a !important; border:1px solid #1e262f !important; }
+.stat-tile-value{ color:var(--v-paper) !important; font-variant-numeric:tabular-nums; }
+.stat-tile-label{ color:var(--v-mute) !important; }
+/* the halftime figure stays subordinate, and legible on dark */
+.stat-tile-half{ color:#8fa0b2 !important; }
+
+/* drive column */
+.drive-card{ background:#151a21 !important; border-color:var(--v-edge) !important; }
+.drive-current{ background:rgba(124,181,24,.07) !important;
+                border-left:4px solid var(--v-brand) !important; }
+.drive-previous{ background:#151a21 !important;
+                 border-left:4px solid var(--v-data) !important; }
+.inline-stat-item{ background:var(--v-raise) !important; border:1px solid #262f39 !important;
+                   color:var(--v-paper) !important; }
+.inline-stat-line{ color:var(--v-paper) !important; }
+.logline, .play-clause{ color:var(--v-paper) !important; }
+.downdist{ color:#b9c4d0 !important; }
+.hint, .sub{ color:var(--v-mute) !important; }
+
+/* box-score tables */
+.player-stat-table{ color:#dde4ec !important; }
+.player-stat-table th{ color:var(--v-mute) !important; border-color:#232c36 !important; }
+.player-stat-table td{ border-color:#202831 !important; color:#dde4ec !important; }
+.player-stat-table tr td:first-child{ color:var(--v-paper) !important; }
+.stat-category-tile{ background:#0f141a !important; border-color:#232c36 !important; }
+.stat-category-head{ background:#1d242c !important; }
+.stat-category-total{ color:var(--v-data) !important; }
+.stat-label{ color:var(--v-mute) !important; }
+.stat-value{ color:var(--v-paper) !important; }
+
+/* the live badge, on the brochure's alert red rather than amber-on-white */
+.live-badge{ background:rgba(176,0,32,.15) !important; color:#ff8fa3 !important;
+             border:1px solid rgba(176,0,32,.45) !important; }
+.badge{ background:var(--v-raise) !important; color:var(--v-paper) !important;
+        border:1px solid var(--v-edge) !important; }
+
+/* score strip */
+.banner{ background:linear-gradient(90deg,#161c24,#11161d) !important;
+         border:1px solid var(--v-edge) !important; }
+.score, .score-team, .score-tally, .score-text{ color:var(--v-paper) !important; }
+.score-q{ background:var(--v-live) !important; color:#fff !important; }
+.score-detail{ color:var(--v-mute) !important; }
+
+/* numbers must not shift sideways as they change during a drive */
+.stat-tile-value, .inline-stat-item, .score-tally, .player-stat-table td{
+  font-variant-numeric:tabular-nums; }
+
+/* The five classes the audit found still carrying light colour. Kept
+   separate from the block above so it is obvious these were found by
+   checking, not by guessing which ones mattered. */
+.wrap{ background:var(--v-ink) !important; }
+.msg{ background:var(--v-raise) !important; color:var(--v-paper) !important;
+      border:1px solid var(--v-edge) !important; }
+.score-row{ border-bottom-color:var(--v-edge) !important; }
+.team-summary-header{ background:#171d25 !important; color:var(--v-paper) !important; }
+.team-summary-logo{ background:rgba(255,255,255,.06) !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <a href="dashboard.html" id="mobileBackLink" style="font-size:13px; color:#555; text-decoration:none; margin-bottom:8px;">← Back to dashboard</a>
+
+  <div id="loading" class="card"><div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:14px;"><img src="logo.png" alt="StatChat" style="width:48px; height:auto; border-radius:8px;"><img id="splashTeamIcon" style="display:none; width:48px; height:48px; border-radius:8px; object-fit:cover;"></div><h1>Loading…</h1></div>
+
+  <div id="errorView" class="hidden card">
+    <h1>Couldn't open this game</h1>
+    <p class="sub" id="errorMsg"></p>
+    <a href="dashboard.html" style="text-decoration:none; padding:9px 16px; border-radius:6px; background:#1a1a2e; color:#fff; font-weight:600;">← Dashboard</a>
+  </div>
+
+  <div id="mainView" class="hidden">
+    <div class="quad-grid">
+      <a href="dashboard.html" id="centerLogoLink" title="Back to dashboard"><img id="centerLogo" src="logo.png" alt="StatChat logo"></a>
+
+      <div class="quad" id="quadTL">
+        <div class="banner compact" id="banner">
+          <span class="score" id="scoreText"></span>
+          <!-- DOWN AND DISTANCE REMOVED FROM THE BANNER, 23 Aug.
+               It took a full line of its own here (a rule below 1220
+               gave it flex-basis:100%), so the banner ran to three lines
+               on an iPad -- score, down, quarter.
+
+               Nothing is lost: the situation is on screen twice already,
+               in Current Drive and via the possession marker on the team
+               tiles. This was the third telling and the one paying for it
+               in vertical space. Score and quarter only now. -->
+          <span class="downdist" id="quarterText"></span>
+        </div>
+        <div id="gameMsg"></div>
+        <div id="teamSummaryContainer" style="flex:1; display:flex; flex-direction:column;"></div>
+      </div>
+
+      <div class="quad" id="quadTR">
+        <div class="card compact drive-card drive-current">
+          <h2>Current Drive</h2>
+          <div id="currentDriveTiles"></div>
+          <div id="driveLogScroll"></div>
+        </div>
+        <div class="card compact drive-card drive-previous">
+          <h2>Previous Drive</h2>
+          <div id="prevDriveLogScroll"></div>
+        </div>
+        <!-- Takes the whole quad at halftime and at the final whistle.
+             Both drive cards are hidden then: there is no current drive
+             to watch, and the question a spectator arrives with at those
+             two moments is how the score got there. -->
+        <div class="card compact drive-card" id="scoringCard" style="display:none;">
+          <h2 id="scoringHeading">Scoring</h2>
+          <div id="scoringBody"></div>
+        </div>
+      </div>
+
+      <div class="quad" id="quadBL">
+        <div class="card compact">
+          <h2 id="teamAHeading">Team Stats</h2>
+          <div id="boxScoreTeamA"></div>
+        </div>
+      </div>
+
+      <div class="quad" id="quadBR">
+        <div class="card compact">
+          <h2 id="teamBHeading">Opponent Stats</h2>
+          <div id="boxScoreTeamB"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="team-icon.js"></script>
+<script src="engine.js"></script>
+<script>
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  // A passive viewer (as opposed to whoever's actively typing plays) is
+  // far more likely to lock their screen or background the tab between
+  // checks -- and browsers, especially iOS, aggressively throttle JS
+  // timers in that state. That silently breaks the realtime connection's
+  // heartbeat with no visible error and no automatic recovery, which is
+  // exactly what was reported: it looked like an admin-vs-viewer
+  // permissions issue, but was actually just who happens to keep their
+  // device active. Both mitigations below are Supabase's own documented
+  // fix for this exact failure mode -- see
+  // https://supabase.com/docs/guides/troubleshooting/realtime-handling-silent-disconnections-in-backgrounded-applications-592794
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    realtime: {
+      worker: true,
+      heartbeatCallback: (status) => {
+        if (status === 'disconnected'){
+          supabaseClient.realtime.connect();
+        }
+      }
+    }
+  });
+
+  // The display is designed against a fixed 1920x1080 canvas so every font
+  // size and tile dimension throughout stays correct relative to every
+  // other -- rather than rewriting all of that in relative units, the
+  // whole canvas is scaled up or down as a single unit to fit whatever
+  // viewport is actually available, so nothing is ever clipped or forced
+  // to scroll regardless of the real screen/browser size. Skipped
+  // entirely below the mobile breakpoint, where the layout is already
+  // its own natural, responsive, scrolling design.
+  function applyDisplayScale(){
+    if (window.innerWidth <= 700){
+      document.querySelector('.wrap').style.transform = '';
+      return;
+    }
+    // Scale X and Y independently -- rather than one uniform scale
+    // (which forces the fixed 1920x1080 (16:9) aspect ratio and always
+    // leaves wasted space on whichever axis doesn't match the actual
+    // screen), this stretches the whole canvas to exactly fill
+    // whatever viewport is actually available, since every real screen
+    // has a different ratio. The very slight non-uniform distortion
+    // this can introduce is far less noticeable than the wasted-space
+    // gaps it replaces, since almost everything on this page is text,
+    // tables, and tiles rather than shapes where aspect ratio matters.
+    const scaleX = window.innerWidth / 1920;
+    const scaleY = window.innerHeight / 1080;
+    document.querySelector('.wrap').style.transform = 'scale(' + scaleX + ', ' + scaleY + ')';
+  }
+  window.addEventListener('resize', () => { applyDisplayScale(); if (plays.length) renderBoxScore(); });
+  // Logos and webfonts land after first paint and change measured
+  // heights, so the first fit is made on stale numbers. Re-fit once
+  // everything has actually loaded.
+  window.addEventListener('load', () => { if (plays.length) renderBoxScore(); });
+  applyDisplayScale();
+
+  function showView(name){
+    ['loading','errorView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+  }
+  function showMsg(elId, text, type){
+    document.getElementById(elId).innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+  }
+
+  let currentGameId = null;
+  // Held for refreshBranding(), which polls long after the game object
+  // has gone out of scope. Scoping that query needs the tenant, and
+  // re-reading the game every ten minutes to learn it would be a
+  // second query to answer a question already answered once.
+  let currentGameTenantId = null;
+  let isResultsMode = false;
+  let currentGameStatus = null;
+  let TEAMS = { teamA: {}, teamB: {} };
+  let plays = [], startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
+  // GAME PHASE, module-level rather than local to renderAll(). Added 19
+  // Aug 2026 for the box score's leader highlight, which has to read the
+  // current phase from renderBoxScore() too -- and renderBoxScore() is
+  // ALSO called directly from the resize and load listeners below,
+  // outside renderAll() entirely, where a value only ever assigned
+  // inside renderAll() would not exist. Set fresh every time renderAll()
+  // computes it; read from wherever needs the current one.
+  let phase = null;
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION'){
+      if (session){ init(); } else { window.location.href = '/login.html'; }
+    } else if (event === 'SIGNED_OUT'){
+      window.location.href = '/login.html';
+    }
+  });
+
+
+  // A logo's two detected colors can both be dark and saturated (navy
+  // and red, for instance) -- using one directly as banner text on the
+  // other as background then reads as low-contrast, hard to read text,
+  // even though each color individually looks fine. Checks the actual
+  // luminance gap between this specific background/text pairing, and
+  // only overrides to black/white when that gap is too small to read
+  // comfortably -- a light background with intentionally dark text
+  // stays untouched, since that's already good contrast.
+
+
+  function buildTeams(game, rosterRows, ourBranding){
+    const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
+    const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    TEAMS.teamA = { name: ourName, bg: ourBranding.primary_color || '#2b3440', text: ourBranding.secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, rosterUnassigned:{}, posOffense:{}, logo: ourBranding.logo_url || null };
+    const oppPrimary = game.opponent_primary_color || '#6e7885', oppSecondary = game.opponent_secondary_color || '#ffffff';
+    TEAMS.teamB = { name: oppName, bg: oppPrimary, text: oppSecondary,
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, rosterUnassigned:{}, posOffense:{}, logo: game.opponent_logo_url || null };
+    // Each team's color is set independently -- nothing checks that
+    // they're actually distinguishable from each other, and two
+    // different schools can genuinely share a similar accent color.
+    // Only the opponent's displayed color adjusts here, never our own,
+    // since our identity should stay put -- first try swapping to their
+    // own secondary color, since that's still genuinely their color, and
+    // only fall back to a neutral tone if even that's too close.
+    if (colorDistance(TEAMS.teamA.bg, TEAMS.teamB.bg) < 60){
+      if (colorDistance(TEAMS.teamA.bg, oppSecondary) >= 60){
+        TEAMS.teamB.bg = oppSecondary;
+        TEAMS.teamB.text = oppPrimary;
+      } else {
+        TEAMS.teamB.bg = luminance(TEAMS.teamA.bg) > 0.5 ? '#3a3a3a' : '#c8c8c8';
+        TEAMS.teamB.text = luminance(TEAMS.teamB.bg) > 0.55 ? '#1a1a1a' : '#ffffff';
+      }
+    }
+    rosterRows.forEach(r => {
+      const team = TEAMS[r.team_side];
+      if (!team) return;
+      if (r.unit === 'offense'){ team.rosterOffense[r.jersey_number] = r.player_name; team.posOffense[r.jersey_number] = r.position; }
+      else if (r.unit === 'defense'){ team.rosterDefense[r.jersey_number] = r.player_name; }
+      else if (r.unit === 'special'){ team.rosterSpecialTeams[r.jersey_number] = r.player_name; }
+      // Requested directly: resolving every unrecognized-position player
+      // to a unit is impractical on a large, position-less roster.
+      // Still absent from the three unit-specific picker lists above --
+      // there is nothing to file him under -- but named here so
+      // rosterName/playerName (engine.js) can resolve him once he is
+      // actually credited on a play, instead of reading as a call-up.
+      else if (r.player_name){ team.rosterUnassigned[r.jersey_number] = r.player_name; }
+    });
+  }
+
+  // --- Proven read-only engine core, extracted verbatim from game.html ---
+function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+const TIMEOUTS_PER_HALF = 3;
+const TIMEOUTS_PER_OT = 1;
+// Administrative entries -- clock markers, quarter/half dividers, manual
+// possession flips -- are announcements, not football plays. They carry
+// no roles and no yardage, so anything reasoning about "what actually
+// happened on this drive" has to skip them.
+//
+// isReset markers are deliberately NOT administrative: they are explicit
+// "new drive" announcements and are valid drive starts.
+//
+// Lives in the engine core (top level) rather than inside
+// findDriveStarts because computeDriveSummary needs it too, from a
+// different scope.
+// Bookkeeping the drive tiles do not need. These are entries the app
+// writes to keep its own state straight -- clock events, chain
+// corrections, the direction arrow -- rather than things that happened on
+// the field. The tiles are for reading at a glance, so they are dropped
+// there; the ALL PLAYS list is the audit trail and keeps everything.
+//
+// Deliberately KEPT: penalties and timeouts (real events), quarter
+// markers, overtime markers, dividers, and "New series" -- which looks
+// like "New drive" but means something different: a muffed kick
+// recovered by the kicking team, a fresh set of downs with no change of
+// possession. Manual entry NOTEs are kept too; a coach typed those on
+// purpose. Only the two "Manual ..." state overrides are dropped.
+function isDriveTileNoise(p){
+  if (!p || p.isDivider) return false;
+  const e = p.effect || {};
+  if (e.clockEvent) return true;
+  if (e.setDirection) return true;
+  // A quarter marker is an administrative row, not a play. It is kept in
+  // the FULL log (it is how the quarter is derived) but it has no place in
+  // a drive tile -- at the start of the second half it was the newest row
+  // in the log and duly rendered as the headline, so the tile read
+  // "Quarter marker — start of Q3" as though someone had run it.
+  if (e.setQuarter) return true;
+  const t = (p.text || '').trim();
+  if (t.indexOf('Down & distance adjusted') === 0) return true;
+  if (t.indexOf('New drive') === 0) return true;
+  if (t.indexOf('Manual flip') === 0) return true;
+  if (t.indexOf('Manual score adjust') === 0) return true;
+  return false;
+}
+function isAdminMarker(p){
+  if (!p) return true;
+  const e = p.effect || {};
+  if (e.isReset) return false;
+  // e.timeout added 19 Aug 2026: a timeout call has no bearing on
+  // possession or drive state at all, but was never in this list --
+  // so findDriveStarts treated it as a real play, and a timeout called
+  // between a defensive score and its own PAT became the target a
+  // phantom drive boundary landed on, registering an unearned
+  // possession for the scoring team. Reported from a real game.
+  return !!(e.clockEvent || e.setQuarter || e.forcePossession || e.timeout || p.isDivider);
+}
+
+// Jersey numbers resolve across ALL THREE roster units, not just the one
+// the play type implies. High-school rosters routinely list a player
+// under a single unit even though they play several, and a dedicated
+// kick/punt returner is normally rostered on special teams only -- which
+// is why returners used to render in the log as a bare "#25".
+//
+// A fallback can only ever turn "#25" into a name; it can never change a
+// name that already resolved, because the expected unit is always
+// searched first. This mirrors playerName() in the report pages.
+
+
+
+
+function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':n===4?'4th':(n+'th'); }
+function clockToAbsSeconds(quarter, clockStr){
+  let m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
+  let mins, secs;
+  if (m){
+    mins = parseInt(m[1]); secs = parseInt(m[2]);
+  } else {
+    // Colon-less entry: last two digits are seconds, everything
+    // before that is minutes -- e.g. "1156" reads the same as
+    // "11:56" would, "56" alone reads as "0:56". Requires at least
+    // two digits so this split is never ambiguous.
+    m = clockStr.match(/^(\d*)(\d{2})$/);
+    if (!m) return null;
+    mins = m[1] ? parseInt(m[1]) : 0; secs = parseInt(m[2]);
+  }
+  if (secs > 59) return null;
+  const remaining = mins * 60 + secs;
+  // A clock value can never show more time than the quarter itself
+  // holds -- e.g. "15:00" is meaningless in a 12-minute quarter.
+  if (remaining > quarterLengthSec) return null;
+  return (quarter - 1) * quarterLengthSec + (quarterLengthSec - remaining);
+}
+function formatDuration(sec){
+  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+// Ported from game.html, for the SOP tile: the reverse of
+// clockToAbsSeconds above -- turns the absolute-seconds-since-kickoff
+// value the scorer's start-of-possession clock entry was stored as
+// back into a displayable "11:24" clock reading. absSec counts UP from
+// the start of the game; a clock counts DOWN within its quarter, which
+// is why this is not simply a format call.
+function absSecToClockStr(absSec){
+  if (absSec === null || absSec === undefined) return null;
+  const q = Math.floor(absSec / quarterLengthSec) + 1;
+  const remaining = quarterLengthSec - (absSec - (q - 1) * quarterLengthSec);
+  const mins = Math.floor(remaining / 60), secs = remaining % 60;
+  return { q, text: mins + ':' + String(secs).padStart(2, '0') };
+}
+// markerLabel() lives in engine.js, loaded above. It was duplicated here
+// (and in view.html, and in broadcast.html) as three identical copies;
+// "own 50" had to be fixed in one place, not three. Removed 13 Aug 2026.
+
+// THE SPECTATOR VERSION: team names instead of own/opp.
+// ---------------------------------------------------------------------
+// "2nd & 10 at opp 45" asks the reader to work out whose 45 that is, and
+// on a screen watched from across a room by people who did not enter the
+// play there is nothing to work it out from. "2nd & 10 at Ouachita 45"
+// says it outright.
+//
+// Deliberately NOT a change to markerLabel() in engine.js. That function
+// is shared with the entry page and the reports, where own/opp is the
+// right register -- the scorer knows whose ball it is, and "own" is
+// shorter than a school name in a column that has to stay narrow. This
+// wording is a property of the audience, not of the yard line.
+//
+// The 50 keeps its own name: it belongs to neither side, and "Neville 50"
+// would be wrong however the possession reads.
+function markerLabelNamed(fp, possession){
+  if (fp === null || fp === undefined) return '';
+  if (fp === 50) return 'the 50';
+  const ownTeam = possession || 'teamA';
+  const side = fp < 50 ? ownTeam : otherTeam(ownTeam);
+  const name = (TEAMS[side] || {}).name;
+  // Falls back to the shared wording if a team has no name yet -- better
+  // "opp 45" than "undefined 45".
+  if (!name) return markerLabel(fp);
+  return name + ' ' + (fp < 50 ? fp : (100 - fp));
+}
+
+function readFileAsDataURL(file){
+  return new Promise(resolve => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.readAsDataURL(file);
+  });
+}
+
+const OFFENSE_POS = new Set(['QB','RB','FB','HB','TB','WR','SE','FL','SLOT','SB','TE','OL','OT','OG','G','T','C','ATHLETE','ATH']);
+const DEFENSE_POS = new Set(['DB','CB','S','FS','SS','LB','OLB','ILB','MLB','WLB','DE','DT','NG','NT','EDGE','DL']);
+const SPECIAL_POS = new Set(['K','P','LS','DS','H','KR','PR','RET']);
+function posToUnit(pos){
+  if (!pos) return null;
+  const first = String(pos).toUpperCase().split(/[\/,\s]+/)[0];
+  if (SPECIAL_POS.has(first)) return 'st';
+  if (OFFENSE_POS.has(first)) return 'o';
+  if (DEFENSE_POS.has(first)) return 'd';
+  return null;
+}
+function extractNameTag(rawName){
+  const m = String(rawName).match(/\(\s*(O|D|ST)\s*\)\s*$/i);
+  if (!m) return { cleanName: String(rawName).trim(), explicitUnit: null };
+  const tag = m[1].toUpperCase();
+  const cleanName = String(rawName).slice(0, m.index).trim();
+  return { cleanName, explicitUnit: tag.toLowerCase() };
+}
+
+
+  // --- End engine core ---
+
+  const RUSH_POS = new Set(['QB','RB','FB','HB','TB']);
+  const RECEIVE_POS = new Set(['WR','TE','SE','FL','SLOT','SB']);
+
+
+
+
+
+  function statRow(cells){
+    return '<tr>' + cells.map(c => '<td>' + c + '</td>').join('') + '</tr>';
+  }
+
+  function renderTeamBoxScore(teamKey, box, overrideDefensePlays){
+      const team = TEAMS[teamKey];
+      const s = box[teamKey];
+      // LEADER HIGHLIGHT, added 19 Aug 2026 -- only at halftime or final,
+      // never during live play. An earlier version of this exact idea
+      // was built and then deliberately removed from these tables: with
+      // the rows already sorted leader-first, a highlight during live
+      // play said nothing the order did not already say, and read as if
+      // it might mean something else on a panel that changes every
+      // snap. Neither objection holds at a fixed summary moment -- the
+      // leader is not about to change, and calling it out reads as a
+      // headline, not a live signal. Reported directly, scoped to
+      // exactly these two phases; see the module-level `phase` variable
+      // above for why it is not local to renderAll().
+      const highlightLeader = phase === 'HALFTIME' || phase === 'FINAL';
+      const leaderTint = highlightLeader && team && team.bg ? mixHex(team.bg, '#ffffff', 0.88) : null;
+      // Built into named holders rather than appended straight to the
+      // columns, because the display order is not the order the sections
+      // are computed in -- rushing is calculated before receiving but
+      // has to appear after it. Assembling at the end keeps the layout
+      // decision in one readable place instead of depending on which
+      // block happens to run first.
+      let passHtml = '', recHtml = '', rushHtml = '', defHtml = '', stHtml = '';
+      let leftHtml = '', rightHtml = '';
+
+      const sum = (nums, obj, key) => nums.reduce((t, n) => t + ((obj[n] && obj[n][key]) || 0), 0);
+      // CATEGORY TOTAL beside the header, deliberately plain.
+      // ----------------------------------------------------------------
+      // It exists as a CHECK against the team tiles in the top-left quad:
+      // passing here should equal Comp/Pass Yds there, rushing should
+      // equal Att/Rush Yds, and receiving should equal passing now that
+      // an unnamed catch buckets to Unknown. Two numbers that must agree,
+      // computed by different paths, on one screen.
+      //
+      // Summed from the WHOLE bucket, not from the rows on screen: these
+      // tables show the top five (plus anyone with a touchdown), so a
+      // total added up from the visible rows would quietly disagree with
+      // the tile it is meant to check -- and would look like the bug it
+      // was put there to catch.
+      //
+      // Same font size as the label and no highlight, on purpose. It is a
+      // reference figure a scorer glances at, not a headline; anything
+      // louder competes with the players' own numbers.
+      const sumBucket = (bucket, key) =>
+        Object.keys(bucket).reduce((t, n) => t + ((bucket[n] || {})[key] || 0), 0);
+      const tile = (label, inner, total) =>
+        '<div class="stat-category-tile"><div class="stat-category-head">' +
+        '<div class="stat-category-label">' + label + '</div>' +
+        (total === undefined || total === null ? ''
+          : '<span class="stat-category-total">' + total + '</span>') +
+        '</div>' + inner + '</div>';
+      // Sorts jersey numbers by a yardage-like field, descending, so the
+      // category leader always sorts first.
+      // TEAM is a bucket, not a player -- kneels, bad snaps and sack
+      // yardage. Its total is usually negative, so ranking by yards put a
+      // bookkeeping row above the actual runners. Pinned last.
+      // TEAM and Unknown both sort last. They are different things --
+      // TEAM is "credited to nobody by rule" (a sack, a kneel), Unknown is
+      // "we did not record who" -- but neither is a player, and either
+      // one topping a leaders list would be wrong.
+      const bookkeeping = n => (n === 'TEAM' || n === 'Unknown') ? 1 : 0;
+      const teamLast = (a, b) => bookkeeping(a) - bookkeeping(b);
+      const sortByYds = (nums, obj, key) => nums.slice().sort((a, b) =>
+        teamLast(a, b) || (((obj[b] && obj[b][key]) || 0) - ((obj[a] && obj[a][key]) || 0)));
+      // Caps a sorted list at 5 entries -- except anyone with a touchdown
+      // stays in regardless of rank, since a scorer never just vanishes
+      // even if their overall yardage was modest.
+      // The touchdown exception exists so a scorer is never dropped just
+      // for having low yardage, but it was unbounded: EVERY remaining
+      // player with a TD got a row, so five scoring receivers meant ten
+      // rows in one tile. The page cannot scroll (body and .quad are both
+      // overflow:hidden) and the auto-fit stops shrinking at 0.5, so past
+      // that the extra rows are silently clipped -- present in the data,
+      // invisible on screen. Capped so the tile height is bounded.
+      // HOW MANY PLAYERS A CATEGORY TILE LISTS.
+      // ----------------------------------------------------------------
+      // Four, down from five on 14 Aug 2026. This panel auto-shrinks its
+      // type to fit whatever it is given, so every extra row is paid for
+      // in font size across ALL the tiles -- and a fifth name nobody can
+      // read from the sideline is worth less than four they can. The
+      // category total beside each header still covers everyone, so the
+      // rows that are cut are not lost, just not listed.
+      //
+      // Named rather than repeated: it was written as a literal 5 in two
+      // places inside this one helper, and the two had to agree or the
+      // cut list and the extras list would overlap or leave a gap.
+      const MAX_ROWS = 4;
+      const MAX_TD_EXTRAS = 3;
+      const capWithTdException = (sortedNums, obj, tdKey) => {
+        const top = sortedNums.slice(0, MAX_ROWS);
+        // Anyone below the cut who SCORED still appears. A touchdown is
+        // the one thing a coach will look for by name and not find in a
+        // yardage ranking -- a 2-yard plunge to win it ranks last.
+        const extras = sortedNums.slice(MAX_ROWS)
+          .filter(n => (obj[n] && obj[n][tdKey]) > 0)
+          .slice(0, MAX_TD_EXTRAS);
+        return top.concat(extras);
+      };
+      // A row whose every displayed value is zero says nothing, and this
+      // panel auto-shrinks to fit -- an empty row costs font size on the
+      // rows that matter. They arise legitimately: a sack-fumble creates
+      // a rushing bucket holding only { fum: 1 }, and the live rushing
+      // table has no Fum column, so the quarterback appeared as 0/0/0.
+      // Filtering on the DISPLAYED values rather than the bucket keeps
+      // the rule general -- the same player still shows up in recap,
+      // which does have a Fum column and therefore a reason to list him.
+      const rowHasValue = r => (r.values || []).some(v => {
+        if (v === null || v === undefined) return false;
+        const t = String(v).trim();
+        if (t === '' || t === '—' || t === '-') return false;
+        const n = parseFloat(t);
+        return isNaN(n) ? true : n !== 0;
+      });
+      const table = (headers, rows, applyLeaderHighlight) => {
+        let h = '<table class="player-stat-table"><tr><th></th>' + headers.map(x => '<th>' + x + '</th>').join('') + '</tr>';
+        let highlighted = false;
+        rows.forEach(r => {
+          // Leader highlight, scoped narrowly -- see the note by
+          // leaderTint's own declaration above for the full history and
+          // reasoning. Three separate gates, all required: leaderTint
+          // itself is only non-null at halftime or final; applyLeaderHighlight
+          // is only passed true for Passing/Rushing/Receiving, never
+          // special teams (not asked for there); and only the FIRST
+          // qualifying row, since rows are already sorted leader-first
+          // and only one leader is being called out per category. TEAM
+          // and Unknown are bookkeeping, not a player -- excluded even
+          // though sortByYds already pins them last, since an category
+          // with no individually-credited stat at all would otherwise
+          // highlight a bucket rather than a person.
+          const shouldHighlight = applyLeaderHighlight && leaderTint && !highlighted &&
+            r.name !== 'TEAM' && r.name !== 'Unknown';
+          if (shouldHighlight) highlighted = true;
+          const style = shouldHighlight ? ' style="background:' + leaderTint + ';"' : '';
+          h += '<tr' + style + '><td>' + r.name + '</td>' + r.values.map(v => '<td>' + v + '</td>').join('') + '</tr>';
+        });
+        return h + '</table>';
+      };
+
+      const passSorted = sortByYds(Object.keys(s.passing), s.passing, 'yds');
+      const passNums = capWithTdException(passSorted, s.passing, 'td');
+      if (passNums.length){
+        // Sacks belong on the passing line -- recap and stat_package both
+        // show them and view did not, so the live page was the only one
+        // where you could not see a quarterback being got at.
+        passHtml += tile('Passing', table(['Comp','Att','%','Yds','TD','Int','Sack'], passNums.map((n, i) => {
+          const d = s.passing[n];
+          const compPct = d.att ? Math.round(100 * (d.comp||0) / d.att) : '—';
+          return { name: n, values: [d.comp||0, d.att||0, compPct, d.yds||0, d.td||0, d.intThrown||0, d.sacked||0] };
+        }).filter(rowHasValue), true), sumBucket(s.passing, 'yds'));
+      }
+      const rushSorted = sortByYds(Object.keys(s.rushing), s.rushing, 'yds');
+      const rushNums = capWithTdException(rushSorted, s.rushing, 'td');
+      if (rushNums.length){
+        rushHtml += tile('Rushing', table(['Att','Yds','TD'], rushNums.map((n, i) => {
+          const d = s.rushing[n];
+          return { name: n, values: [d.att||0, d.yds||0, d.td||0] };
+        }).filter(rowHasValue), true), sumBucket(s.rushing, 'yds'));
+      }
+      // A target alone does not earn a row on the live view. Adding targets
+      // meant anyone thrown at once appeared with 0 catches and 0 yards,
+      // padding the tile with players who have not caught anything -- and
+      // this panel auto-shrinks to fit, so every wasted row costs size on
+      // the rows that matter. The full-detail reports still list them.
+      const recSorted = sortByYds(
+        Object.keys(s.receiving).filter(n => (s.receiving[n].rec || 0) > 0),
+        s.receiving, 'yds');
+      const recNums = capWithTdException(recSorted, s.receiving, 'td');
+      if (recNums.length){
+        // Tgt before Rec: the throw comes before the catch, and reading
+        // "3 targets, 1 catch" left to right is how it is said out loud.
+        recHtml += tile('Receiving', table(['Rec','Tgt','Yds','TD'], recNums.map((n, i) => {
+          const d = s.receiving[n];
+          return { name: n, values: [d.rec||0, d.tgt||0, d.yds||0, d.td||0] };
+        }).filter(rowHasValue), true), sumBucket(s.receiving, 'yds'));
+      }
+      // kickoffs belongs in this gate too -- without it a pure kickoff
+      // specialist never entered the loop at all, so the kickoff table
+      // could never be built no matter what the box score held.
+      const stNums = Object.keys(s.specialTeams).filter(n => {
+        const d = s.specialTeams[n];
+        return d.fgAtt || d.patAtt || d.punts || d.kickoffs;
+      });
+      const stKicking = [], stPunting = [], stKickoffs = [];
+      stNums.forEach(n => {
+        const d = s.specialTeams[n];
+        const name = n;
+        if (d.fgAtt || d.patAtt){
+          // A dash, not a zero, for a category the kicker never attempted.
+          // "0 for 0" reads as a failure; on a PAT-only kicker it looked
+          // like he had missed field goals he was never asked to take.
+          // Long is also dashed on an 0-for-N day -- a missed 45 is not
+          // a "long" of 45, and nor is it a long of 0.
+          const fg = d.fgAtt
+            ? [d.fgAtt, d.fgMade || 0, d.fgMade ? (d.fgLong || 0) : '—']
+            : ['—', '—', '—'];
+          const xp = d.patAtt ? [d.patAtt, d.patMade || 0] : ['—', '—'];
+          stKicking.push({ yds: d.fgLong || 0, name, values: fg.concat(xp) });
+        }
+        if (d.kickoffs){
+          const tbPct = Math.round(100 * (d.touchbacks || 0) / d.kickoffs);
+          stKickoffs.push({ name, values: [d.kickoffs, d.touchbacks || 0, tbPct + '%'] });
+        }
+        if (d.punts){
+          const avg = d.puntsWithYards ? (d.puntYds / d.puntsWithYards).toFixed(1) : '0.0';
+          // Total punt yardage is not a stat anyone reads -- it is just
+          // punts x average. Longest is the one that gets talked about,
+          // and computeBoxScore already tracks it.
+          stPunting.push({ yds: d.puntYds||0, name, values: [d.punts||0, avg, d.puntLong||0] });
+        }
+      });
+      stKicking.sort((a, b) => b.yds - a.yds);
+      stPunting.sort((a, b) => b.yds - a.yds);
+      const stTotalEntries = stKicking.length + stPunting.length + stKickoffs.length;
+      if (stTotalEntries){
+        // Three separate tables share this tile, and concatenated flush
+        // they read as one run-on block: a header row lands directly
+        // under the previous table's data row, so "Punts Avg Long" looks
+        // like more numbers for the kicker above it. A rule and a gap
+        // between sections makes each one legible on its own.
+        const stSections = [];
+        const pushIfRows = (hdrs, rows) => { if (rows.length) stSections.push(table(hdrs, rows)); };
+        pushIfRows(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, MAX_ROWS).filter(rowHasValue));
+        pushIfRows(['Punts','Avg','Long'], stPunting.slice(0, MAX_ROWS).filter(rowHasValue));
+        // Kickoffs: just the count and how many stayed in the end zone.
+        // Individual kickoff distance is not reported anywhere and the
+        // panel does not even ask for it, so a per-kicker yardage table
+        // would be all zeroes.
+        pushIfRows(['Kicks','Touchbacks','TB%'], stKickoffs.filter(rowHasValue));
+        // NO RETURNS ON THIS PAGE (Andy's call, 23 Aug). Returns are in
+        // the recap, the stat package, the season report and the player
+        // report. This is the spectator tile and it is already dense;
+        // returns are the section a crowd scans for least.
+        const stInner = stSections.map((sec, i) => i === 0 ? sec :
+          '<div style="border-top:1px solid #dde3ea; margin-top:calc(9px * var(--stat-scale, 1)); ' +
+          'padding-top:calc(7px * var(--stat-scale, 1));">' + sec + '</div>').join('');
+        stHtml += tile('Special Teams', stInner);
+      }
+      // Counted from the play log, not from named defenders. Naming the
+      // tackler, interceptor or recoverer is optional, and summing
+      // s.defense meant a sack with nobody credited recorded no sack at
+      // all -- the Defense tile simply did not render. The event
+      // happened whether or not anyone was identified.
+      //
+      // overrideDefensePlays, added 21 Aug 2026 for the not-started-game
+      // Season Stats tile: this reduction has always counted straight
+      // from the CURRENT game's own module-level `plays`, which is
+      // exactly empty for a game that has not started -- computeBoxScore
+      // alone was never going to produce a real Defense tile no matter
+      // what `box` it was handed, since this section never reads `box`
+      // for its numbers at all. Every existing caller passes nothing
+      // here and falls through to the unchanged, original behaviour.
+      const opp = otherTeam(teamKey);
+      const defTotals = (overrideDefensePlays || plays).reduce((acc, p) => {
+        const r = p.roles; if (!r) return acc;
+        const e = p.effect || {};
+        // A fumble that ended a SACK is still a sack -- reported
+        // directly, 20 Aug 2026, from a game where this exact team
+        // total dropped one. This accumulator predates that report and
+        // never carried the exception engine.js's own sack credit
+        // already had, since it counts straight from the play log
+        // rather than through computeBoxScore.
+        if ((r.playType === 'sack' || (r.playType === 'fumble' && r.attempt === 'sack')) && r.passer && r.passer.team === opp) acc.sacks++;
+        if (r.playType === 'int' && r.passer && r.passer.team === opp) acc.int++;
+        if (r.playType === 'fumble' && r.carrier && r.carrier.team === opp && (r.lost || r.defense)) acc.fumRec++;
+        // Tackles for loss, counted from the PLAY rather than from a named
+        // tackler. Naming the tackler is optional and often skipped at
+        // speed, so requiring one would undercount a team stat that the
+        // play log already knows for certain: a scrimmage snap by the
+        // other team that lost yardage was a tackle for loss, whoever
+        // made it. Sacks are included -- NFHS and NCAA both treat a sack
+        // as a tackle behind the line -- and shown alongside the sack
+        // count so the two can be read separately.
+        const TFL_TYPES = ['rush', 'pass', 'sack'];
+        const byOpp = (r.carrier && r.carrier.team === opp) ||
+                      (r.passer && r.passer.team === opp);
+        if (byOpp && TFL_TYPES.indexOf(r.playType) !== -1 &&
+            typeof e.statYds === 'number' && e.statYds < 0) acc.tfl++;
+        return acc;
+      }, { int: 0, fumRec: 0, sacks: 0, tfl: 0 });
+      const hasDef = defTotals.int || defTotals.fumRec || defTotals.sacks || defTotals.tfl;
+      if (hasDef){
+        defHtml += tile('Defense', table(['Int','Fum Rec','Sacks','TFL'],
+          [{ name: 'Team', values: [defTotals.int, defTotals.fumRec, defTotals.sacks, defTotals.tfl] }]));
+      }
+      // Per-player tackles, ADDED 12 Aug 2026. Separate from the team
+      // row above, deliberately: the two answer different questions and
+      // will not agree.
+      //
+      // Team TFL counts from the play log and needs no named tackler, so
+      // it is a CEILING. Per-player tackles come from the optional
+      // "tackled by" field, so they are a FLOOR. Showing them in one
+      // table would make the app look like it was contradicting itself.
+      // NO PER-PLAYER TACKLES TILE HERE. Removed 13 Aug 2026 at Andy's
+      // request: the view page is the live spectator and broadcast
+      // screen, where the useful defensive figure is the TEAM one above
+      // (interceptions, fumble recoveries, sacks, team TFL). A per-player
+      // list is a post-game reading, and it is the one table on the page
+      // that is knowingly incomplete -- it counts only plays where a
+      // tackler happened to be named, which is a floor, not a total.
+      //
+      // The data is unaffected. Per-player tackles are still computed by
+      // computeBoxScore, still recorded, and still shown on recap.html,
+      // stat_package.html and season_report.html, each of which carries
+      // the "only named tackles" caveat. Only this tile is gone.
+
+      const defNums = hasDef ? ['team'] : [];
+      if (!rushNums.length && !passNums.length && !recNums.length && !stTotalEntries && !defNums.length){
+        passHtml += '<p class="hint">No stats yet for ' + team.name + '.</p>';
+      }
+      const totalRows = passNums.length + rushNums.length + recNums.length + Math.min(stKicking.length, 5) + Math.min(stPunting.length, 5) + (defNums.length ? 1 : 0);
+      // Left: the passing game top to bottom, then rushing.
+      // Right: defense, then special teams.
+      leftHtml = passHtml + recHtml + rushHtml;
+      rightHtml = defHtml + stHtml;
+      // Early in a game a team can easily have defensive or special-teams
+      // stats and no offensive ones -- the opening play being a punt or a
+      // sack does it. That left the first column empty and the content
+      // stranded in the right half with a gap beside it. Reading order is
+      // left to right, so a lone column belongs on the left.
+      if (!leftHtml && rightHtml){
+        leftHtml = rightHtml;
+        rightHtml = '';
+      }
+      return { html: '<div class="stat-category-grid"><div class="stat-category-col">' + leftHtml + '</div><div class="stat-category-col">' + rightHtml + '</div></div>', totalRows };
+  }
+
+  function renderBoxScore(){
+    const box = computeBoxScore(plays);
+    // Requested directly: while a game has not started, teamA's tile
+    // shows this season's cumulative stats instead of this game's own
+    // (always empty at this point, since nothing has been entered
+    // yet) -- computed once in init(), reused here on every render
+    // rather than refetched. teamB (the opponent) is deliberately
+    // untouched either way.
+    let a;
+    if (seasonStatsForNotStarted && seasonStatsForNotStarted.gameCount > 0){
+      a = renderTeamBoxScore('teamA', seasonStatsForNotStarted.aggregatedBox, seasonStatsForNotStarted.allSeasonPlays);
+    } else if (seasonStatsForNotStarted && seasonStatsForNotStarted.loadError){
+      // Reported directly: a real season with real, finished games
+      // rendered this tile completely blank instead of showing them --
+      // an exception during aggregation, now caught in
+      // loadSeasonStatsForNotStarted() and surfaced here as its own
+      // distinct message, deliberately NOT "no season stats yet". That
+      // message would misreport real games as if none existed; this
+      // one says plainly that something went wrong computing them.
+      // Check the browser console for the actual error it logged.
+      a = { html: '<div style="color:#a32d2d; padding:20px 0; text-align:center;">season stats could not be loaded</div>', totalRows: 0 };
+    } else if (seasonStatsForNotStarted){
+      // No prior finished games this season at all -- game 1. Shown
+      // directly rather than through renderTeamBoxScore, which has no
+      // concept of "no season yet" and would otherwise fall through to
+      // its own generic "No stats yet for [team]." empty state, saying
+      // something true but not the more specific thing this actually is.
+      a = { html: '<div style="color:#8d99a6; padding:20px 0; text-align:center;">no season stats yet</div>', totalRows: 0 };
+    } else {
+      a = renderTeamBoxScore('teamA', box);
+    }
+    const b = renderTeamBoxScore('teamB', box);
+    const quadBL = document.getElementById('quadBL'), quadBR = document.getElementById('quadBR');
+    quadBL.style.setProperty('--stat-scale', 1);
+    quadBR.style.setProperty('--stat-scale', 1);
+    document.getElementById('boxScoreTeamA').innerHTML = a.html;
+    document.getElementById('boxScoreTeamB').innerHTML = b.html;
+
+    // Measure real rendered height at scale 1, then compute the scale
+    // that actually fills the available space -- growing when there's
+    // room to spare (a team with modest stats shouldn't render small
+    // and leave the rest of the quadrant empty), shrinking when there's
+    // more content than fits. Both sides use the same scale so neither
+    // panel looks visually denser or sparser than its sibling.
+    // offsetHeight, NOT getBoundingClientRect(). The whole page sits
+    // inside a `transform: scale()` wrapper, and getBoundingClientRect
+    // returns the VISUAL box -- already multiplied by that transform --
+    // while clientHeight and scrollHeight return the unscaled layout
+    // box. Mixing the two made availableHeight too generous by exactly
+    // the display scale factor, so --stat-scale came out too large and
+    // the content overflowed its quadrant. At 1920x1080 the transform
+    // is 1:1 and the bug is invisible, which is why it looked like it
+    // "sometimes worked".
+    const availableHeight = (quad) => {
+      const header = quad.querySelector('h2');
+      const headerH = header ? header.offsetHeight + 10 : 0;
+      return quad.clientHeight - headerH - 16;
+    };
+    const contentHeight = (id) => document.getElementById(id).scrollHeight;
+    // A 4% safety margin. The fit is computed from measurements taken
+    // before the browser has finished reflowing at the new scale, so
+    // landing exactly on the available height reliably overshoots by a
+    // pixel or two -- which is all it takes to get a scrollbar.
+    const FIT_MARGIN = 0.96;
+    // Growth is allowed but capped well below the old 2.2. Enlarging a
+    // table does not increase its height proportionally -- columns
+    // re-wrap and rows gain padding -- so a scale derived from
+    // measurements taken at 1.0 overshoots, and the error compounds the
+    // further it grows. At 2.2 that overshoot produced scrollbars and
+    // clipped rows; a modest ceiling keeps the prediction close enough
+    // for the refinement loop below to correct the remainder.
+    const MAX_GROW = 1.5;
+    const scaleFor = (avail, content) => {
+      if (content <= 0) return 1;
+      return Math.min(MAX_GROW, Math.max(0.5, (avail / content) * FIT_MARGIN));
+    };
+    const availA = availableHeight(quadBL), availB = availableHeight(quadBR);
+    let scale = Math.min(scaleFor(availA, contentHeight('boxScoreTeamA')),
+                         scaleFor(availB, contentHeight('boxScoreTeamB')));
+    quadBL.style.setProperty('--stat-scale', scale);
+    quadBR.style.setProperty('--stat-scale', scale);
+
+    // Scaling text does not change height linearly -- lines re-wrap and
+    // line heights round to whole pixels -- so one pass can still
+    // overshoot. Re-measure and back off until it genuinely fits.
+    for (let i = 0; i < 8; i++){
+      // Measure against the margin, not the raw height, so the loop
+      // stops slightly short of the edge rather than flush against it.
+      const targetA = availA * FIT_MARGIN, targetB = availB * FIT_MARGIN;
+      const overA = contentHeight('boxScoreTeamA') - targetA;
+      const overB = contentHeight('boxScoreTeamB') - targetB;
+      if (overA <= 0 && overB <= 0) break;
+      const worst = Math.max(overA / targetA, overB / targetB);
+      scale = Math.max(0.5, scale * (1 - Math.min(0.2, worst)));
+      quadBL.style.setProperty('--stat-scale', scale);
+      quadBR.style.setProperty('--stat-scale', scale);
+    }
+  }
+
+  function renderAll(){
+    const state = computeState();
+    const isGoalToGo = state.down && state.fieldPos !== null && (state.fieldPos + state.distance >= 100);
+    const distDisplay = isGoalToGo ? 'Goal' : state.distance;
+    document.getElementById('scoreText').textContent = TEAMS.teamA.name + ' ' + state.scores.teamA + ' — ' + TEAMS.teamB.name + ' ' + state.scores.teamB;
+    // Phase is derived from the play log rather than passed in, because
+    // view.html is a spectator page and only reliably has the plays. The
+    // markers it looks for are the same ones End 1st half / End game
+    // write, so the banner can never disagree with the drive summary --
+    // which it did: "3rd & 10 at own 21" while the drive panel already
+    // said End of 1st half.
+    const isDiv = (p, t) => p.isDivider && (p.text || '').trim() === t;
+    const halftimeIdx = plays.findIndex(p => isDiv(p, 'End of 1st half'));
+    // PRESSING "START 2ND HALF" ENDS HALFTIME HERE, without waiting for
+    // the kickoff to be entered. Requested directly: the guided kickoff
+    // takes a while to fill in, and for all of it this page sat on a
+    // HALFTIME card while the teams were visibly lining up.
+    //
+    // The rule used to be "a REAL play has been run since the interval",
+    // which is still what game.html's own derivePhase() uses. That was
+    // chosen because undoing the opening plays of a half leaves the
+    // quarter marker behind, so keying off the marker could make this
+    // page insist on Q3 while game.html had gone back to halftime.
+    //
+    // That trade is now taken deliberately, and it is the narrower of the
+    // two: the disagreement needs a kickoff to be entered AND then undone,
+    // and it lasts until the next play. Sitting on HALFTIME through every
+    // second-half kickoff is the common case, and it is wrong every time.
+    const secondHalfStarted = halftimeIdx !== -1 &&
+      plays.some((p, i) => i > halftimeIdx &&
+        (!isAdminMarker(p) || (p.effect && p.effect.setQuarter >= 3)));
+
+    // WHO KICKS OFF TO START THE SECOND HALF, shown beside HALFTIME.
+    // Whoever kicked off to start the GAME receives now, so the second-half
+    // kicker is the other team. Derived from the opening kickoff rather
+    // than from possession, which at halftime belongs to whoever last had
+    // the ball and says nothing about what happens next.
+    let secondHalfKicker = null;
+    if (halftimeIdx !== -1){
+      const openingKick = plays.find(p => p.roles &&
+        (p.roles.playType === 'kickoff' || p.roles.playType === 'kickoff_return') && p.roles.kicker);
+      if (openingKick) secondHalfKicker = otherTeam(openingKick.roles.kicker.team);
+    }
+    // MODULE-LEVEL phase, not const -- see its declaration above for why:
+    // renderBoxScore() needs the current value too, and is also called
+    // directly from resize/load, outside this function.
+    phase =
+      currentGameStatus === 'final' || plays.some(p => isDiv(p, 'Final')) ? 'FINAL'
+      : (halftimeIdx !== -1 && !secondHalfStarted) ? 'HALFTIME'
+      : !plays.some(p => p.roles || (p.effect && p.effect.isStat)) ? 'NOT STARTED'
+      : null;
+    // THE HALF HAS BEEN STARTED BUT NOTHING HAS BEEN ENTERED IN IT.
+    // Hoisted up here because the BANNER needs it as well as the drive
+    // tiles below: computeState() still carries the down, distance and
+    // spot the first half ended on, so between "Start 2nd half" and the
+    // kickoff the banner read "3rd & 16 at own 12" -- a situation that
+    // ended at the interval and cannot be resumed.
+    const secondHalfPending = halftimeIdx !== -1 &&
+      plays.some((p, i) => i > halftimeIdx && p.effect && p.effect.setQuarter >= 3) &&
+      !plays.some((p, i) => i > halftimeIdx && !isAdminMarker(p));
+    // HAS THIS HALF PRODUCED A DRIVE YET. Read by the banner AND by the
+    // Current Drive tile, which builds its own copy of the down line --
+    // fixing only the banner left the same stale "3rd & 16 at own 12"
+    // sitting under the kickoff in the tile.
+    //
+    // A drive marker OR any scrimmage play. Keying on the marker alone
+    // was too narrow: it is written by the guided kickoff, and any path
+    // that puts a snap on the board without one -- a spot entered by
+    // hand, an unusual recovery -- would leave the line blank with a play
+    // visibly on screen. The kick itself is excluded because it sets no
+    // down; that is the whole window being closed.
+    const driveThisHalf = halftimeIdx === -1 ||
+      plays.some((p, i) => {
+        if (i <= halftimeIdx) return false;
+        if (p.effect && p.effect.isReset) return true;
+        const pt = p.roles && p.roles.playType;
+        return !!pt && pt !== 'kickoff' && pt !== 'kickoff_return';
+      });
+    const qEl = document.getElementById('quarterText');
+    if (phase){
+      // #downText is gone from the banner -- see the note in the markup.
+      // Just the phase. Who kicks off to start the second half is shown
+      // under the scoring summary instead -- it is a fact about what
+      // happens next, and it reads better beside the half's scoring than
+      // squeezed against the banner's own word.
+      qEl.textContent = phase;
+      // Large and bold: this is the whole state of the game, and at 15px
+      // regular it read as just another label beside the quarter.
+      qEl.style.fontSize = '26px';
+      qEl.style.fontWeight = '800';
+      qEl.style.letterSpacing = '0.06em';
+    } else {
+      qEl.style.fontSize = '';
+      qEl.style.fontWeight = '';
+      qEl.style.letterSpacing = '';
+      // No "— X ball" here any more. Possession is shown by a football
+      // against the team's own name in the row below, which says the same
+      // thing in a glance instead of a phrase, and gives the down and
+      // distance the width it needs to be readable across a room.
+      // The middle slot shows down, distance and spot ONLY while a drive
+      // is actually in progress. It used to read "no active drive"
+      // between drives -- a caption for an empty state on a screen where
+      // the empty state is already plain, and it took the widest slot in
+      // the banner to say nothing. Blank is the honest rendering of
+      // "nothing to report", and on a scoreboard read from across a room
+      // absence is faster to parse than a sentence.
+      //
+      // fieldPos is required as well as down. A down with no spot yet
+      // rendered as "1st & 10 at " with a dangling "at" -- rare, but it
+      // is the state right after a possession change before the spot is
+      // entered, which is exactly when someone is looking.
+      // NO DOWN AND DISTANCE UNTIL THIS HALF HAS A DRIVE. computeState()
+      // keeps the down, distance and spot the first half ended on, so
+      // everything from "Start 2nd half" through the kickoff showed the
+      // situation the interval interrupted -- "3rd & 16 at own 12" while
+      // the teams were lining up for a kick.
+      //
+      // The test is a drive marker after the divider, not merely a play:
+      // the kickoff itself is a real play but sets no down, so keying off
+      // plays would have cleared the marker state and left the same stale
+      // line up during the kick. Blank is the honest rendering of nothing
+      // to report, which is the rule the middle slot already follows
+      // between drives.
+      // A drive marker OR any scrimmage play. Keying on the marker alone
+      // was too narrow: it is written by the guided kickoff, and any path
+      // that puts a snap on the board without one -- a spot entered by
+      // hand, an unusual recovery -- would have left the banner blank
+      // with a play visibly on screen. The kick itself is excluded
+      // because it sets no down; that is the whole window being closed.
+      // The banner no longer carries down and distance; Current Drive
+      // and the possession marker already say it. hasDrive and the
+      // markerLabelNamed call that fed this went with it.
+      // Just the quarter, matching game.html. Which half it belongs to is
+      // obvious from the number and only crowded the banner.
+      document.getElementById('quarterText').textContent =
+        quarterLabel(state);
+    }
+    const banner = document.getElementById('banner');
+    banner.style.background = '#1a1a1a';
+    banner.style.color = '#ffffff';
+
+    // highlightFirst marks the most recent play. The list arrives already
+    // reversed, so index 0 is the play that just happened -- the one a
+    // spectator glancing up is looking for, and the one that was hardest
+    // to pick out of an evenly-weighted list.
+    // Drive boundaries aren't only marked by explicit isReset plays --
+    // a turnover on downs changes possession but never sets isReset at
+    // all, relying entirely on the next scrimmage play's own down/
+    // distance fallback logic. Detect any possession change directly
+    // so "current drive" can't silently span two different teams.
+    // For an explicit isReset marker, that play itself IS the first
+    // play of the new drive (a dedicated announcement) -- include it.
+    // For a detected-but-unmarked possession change, the play that
+    // caused it still belongs to the PREVIOUS possessor's drive, so
+    // the new drive starts at the next play instead.
+    if (!isResultsMode){
+      const resetIdxs = findDriveStarts(plays);
+      const halfDivIdx = plays.findIndex(p => p.isDivider &&
+        /end of (1st|first) half/i.test((p.text || '').trim()));
+      const lastReset = resetIdxs.length ? resetIdxs[resetIdxs.length - 1] : -1;
+      // NO HALF CLAMP HERE, deliberately. One was written -- floor the
+      // slice at the interval so a first-half drive cannot bleed into a
+      // second-half card -- and then measured: findDriveStarts already
+      // opens a drive at the first thing after the break (the kickoff, or
+      // a penalty before it), so the newest reset index is ALWAYS past the
+      // divider by the time anything renders from it. The clamp changed
+      // no output in any reachable state and was removed rather than
+      // shipped as protection that never fires.
+      //
+      // The one state where the index IS still pre-break -- Start 2nd half
+      // pressed and nothing entered -- is handled by secondHalfPending
+      // below, which does not read this slice at all.
+      const driveFloor = lastReset;
+      const currentDrivePlays = driveFloor >= 0 ? plays.slice(driveFloor) : [];
+      // FILTERED BY TEAM, matching the exact filter computeDriveSummary
+      // already applies to the numeric tiles just below -- this log
+      // never had it. Reported from a real game, 19 Aug 2026: a
+      // defensive score is followed by that scoring team's own PAT and
+      // kickoff before the real new drive registers (see the
+      // findDriveStarts fix from the same night, which correctly makes
+      // THEM wait for it) -- and until it does, this slice still starts
+      // at the OTHER team's old drive. Unfiltered, that meant the
+      // scoring team's touchdown and PAT rendered inside a box still
+      // labelled with the team that just got scored on, mixed into
+      // their own older plays.
+      //
+      // A punt or kickoff that ends THIS team's own drive is correctly
+      // unaffected: its own team field already matches driveTeam (the
+      // kicking team is still "on offense" the instant they kick, per
+      // this app's own convention), so it stays in the log exactly as
+      // it always has.
+      //
+      // EXCEPT the drive's OWN ending score, even when scored by the
+      // OTHER team -- a blocked kick, an interception, a fumble
+      // returned the wrong way. Reported immediately after shipping
+      // the filter above: excluding it entirely made the score look
+      // like it had not happened at all, rather than what it actually
+      // is -- exactly how this drive ended, the same way a punt or an
+      // interception is.
+      //
+      // EXTENDED the same night, a few messages later, to the TRY that
+      // follows: a PAT/2PT was still being excluded outright, on the
+      // reasoning that it was "the next team's business" -- it is not,
+      // it is the scoring team's own follow-up to their OWN score, and
+      // hiding it made a completed PAT look like it never happened at
+      // all. What is STILL correctly excluded is only the ensuing
+      // kickoff (which carries no score and no playType this filter
+      // treats specially, so the team check above excludes it on its
+      // own, same as before).
+      const driveTeam = resetIdxs.length
+        ? computeState(plays.slice(0, resetIdxs[resetIdxs.length - 1] + 1)).possession
+        : null;
+      const currentDriveOwnTeamPlays = currentDrivePlays.filter(p => {
+        if (p.isDivider || !p.team || p.team === driveTeam) return true;
+        // A PENALTY, whoever it was called on. The row is stamped with the
+        // PENALISED team, not the team whose drive it happened in -- so a
+        // flag on the defence during our drive carries the other team's
+        // side and this filter dropped it, and the flag simply vanished
+        // from the tile. Reported from a real game.
+        //
+        // Penalties belong to the drive they occurred in by definition:
+        // they move that drive's chains. There is no case where a flag
+        // during a possession belongs to somebody else's possession, so
+        // this is unconditional rather than another team-matching rule.
+        if (p.effect && p.effect.penaltyTeam) return true;
+        const pt = p.roles && p.roles.playType;
+        // A try (PAT/2PT) that follows a defensive score's own
+        // touchdown, captured REGARDLESS OF TEAM. Reported directly
+        // from a real game, 19 Aug 2026: the scoring exception just
+        // above already keeps the touchdown itself visible even when
+        // the OTHER team scored it, on exactly this reasoning -- but
+        // the try that follows it was still excluded outright, on the
+        // earlier (and, per that report, wrong) reasoning that it was
+        // "the next team's business". It is not. It is the SAME
+        // team's own follow-up to their OWN score, and excluding it
+        // made a completed PAT look like it had never happened at
+        // all, on the one page a crew is actually watching live --
+        // confirmed directly by a side-by-side screenshot: game.html's
+        // own internal log (no such filter) showed the PAT plainly;
+        // this page's Current Drive did not.
+        //
+        // Detected by playType alone, not by effect.score -- a MISSED
+        // try carries no score at all (its own effect is just
+        // { endsDrive: true }, see parseInput's 'pa'/'tpr'/'tpp'
+        // branches) and would otherwise still vanish from the log
+        // exactly like the made ones used to, the moment it failed.
+        if (pt === 'pat' || pt === 'twopt') return true;
+        return !!(p.effect && p.effect.score);
+      });
+      // Requested directly: rather than the full drive log, this now
+      // shows ONLY the most recent play, in a much larger font, with
+      // the down/distance/spot resulting from it directly underneath
+      // -- the exact same state and formatting the banner at the top
+      // of the page already uses, so the two can never disagree.
+      // Previous Drive is deliberately untouched by this -- its own
+      // renderDriveSummary() below is unchanged.
+      let currentDriveDisplayList = currentDriveOwnTeamPlays.filter(x => !isDriveTileNoise(x));
+      // Requested directly: an ordinary kickoff was invisible in BOTH
+      // drive tiles -- filed under the KICKING team at the tail of the
+      // old segment (the app's own convention: the kicking team is
+      // still "on offense" the instant they kick), with the new
+      // segment starting at the "New drive" marker right after it. So
+      // between the kickoff and the receiving team's first snap, this
+      // tile read "no active drive yet" as though nothing had
+      // happened. When the new segment has no visible plays yet, reach
+      // one play back past the boundary and, if it is a kickoff, show
+      // it -- with the resulting drive start (1st & 10 at the return
+      // spot) beneath it from the same state the banner uses.
+      //
+      // DISPLAY ONLY, verified rather than assumed: the play is READ
+      // for rendering and never moved, copied into the segment, or
+      // modified -- possessions (countPossessions), both drive
+      // summaries (computeDriveSummary), and the box score all compute
+      // from the untouched plays array and cannot see this. A kick
+      // RETURNED FOR A TOUCHDOWN never reaches this branch at all: its
+      // score keeps it visible in the old segment's own log (the
+      // scoring exception above), no new segment starts, and the list
+      // here is not empty. Only a kickoff qualifies -- a punt already
+      // shows as the Previous Drive's own outcome line, so the nearest
+      // real play being anything else changes nothing.
+      // Extended for the timeout follow-up: a timeout called in this
+      // same window (after the kickoff, before the first snap) used to
+      // leave the list non-empty and skip this reach-back entirely, so
+      // the timeout REPLACED the kickoff as the headline -- the exact
+      // replace-the-play behavior the timeout change exists to prevent.
+      // "No plays yet" now means no plays OTHER THAN timeouts, and the
+      // kickoff is PREPENDED rather than assigned, so the timeout-
+      // peeling inside renderCurrentDriveLastPlay pairs the two:
+      // kickoff as the headline, timeout as its amber sub-line.
+      if (!currentDriveDisplayList.some(p => !(p.effect && p.effect.timeout))){
+        // Widened 22 Aug 2026, reported directly: a kickoff RETURNED FOR
+        // A TOUCHDOWN left both drive tiles reading "no active drive
+        // yet" -- the score and the try that followed it were nowhere on
+        // the page. No "New drive" marker is written when the return
+        // scores (correctly: nobody takes over, the try comes next), so
+        // there is no drive segment at all, and the earlier version of
+        // this fallback required one before it would look back.
+        //
+        // Anchored on the end of the PLAY LIST when there is no segment
+        // to anchor on, and it collects backwards to the play that
+        // started the sequence -- a kickoff, or anything that scored six
+        // -- so the touchdown arrives together with the try behind it and
+        // renderCurrentDriveLastPlay's own touchdown lock pairs them the
+        // way it does everywhere else.
+        //
+        // Still display only: nothing here is written back, and a return
+        // touchdown remains NOT a possession, which is the ruling and is
+        // what countPossessions already reports.
+        // FIRST look inside the segment, ignoring the team filter. At the
+        // start of a half the only thing in it is the kickoff, which
+        // belongs to the KICKING team and so was filtered out of the list
+        // above -- leaving "no active drive yet" on screen while the
+        // kickoff sat in the log. The team filter is right for a drive in
+        // progress and wrong for a segment that is nothing but a kick.
+        // A TIMEOUT DOES NOT COUNT as something to show. It is additive to
+        // a play, never a headline in its own right, and treating any
+        // non-noise row as good enough made a timeout called during the
+        // kickoff window replace the kickoff it was supposed to sit under.
+        const inSegment = (driveFloor >= 0 ? plays.slice(driveFloor) : [])
+          .filter(x => x && !x.isDivider && !isDriveTileNoise(x));
+        const segmentHasPlay = inSegment.some(x => !(x.effect && x.effect.timeout));
+        if (segmentHasPlay) currentDriveDisplayList = inSegment;
+        const start = driveFloor >= 0 ? driveFloor : plays.length;
+        // Never back across the interval. This walk exists to find the
+        // kickoff that opened the CURRENT segment; with no floor it kept
+        // going until it found any play at all, which after halftime meant
+        // reaching into the first half and putting a play from before the
+        // break on a second-half card.
+        const floor = (halfDivIdx !== -1 && start > halfDivIdx) ? halfDivIdx + 1 : 0;
+        const picked = [];
+        for (let i = (segmentHasPlay ? floor - 1 : start - 1); i >= floor; i--){
+          const cand = plays[i];
+          if (!cand || cand.isDivider || isDriveTileNoise(cand)) continue;
+          picked.unshift(cand);
+          const e = cand.effect || {};
+          const pt = (cand.roles || {}).playType;
+          // The anchor: the kick that began the sequence, or the play
+          // that scored it. Anything after it (a try, a timeout) is
+          // carried along with it.
+          if (pt === 'kickoff' || pt === 'kickoff_return' ||
+              (e.score && e.score.points === 6)) break;
+          // A guard, not a feature: without a kick or a score behind it
+          // this is an unusual log, and walking the whole game backwards
+          // to fill a tile is not worth it.
+          if (picked.length >= 3) break;
+        }
+        if (picked.length) currentDriveDisplayList = picked.concat(currentDriveDisplayList);
+      }
+      // THE SECOND HALF HAS BEEN STARTED BUT NOTHING HAS HAPPENED IN IT.
+      // ----------------------------------------------------------------
+      // Between "Start 2nd half" and the kickoff there is no drive and no
+      // play, but every figure on this card still described the FIRST
+      // half: the tiles carried the last first-half drive's rushes and
+      // yards, the down line read the spot the half ended on, and
+      // Previous Drive showed a punt from minutes earlier. All of it true
+      // once and none of it true now.
+      //
+      // The half boundary is the honest reset point, so the card says
+      // where the game is and nothing else until the kickoff lands.
+      // secondHalfPending is defined up with the banner -- one definition,
+      // so the banner and these cards can never disagree about whether
+      // the half has actually begun.
+      // Declared outside the branch: paintDrive() colours both cards from
+      // these further down, and scoping them to the else left it reading
+      // an undefined name the moment the start-of-half state was hit.
+      let currentSummary = null, prevSummary = null;
+      if (secondHalfPending){
+        const q = (state.quarter && state.quarter >= 3) ? state.quarter : 3;
+        document.getElementById('driveLogScroll').innerHTML =
+          '<div style="font-size:36px; font-weight:700; color:#111; line-height:1.2; ' +
+          'margin-top:16px;">Start of Q' + q + '</div>';
+        document.getElementById('currentDriveTiles').innerHTML = '';
+        document.getElementById('prevDriveLogScroll').innerHTML =
+          '<div style="color:#8d99a6;">no previous drive yet</div>';
+      } else {
+
+      document.getElementById('driveLogScroll').innerHTML =
+        renderCurrentDriveLastPlay(currentDriveDisplayList, state, distDisplay, driveThisHalf);
+
+      // Same floor as the log above, for the same reason: the numbers and
+      // the play they sit over have to describe the same stretch of game.
+      currentSummary = driveFloor >= 0
+        ? computeDriveSummary(driveFloor, plays.length)
+        : null;
+      document.getElementById('currentDriveTiles').innerHTML = currentSummary
+        ? '<div class="inline-stat-line">' + [
+            ['RUSH', currentSummary.rushes + '/' + currentSummary.rushYds],
+            ['PASS', currentSummary.passes + '/' + currentSummary.passYds],
+            ['TOTAL', currentSummary.totalPlays + '/' + currentSummary.totalYds],
+            // Requested directly: while the drive is still open (no
+            // closing clock event yet for driveTeam), this tile reads
+            // SOP -- the clock exactly as the scorer logged it at the
+            // START of the possession, not a computed duration, since
+            // there isn't one yet. The moment a closing clock value is
+            // entered, pendingClockStart[driveTeam] resets to null on
+            // its own (see engine.js's computeState) and this reverts
+            // to TOP with the real elapsed time, unchanged from before.
+            //
+            // The TILE matches its three neighbours; only the LABEL is
+            // marked. It used to be amber all over, which made the whole
+            // quad look uneven for something that is simply a fourth
+            // reading — and the amber sat behind the CLOCK VALUE too,
+            // tinting the one part of the tile that is a plain fact.
+            //
+            // What actually needs saying is that SOP is not the same kind
+            // of number as TOP: it is where the possession started, not
+            // how long it has run. So the badge goes on the label, which
+            // is the word that changes between the two states, and the
+            // value is left to read as the clock reading it is.
+            (function(){
+              const pending = (state.pendingClockStart || {})[driveTeam];
+              if (pending !== null && pending !== undefined){
+                const clk = absSecToClockStr(pending);
+                return ['SOP', clk ? clk.text : '—', true];
+              }
+              return ['TOP', formatDuration(currentSummary.top), false];
+            })()
+          ].map(([label, val, sop]) => '<span class="inline-stat-item">' +
+              '<span class="stat-value">' + val + '</span>' +
+              '<span class="stat-label' + (sop ? ' stat-label-badge' : '') + '">' +
+              label + '</span></span>').join('') + '</div>'
+        : '';
+
+      // Null once the interval is the floor: the drive before it belongs
+      // to the first half, and showing it beside a second-half card
+      // invites reading it as the possession that just ended.
+      // Null unless the PREVIOUS drive also belongs to this half. Testing
+      // the current one was not enough: once the second half's own New
+      // drive registers, the one before it is still the last drive of the
+      // first half, and it rendered beside a second-half card as though
+      // it were the possession that just ended.
+      const prevStart = resetIdxs.length >= 2 ? resetIdxs[resetIdxs.length - 2] : -1;
+      prevSummary = (prevStart >= 0 && (halfDivIdx === -1 || prevStart > halfDivIdx))
+        ? computeDriveSummary(prevStart, resetIdxs[resetIdxs.length - 1])
+        : null;
+      document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary);
+      }
+
+      // AT HALFTIME AND FINAL, THE SCORING SUMMARY TAKES THE QUAD.
+      // ----------------------------------------------------------------
+      // Requested directly. Neither drive card says anything useful at
+      // those two moments -- there is no current drive, and the previous
+      // one is a single play from minutes ago -- while the question a
+      // spectator actually arrives with is how the score got there.
+      //
+      // Reads the same `phase` the banner does, so the three can never
+      // disagree about what moment this is. NOT shown for 'NOT STARTED':
+      // that state already hands the bottom-left tile to season stats,
+      // and an empty Scoring card would say nothing at all.
+      // AT FINAL THE QUAD JUST SAYS SO. The scoring summary earns its
+      // place at the interval, when the question is how the score got
+      // there and there is a second half still to come. Once the game is
+      // over that question is answered by the recap, and a spectator
+      // arriving at a finished stream wants one thing from this quarter
+      // of the screen: whether it is over. Reported directly.
+      const isFinal = phase === 'FINAL';
+      const showScoring = phase === 'HALFTIME';
+      const scoringCard = document.getElementById('scoringCard');
+      document.querySelectorAll('#quadTR .drive-current, #quadTR .drive-previous')
+        .forEach(el => { el.style.display = (showScoring || isFinal) ? 'none' : ''; });
+      scoringCard.style.display = (showScoring || isFinal) ? '' : 'none';
+      if (isFinal){
+        document.getElementById('scoringHeading').textContent = '';
+        document.getElementById('scoringBody').innerHTML =
+          '<div style="display:flex; align-items:center; justify-content:center; height:100%; ' +
+          'min-height:120px; font-size:44px; font-weight:800; letter-spacing:0.08em; ' +
+          'color:#1a1a2e;">GAME FINAL</div>';
+      } else if (showScoring){
+        document.getElementById('scoringHeading').textContent =
+          phase === 'HALFTIME' ? 'Scoring — first half' : 'Scoring — final';
+        const rows = scoringSummary(plays);
+        // WHO KICKS OFF NEXT, under the scoring rows. Halftime only: at
+        // FINAL there is no next kickoff, and at NOT STARTED the opening
+        // kickoff has not been chosen yet.
+        const kickLine = (phase === 'HALFTIME' && secondHalfKicker && TEAMS[secondHalfKicker])
+          ? '<div style="margin-top:18px; padding-top:14px; border-top:1px solid #e8e8e8; ' +
+            'font-size:20px; font-weight:800;">' + TEAMS[secondHalfKicker].name +
+            ' kicks off</div>'
+          : '';
+        document.getElementById('scoringBody').innerHTML = (rows.length
+          ? rows.map(r => {
+              const t = TEAMS[r.team] || {};
+              const bg = t.bg || '#1a1a2e';
+              return '<div class="score-row">' +
+                '<span class="score-q">' + (r.quarter >= 5 ? 'OT' : 'Q' + r.quarter) + '</span>' +
+                '<span class="score-team" style="background:' + bg + '; color:' +
+                  safeTextColor(bg, t.text || '#fff') + ';">' + (t.name || '') + '</span>' +
+                '<span class="score-text">' + r.text +
+                  (r.detail ? '<span class="score-detail">(' + r.detail + ')</span>' : '') + '</span>' +
+                // The running score after this play, which is the column a
+                // spectator scans -- the play text alone does not say
+                // whether it tied the game or extended a lead.
+                '<span class="score-tally">' + r.teamA + '&ndash;' + r.teamB + '</span>' +
+                '</div>';
+            }).join('')
+          : '<div style="color:#8d99a6; padding:14px 0;">no scoring yet</div>') + kickLine;
+      }
+
+      // COLOUR EACH DRIVE CARD FOR THE TEAM THAT HAD THE BALL.
+      // ----------------------------------------------------------------
+      // The accent bar and the heading take the team's own colour; the
+      // stat chips take a pale mix of it toward white. Set as custom
+      // properties so the CSS above keeps its fallbacks -- before the
+      // first drive exists there is no team to colour for, and the card
+      // should not flash an undefined value.
+      //
+      // The heading goes through safeTextColor against WHITE, not against
+      // the tint: it sits on the card, and a pale gold team colour is
+      // perfectly readable on its own chips while being invisible as text
+      // on a white card.
+      const paintDrive = (sel, summary) => {
+        const card = document.querySelector(sel);
+        if (!card) return;
+        const teamKey = summary && summary.team;
+        const bg = teamKey && TEAMS[teamKey] && TEAMS[teamKey].bg;
+        if (!bg){
+          ['--drive-accent', '--drive-heading', '--drive-tint']
+            .forEach(v => card.style.removeProperty(v));
+          return;
+        }
+        card.style.setProperty('--drive-accent', bg);
+        card.style.setProperty('--drive-heading', safeTextColor('#ffffff', bg));
+        card.style.setProperty('--drive-tint', mixHex(bg, '#ffffff', 0.88));
+      };
+      paintDrive('.drive-current', currentSummary);
+      paintDrive('.drive-previous', prevSummary);
+    } else {
+      document.getElementById('allPlaysScroll').innerHTML = renderLogLines(plays.slice().reverse()) || '<div style="color:#8d99a6;">No plays recorded.</div>';
+    }
+
+    renderTeamSummary();
+    renderBoxScore();
+    if (!isResultsMode) adjustDriveCardVisibility();
+  }
+
+  // Measures the actual rendered content against the quadrant's real
+  // height and progressively frees up space for Current Drive if
+  // Previous Drive would otherwise force scrolling -- first dropping
+  // just its tile row, then the whole card if that's still not enough.
+  // Always starts from fully visible so it correctly un-hides again
+  // once there's more room (e.g. after Undo shortens the current drive).
+  function adjustDriveCardVisibility(){
+    const quad = document.getElementById('quadTR');
+    const prevCard = document.querySelector('.drive-previous');
+    const prevTiles = prevCard ? prevCard.querySelector('.inline-stat-line') : null;
+    if (!quad || !prevCard) return;
+
+    prevCard.classList.remove('hidden');
+    if (prevTiles) prevTiles.classList.remove('hidden');
+
+    if (quad.scrollHeight <= quad.clientHeight) return;
+
+    if (prevTiles) prevTiles.classList.add('hidden');
+    if (quad.scrollHeight <= quad.clientHeight) return;
+
+    prevCard.classList.add('hidden');
+  }
+
+  // HOISTED TO TOP LEVEL, 19 Aug 2026 -- this used to be a private
+  // helper nested inside renderAll(), which is fine as long as only
+  // renderAll ever calls it. renderDriveSummary (Previous Drive's own
+  // full play log, added the same night) needed it too, and a function
+  // declared inside another function is invisible outside it -- calling
+  // it from renderDriveSummary threw "renderLogLines is not defined" in
+  // the real page even though an isolated test of both functions
+  // together passed cleanly, because extracting them side by side into
+  // one flat script accidentally recreated the very scope they don't
+  // share on the real page. Caught by the full test suite booting the
+  // actual page, not by the isolated one.
+  function renderLogLines(list, highlightFirst){
+    let marked = false;
+    // A touchdown or a made field goal is bold on sight, not just
+    // whichever play happens to be most recent -- Andy asked for
+    // this specifically, 19 Aug 2026. Same detection computeDriveSummary
+    // uses for scoringPlayText -- and the SAME bug this function had,
+    // found by a systematic audit rather than another live-game report:
+    // effect.td is never set by a blocked kick, an interception, or a
+    // fumble returned for a touchdown -- only effect.score.points: 6
+    // is. Every one of those thirteen-plus branches has been bold-
+    // eligible in NAME since the feature shipped and never once
+    // actually bold, because this check could not see them. points
+    // === 6 is unambiguous in football regardless of the mechanism
+    // that scored it. Deliberately NOT every scoring play -- a PAT, a
+    // 2-point try and a safety were not asked for, and neither is 6
+    // points, so none of them match this check either.
+    const isTdOrFg = (p) => {
+      if (p.effect && p.effect.score && p.effect.score.points === 6) return true;
+      const r = p.roles;
+      return !!(r && r.playType === 'fg' && r.kicker && r.kicker.result === 'g');
+    };
+    return list.map(p => {
+      if (p.isDivider) return '<div style="text-align:center; font-size:14px; font-weight:600; color:#888; margin:8px 0; border-top:1px dashed #ccc; padding-top:6px;">' + p.text + '</div>';
+      // A play in overtime is tagged OT, not Q5. The banner already
+      // said OT while every row beneath it said Q5, which is the same
+      // period under two names on one screen.
+      //
+      // Rounds are deliberately NOT numbered here: the tag is per PLAY
+      // and quarterLabel counts series up to the CURRENT state, so
+      // numbering a play from it would relabel the whole log every time
+      // a new series began. Which OT round is on the banner; the row
+      // only has to say it was overtime.
+      const qtag = p.quarter
+        ? '<span style="color:#8d99a6; font-size:12px; margin-right:6px;">' +
+          (p.quarter >= 5 ? 'OT' : 'Q' + p.quarter) + '</span>'
+        : '';
+      const text = stripTeamNames(p.text || '').replace(/TOUCHDOWN/g, '<strong>TOUCHDOWN</strong>');
+      // The first NON-DIVIDER line, not simply the first entry: an "End
+      // of 1st half" rule sitting on top would otherwise take the
+      // emphasis meant for the last real play.
+      let style = '';
+      if (highlightFirst && !marked){
+        marked = true;
+        style = ' style="font-size:calc(17px * var(--stat-scale, 1)); font-weight:700; color:#111;"';
+      } else if (isTdOrFg(p)){
+        style = ' style="font-weight:700;"';
+      }
+      return '<div class="logline"' + style + '>' + qtag + text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
+    }).join('');
+  }
+
+  // Requested directly, 21 Aug 2026: the Current Drive tile no longer
+  // lists every play -- just the most recent one, at a size meant to
+  // be read from across a room, with the down/distance/spot it left
+  // the offense facing directly underneath. `list` is in CHRONOLOGICAL
+  // order (oldest first), matching what currentDriveOwnTeamPlays
+  // already produces -- so the last element is the most recent play,
+  // with no reversing needed.
+  //
+  // Deliberately its own function rather than a mode of renderLogLines:
+  // that function's highlightFirst path exists for exactly one caller
+  // (this one, until today), and the two now want genuinely different
+  // things -- a single play at 30px plus a line of state renderLogLines
+  // has no concept of at all, versus a scrollable list of many. Forcing
+  // both through one function would have meant threading an unrelated
+  // "and also render this extra line" parameter through code that every
+  // other caller (allPlaysScroll) has no use for.
+  function renderCurrentDriveLastPlay(list, state, distDisplay, driveThisHalf){
+    if (!list.length) return '<div style="color:#8d99a6;">no active drive yet</div>';
+    // Requested directly: a timeout must be ADDITIVE to the last play,
+    // never replace it as the headline -- the same principle as the
+    // touchdown/try lock below. Every trailing timeout is peeled off
+    // the end of the list into its own amber sub-line (amber matching
+    // the SOP tile: a clock event, not a play), and everything below
+    // -- including the try-lock -- operates on what remains, so a
+    // timeout called after a PAT leaves the touchdown+try pairing
+    // fully intact with the timeout beneath both. Rendered LAST, after
+    // the down/distance line, reading chronologically: the play, the
+    // situation it produced, then the stoppage called on top of it.
+    //
+    // If the segment holds NOTHING BUT timeouts (end === 0), nothing
+    // is peeled and the newest timeout stays the headline -- the only
+    // event that exists is still better shown than hidden.
+    let timeoutLines = '';
+    let end = list.length;
+    while (end > 0 && list[end - 1].effect && list[end - 1].effect.timeout) end--;
+    if (end > 0 && end < list.length){
+      timeoutLines = list.slice(end).map(t =>
+        '<div style="font-size:24px; font-weight:600; margin-top:8px; color:#7a5c00;">' +
+        stripTeamNames(t.text || '') + '</div>').join('');
+      list = list.slice(0, end);
+    }
+    let p = list[list.length - 1];
+    // Requested directly: when the drive just ended in a touchdown, the
+    // try (PAT/2PT) that follows must not REPLACE the touchdown as the
+    // headline -- the score is the story, the try is its follow-up.
+    // Lock the touchdown in place and show the try's own result as a
+    // colored sub-line beneath it, the same pairing Previous Drive's
+    // summary already presents. Nothing here needs clearing later: the
+    // moment the next drive actually registers (the ensuing kickoff --
+    // see findDriveStarts), this list becomes the NEW drive's plays and
+    // the display moves on on its own.
+    //
+    // Detection mirrors computeDriveSummary exactly, on purpose:
+    // playType 'pat'/'twopt' for the try (never .result alone, which a
+    // field goal's kicker also carries), points === 6 for the touchdown
+    // behind it (never effect.td, which a blocked-kick return score
+    // never sets). Both lessons were paid for once already in that
+    // function; re-deriving them differently here would just buy the
+    // same bugs a second time.
+    let tryLine = '';
+    const lastRoles = p.roles || {};
+    if (lastRoles.playType === 'pat' || lastRoles.playType === 'twopt'){
+      const tryRole = lastRoles.playType === 'pat' ? lastRoles.kicker : (lastRoles.carrier || lastRoles.passer);
+      for (let i = list.length - 2; i >= 0; i--){
+        const e = list[i].effect || {};
+        if (e.score && e.score.points === 6){
+          tryLine = '<div style="font-size:24px; font-weight:600; margin-top:8px; color:' +
+            (tryRole && tryRole.result === 'g' ? '#1a7a4c' : '#a32d2d') + ';">' +
+            stripTeamNames(p.text || '') + '</div>';
+          p = list[i];
+          break;
+        }
+      }
+      // No touchdown found behind the try -- nothing to lock onto, so
+      // fall through unchanged and show the try itself as the last
+      // play, exactly as before this existed.
+    }
+    // The trailing " — 2nd & 9" (or, when the play converts the down,
+    // the fixed phrase " — 1st down") every scrimmage play's own stored
+    // text already carries -- added at entry time in game.html, and
+    // left completely alone there and everywhere else it is shown:
+    // this page's own allPlaysScroll, recap.html, the stat package --
+    // is now redundant HERE ONLY, since the down/distance/spot line
+    // below repeats the exact same information as its own, standalone
+    // line. Stripped from the copy shown in this one widget, not from
+    // the text itself.
+    //
+    // Deliberately does NOT touch " — TOUCHDOWN" or
+    // " — turnover on downs": neither is duplicated by the standalone
+    // line below (a scoring or turnover-ending play has no next down to
+    // repeat), so stripping those would delete information this widget
+    // states nowhere else.
+    const rawText = (p.text || '').replace(/ — (?:\d+(?:st|nd|rd|th) & (?:\d+|Goal)|1st down)$/, '');
+    // Same text processing renderLogLines applies -- team names
+    // stripped (redundant here, since only one team's own drive is
+    // ever shown), TOUCHDOWN bolded for consistency with every other
+    // log line in the app, even though a 30px, already-bold line does
+    // not visually need the extra emphasis.
+    const text = stripTeamNames(rawText).replace(/TOUCHDOWN/g, '<strong>TOUCHDOWN</strong>');
+    // margin-top, not a gap on the tiles above: currentDriveTiles and
+    // driveLogScroll are separate sibling elements, and the tiles are
+    // shared with Previous Drive's own summary -- spacing added there
+    // would have widened Previous Drive's gap too, which nobody asked
+    // to change.
+    const playHtml = '<div style="font-size:36px; font-weight:700; color:#111; line-height:1.2; margin-top:16px;">' +
+      breakPlayText(text) + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
+    // Identical construction to the banner's own down/distance/spot
+    // text a few hundred lines up -- same hasDrive guard, same
+    // ordinal/markerLabel calls, same state and distDisplay passed in
+    // from the one place renderAll() already computed them. Anything
+    // else risks the two silently disagreeing about the same drive.
+    // driveThisHalf gates it, exactly as the banner does. computeState()
+    // keeps the down, distance and spot the first half ended on, so this
+    // line sat under the second-half KICKOFF reading "3rd & 16 at own 12"
+    // -- a situation that ended at the interval. Fixing the banner alone
+    // left it here, because this tile builds its own copy of the line
+    // rather than reading the banner's.
+    //
+    // Defaults to true when the caller passes nothing, so the argument is
+    // additive and no other call site changes behaviour.
+    const inThisHalf = driveThisHalf === undefined ? true : !!driveThisHalf;
+    const hasDrive = inThisHalf && !!state.down &&
+      state.fieldPos !== null && state.fieldPos !== undefined;
+    const downLine = hasDrive
+      ? '<div style="font-size:24px; font-weight:600; color:#555; margin-top:8px;">' +
+        ordinal(state.down) + ' & ' + distDisplay + ' at ' + markerLabelNamed(state.fieldPos, state.possession) + '</div>'
+      : '';
+    return playHtml + tryLine + downLine + timeoutLines;
+  }
+
+  function computeDriveSummary(startIdx, endIdx){
+    const driveTeam = computeState(plays.slice(0, startIdx + 1)).possession;
+    if (driveTeam !== 'teamA' && driveTeam !== 'teamB') return null;
+    const stateBefore = computeState(plays.slice(0, startIdx));
+    const stateAtEnd = computeState(plays.slice(0, endIdx));
+    const segment = plays.slice(startIdx, endIdx);
+    const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
+    let rushes = 0, rushYds = 0, passes = 0, passYds = 0, totalPlays = 0, totalYds = 0, scoringPlayText = null;
+    // Set only for a TOUCHDOWN, never a field goal -- a made FG has no
+    // PAT/2PT to follow, so tryOutcome must not even be searched for
+    // after one, let alone shown as though it belonged there.
+    let endedInTouchdown = false, tryOutcome = null;
+    segment.forEach(p => {
+      const e0 = p.effect || {};
+      // A penalty is not a play, but its yardage genuinely moves the
+      // drive -- a 15-yard defensive foul advances the offense just as a
+      // 15-yard completion does. Counted in YARDS only, never in plays.
+      // fieldDelta is already signed from the offense's point of view,
+      // so a foul on the offense subtracts.
+      if (e0.penaltyTeam && typeof e0.fieldDelta === 'number'){
+        totalYds += e0.fieldDelta;
+        return;
+      }
+      const r = p.roles;
+      // SCORING TEXT CAPTURED REGARDLESS OF TEAM, unlike everything
+      // below this. Reported from a real game, 19 Aug 2026: a
+      // defensive score -- a blocked kick, an interception, a fumble,
+      // anything returned by the team that was NOT driving -- is still
+      // this drive's OUTCOME, even though the team that committed it
+      // is not the offense whose rushing/passing stats the rest of this
+      // loop counts. The early return two lines below, gating
+      // everything on p.team === driveTeam, used to gate THIS too --
+      // so once a defensive score's own team correctly said who
+      // actually scored (the attribution fix from earlier the same
+      // night), that team no longer matched driveTeam, and the
+      // touchdown that ended this exact drive silently never got
+      // captured. The outcome line fell back to lastPlayText instead --
+      // in the reported case, the scoring team's own ensuing kickoff,
+      // which is not remotely what ended this drive.
+      if (r){
+        const isFgGoodAny = r.playType === 'fg' && r.kicker && r.kicker.result === 'g';
+        // points === 6, not effect.td -- a THIRD bug in the same
+        // function, found while fixing the second one, the same night:
+        // a blocked kick returned for a touchdown sets effect.score
+        // with points: 6, but never sets effect.td at all -- that flag
+        // only gets set by the rush/pass/fumble/interception/kick-
+        // return branches, not the field-goal-block one. And it can
+        // never match isFgGoodAny either, since a BLOCKED kick's own
+        // result is 'b', never the 'g' a made field goal has. Neither
+        // condition ever matched this exact play shape, in EITHER
+        // team's own drive, since before tonight's attribution fix
+        // existed at all -- this was never about which team the play
+        // was filed under. 6 points is unambiguous in football
+        // regardless of the mechanism that produced it, so it is the
+        // one check that cannot miss a touchdown no matter how it was
+        // scored.
+        if (p.effect && p.effect.score && p.effect.score.points === 6){ scoringPlayText = p.text; endedInTouchdown = true; }
+        else if (p.effect && isFgGoodAny){ scoringPlayText = p.text; }
+        // THE TRY THAT FOLLOWS THE TOUCHDOWN, captured REGARDLESS OF
+        // TEAM -- moved above the team filter below for the same
+        // reason scoringPlayText was, a few lines up, the same night.
+        // A try always belongs to whoever scored the touchdown it
+        // follows, not to driveTeam (the team that was driving BEFORE
+        // the turnover this drive's segment starts from). For an
+        // ordinary offensive touchdown those are the same team, so
+        // this worked by coincidence and the gap went unnoticed; for a
+        // defensive score they never are, and the try's own outcome
+        // silently never got captured -- the "Previous Drive" panel's
+        // colored PAT/2PT line, built for exactly this, simply never
+        // rendered. Reported directly from a real game.
+        //
+        // Detected by playType === 'pat'/'twopt' specifically -- NOT by
+        // the presence of a .result field, which a field goal's kicker
+        // role also carries. An earlier version of this keyed on
+        // .result alone and silently swallowed made field goals:
+        // r.kicker.result === 'g' matched a FG too, this branch
+        // returned early, and the FG's own scoringPlayText capture
+        // above never ran. Caught by testing a made field goal
+        // specifically, not by re-reading the code -- the assumption
+        // that playType was absent from these roles was wrong, and the
+        // generic `roles.playType = roles.playType || type` line in
+        // the submit code (which runs for every panel, this one
+        // included) is why.
+        const tryRole = r.playType === 'pat' ? r.kicker
+          : r.playType === 'twopt' ? (r.carrier || r.passer) : null;
+        if (tryRole){
+          // p.text is reused verbatim rather than re-derived -- it is
+          // already the exact, correct wording for every outcome this
+          // can have, including the edge cases (a blocked kick
+          // returned for two, a muffed hold, an intercepted 2-point
+          // pass) that a short summary written here would be liable to
+          // get wrong or leave out.
+          tryOutcome = { text: p.text, good: tryRole.result === 'g' };
+          return;
+        }
+      }
+      if (!r || p.team !== driveTeam) return;
+
+      if (scrimmageTypes.includes(r.playType)) totalPlays++;
+      // A LOST fumble carries no statYds ON PURPOSE -- computeState skips
+      // the flip for stat plays, so the yardage rides on roles instead
+      // (see the 'f' branch of parseInput). Reading statYds alone therefore
+      // scored a 3-yard catch-and-fumble as a 3-yard drive gain of zero.
+      const attYds = (typeof r.attemptYards === 'number') ? r.attemptYards : null;
+      const yds = (p.effect && typeof p.effect.statYds === 'number') ? p.effect.statYds
+        : (attYds !== null ? attYds : 0);
+      if (p.effect && typeof p.effect.statYds === 'number') totalYds += p.effect.statYds;
+      else if (attYds !== null) totalYds += attYds;
+      if (r.playType === 'rush'){ rushes++; rushYds += yds; }
+      else if (r.playType === 'pass' || r.playType === 'incomplete' || r.playType === 'int' || r.playType === 'sack'){ passes++; passYds += yds; }
+      else if (r.playType === 'fumble' && r.carrier){
+        // ASK THE PLAY, DO NOT GUESS FROM THE ROSTER.
+        // A fumble used to carry no record of what play it ended, so this
+        // inferred rush-or-pass from the carrier's listed position. That
+        // put a completion to a receiver with no position on file -- or
+        // any position outside RECEIVE_POS -- in the RUSHING column, and a
+        // running back's catch-and-fumble with it. `attempt` now states
+        // what the play was, so the guess is only a fallback for plays
+        // saved before it existed.
+        if (r.attempt === 'rush'){ rushes++; rushYds += yds; }
+        else if (r.attempt === 'pass' || r.attempt === 'sack'){ passes++; passYds += yds; }
+        else {
+          const pos = ((TEAMS[driveTeam] && TEAMS[driveTeam].posOffense[r.carrier.num]) || '').toUpperCase();
+          if (RECEIVE_POS.has(pos)){ passes++; passYds += yds; }
+          else { rushes++; rushYds += yds; }
+        }
+      }
+    });
+    const top = stateAtEnd.possessionTime[driveTeam] - stateBefore.possessionTime[driveTeam];
+    let lastPlayText = null;
+    if (!scoringPlayText){
+      for (let i = segment.length - 1; i >= 0; i--){
+        // Skip trailing administrative markers: a drive that ended in a
+        // punt must summarize as the punt, not as the clock line that
+        // happens to follow it.
+        if (segment[i].text && !isAdminMarker(segment[i])){ lastPlayText = segment[i].text; break; }
+      }
+    }
+    return { team: driveTeam, rushes, rushYds, passes, passYds, totalPlays, totalYds, top, scoringPlayText, lastPlayText,
+      // null unless the drive ended in a touchdown AND a try play was
+      // actually found in the segment -- a TD entered without its try
+      // yet (the scorer has not gotten to it) must not show a blank or
+      // a guess, it must show nothing, same as any other pending state
+      // in this app.
+      tryOutcome: endedInTouchdown ? tryOutcome : null };
+  }
+
+  // BREAK A LONG PLAY LINE AT ITS OWN CLAUSES.
+  // ---------------------------------------------------------------------
+  // A kickoff with a return and a tackler runs past 90 characters, and on
+  // a tile this size that wraps wherever the box happens to end -- mid
+  // name as often as not. The play text already has natural seams: the
+  // clauses that follow the main action are each introduced by a comma
+  // and a fixed phrase, so breaking THERE puts each part of the play on
+  // its own line and never splits a person's name.
+  //
+  // Display only -- the stored text is untouched. The comma goes with the
+  // break: it was punctuation for a running sentence and reads as a stray
+  // mark at the end of a line.
+  const PLAY_CLAUSES = [
+    ', returned by ', ', intended for ', ', tackled by ', ', recovered by '
+  ];
+  function breakPlayText(html){
+    if (!html) return html;
+    // FIND EVERY SEAM FIRST, then cut once. Wrapping one clause at a time
+    // nested each span inside the last, so a kickoff with a return AND a
+    // tackler indented the tackler twice -- it rendered on its own line,
+    // but stepped further right than the clause above it for no reason a
+    // reader could see. Collecting the positions and emitting siblings
+    // keeps every clause at the same indent.
+    const cuts = [];
+    PLAY_CLAUSES.forEach(c => {
+      let from = 0, idx;
+      while ((idx = html.indexOf(c, from)) !== -1){
+        cuts.push({ at: idx, len: c.length, phrase: c.slice(2) });
+        from = idx + c.length;
+      }
+    });
+    if (!cuts.length) return html;
+    cuts.sort((a, b) => a.at - b.at);
+    let out = html.slice(0, cuts[0].at);
+    cuts.forEach((cut, i) => {
+      const end = (i + 1 < cuts.length) ? cuts[i + 1].at : html.length;
+      out += '<span class="play-clause">' + cut.phrase +
+             html.slice(cut.at + cut.len, end) + '</span>';
+    });
+    return out;
+  }
+
+  function renderDriveSummary(summary){
+    if (!summary) return '<div style="color:#8d99a6;">no previous drive yet</div>';
+    const teamName = TEAMS[summary.team].name;
+    const tiles = [
+      ['RUSH', summary.rushes + '/' + summary.rushYds],
+      ['PASS', summary.passes + '/' + summary.passYds],
+      // TOTAL plays/yards, matching the Current Drive tile exactly. This
+      // read 'YARDS 80' against the live tile's 'TOTAL 4/66' -- the same
+      // four tiles in the same order, with the third one counting a
+      // different thing under a different name. Two drives side by side
+      // are there to be compared, and one of the four numbers could not
+      // be. totalPlays was already computed; only the tile was missing it.
+      ['TOTAL', summary.totalPlays + '/' + summary.totalYds],
+      ['TOP', formatDuration(summary.top)]
+    ];
+    const outcome = summary.scoringPlayText || summary.lastPlayText || 'No plays recorded';
+    const outcomeColor = summary.scoringPlayText ? '#1a7a4c' : '#555';
+    // A SEPARATE, SMALLER LINE, not appended onto the touchdown text --
+    // the scoring line is already long once a player's full name is in
+    // it, and this tile has already been fixed once for wrapping (the
+    // clock hint, on the header line above). Colour carries the same
+    // good/bad meaning it does everywhere else in this app: green for
+    // the attempting team's own success, red for anything else, whether
+    // that is a miss, a block, an interception or a fumble.
+    const tryHtml = summary.tryOutcome
+      ? '<div style="font-size:16px; line-height:1.3; margin-top:4px; color:' +
+        (summary.tryOutcome.good ? '#1a7a4c' : '#a32d2d') + ';">' + summary.tryOutcome.text + '</div>'
+      : '';
+    return '<div class="inline-stat-line">' +
+      tiles.map(([label, val]) => '<span class="inline-stat-item"><span class="stat-value">' + val + '</span><span class="stat-label">' + label + '</span></span>').join('') +
+      '</div>' +
+      // Requested directly, bumped again after the first pass still
+      // read too small next to Current Drive's now-36px headline --
+      // deliberately still short of that, since this is a summary of a
+      // FINISHED drive, not the thing the page is live for.
+      '<div style="font-size:20px; line-height:1.3; margin-top:4px;"><strong>' + teamName + ':</strong> <span style="color:' + outcomeColor + '; font-weight:' + (summary.scoringPlayText ? '700' : '600') + ';">' + breakPlayText(outcome) + '</span></div>' +
+      tryHtml;
+  }
+
+
+
+
+
+  function renderTeamSummary(){
+    const box = computeBoxScore(plays);
+
+    // THE GAME AS IT STOOD AT HALFTIME.
+    // ---------------------------------------------------------------------
+    // Total, pass and rush each carry a bracketed second figure from the
+    // second half onward: what that number was when the half ended.
+    //
+    // Computed by running the SAME computeBoxScore over the first-half
+    // plays, not by snapshotting a running total. A snapshot would be wrong
+    // the moment a first-half play is corrected after halftime -- which is
+    // ordinary, since corrections are entered when somebody notices, not
+    // when the mistake happened.
+    //
+    // Quarters 1 and 2, always. Overtime accrues into the game total and
+    // leaves the bracket alone: it is a fixed reference point, and a
+    // reference that moves is not one.
+    const firstHalfPlays = plays.filter(p => (p.quarter || 0) <= 2);
+    const halfBox = computeBoxScore(firstHalfPlays);
+    // FROM THE FIRST SECOND-HALF PLAY, not from the quarter changing. At
+    // the Q3 kickoff the two figures are identical -- "284 [284]" -- which
+    // reads as a bug rather than as information.
+    const showHalf = plays.some(p => (p.quarter || 0) >= 3);
+    // Needed for the possession marker on each team's header. This
+    // function did not previously care who had the ball.
+    const liveState = computeState(plays);
+    const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
+    // OFFENSE DETERMINED BY ROLE, NOT BY p.team -- same bug, same fix as
+    // recap.html/stat_package.html/season_report.html, found the same
+    // night by a systematic audit specifically because this file's own
+    // copy had been missed on the first pass through those three.
+    const offenseTeamOf = (p) => {
+      const r = p.roles;
+      if (!r) return null;
+      if (r.carrier) return r.carrier.team;
+      if (r.passer) return r.passer.team;
+      return null;
+    };
+    const playsFor = (teamKey) => plays.filter(p => p.roles && scrimmageTypes.includes(p.roles.playType) && offenseTeamOf(p) === teamKey).length;
+    const possessions = countPossessions(plays);
+    const turnovers = countTurnovers(plays);
+    const penState = computeState();
+
+    let html = '<div class="team-summary-row">';
+    ['teamA', 'teamB'].forEach(teamKey => {
+      const team = TEAMS[teamKey];
+      const s = box[teamKey];
+      const rushYdsRaw = Object.keys(s.rushing).reduce((t, n) => t + (s.rushing[n].yds || 0), 0);
+      // NFHS (which follows the NCAA convention, not the NFL one):
+      // sack yardage is charged as RUSHING yardage lost, not deducted
+      // from passing. The quarterback's individual passing line is
+      // untouched either way -- only where the team total absorbs it
+      // changes. Under the NFL rule this came out of Pass Yards.
+      //
+      // NOT currently referenced downstream in this function -- confirmed
+      // by search before this fix, not assumed. Corrected anyway,
+      // alongside the identical, LIVE gap this same session found a few
+      // hundred lines up (defTotals.sacks), rather than left as a latent
+      // copy of the same mistake for whenever this does get wired up.
+      const sackYardsLost = plays.reduce((t, p) => {
+        const r = p.roles;
+        return (r && (r.playType === 'sack' || (r.playType === 'fumble' && r.attempt === 'sack')) && r.passer && r.passer.team === teamKey) ? t + (r.passer.yards || 0) : t;
+      }, 0);
+      const passYds = Object.keys(s.passing).reduce((t, n) => t + (s.passing[n].yds || 0), 0);
+      // No subtraction here: the sack yardage is already inside the
+      // TEAM rushing line, so taking it off again would double count.
+      const rushYds = rushYdsRaw;
+      const totalYds = rushYds + passYds;
+      // A team's own offensive 3rd/4th down conversion rate is stored on
+      // the OTHER team's oppDowns entry (that's "the other team's defense
+      // against this team's offense", which is the same numbers).
+      const own = box[otherTeam(teamKey)].oppDowns;
+      const d3 = own.d3Pct !== null ? own.d3conv + ' of ' + own.d3att + ' (' + own.d3Pct + '%)' : '—';
+      const pen = penState.penalties[teamKey];
+
+      // COMPLETIONS AND ATTEMPTS REMOVED FROM THESE TWO TILES, 25 Aug 2026.
+      // ---------------------------------------------------------------
+      // They were here deliberately -- "180 passing yards reads very
+      // differently at 12 of 18 than at 12 of 34" -- and that argument
+      // still holds, which is why comp and att remain in the per-category
+      // tables further down this page. What changed is what these three
+      // tiles are FOR: a game total beside its halftime figure. Two pairs
+      // of numbers in one tile is one pair too many at 34px.
+      const yardsOf = (bucket) =>
+        Object.keys(bucket).reduce((t, n) => t + (bucket[n].yds || 0), 0);
+      const hs = halfBox[teamKey];
+      const halfPass  = yardsOf(hs.passing);
+      const halfRush  = yardsOf(hs.rushing);
+      const halfTotal = halfPass + halfRush;
+      // Interpolated as HTML, so it is built from numbers this function
+      // computed rather than from anything a scorer typed.
+      const withHalf = (val, half) => showHalf
+        ? val + '<span class="stat-tile-half">[' + half + ']</span>'
+        : String(val);
+
+      const topSec = (liveState.possessionTime || {})[teamKey] || 0;
+      const tiles = [
+        [possessions[teamKey] || 0, 'Possessions'],
+        [withHalf(totalYds, halfTotal), 'Total Yards'],
+        [withHalf(passYds, halfPass), 'Pass Yards'],
+        [withHalf(rushYds, halfRush), 'Rush Yards'],
+        [playsFor(teamKey), 'Total Plays'],
+        [turnovers[teamKey] || 0, 'Turnovers'],
+        [pen.count + '-' + pen.yds, 'Penalties'],
+        [d3, '3rd Down']
+      ];
+
+      html += '<div class="team-summary-col">' +
+        // DARK THEME: a spine, not a fill. The tenant picks this colour
+        // and it may be pale -- filled, it is a bright block in a dark
+        // screen and safeTextColor has to flip the label to near-black,
+        // so the two teams' headers end up with different contrast. As a
+        // 5px edge the colour still identifies the team and the label is
+        // always the same white.
+        '<div class="team-summary-header" style="background:#171d25; color:#eef1f4; ' +
+          'border-left:5px solid ' + team.bg + '; border-radius:0 8px 8px 0;">' +
+        (team.logo ? '<img class="team-summary-logo" src="' + team.logo + '">' : '') +
+        '<span>' + team.name + '</span>' +
+        // The possession marker. Rendered for BOTH teams and hidden on
+        // the one without the ball, so the header width does not jump
+        // every time possession changes.
+        '<span class="poss-ball" style="visibility:' +
+          (liveState.possession === teamKey && liveState.down ? 'visible' : 'hidden') +
+          ';" title="has the ball">\uD83C\uDFC8</span>' +
+        // Right-justified via margin-left:auto so it sits hard against
+        // the end of the coloured bar regardless of how long the team
+        // name or logo is.
+        // Timeouts and time of possession, stacked and right-justified at
+        // the end of the coloured bar. The bar is a flex row with no set
+        // height, so a second line grows it by one small line and nothing
+        // in the tile grid below moves -- the grid takes its height from
+        // flex:1 on whatever is left.
+        //
+        // TOP is shown only once some has accrued. It is built entirely
+        // from the clock values the scorer types, and those are optional,
+        // so a game with no clock entries would otherwise read a confident
+        // 0:00 -- which says "they never had the ball" rather than "nobody
+        // recorded it". Absent is honest; zero is a claim.
+        '<span style="margin-left:auto; display:flex; flex-direction:column; align-items:flex-end; line-height:1.15;">' +
+          '<span style="font-size:16px; font-weight:700; letter-spacing:0.02em;">TOL=' +
+            computeState(plays).timeouts[teamKey] + '</span>' +
+          (topSec > 0
+            // Same font size and weight as TOL above it, so the two lines
+            // are the same height. It was 13px against 16px, which on a
+            // screen read from across a room made the second line look
+            // like a footnote rather than a figure. Both are stats a coach
+            // glances at between plays; neither outranks the other.
+            ? '<span style="font-size:16px; font-weight:700; letter-spacing:0.02em;" ' +
+              'title="Time of possession, from the clock values entered">' +
+              formatDuration(topSec) + ' TOP</span>'
+            : '') +
+        '</span>' +
+        '</div>' +
+        '<div class="stat-tile-grid">' +
+        tiles.map(([val, label]) => '<div class="stat-tile"><div class="stat-tile-value">' + val + '</div><div class="stat-tile-label">' + label + '</div></div>').join('') +
+        '</div>' +
+        '</div>';
+    });
+    html += '</div>';
+    document.getElementById('teamSummaryContainer').innerHTML = html;
+  }
+
+  // Requested directly, mocked up and approved before this was built:
+  // while a game has not started, the bottom-left tile shows this
+  // season's cumulative stats for our own team instead of this game's
+  // own (which would otherwise just be empty, since nothing has been
+  // entered yet). Set once in init(), before the CURRENT game's own
+  // buildTeams() call, and read from again on every render rather than
+  // refetched -- see loadSeasonStatsForNotStarted() below for why the
+  // ordering there matters.
+  //
+  // { aggregatedBox, allSeasonPlays, gameCount } | null. null means
+  // either the game has actually started (the normal, live tile
+  // applies) or this was never checked for this game at all.
+  let seasonStatsForNotStarted = null;
+
+  // There is no stored, precomputed season-stats table anywhere in
+  // this app -- confirmed directly before building this, not assumed.
+  // season_report.html derives its own season totals fresh, in the
+  // browser, every single time it loads: for each finished game,
+  // rebuild that game's own roster/team context, compute that game's
+  // own box score, merge the result into a running total. This does
+  // the identical thing, for the same reason -- there is no cheaper
+  // source to read from, since nothing anywhere writes this total back
+  // to the database once computed. A third page doing the same
+  // derivation, not a shortcut around it.
+  async function loadSeasonStatsForNotStarted(game, ourBranding){
+    const { data: priorGames, error } = await supabaseClient
+      .from('games').select('*')
+      .eq('season_year', game.season_year).eq('status', 'final')
+      // Same reasoning as season_report.html and player_report.html:
+      // NULL is not false in SQL, so a plain .eq('is_preseason', false)
+      // would have silently excluded every game saved before that
+      // column existed.
+      .or('is_preseason.is.null,is_preseason.eq.false');
+    if (error || !priorGames || !priorGames.length){
+      seasonStatsForNotStarted = { aggregatedBox: null, allSeasonPlays: [], gameCount: 0 };
+      return;
+    }
+
+    // Everything below is wrapped -- reported directly: a real season
+    // with real, finished games rendered the tile completely blank, not
+    // "no season stats yet". That distinction matters: an exception
+    // thrown partway through this loop (an older or unusual stored
+    // shape this had not been tested against) would otherwise propagate
+    // straight up through init() and leave the REST of the page's own
+    // setup unfinished too, not just this one tile. Caught here, logged
+    // loudly so the actual cause is visible in the console instead of a
+    // silent blank box, and surfaced as its own distinct state --
+    // deliberately NOT the same "no season stats yet" a genuinely empty
+    // season falls to, since that would misreport real games as if
+    // they did not exist.
+    try {
+      const aggRushing = {}, aggPassing = {}, aggReceiving = {}, aggSpecialTeams = {};
+      const allSeasonPlays = [];
+      // Identical to season_report.html's own mergeInto -- summed except
+      // for a "long" figure, which is a max, not a running total.
+      const mergeInto = (target, key, delta) => {
+        if (!target[key]) target[key] = {};
+        Object.keys(delta).forEach(k => {
+          // A LIST OF MAXIMA. The suffix test was added on 23 Aug: the list
+      // was three hardcoded names, so any new "long" stat would have been
+      // SUMMED across games -- three 20-yard returns reporting a long of
+      // 60. Returns are no longer shown on this page, but the trap is
+      // general and the fix is kept: the explicit names remain only so
+      // the intent stays readable.
+      if (/Long$/.test(k) || k === 'long' || k === 'fgLong' || k === 'puntLong'){
+            target[key][k] = Math.max(target[key][k] || 0, delta[k] || 0);
+          } else {
+            target[key][k] = (target[key][k] || 0) + (delta[k] || 0);
+          }
+        });
+      };
+
+      for (const priorGame of priorGames){
+        const { data: rosterRows } = await supabaseClient
+          .from('game_rosters').select('*').eq('game_id', priorGame.id);
+        const { data: rawPlays } = await supabaseClient
+          .from('plays').select('*').eq('game_id', priorGame.id).order('sequence_number', { ascending: true });
+        const gamePlays = (rawPlays || []).map(p => ({
+          text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+          roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+        }));
+        // Rebuilds the SAME global TEAMS object the current, not-started
+        // game is about to use for real -- deliberately safe, because
+        // this entire function runs and finishes BEFORE buildTeams() is
+        // called for the actual current game a few lines later in
+        // init(). Whatever TEAMS looks like when this returns is
+        // correctly overwritten immediately afterward; nothing else
+        // reads TEAMS in between.
+        buildTeams(priorGame, rosterRows || [], ourBranding);
+        const box = computeBoxScore(gamePlays);
+        ['rushing', 'passing', 'receiving'].forEach(cat => {
+          const target = cat === 'rushing' ? aggRushing : cat === 'passing' ? aggPassing : aggReceiving;
+          Object.keys(box.teamA[cat]).forEach(n => mergeInto(target, n, box.teamA[cat][n]));
+        });
+        Object.keys(box.teamA.specialTeams).forEach(n => mergeInto(aggSpecialTeams, n, box.teamA.specialTeams[n]));
+        // Kept, not just merged and discarded: renderTeamBoxScore's own
+        // Defense tile has never read its numbers from `box` at all (see
+        // the comment on defTotals above) -- it reduces straight over
+        // whichever plays array it is handed. Concatenating every prior
+        // game's plays here, then handing the combined array in as
+        // overrideDefensePlays, reuses that exact same reduction
+        // unchanged rather than re-deriving int/fumRec/sacks/tfl a second
+        // way that could quietly disagree with it.
+        allSeasonPlays.push(...gamePlays);
+      }
+
+      seasonStatsForNotStarted = {
+        aggregatedBox: { teamA: { rushing: aggRushing, passing: aggPassing, receiving: aggReceiving, specialTeams: aggSpecialTeams } },
+        allSeasonPlays,
+        gameCount: priorGames.length
+      };
+    } catch (e) {
+      console.error('Season Stats tile: could not compute the season aggregate', e);
+      seasonStatsForNotStarted = { aggregatedBox: null, allSeasonPlays: [], gameCount: 0, loadError: true };
+    }
+  }
+
+  async function init(){
+    const params = new URLSearchParams(window.location.search);
+    currentGameId = params.get('id');
+    isResultsMode = params.get('mode') === 'results';
+    if (isResultsMode){
+      document.getElementById('quadTR').innerHTML =
+        '<div class="card compact drive-card" style="height:100%; display:flex; flex-direction:column;">' +
+          '<h2>All Plays</h2>' +
+          '<div id="allPlaysScroll" style="flex:1; min-height:0; overflow-y:auto;"></div>' +
+        '</div>';
+    }
+    if (!currentGameId){
+      showView('errorView');
+      showMsg('errorMsg', 'No game specified.', 'error');
+      return;
+    }
+
+    const { data: gameRows, error: gameError } = await supabaseClient
+      .from('games').select('*').eq('id', currentGameId).limit(1);
+    if (gameError || !gameRows || gameRows.length === 0){
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = gameError ? gameError.message : 'That game could not be found.';
+      return;
+    }
+    const game = gameRows[0];
+    currentGameTenantId = game.tenant_id;
+    gameLabel = game.designator;
+    currentGameStatus = game.status;
+    quarterLengthSec = game.quarter_length_seconds || 720;
+
+    // BY THE GAME'S OWN TENANT, not by is_our_team.
+    // -----------------------------------------------------------------
+    // `is_our_team` meant "the only team" when there was one tenant. It
+    // is TRUE for every tenant's team now, so this query returned every
+    // team on the platform and .limit(1) took whichever Postgres felt
+    // like -- an arbitrary school's colours on somebody else's page.
+    //
+    // The game already knows whose it is. Asking it is exact for a
+    // tenant, for the platform, and for an anonymous recap reader, none
+    // of which the flag could distinguish.
+    const { data: teamRows } = await supabaseClient
+      .from('teams').select('primary_color, secondary_color, logo_url').eq('tenant_id', game.tenant_id).limit(1);
+    const ourBranding = (teamRows && teamRows[0]) || {};
+
+    // Requested directly: this has to run and finish BEFORE the current
+    // game's own buildTeams() call a few lines below, since it does its
+    // own buildTeams() calls internally, once per prior game, and the
+    // LAST one to run wins for the rest of this page. Doing this first
+    // means the current game's own buildTeams() call is always that
+    // last one, regardless of what happened during aggregation.
+    //
+    // 'setup', not 'not_started' -- a real error, caught directly: this
+    // read 'not_started' from the first draft on, a string that does
+    // not occur anywhere in this app. create_game.html writes 'setup'
+    // for a freshly created game (gamePayload.status = 'setup'), and
+    // every other page's own currentGameStatus default agrees. The
+    // wrong string meant this condition was never once true against a
+    // real game, in testing or otherwise -- confirmed only once a real
+    // season's own games showed nothing, and traced back to this exact
+    // line rather than guessed at.
+    if (game.status === 'setup'){
+      await loadSeasonStatsForNotStarted(game, ourBranding);
+    }
+
+    const { data: rosterRows, error: rosterError } = await supabaseClient
+      .from('game_rosters').select('*').eq('game_id', currentGameId);
+    if (rosterError){
+      showView('errorView');
+      document.getElementById('errorMsg').textContent = rosterError.message;
+      return;
+    }
+
+    buildTeams(game, rosterRows || [], ourBranding);
+    ['teamA', 'teamB'].forEach(teamKey => {
+      const h = document.getElementById(teamKey === 'teamA' ? 'teamAHeading' : 'teamBHeading');
+      // Season Stats only ever applies to OUR OWN team's tile (teamA),
+      // matching the request exactly -- the opponent changes every
+      // week, so a season total for them would not mean anything.
+      const showingSeasonStats = teamKey === 'teamA' && seasonStatsForNotStarted;
+      const n = showingSeasonStats ? seasonStatsForNotStarted.gameCount : 0;
+      h.textContent = TEAMS[teamKey].name + (showingSeasonStats
+        ? (n > 0 ? ' Season Stats — ' + n + ' game' + (n === 1 ? '' : 's') : ' Season Stats')
+        : ' Stats');
+      // DARK THEME: the tenant's colour becomes a spine, not a fill.
+      // It is chosen by the customer, so it may be pale -- filled, it
+      // punches a hole in a dark screen and safeTextColor then has to
+      // flip the label to near-black. As an edge it always works, and
+      // the heading keeps one predictable contrast.
+      h.style.background = '#171d25';
+      h.style.color = '#eef1f4';
+      h.style.borderLeft = '5px solid ' + TEAMS[teamKey].bg;
+      h.style.padding = '6px 12px';
+      h.style.borderRadius = '0 6px 6px 0';
+      h.style.display = 'table';
+      h.style.margin = '0 auto 8px';
+    });
+
+    const { data: existingPlays } = await supabaseClient
+      .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
+    plays = (existingPlays || []).map(p => ({
+      text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+      roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+    }));
+
+    showView('mainView');
+    renderAll();
+    subscribeToLiveUpdates();
+  }
+
+  async function reloadPlaysAndRender(){
+    const { data: existingPlays } = await supabaseClient
+      .from('plays').select('*').eq('game_id', currentGameId).order('sequence_number', { ascending: true });
+    plays = (existingPlays || []).map(p => ({
+      text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
+      roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+    }));
+    renderAll();
+  }
+
+  function subscribeToLiveUpdates(){
+    // Inserts and updates can be filtered server-side by game_id.
+    // Deletes (Undo) can't be filtered server-side at all in Postgres
+    // Changes, so we listen to every delete on this table and check
+    // game_id ourselves once it arrives -- this only works because the
+    // migration set REPLICA IDENTITY FULL, which makes sure a delete
+    // event actually carries the deleted row's other columns instead
+    // of just its id.
+    supabaseClient
+      .channel('plays-' + currentGameId)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'plays', filter: 'game_id=eq.' + currentGameId }, () => {
+        reloadPlaysAndRender();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'plays', filter: 'game_id=eq.' + currentGameId }, () => {
+        reloadPlaysAndRender();
+      })
+      // Reload on ANY delete, without checking game_id.
+      //
+      // This used to check `payload.old.game_id === currentGameId`, which
+      // depends on the delete event carrying non-key columns. That needs
+      // REPLICA IDENTITY FULL -- which IS set here, and the table IS in
+      // the supabase_realtime publication, and undos still did not
+      // propagate. Rather than keep chasing it, the check is gone: the
+      // cost of reloading when another game is edited is one query, and
+      // in practice two games are never live at once.
+      //
+      // A missed undo is the WORST failure mode this page has. The
+      // spectator keeps seeing a play that no longer exists, and nothing
+      // says so.
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'plays' }, () => {
+        reloadPlaysAndRender();
+      })
+      .subscribe();
+
+    // Requested directly, confirmed by reproducing it exactly rather
+    // than assumed correct: someone with this page open BEFORE the
+    // game starts sees Season Stats correctly, but pressing Start Game
+    // is a pure `games`-table update -- no `plays` row is touched, so
+    // the subscription above never fires, and even once a real play
+    // eventually does arrive, reloadPlaysAndRender() only ever re-reads
+    // `plays`. It never revisits game.status or seasonStatsForNotStarted,
+    // so an ALREADY-OPEN tab kept showing the season aggregate
+    // indefinitely, with no way to notice its own snapshot was stale.
+    //
+    // Only subscribed when the page actually loaded into the Season
+    // Stats state -- an ordinary in-progress or final load has nothing
+    // here to correct, and does not need a second open channel for it.
+    if (seasonStatsForNotStarted){
+      supabaseClient
+        .channel('game-status-' + currentGameId)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: 'id=eq.' + currentGameId }, () => {
+          checkForGameStart();
+        })
+        .subscribe();
+    }
+
+    startReconciliationPoll();
+  }
+
+  // Re-fetches the game row fresh rather than trusting the realtime
+  // payload -- same reasoning as reloadPlaysAndRender() above: a
+  // filtered re-read is one query and is never wrong, where a payload
+  // depends on replica identity settings this app does not control for
+  // this table. If the game has moved on from 'setup', drops the stale
+  // Season Stats snapshot and re-renders immediately -- matching "the
+  // moment Start Game is pressed" exactly, not the moment a play
+  // eventually follows it.
+  async function checkForGameStart(){
+    if (!seasonStatsForNotStarted) return;
+    const { data: rows } = await supabaseClient
+      .from('games').select('status').eq('id', currentGameId).limit(1);
+    const status = rows && rows[0] && rows[0].status;
+    if (status && status !== 'setup'){
+      seasonStatsForNotStarted = null;
+      const h = document.getElementById('teamAHeading');
+      if (h) h.textContent = TEAMS.teamA.name + ' Stats';
+      renderAll();
+    }
+  }
+
+  // A backstop for everything realtime can silently miss: a dropped
+  // websocket, a throttled background tab, an event the server never
+  // sent. Every few seconds, ask how many plays the game has and compare
+  // it with what is on screen.
+  //
+  // This is the pattern broadcast.html already uses, and the reason that
+  // page never had this problem -- it polls and simply cannot go stale.
+  // A missed event here is INVISIBLE: the page looks fine and is wrong.
+  //
+  // Deliberately a count, not a full fetch. It is one small query every
+  // few seconds and only pulls the plays when something has actually
+  // changed.
+  function startReconciliationPoll(){
+    const POLL_MS = 4000;
+    setInterval(async () => {
+      if (document.hidden) return;          // a hidden tab reconciles on wake
+      try {
+        const { count, error } = await supabaseClient
+          .from('plays')
+          .select('id', { count: 'exact', head: true })
+          .eq('game_id', currentGameId);
+        if (error || count === null || count === undefined) return;
+        // AWAITED. Left unawaited, a failure inside the reload escapes
+        // this catch entirely and surfaces as an unhandled rejection --
+        // the poll would look like it was handling errors while actually
+        // ignoring the only ones that matter.
+        if (count !== plays.length) await reloadPlaysAndRender();
+      } catch (e) { /* offline or asleep -- try again on the next tick */ }
+    }, POLL_MS);
+
+    // BRANDING GOES STALE TOO, and nothing was re-reading it.
+    // -------------------------------------------------------------------
+    // This page reads the teams row ONCE, in init(). Everything else on
+    // it updates live -- plays, score, drives, the clock -- so it reads
+    // as a live page, and a new team logo uploaded on the customize
+    // screen quietly did not arrive here while every other page showed
+    // it. Reported directly: "updated everywhere but the view screen."
+    //
+    // Throttled hard. Branding changes a few times a season and the
+    // spectator page can sit open for hours: re-reading it on the play
+    // poll would be a query every couple of seconds to learn nothing.
+    // Ten minutes, and on waking the tab, is far more often than a logo
+    // actually changes.
+    let lastBrandingCheck = Date.now();
+    async function refreshBranding(force){
+      if (!force && Date.now() - lastBrandingCheck < 600000) return;
+      lastBrandingCheck = Date.now();
+      try {
+        const { data } = await supabaseClient
+        // SCOPED, like the initial load above. This one polls, so it
+        // outlives the game object and needs the tenant kept for it.
+          .from('teams').select('primary_color, secondary_color, logo_url')
+          .eq('tenant_id', currentGameTenantId).limit(1);
+        const b = (data && data[0]) || {};
+        if (!TEAMS.teamA) return;
+        // Only repaint when something actually differs -- a re-render on
+        // every check would fight the drive tiles for no reason.
+        const changed = TEAMS.teamA.logo !== (b.logo_url || null) ||
+                        TEAMS.teamA.bg !== (b.primary_color || '#2b3440');
+        if (!changed) return;
+        TEAMS.teamA.logo = b.logo_url || null;
+        TEAMS.teamA.bg = b.primary_color || '#2b3440';
+        TEAMS.teamA.text = b.secondary_color || '#ffffff';
+        renderAll();
+      } catch (e) { /* offline -- the next wake will try again */ }
+    }
+    setInterval(() => { if (!document.hidden) refreshBranding(false); }, 60000);
+    // Exposed so the suite can drive it: it lives inside init()'s scope
+    // like everything else here, and a test cannot reach it otherwise.
+    window.__refreshBranding = refreshBranding;
+
+    // Coming back to the tab is the most likely moment to be stale, so
+    // reconcile immediately rather than waiting for the next tick.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden){
+        reloadPlaysAndRender().catch(() => {});
+        refreshBranding(true);
+      }
+    });
+  }
+</script>
+</body>
+</html>
