@@ -445,6 +445,55 @@
   // ---- tenants ----------------------------------------------------------
   // A tenant may field several sports, so the embedded `teams` is a list.
   // The first one with a logo wins; a tenant whose teams have none gets a
+  // ---- demo seeding and reset -------------------------------------------
+  // Both prompt for the game, because a tenant may hold several demos and
+  // picking the wrong one is the whole risk. The uuid is typed rather than
+  // chosen from a list: a list would be friendlier, and this is a control
+  // used a handful of times by one person who has the ids to hand.
+  document.getElementById('tenantsBody').addEventListener('click', async (e) => {
+    const seedBtn  = e.target.closest('[data-seed]');
+    const resetBtn = e.target.closest('[data-resetdemo]');
+    if (!seedBtn && !resetBtn) return;
+    const name = (seedBtn || resetBtn).dataset.name;
+
+    if (seedBtn){
+      const demoId = prompt('Seed a demo game for ' + name +
+        '.\n\nGame id of the DEMO game to fill:');
+      if (!demoId) return;
+      const srcId = prompt('Game id of the SOURCE game to copy plays from.\n\n' +
+        'Its players never appear: the demo roster replaces them and the play ' +
+        'text is rewritten.');
+      if (!srcId) return;
+      const q = prompt('Copy plays through which quarter?\n\n' +
+        '2 leaves the demo at halftime with a real first half behind it.', '2');
+      if (q === null) return;
+      showMsg('Seeding\u2026', 'info');
+      const { data, error } = await supabaseClient.rpc('seed_demo_game', {
+        p_demo_game: demoId.trim(), p_source_game: srcId.trim(),
+        p_through_quarter: parseInt(q, 10) || 2
+      });
+      if (error){ showMsg('Could not seed: ' + esc(error.message), 'error'); return; }
+      showMsg('Seeded ' + data + ' plays into the demo game, and saved that as its ' +
+              'reset point.', 'success');
+      await loadTenants();
+      return;
+    }
+
+    // RESET. Named in the prompt, because the risk is the wrong game -- and
+    // unlike the seed this one throws work away.
+    const demoId = prompt('Reset a demo game for ' + name +
+      '.\n\nEverything entered since it was seeded is discarded.\n\n' +
+      'Game id of the demo game to reset:');
+    if (!demoId) return;
+    showMsg('Resetting\u2026', 'info');
+    const { data, error } = await supabaseClient.rpc('reset_demo_game', {
+      p_demo_game: demoId.trim()
+    });
+    if (error){ showMsg('Could not reset: ' + esc(error.message), 'error'); return; }
+    showMsg('Demo game reset to ' + data + ' plays.', 'success');
+    await loadTenants();
+  });
+
   // ONE HANDLER FOR ALL THREE REFRESH BUTTONS.
   // Every tab reloads everything, which the Tenants button already did: a
   // refresh that updated one list and left another showing something older
@@ -493,7 +542,7 @@
       // 017 drops the stale columns; this reads the live ones through the
       // foreign key. `teams` comes back as an ARRAY because a tenant may
       // field several sports.
-      .from('tenants').select('id, name, full_name, subscription, renews_on, created_at, disabled_at, disabled_reason, deleted_at, teams(logo_url)')
+      .from('tenants').select('id, name, full_name, subscription, renews_on, created_at, disabled_at, disabled_reason, deleted_at, is_demo, teams(logo_url)')
       .order('name');
     if (error){
       body.innerHTML = '<p class="empty">Could not load tenants: ' + esc(error.message) + '</p>';
@@ -571,7 +620,13 @@
               (t.full_name ? '<div style="font-weight:400; font-size:12.5px; color:#6b7680;">' +
                 esc(t.full_name) + '</div>' : '') +
             '</span></span></td>' +
-          '<td><span class="pill ' + pill + '">' + esc(label) + '</span></td>' +
+          // DEMO BADGE. A demo tenant behaves like any other -- its games can go
+          // ON AIR and run the full product -- so the only thing marking it out
+          // is this, and the seed/reset controls in the menu. Both the SQL
+          // functions refuse any tenant without the flag, so the badge is also
+          // the honest indicator of which rows those controls can touch.
+          '<td><span class="pill ' + pill + '">' + esc(label) + '</span>' +
+            (t.is_demo ? ' <span class="pill trial">Demo</span>' : '') + '</td>' +
           '<td>' + fmtDate(t.renews_on) + '</td>' +
           '<td>' + (live[t.id] || 0) + '</td>' +
           '<td>' + (gone[t.id] || 0) + '</td>' +
@@ -588,6 +643,16 @@
                   'data-name="' + esc(t.name) + '">' + (off ? 'Restore access' : 'Suspend') + '</button>' +
                 '<button class="danger" data-del="' + esc(t.id) + '" ' +
                   'data-name="' + esc(t.name) + '">Delete tenant</button>' +
+                // SEED AND RESET, ON DEMO TENANTS ONLY. The SQL refuses any
+                // other, so hiding these is about not offering a control that
+                // would be rejected -- not about safety, which lives in the
+                // function.
+                (t.is_demo
+                  ? '<button data-seed="' + esc(t.id) + '" data-name="' + esc(t.name) + '">' +
+                      'Seed a demo game\u2026</button>' +
+                    '<button data-resetdemo="' + esc(t.id) + '" data-name="' + esc(t.name) + '">' +
+                      'Reset a demo game\u2026</button>'
+                  : '') +
               '</div>' +
             '</div>' +
             (off && t.disabled_reason
