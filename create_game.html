@@ -21,7 +21,7 @@
 <style>
   /* THE SAME DASHBOARD BUTTON AS customize.html AND roster.html. */
   .backlink { text-decoration:none; padding:8px 14px; border-radius:6px;
-              border:1px solid #ccc; color:#444; font-size:13px; font-weight:600;
+              border:1px solid var(--sc-rule-strong); color:var(--sc-ink); font-size:13px; font-weight:600;
               display:inline-block; }
 
   /* THE SPREADSHEET EXAMPLE. Deliberately looks like a spreadsheet --
@@ -39,27 +39,69 @@
   .sheetMock .corner { background:#dfe4e8; min-width:26px; }
   .sheetMock .rownum { background:#eceff1; text-align:center; font-weight:700;
                        color:#5a636b; min-width:26px; padding:4px 6px; }
-  .sheetNote { margin:6px 0 0; font-size:12.5px; color:#666; }
+  /* The caption sits on the CARD, not on the white sheet above it. */
+  .sheetNote { margin:6px 0 0; font-size:12.5px; color:var(--sc-ink-muted); }
 
   /* THE STATCHAT MARK, identical on every page reachable from the
      dashboard. Same element, same size, same place: beside the page's own
      heading. Uniformity is the point -- a mark that moves or resizes
      between screens reads as decoration rather than as the product. */
   .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
-  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block; }
+  /* Dark-on-light artwork needs a plate on a #191f27 card. */
+  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block;
+                  background:#fff; padding:2px; box-sizing:border-box; }
 
+  /* DARK, 25 August 2026. Recipe in DARK_THEME_PLAN.md.
+     Every --sc-* this page reads is defined, including those only written
+     as var(--x, #fallback): an undefined token silently becomes the
+     fallback, and every fallback here was chosen for a white page. */
+  :root{ color-scheme:dark; }
+  :root{
+    --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+    --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+    --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+    --sc-navy:#2f3a47;   /* A BUTTON FILL. Never text, never a panel. */
+    --sc-green:#a3d93f;  --sc-green-dark:#8ac53e;
+    --sc-green-tint:rgba(124,181,24,.14);
+    --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
+    --sc-amber:#ffc72c;  --sc-amber-text:#ffc72c;
+    --sc-amber-tint:rgba(255,199,44,.13);
+    --sc-blue:#5aa9f0;   --sc-link:#7cb518;
+  }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
   .wrap { max-width:760px; margin:0 auto; }
-  .card { background:#fff; border-radius:12px; padding:28px; margin-bottom:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  .card { background:var(--sc-card); border:1px solid var(--sc-rule); color:var(--sc-ink); border-radius:12px; padding:28px; margin-bottom:20px; }
   h1 { font-size:22px; margin:0 0 6px; }
-  h2 { font-size:16px; margin:0 0 12px; color:#444; }
-  p.sub { color:#888; margin:0 0 20px; font-size:14px; }
-  label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
-  input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; }
+  h2 { font-size:16px; margin:0 0 12px; color:var(--sc-ink); }
+  p.sub { color:var(--sc-ink-muted); margin:0 0 20px; font-size:14px; }
+  label { display:block; font-size:13px; margin-bottom:4px; color:var(--sc-ink-muted); }
+  /* A <select> ON DARK NEEDS appearance:none -- the browser paints the
+     control face natively and ignores `background`. The chevron is drawn
+     back as a STROKED path (a fill on an open path renders as a wedge),
+     and the option list is reachable only from a stylesheet.
+     background-COLOR below, never the shorthand: the shorthand resets
+     background-image and would wipe that chevron. */
+  select {
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 9'%3E%3Cpath d='M1 1.5L7 7.5L13 1.5' stroke='%23eef1f4' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 11px center;
+    background-size:12px; padding-right:34px !important; cursor:pointer;
+  }
+  select option { background:var(--sc-card); color:var(--sc-ink); }
+  input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus {
+    -webkit-text-fill-color:var(--sc-ink);
+    -webkit-box-shadow:0 0 0 1000px var(--sc-raise) inset;
+    caret-color:var(--sc-ink);
+    transition:background-color 9999s ease-out 0s;
+  }
+  input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
+    outline:2px solid var(--sc-link); outline-offset:2px;
+  }
+  input, select { padding:8px; border:1px solid var(--sc-rule-strong); background-color:var(--sc-raise); color:var(--sc-ink); border-radius:6px; font-size:14px; box-sizing:border-box; }
   input[type="color"] { width:64px; height:40px; padding:2px; cursor:pointer; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
-  button { padding:9px 16px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
-  button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
+  button { padding:9px 16px; border-radius:6px; border:1px solid var(--sc-rule-strong); background:var(--sc-navy, #1a1a2e); color:var(--sc-ink); font-size:14px; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
   button:disabled { opacity:0.5; cursor:default; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
   .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
@@ -67,7 +109,7 @@
   .hidden { display:none; }
   .conflict-block { background:var(--sc-amber-tint, #fff3cd); border-radius:8px; padding:12px 14px; margin-top:12px; }
   .conflict-row { font-size:13px; margin-bottom:6px; }
-  .conflict-status { font-size:12px; color:#7a6a2a; margin-top:2px; }
+  .conflict-status { font-size:12px; color:var(--sc-amber); margin-top:2px; }
   .roster-summary { font-size:14px; color:var(--sc-green, #1a7a4c); margin-top:8px; }
 </style>
 </head>
@@ -91,9 +133,12 @@
         <a class="backlink" href="dashboard.html" style="white-space:nowrap; flex-shrink:0;">&larr; Dashboard</a>
       </div>
       <div id="finalLockBanner" class="hidden" style="background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400); border-radius:8px; padding:12px 14px; margin-bottom:16px;">
-        <div style="font-weight:600; color:#7a5c00; margin-bottom:4px;">This game is finalized</div>
-        <div style="font-size:13px; color:#7a5c00; margin-bottom:10px;">Setup is locked to prevent accidental changes to a completed game's record. Unlock only if something genuinely needs correcting.</div>
-        <button type="button" id="unlockFinalBtn" class="secondary" style="background:#fff;">Unlock to edit</button>
+        <div style="font-weight:600; color:var(--sc-amber); margin-bottom:4px;">This game is finalized</div>
+        <div style="font-size:13px; color:var(--sc-amber); margin-bottom:10px;">Setup is locked to prevent accidental changes to a completed game's record. Unlock only if something genuinely needs correcting.</div>
+        <!-- The inline white was forcing this .secondary button back to a
+             white fill, which the class no longer uses. Dropped rather than
+             recoloured: the class already says what a secondary button is. -->
+        <button type="button" id="unlockFinalBtn" class="secondary">Unlock to edit</button>
       </div>
       <p class="sub">Set this game up now, start entering stats whenever you're ready — no need to do both at once.</p>
       <div id="setupMsg"></div>
@@ -115,7 +160,7 @@
       <label style="display:flex; align-items:center; gap:8px; margin:12px 0 0; font-weight:400; cursor:pointer;">
         <input type="checkbox" id="isPreseason" style="width:auto; margin:0;"> This is a preseason game
       </label>
-      <div id="preseasonWarning" class="hidden" style="background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400); border-radius:8px; padding:10px 12px; margin-top:8px; font-size:13px; color:#7a5c00;">
+      <div id="preseasonWarning" class="hidden" style="background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400); border-radius:8px; padding:10px 12px; margin-top:8px; font-size:13px; color:var(--sc-amber);">
         Excluded from Season Report and Player Report — every other total for the season stays exactly what it would be without this game. The game itself, its recap, and its own stat package are unaffected; this only pulls it out of season-wide aggregation.
       </div>
     </div>
@@ -127,7 +172,7 @@
       <div id="ourAssignments"></div>
       <div id="ourConflicts"></div>
 
-      <p class="hint" style="margin:16px 0 6px; font-size:13px; color:#888;">Likely starters (optional) — the offense picker starts with just these, and grows as anyone else gets entered during the game</p>
+      <p class="hint" style="margin:16px 0 6px; font-size:13px; color:var(--sc-ink-muted);">Likely starters (optional) — the offense picker starts with just these, and grows as anyone else gets entered during the game</p>
       <div class="row" style="gap:10px; flex-wrap:wrap;">
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">QB<input type="text" id="ourStarterQB" style="width:36px;"></label>
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">RB1<input type="text" id="ourStarterRB1" style="width:36px;"></label>
@@ -145,8 +190,8 @@
       <button id="uploadOpponentBtn" class="secondary">Upload opponent roster (.xlsx)</button>
       <button id="skipOpponentBtn" class="secondary" style="margin-left:8px;">Skip roster (manual entry only)</button>
       <input type="file" id="opponentFile" accept=".xlsx,.xls" style="display:none;">
-      <div id="oppFormatCard" style="display:none; margin-top:10px; padding:14px 16px; border:2px solid #1a4d2e; border-radius:8px; background:#f2f8f4;">
-        <p style="margin:0 0 8px; font-weight:700; font-size:15px; color:#1a4d2e;">Roster file format</p>
+      <div id="oppFormatCard" style="display:none; margin-top:10px; padding:14px 16px; border:2px solid #1a4d2e; border-radius:8px; background:rgba(124,181,24,.09);">
+        <p style="margin:0 0 8px; font-weight:700; font-size:15px; color:var(--sc-green);">Roster file format</p>
         <p style="margin:0 0 8px; font-size:14px;">A spreadsheet (.xlsx or .xls) with <strong>three columns</strong>, in this order. A header row is fine &mdash; it will be ignored.</p>
         <!-- A PICTURE OF THE FILE, not a description of it. The three-column
              table below it says the same thing in words, and people were
@@ -175,7 +220,7 @@
           <tr><td style="padding:2px 14px 2px 0;">12</td><td style="padding:2px 14px 2px 0;">Bravo Boone</td><td style="padding:2px 0;">QB</td></tr>
         </table>
         <p style="margin:0 0 8px; font-size:14px;"><strong>Position is optional.</strong> Leave column C blank for anyone you do not have a position for &mdash; a roster with positions for the starters only imports fine. <strong>List more than one if you like &mdash; only the first is used.</strong> <em>RB/WR</em>, <em>RB, WR</em> and <em>RB-WR</em> all read as <strong>RB</strong>. Put the position they mostly play first. Two players may share a number; you will be asked which is which.</p>
-        <p style="margin:0 0 10px; font-size:13px; color:#666;"><strong>Offense:</strong> QB RB FB HB TB WR SE FL SLOT TE OL OT OG G T C ATHLETE<br><strong>Defense:</strong> DB CB S FS SS LB OLB ILB MLB WLB DE DT NG NT EDGE DL<br><strong>Special teams:</strong> K P LS DS H KR PR RET</p>
+        <p style="margin:0 0 10px; font-size:13px; color:var(--sc-ink-muted);"><strong>Offense:</strong> QB RB FB HB TB WR SE FL SLOT TE OL OT OG G T C ATHLETE<br><strong>Defense:</strong> DB CB S FS SS LB OLB ILB MLB WLB DE DT NG NT EDGE DL<br><strong>Special teams:</strong> K P LS DS H KR PR RET</p>
         <button type="button" id="oppFormatContinue">Choose file&hellip;</button>
         <button type="button" id="oppFormatCancel" class="secondary" style="margin-left:8px;">Cancel</button>
       </div>
@@ -184,7 +229,7 @@
       <div id="opponentAssignments"></div>
       <div id="opponentConflicts"></div>
 
-      <p class="hint" style="margin:16px 0 6px; font-size:13px; color:#888;">Likely starters (optional)</p>
+      <p class="hint" style="margin:16px 0 6px; font-size:13px; color:var(--sc-ink-muted);">Likely starters (optional)</p>
       <div class="row" style="gap:10px; flex-wrap:wrap;">
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">QB<input type="text" id="oppStarterQB" style="width:36px;"></label>
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">RB1<input type="text" id="oppStarterRB1" style="width:36px;"></label>
@@ -195,7 +240,7 @@
       </div>
       <div id="oppStarterResolve" style="margin-top:8px;"></div>
 
-      <p class="hint" style="margin:16px 0 6px; font-size:13px; color:#888;">Opponent branding (optional)</p>
+      <p class="hint" style="margin:16px 0 6px; font-size:13px; color:var(--sc-ink-muted);">Opponent branding (optional)</p>
       <div class="row" style="gap:16px; align-items:flex-end; flex-wrap:wrap;">
         <div>
           <button type="button" id="chooseOppLogoBtn" class="secondary">Choose logo</button>
@@ -219,7 +264,7 @@
 
     <div class="card">
       <button id="createGameBtn">Create game</button>
-      <a href="dashboard.html" class="secondary" style="margin-left:8px; text-decoration:none; padding:9px 16px; border-radius:6px; border:1px solid #ccc; color:#444;">Cancel</a>
+      <a href="dashboard.html" class="secondary" style="margin-left:8px; text-decoration:none; padding:9px 16px; border-radius:6px; border:1px solid var(--sc-rule-strong); color:var(--sc-ink);">Cancel</a>
     </div>
   </div>
 
@@ -367,14 +412,14 @@
       if (cands.length === 0){
         delete seedChoice[side][role];
         if (isAwaitingAssignment(side, num)){
-          lines.push('<div style="font-size:13px; color:#a05a00; margin-bottom:4px;">' +
+          lines.push('<div style="font-size:13px; color:var(--sc-amber); margin-bottom:4px;">' +
             role + ' #' + num + ' — on the roster, but needs a unit picked below (' +
             '"players with a position we didn\'t recognize") before it can be seeded.</div>');
         } else {
           // No roster loaded, or a number nobody wears. Not an error -- a
           // coach may seed before uploading, or from memory -- but say so
           // rather than showing a confident tick against nothing.
-          lines.push('<div style="font-size:13px; color:#888; margin-bottom:4px;">' +
+          lines.push('<div style="font-size:13px; color:var(--sc-ink-muted); margin-bottom:4px;">' +
             role + ' #' + num + ' — not on the roster loaded here; the number will be used on its own.</div>');
         }
         return;
@@ -441,7 +486,7 @@
       g.entries.map(e => e.name + (e.position ? ' (' + e.position + ')' : '')).join(' / ');
     let out = '';
     if (info.duplicatePeople.length){
-      out += '<p class="sub" style="margin:6px 0 0; color:#8a4b00;"><strong>' +
+      out += '<p class="sub" style="margin:6px 0 0; color:var(--sc-amber);"><strong>' +
         info.duplicatePeople.length + ' number' + (info.duplicatePeople.length === 1 ? '' : 's') +
         ' looks like the same player entered twice.</strong> ' +
         'Worth deleting the extra row before you import: ' +
@@ -450,7 +495,7 @@
         '</p>';
     }
     if (info.sameSide.length){
-      out += '<p class="sub" style="margin:6px 0 0; color:#8a4b00;"><strong>' +
+      out += '<p class="sub" style="margin:6px 0 0; color:var(--sc-amber);"><strong>' +
         info.sameSide.length + ' number' + (info.sameSide.length === 1 ? '' : 's') +
         ' shared by players on the same side of the ball.</strong> ' +
         'Nothing can tell these apart automatically, so the pickers will ask which one. ' +
@@ -577,7 +622,7 @@
   function renderAssignmentUI(containerId, teamKey, needsAssignment, resolvedRef){
     const container = document.getElementById(containerId);
     if (needsAssignment.length === 0){ container.innerHTML = ''; return; }
-    container.innerHTML = '<div class="conflict-block" style="background:#eef5ff;">' +
+    container.innerHTML = '<div class="conflict-block" style="background:rgba(90,169,240,.12);">' +
       '<p style="font-size:13px; font-weight:600; margin:0 0 8px;">' + needsAssignment.length + ' player(s) with a position we didn\'t recognize — just pick one unit for each</p>' +
       needsAssignment.map(({ num, entry }) => {
         const label = '#' + num + ' ' + entry.name + (entry.position ? ' (' + entry.position + ')' : '');
@@ -632,7 +677,7 @@
     if (conflicts.length === 0){ container.innerHTML = ''; return; }
     container.innerHTML = '<div class="conflict-block">' +
       '<p style="font-size:14px; font-weight:600; margin:0 0 8px;">Quick check — ' + conflicts.length + ' number(s) need a look</p>' +
-      '<p style="font-size:12px; color:#665; margin:0 0 10px;">Check every unit each person actually plays. You can check more than one if you\'re not sure which one -- that number just stays flagged until you narrow it down.</p>' +
+      '<p style="font-size:12px; color:var(--sc-ink-muted); margin:0 0 10px;">Check every unit each person actually plays. You can check more than one if you\'re not sure which one -- that number just stays flagged until you narrow it down.</p>' +
       conflicts.map(c => {
         return '<div style="margin-bottom:10px;">' +
           '<div style="font-size:13px; font-weight:600;">#' + c.num + '</div>' +
@@ -845,7 +890,7 @@
         renderConflictUI('opponentConflicts', 'opp', conflicts, oppResolved);
       }
       document.getElementById('currentOppRosterNote').innerHTML =
-        '<div class="roster-summary" style="color:#888;">' +
+        '<div class="roster-summary" style="color:var(--sc-ink-muted);">' +
         (oppCount > 0 ? 'Currently saved: ' + oppCount + ' opponent player(s). Upload a new file below only if you need to replace it.' : 'No opponent roster currently saved for this game.') +
         '</div>';
     } else {
@@ -1037,7 +1082,7 @@
       return;
     }
     const statusEl = document.getElementById('opponentRosterStatus');
-    statusEl.innerHTML = '<div class="roster-summary" style="color:#888;">Reading file…</div>';
+    statusEl.innerHTML = '<div class="roster-summary" style="color:var(--sc-ink-muted);">Reading file…</div>';
     const reader = new FileReader();
     reader.onload = (ev) => {
       let rows;
