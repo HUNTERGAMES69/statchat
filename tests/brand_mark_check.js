@@ -40,7 +40,6 @@ const raw = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const MUST_HAVE = ['roster.html', 'create_game.html', 'customize.html',
                    'account.html', 'broadcast_setup.html', 'help.html',
                    'dashboard.html'];
-const TOOLBAR = 'game.html';
 
 // Excluded, each for a stated reason — so a future reader knows the
 // omission was a decision rather than an oversight.
@@ -88,36 +87,22 @@ function run() {
     }
   }
 
-  const g = live(TOOLBAR);
-  if (!/class="scMark-inline"/.test(g)) bad(TOOLBAR, 'has no StatChat mark in the header');
-  const chkNum = (expected, actual) => {
-    if (expected == null) { bad(TOOLBAR, 'could not read .hdr-btn metrics'); return; }
-    if (actual !== expected) {
-      bad(TOOLBAR, 'the toolbar mark is ' + actual + 'px but .hdr-btn computes to ' +
-          expected + 'px — #headerLeft stretches its children, so a mark that does not ' +
-          'match sits at a different height from the buttons beside it');
-    }
-  };
-  // THE TOOLBAR MARK MUST MATCH .hdr-btn'S BOX. #headerLeft is
-  // align-items:stretch, so the buttons size to the row; a mark with its
-  // own height and align-self:center opts out and lands at a different
-  // height from the controls beside it. Reported 25 Aug.
+  // game.html DELIBERATELY HAS NO MARK, for now.
+  // -------------------------------------------------------------------
+  // Four attempts, none of which worked in the browser. That page lays
+  // its header out from JavaScript: layoutHeader() rewrites inline styles
+  // on every child of #headerLeft with !important, and a banner sync
+  // gives the container an explicit height that align-items:stretch then
+  // passes to its children. A stylesheet rule, an inline style and a
+  // script exemption all failed to survive that.
   //
-  // Asserted as a RELATIONSHIP: whatever height the mark declares must be
-  // what .hdr-btn's own numbers add up to. A hardcoded 30 here would drift
-  // silently the first time the buttons change.
-  const btn = /\.hdr-btn\s*\{([^}]*)\}/.exec(g);
-  const num = (css, prop) => {
-    const m = new RegExp(prop + ':\\s*(\\d+)px').exec(css || '');
-    return m ? Number(m[1]) : null;
-  };
-  const pad = /padding:\s*(\d+)px/.exec(btn ? btn[1] : '');
-  const expected = btn
-    ? num(btn[1], 'line-height') + (pad ? Number(pad[1]) * 2 : 0) +
-      (num(btn[1], 'border-width') || 0) * 2
-    : null;
-  const markH = num((/\.scMark-inline\s*\{([^}]*)\}/.exec(g) || [])[1], 'height');
-  chkNum(expected, markH);
+  // Removed rather than left half-working. It is on the list to revisit
+  // with the layout code in hand rather than fought from the outside.
+  if (/class="scMark/.test(live('game.html'))) {
+    bad('game.html', 'has a StatChat mark — it was removed 25 Aug because the header is ' +
+        'laid out from script and the mark could not be made to survive it. Revisit with ' +
+        'layoutHeader(), do not re-add from CSS.');
+  }
 
   // The exclusions are asserted too: adding a mark to a print report would
   // double up with the lockup already there.
