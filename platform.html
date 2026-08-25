@@ -157,7 +157,15 @@
     </div>
 
     <div id="panelTenants" class="card">
-      <h1>Tenants</h1>
+      <div style="display:flex; align-items:baseline; gap:12px;">
+        <h1 style="margin:0;">Tenants</h1>
+        <!-- REFRESH, because this list goes stale while you watch it.
+             A tenant admin uploads a logo or finishes a game in another
+             window and nothing here knows. Reloading the whole page also
+             works; a button that reloads only the list is faster and does
+             not lose which tab you were on. -->
+        <button id="refreshTenantsBtn" class="topAct" type="button">Refresh</button>
+      </div>
       <p class="sub">Every tenant on the platform. Counts are live games only —
          deleted ones are under Recovery tools.</p>
       <div id="tenantsBody"><p class="empty">Loading…</p></div>
@@ -376,10 +384,40 @@
   });
 
   // ---- tenants ----------------------------------------------------------
+  // A tenant may field several sports, so the embedded `teams` is a list.
+  // The first one with a logo wins; a tenant whose teams have none gets a
+  document.getElementById('refreshTenantsBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('refreshTenantsBtn');
+    btn.disabled = true;
+    btn.textContent = 'Refreshing\u2026';
+    // Users too: a refresh that updated the tenant list and left the Users
+    // tab showing something older would be a worse kind of stale than the
+    // one it fixes.
+    await Promise.all([loadTenants(), loadUsers(accessToken), loadRecovery()]);
+    btn.disabled = false;
+    btn.textContent = 'Refresh';
+  });
+
+  // monogram, which is the ordinary state for a new customer.
+  const tenantLogo = t => {
+    const withLogo = (t.teams || []).find(x => x && x.logo_url);
+    return withLogo ? withLogo.logo_url : null;
+  };
+
   async function loadTenants(){
     const body = document.getElementById('tenantsBody');
     const { data: tenants, error } = await supabaseClient
-      .from('tenants').select('id, name, full_name, logo_url, subscription, renews_on, created_at, disabled_at, disabled_reason')
+      // THE CREST COMES FROM `teams`, NOT FROM HERE.
+      // -----------------------------------------------------------------
+      // 006 copied branding onto `tenants` and the application was never
+      // repointed at it, so that copy has been stale since the day it was
+      // made -- a tenant uploaded a logo on Customize, it saved to `teams`,
+      // and this console kept showing the August one.
+      //
+      // 017 drops the stale columns; this reads the live ones through the
+      // foreign key. `teams` comes back as an ARRAY because a tenant may
+      // field several sports.
+      .from('tenants').select('id, name, full_name, subscription, renews_on, created_at, disabled_at, disabled_reason, teams(logo_url)')
       .order('name');
     if (error){
       body.innerHTML = '<p class="empty">Could not load tenants: ' + esc(error.message) + '</p>';
@@ -435,8 +473,8 @@
           // icon: storage refuses non-images now, but a logo deleted from
           // the bucket would still leave a live logo_url behind.
           '<td class="name"><span style="display:flex; align-items:center; gap:10px;">' +
-            (t.logo_url
-              ? '<img src="' + esc(t.logo_url) + '" alt="" ' +
+            (tenantLogo(t)
+              ? '<img src="' + esc(tenantLogo(t)) + '" alt="" ' +
                 'style="width:28px; height:28px; object-fit:contain; border-radius:5px; flex:none;" ' +
                 'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),' +
                 '{className:\'crest\', textContent:this.alt||\'\'}))">'
