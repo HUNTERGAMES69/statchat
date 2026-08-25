@@ -75,6 +75,14 @@
   h2 { font-size:16px; margin:0 0 12px; color:var(--sc-ink); }
   p.sub { color:var(--sc-ink-muted); margin:0 0 20px; font-size:14px; }
   label { display:block; font-size:13px; margin-bottom:4px; color:var(--sc-ink-muted); }
+  /* THE INPUT IS INSIDE THE LABEL, so the label's own margin-bottom sits
+     BELOW both and separates nothing -- the field text and its box were
+     touching. The gap has to be on the control, and it has to be a block
+     or the input stays on the same line as the text it belongs to.
+     Radios and checkboxes are excluded: those DO belong beside their text. */
+  label > input:not([type="radio"]):not([type="checkbox"]),
+  label > select,
+  label > textarea { display:block; margin-top:5px; }
   /* A <select> ON DARK NEEDS appearance:none -- the browser paints the
      control face natively and ignores `background`. The chevron is drawn
      back as a STROKED path (a fill on an open path renders as a wedge),
@@ -97,7 +105,23 @@
   input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
     outline:2px solid var(--sc-link); outline-offset:2px;
   }
-  input, select { padding:8px; border:1px solid var(--sc-rule-strong); background-color:var(--sc-raise); color:var(--sc-ink); border-radius:6px; font-size:14px; box-sizing:border-box; }
+  /* RADIOS AND CHECKBOXES ARE EXCLUDED, and their absence from this rule
+     is the whole point. A blanket `input` selector gave every radio in the
+     conflict-resolution box 8px of padding, a dark fill and a grey border
+     -- so they rendered as dark blobs with no visible selected state, on a
+     control whose entire job is showing which option is chosen.
+     They keep the browser's native rendering; `accent-color` is the one
+     property that tints a native control without replacing it. */
+  input[type="radio"], input[type="checkbox"] {
+    accent-color:var(--sc-green);
+    width:16px; height:16px; vertical-align:-2px; cursor:pointer;
+  }
+  /* And their labels are inline, not the stacked field labels below --
+     otherwise every option in the conflict box lands on its own line. */
+  .conflict-row label, .conflict-block label {
+    display:inline; color:var(--sc-ink); font-size:13px; cursor:pointer;
+  }
+  input:not([type="radio"]):not([type="checkbox"]), select { padding:8px; border:1px solid var(--sc-rule-strong); background-color:var(--sc-raise); color:var(--sc-ink); border-radius:6px; font-size:14px; box-sizing:border-box; }
   input[type="color"] { width:64px; height:40px; padding:2px; cursor:pointer; }
   /* STACKS ON A PHONE. Two columns of inputs at 380px gives each field
      about 160px, which is not enough for a date picker or a designator, and

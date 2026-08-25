@@ -341,6 +341,45 @@ on an open path renders as a wedge), and style `select option` separately
 — the option list is drawn by the OS and can only be reached from a
 stylesheet, never from the select's inline style.
 
+### A blanket `input` rule breaks radios and checkboxes
+
+`input { padding:8px; background:...; border:... }` is the right treatment
+for a text field and wrong for every other control. On create_game.html it
+gave each radio in the conflict-resolution box 8px of padding, a dark fill
+and a grey border — so they rendered as dark blobs **with no visible
+selected state**, on a control whose only job is showing which option is
+chosen.
+
+Exclude them, and tint the native control instead:
+
+```css
+input:not([type="radio"]):not([type="checkbox"]), select { … }
+input[type="radio"], input[type="checkbox"] {
+  accent-color:var(--sc-green); width:16px; height:16px; }
+```
+
+`accent-color` is the one property that recolours a native checkbox
+without replacing it.
+
+### A control inside its label needs its own top margin
+
+`label { margin-bottom:4px }` puts space BELOW the label. When the input is
+a CHILD of the label — which it is on five pages here — nothing separates
+the label's text from its own box, and they touch.
+
+```css
+label > input:not([type="radio"]):not([type="checkbox"]),
+label > select, label > textarea { display:block; margin-top:5px; }
+```
+
+Radios and checkboxes are excluded because those genuinely do belong
+beside their text.
+
+Found on create_game and then present on **login, account, roster and
+customize as well** — including the login form, which is the first thing
+every user sees. Worth checking the whole set whenever a spacing fault
+turns up on one page.
+
 ### Spacing: the header must read as a header
 
 Reported on the dashboard 25 Aug and it applies everywhere. Two shapes:
