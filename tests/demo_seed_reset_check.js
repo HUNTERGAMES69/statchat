@@ -83,6 +83,21 @@ chk(!/set[^;]*is_broadcast/.test(sql),
     'reset does not clear is_broadcast — a demo game has full functionality and ' +
     'clearing it would pull the overlay off air mid-demonstration');
 
+// ---- the guard must not block the SQL editor ----------------------------
+// capture_demo_seed() is documented as "run this in the SQL editor" and
+// failed there: is_super_admin() reads `profiles where id = auth.uid()`, the
+// editor has no JWT, so auth.uid() is NULL and the check refused the exact
+// use it was written for.
+const g022 = fs.readFileSync(path.join(__dirname, '..', 'sql',
+  '022_demo_guard_direct_sql.sql'), 'utf8');
+chk(/auth\.uid\(\) is not null and not public\.is_super_admin\(\)/.test(g022),
+    'no JWT means direct database access, which is already total — refusing it ' +
+    'blocks the setup script and protects nothing');
+chk(/if not v_is_demo then[\s\S]{0,220}raise exception/.test(g022),
+    'while the is_demo check is UNCHANGED and applies to everyone, including ' +
+    'direct SQL — it guards against a mistake rather than an attacker, so the ' +
+    'person running a script by hand is exactly who trips it');
+
 // ---- observed against PostgreSQL 16 --------------------------------------
 console.log('\n  --- observed against PostgreSQL 16 ---');
 [
@@ -92,6 +107,10 @@ console.log('\n  --- observed against PostgreSQL 16 ---');
   ['game status after reset', 'back to in_progress / inProgress'],
   ['demo tenant unflagged, reset', 'refused'],
   ['019 entry points', 'dropped; only reset_demo remains'],
+  ['SQL editor, no JWT', 'capture works after 022; refused before it'],
+  ['signed-in NON-platform user', 'refused'],
+  ['signed-in platform user', 'allowed'],
+  ['SQL editor into a real game', 'refused — is_demo still applies'],
 ].forEach(([what, result]) => console.log('    ' + what.padEnd(34) + result));
 
 console.log(fails ? '\n' + fails + ' FAILURES' : '\nALL PASS');
