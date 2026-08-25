@@ -133,21 +133,13 @@ function run() {
     }
   }
 
-  // game.html DELIBERATELY HAS NO MARK, for now.
-  // -------------------------------------------------------------------
-  // Four attempts, none of which worked in the browser. That page lays
-  // its header out from JavaScript: layoutHeader() rewrites inline styles
-  // on every child of #headerLeft with !important, and a banner sync
-  // gives the container an explicit height that align-items:stretch then
-  // passes to its children. A stylesheet rule, an inline style and a
-  // script exemption all failed to survive that.
-  //
-  // Removed rather than left half-working. It is on the list to revisit
-  // with the layout code in hand rather than fought from the outside.
-  if (/class="scMark/.test(live('game.html'))) {
-    bad('game.html', 'has a StatChat mark — it was removed 25 Aug because the header is ' +
-        'laid out from script and the mark could not be made to survive it. Revisit with ' +
-        'layoutHeader(), do not re-add from CSS.');
+  // game.html HAS THE MARK AGAIN, as of 25 Aug, after seven attempts and
+  // one getComputedStyle readout from the live page. It is asserted in
+  // tests/game_mark_check.js rather than here, because what makes it work
+  // is a specificity relationship with `#headerLeft > *` and not the shared
+  // .scMark treatment every other page uses.
+  if (!/class="scMarkBox"/.test(live('game.html'))) {
+    bad('game.html', 'has lost its StatChat mark');
   }
 
   // The exclusions are asserted too: adding a mark to a print report would
