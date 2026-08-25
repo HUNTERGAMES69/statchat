@@ -164,9 +164,19 @@ function audit(file) {
   return { file, findings, inline, tokens: Object.keys(tokens).length };
 }
 
-// Pages converted so far. Add each one as it is done, so a regression on
-// an earlier page fails the run.
-const CONVERTED = ['login.html', 'view.html'];
+// WHICH PAGES ARE CONVERTED IS DETECTED, NOT LISTED.
+// A hardcoded array meant this file changed on every page conversion, so
+// it had to be re-uploaded each time -- and a list that must be edited in
+// lockstep with something else is a list that will eventually disagree
+// with it.
+//
+// `color-scheme:dark` is the marker: it is required on every converted
+// page (see DARK_THEME_PLAN.md) and appears on no other. So a page opts
+// itself in by being converted, and this file can be uploaded once.
+const CONVERTED = fs.readdirSync(ROOT)
+  .filter(f => f.endsWith('.html') && !f.includes('_mock') && f !== 'index.html')
+  .filter(f => /color-scheme\s*:\s*dark/.test(fs.readFileSync(path.join(ROOT, f), 'utf8')))
+  .sort();
 
 const only = process.argv[2];
 const files = (only
