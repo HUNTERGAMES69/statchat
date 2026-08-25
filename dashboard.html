@@ -25,9 +25,25 @@
      the team name, which is the whole meaning. */
   .brandDiv { width:1px; height:22px; background:var(--sc-rule, #e6e6e6); flex:none; }
 
+  /* DARK, 25 August 2026. Second page converted; the token block and every
+     rule below follow the recipe in DARK_THEME_PLAN.md, which was settled
+     on login.html. Values are index.html's -- the brochure's dark system.
+     When the app is fully converted these move into statchat.css. */
+  :root{ color-scheme:dark; }
+  :root{
+    --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+    --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+    --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+    --sc-navy:#2f3a47;   /* A BUTTON FILL. Never text, never a panel. */
+    --sc-green:#a3d93f;  --sc-green-tint:rgba(124,181,24,.14);
+    --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
+    --sc-amber:#ffc72c;  --sc-amber-tint:rgba(255,199,44,.13);
+    --sc-amber-text:#ffc72c; --sc-amber-soft:rgba(255,199,44,.10);
+    --sc-link:#7cb518;
+  }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
   .wrap { max-width:760px; margin:0 auto; }
-  .card { background:#fff; border-radius:12px; padding:20px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  .card { background:var(--sc-card); border:1px solid var(--sc-rule); color:var(--sc-ink); border-radius:12px; padding:20px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:22px; margin:0; line-height:1.15; }
   #teamHeading { font-size:20px; }
   /* TOOLS ON TOP, TENANT UNDERNEATH, ON ITS OWN LINE.
@@ -50,8 +66,13 @@
 .headerRight { order:1; margin-left:auto; }
 /* App chrome: product mark, hairline, account. Never wraps, never grows. */
 .headerRight { display:flex; align-items:center; gap:10px; flex:0 0 auto; }
-.scMark-dash { width:24px; height:24px; border-radius:5px; display:block; flex:none;
-               opacity:.85; }
+/* THE MARK NEEDS A PLATE, and the opacity has to go with it.
+     logo.png is dark-on-light artwork: on a #191f27 header it sinks into
+     the panel, and .85 opacity made it fainter still. On white the dimming
+     read as "secondary chrome"; on dark it reads as broken. Same treatment
+     as login.html -- the mark is not being redrawn for a theme. */
+  .scMark-dash { width:24px; height:24px; border-radius:5px; display:block; flex:none;
+                 background:#fff; padding:2px; box-sizing:border-box; }
 .brandDiv { width:1px; height:22px; background:var(--sc-rule, #e6e6e6); flex:none; }
   #teamLogo { height:32px; width:32px; object-fit:contain; border-radius:6px; display:none; flex-shrink:0; }
   /* Equal columns rather than flex, at every width. `flex:1 1 auto` sized
@@ -93,18 +114,18 @@
     .games-head h1 { margin-right:2px; }
     #newGameLink { display:block !important; text-align:center; }
   }
-  p.sub { color:#888; margin:0 0 20px; font-size:15px; }
-  button { padding:8px 10px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
-  button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
-  a.button-link { display:inline-block; text-decoration:none; padding:8px 10px; border-radius:6px; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:13px; font-weight:600; }
-  a.button-link.secondary { background:#fff; color:#444; border:1px solid #ccc; }
+  p.sub { color:var(--sc-ink-muted); margin:0 0 20px; font-size:15px; }
+  button { padding:8px 10px; border-radius:6px; border:1px solid var(--sc-rule-strong); background:var(--sc-navy, #1a1a2e); color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
+  a.button-link { display:inline-block; text-decoration:none; padding:8px 10px; border-radius:6px; background:var(--sc-navy, #1a1a2e); border:1px solid var(--sc-rule-strong); color:#fff; font-size:13px; font-weight:600; }
+  a.button-link.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
   .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
   .hidden { display:none; }
   a.button-link.hidden { display:none; }
   .game-list { border-top:0.5px solid #e5e3dc; }
   .game-row { display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:0.5px solid #e5e3dc; cursor:pointer; }
-  .game-row:hover { background:#faf9f6; }
+  .game-row:hover { background:rgba(255,255,255,.04); }
   .game-left { display:flex; align-items:center; gap:14px; flex:1; min-width:0; }
   /* Reported directly, with a screenshot: 28px fit maybe two or three
      characters at this font size, so a designator like "SCRMG" or
@@ -118,9 +139,9 @@
      media query below for why mobile keeps a narrower reservation here.
      flex-shrink:0 so the game-matchup/game-meta block, not this label,
      gives up the room when things get tight. */
-  .game-num { font-size:13px; color:#aaa; width:120px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .game-num { font-size:13px; color:var(--sc-ink-muted); width:120px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .game-matchup { font-weight:600; }
-  .game-meta { font-size:13px; color:#888; }
+  .game-meta { font-size:13px; color:var(--sc-ink-muted); }
   .game-right { text-align:center; width:140px; flex-shrink:0; }
   .game-score { font-weight:600; }
   @media (max-width: 767px) {
@@ -160,14 +181,14 @@
   /* Deliberately quieter than ON AIR: sharing is a standing state, not a
      thing happening right now, and it should not pulse at you all season. */
   .shared-badge { display:inline-block; margin-left:8px; padding:2px 8px; border-radius:4px;
-                  background:#eef1f4; color:#4a5563; font-size:11px; font-weight:700;
+                  background:rgba(255,255,255,.09); color:var(--sc-ink-soft); font-size:11px; font-weight:700;
                   letter-spacing:0.06em; vertical-align:middle; }
   /* Same quiet treatment as SHARED, not the pulsing ON AIR one -- a
      preseason game is a standing classification, not something live.
      Amber to match the warning shown at setup time, so the two read as
      the same idea in two places. */
   .preseason-badge { display:inline-block; margin-left:8px; padding:2px 8px; border-radius:4px;
-                      background:var(--sc-amber-tint, #fff3cd); color:#7a5c00; font-size:11px; font-weight:700;
+                      background:var(--sc-amber-tint, #fff3cd); color:var(--sc-amber); font-size:11px; font-weight:700;
                       letter-spacing:0.06em; vertical-align:middle; }
   .onair-badge { display:inline-block; margin-left:10px; padding:2px 9px; border-radius:4px;
                  background:#b00020; color:#fff; font-size:11px; font-weight:800;
@@ -178,7 +199,14 @@
      because a season record belongs to the team -- and because it has to
      follow the season selector, which is easier to reason about as one
      element than as a row inside a list. */
-  .season-record { background:var(--sc-navy, #1a1a2e); color:#fff; border-radius:10px; padding:14px 18px;
+  /* NOT --sc-navy. That token is now a BUTTON fill (#2f3a47) and this is a
+     PANEL -- at 1.43:1 against the card it would read as a faint smudge
+     rather than as the banner it is. The same token, mis-read as an ink,
+     has already sunk the game ladder and the login wordmark.
+     A panel wants to be darker than the card it sits on, not lighter, so
+     the record band is the page colour with its own edge. */
+  .season-record { background:#0f141a; border:1px solid var(--sc-rule);
+                   color:var(--sc-ink); border-radius:10px; padding:14px 18px;
                    display:flex; align-items:center; margin:14px 0 0; }
   /* The stats moved one level deeper in the DOM (see renderSeasonRecord)
      so the mobile rule below can force this one container to full width
@@ -192,7 +220,7 @@
   .season-record .rec-lbl { font-size:10.5px; text-transform:uppercase;
                             letter-spacing:0.05em; color:var(--sc-ink-muted, #9aa3b2); }
   .season-record .rec-item { display:flex; flex-direction:column; gap:2px; }
-  .season-record .rec-empty { font-size:14px; color:#c7ccd6; }
+  .season-record .rec-empty { font-size:14px; color:var(--sc-ink-muted); }
   /* Pushed to the far edge of the flex row regardless of how many
      .rec-item blocks precede it -- margin-left:auto claims all the
      leftover space for itself, which is the standard way to right-align
@@ -236,11 +264,14 @@
      the wrong season -- lasts as long as the season is wrong, so a toast
      that fades would be the wrong shape. */
   .season-notice { background:var(--sc-amber-soft, #fff8e6); border:1px solid var(--sc-amber, #e0b400); border-radius:6px;
-                   padding:9px 12px; margin:0 0 12px; font-size:13px; color:#5a4300;
+                   padding:9px 12px; margin:0 0 12px; font-size:13px; color:var(--sc-amber);
                    line-height:1.5; }
-  .status-notstarted { color:#999; font-weight:600; }
-  .empty-state { color:#999; padding:16px 0; }
-  #appSplash { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000; background:#fff; transition:opacity 0.3s; }
+  .status-notstarted { color:var(--sc-ink-muted); font-weight:600; }
+  .empty-state { color:var(--sc-ink-muted); padding:16px 0; }
+  /* THE SPLASH MUST BE DARK TOO. It covers the whole viewport before the
+     page paints; left white it is a full-screen flash on every load, which
+     is worse on a dark theme than having no splash at all. */
+  #appSplash { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000; background:var(--sc-page); color:var(--sc-ink); transition:opacity 0.3s; }
   #appSplash img { width:96px; height:96px; object-fit:contain; margin-bottom:16px; border-radius:16px; }
   #appSplash .splashTitle { font-size:20px; font-weight:600; letter-spacing:0.5px; }
   #appSplash.hidden { opacity:0; pointer-events:none; }
@@ -301,7 +332,7 @@
             </button>
             <div id="accountMenu" class="hidden" style="position:absolute; right:0; top:110%; background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:20; min-width:200px; padding:6px 0;">
               <div id="accountMenuEmail" style="padding:8px 14px; font-size:12px; color:#888; border-bottom:1px solid #f0f0f0;"></div>
-              <a href="account.html" class="accountMenuItem" style="display:block; padding:9px 14px; color:#333; font-size:14px; text-decoration:none;">Account settings</a>
+              <a href="account.html" class="accountMenuItem" style="display:block; padding:9px 14px; color:var(--sc-ink); font-size:14px; text-decoration:none;">Account settings</a>
               <button id="signOutBtn" class="accountMenuItem" style="display:block; width:100%; text-align:left; padding:9px 14px; color:var(--sc-red, #a32d2d); font-size:14px; background:none; border:none;">Sign out</button>
             </div>
           </div>
@@ -328,7 +359,7 @@
       <div class="games-head" style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
         <div>
           <h1 style="font-size:20px; margin:0;">Games</h1>
-          <select id="seasonPicker" style="font-size:13px; color:#555; border:1px solid #ddd; border-radius:6px; padding:3px 6px; background:#fff;"></select>
+          <select id="seasonPicker" style="font-size:13px; color:var(--sc-ink); background:var(--sc-raise); border:1px solid var(--sc-rule-strong); border-radius:6px; padding:3px 6px; background:#fff;"></select>
           <button type="button" id="refreshGamesBtn" class="secondary" style="font-size:13px; padding:3px 10px; margin-left:6px;">Refresh</button>
         </div>
       </div>
@@ -844,7 +875,7 @@
           ? '<div style="position:relative;">' +
             '<button class="secondary rowMenuBtn" data-id="' + g.id + '" style="padding:4px 10px; font-size:16px; line-height:1;">⋮</button>' +
             '<div class="rowMenu hidden" data-id="' + g.id + '" style="position:absolute; right:0; top:100%; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); z-index:10; min-width:140px;">' +
-              (currentIsAdmin ? '<a href="create_game.html?edit=' + g.id + '" style="display:block; padding:8px 12px; color:#444; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game setup</a>' : '') +
+              (currentIsAdmin ? '<a href="create_game.html?edit=' + g.id + '" style="display:block; padding:8px 12px; color:#eef1f4; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game setup</a>' : '') +
               (g.status === 'in_progress' ? '<a href="view.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:var(--sc-blue, #1565c0); font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Crew View</a>' : '') +
               (g.status === 'final' ? '<a href="view.html?id=' + g.id + '&mode=results" style="display:block; padding:8px 12px; color:var(--sc-blue, #1565c0); font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Crew View</a>' : '') +
               (g.status === 'final' ? '<a href="recap.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:var(--sc-green, #1a7a4c); font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid #eee;">Game recap</a>' : '') +
@@ -871,8 +902,8 @@
                   (g.is_broadcast ? '#b00020' : '#0f6e56') + ';">' +
                   (g.is_broadcast ? '\u25CF Take OFF AIR' : 'Set as ON AIR') + '</button>'
                 : '') +
-              (currentCanEnterGames ? '<button class="exportGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#444; font-weight:600; font-size:13px; border-bottom:1px solid #eee;">Download backup</button>' : '') +
-              (currentIsAdmin ? '<button class="resetGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:#a05a00; font-weight:600; font-size:13px; border-bottom:1px solid #eee;">Reset game</button>' : '') +
+              (currentCanEnterGames ? '<button class="exportGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--sc-ink); font-weight:600; font-size:13px; border-bottom:1px solid #eee;">Download backup</button>' : '') +
+              (currentIsAdmin ? '<button class="resetGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--sc-amber); font-weight:600; font-size:13px; border-bottom:1px solid #eee;">Reset game</button>' : '') +
               (currentIsAdmin ? '<button class="deleteGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--sc-red, #a32d2d); font-weight:600; font-size:13px;">Delete game</button>' : '') +
             '</div>' +
             '</div>'
