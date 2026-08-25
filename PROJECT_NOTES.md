@@ -3348,3 +3348,68 @@ exists for exactly this and can be rebuilt from `game.html` in one copy.
 - Verify in a browser, not in the file. `tests/game_mark_check.js`
   asserts the relationship rather than the values, so it survives a
   change to either rule.
+
+## The crew view went dark (25 August 2026)
+
+`view.html` is now the brochure site's dark palette. It was white, which is
+what every other page is, and a control room is not.
+
+### It is a re-skin, not a redesign
+
+Nothing moved. Every panel is where it was, because a crew that knows where
+to look during a two-minute drill should not have to relearn it mid-season.
+**21 lines changed, 20 of them colours**; the twenty-first removed a
+`safeTextColor` call the team heading no longer needs.
+
+The theme is APPENDED after the existing CSS rather than replacing it, so
+every size, position and scaling rule survives untouched. That page is a
+fixed 1920×1080 surface with a transform scale and its geometry is
+load-bearing.
+
+Tokens are `index.html`'s own — `--ink`, `--panel`, `--raise`, `--edge`,
+`--mute`, `--paper`, `--brand`, `--data`. The product should not carry a
+second dark system.
+
+### The tenant's colour is an accent, never a fill
+
+The team summary bar and the box-score heading both had the customer's
+colour as a **background**, set inline. Two problems with that on a dark
+page: a school may pick something pale, and `safeTextColor` was flipping
+the label to near-black for those, so the two teams' headers ended up with
+different contrast.
+
+Both are now a dark bar with a 5px coloured spine. The colour still
+identifies the team, and the label is always the same white.
+
+### The trap: inline colours tuned for white
+
+The reported symptom was "the current drive section looks washed out". The
+play line was `color:#111` and the situation line `#555` — near-black on a
+near-black panel, **set inline**, so no stylesheet rule could reach them.
+
+Auditing found nine more of the same kind: `GAME FINAL` at `#1a1a2e`, the
+half-boundary text, the emphasised stat value, the drive headings (the LIVE
+label was dark green on dark), the amber SOP badge at `#7a5c00`, the
+season-stats error, and the table headers.
+
+**Every one read fine on white.** The way to find them was to compute the
+WCAG contrast of every text colour against the panel behind it, not to look
+at the screen — several were legible enough to miss by eye and wrong by
+measurement.
+
+### `SOP` became `Started`
+
+The label was boxed in amber to mark it as a different kind of reading from
+TOP: where the possession started, not how long it has run. The word
+"Started" says that in the same place, so the box was carrying meaning the
+text now carries — and it was the only label on the row wearing a colour.
+
+### If this needs undoing
+
+Replace the one file. Nothing embeds this page, `stat-label-badge` and
+`'SOP'` existed nowhere else, and `safeTextColor` itself is untouched — only
+one of its eleven call sites went.
+
+**The one risk that is not technical:** dark suits a control room and not
+daylight. If a crew works in a bright room or points a camera at the
+screen, this is a tradeoff rather than an improvement.
