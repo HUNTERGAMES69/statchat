@@ -29,7 +29,7 @@ const ROOT = path.join(__dirname, '..');
 let fails = 0;
 const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fails++; };
 
-const PAGES = ['gamedark.html', 'game.html', 'view.html'].filter(
+const PAGES = ['game.html', 'view.html'].filter(
   f => fs.existsSync(path.join(ROOT, f)));
 
 console.log('=== Selection states survive the cascade ===\n');

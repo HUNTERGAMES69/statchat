@@ -33,8 +33,12 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
 // something the dark conversion introduced. It is listed so that promoting
 // gamedark over game.html fixes it, and so the run goes green at that
 // point rather than staying permanently red.
-const PAGES = ['gamedark.html', 'game.html'];
-const KNOWN_UNFIXED = new Set(['game.html']);
+const PAGES = ['game.html'];
+// game.html WAS listed here while the fix lived only in gamedark.html.
+// gamedark has now been promoted over it, so the allowance is empty and
+// the real assertion runs on the live page. A stale allowance is a test
+// that has quietly stopped testing.
+const KNOWN_UNFIXED = new Set();
 
 for (const f of PAGES) {
   const p = path.join(ROOT, f);
