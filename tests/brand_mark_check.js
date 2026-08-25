@@ -122,10 +122,14 @@ function run() {
     if (!doc.querySelector('.headerRight #accountBtn')) {
       bad('dashboard.html', 'the account button is not in .headerRight');
     }
-    const first = doc.querySelector('.topbar') && doc.querySelector('.topbar').children[0];
-    if (!first || !first.classList.contains('brandline')) {
-      bad('dashboard.html', 'the tenant is not the first thing in the header — it should run ' +
-          'hard left, with everything else pushed off it');
+    // The tenant is now the LAST child: it takes a full-width row of its
+    // own beneath the tools, so a long name is not squeezed into a narrow
+    // column beside four buttons. Ordering is asserted in
+    // tests/dashboard_header_check.js; here it only matters that the mark
+    // is not sitting in front of it.
+    const last = doc.querySelector('.topbar') && doc.querySelector('.topbar').lastElementChild;
+    if (!last || !last.classList.contains('brandline')) {
+      bad('dashboard.html', 'the tenant does not have its own row at the end of the header');
     }
   }
 

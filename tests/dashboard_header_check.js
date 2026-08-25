@@ -38,9 +38,12 @@ function run() {
   // ---- structure ------------------------------------------------------
   const bar = doc.querySelector('.topbar');
   if (!bar) return ['no .topbar'];
+  // TWO LINES: tools and account on top, tenant on its own row beneath.
+  // The tenant shared the top row with four buttons and the account, which
+  // squeezed a long name into three stacked words. Reported 25 Aug.
   const kids = [...bar.children].map(c => c.className.trim());
-  if (kids.join(' | ') !== 'brandline | navlinks | headerRight') {
-    bad('the header is not tenant | tools | chrome, in that order (' + kids.join(' | ') + ')');
+  if (kids.join(' | ') !== 'navlinks | headerRight | brandline') {
+    bad('the header is not tools | chrome | tenant, in that order (' + kids.join(' | ') + ')');
   }
 
   if (doc.querySelector('.navlinks #accountBtn')) {
@@ -54,9 +57,21 @@ function run() {
   }
 
   // ---- the tenant runs hard left --------------------------------------
-  if (!/\.brandline\s*\{[^}]*flex:\s*1 1 auto/.test(live)) {
-    bad('.brandline does not claim the leftover width, so the tenant name will not sit hard ' +
-        'left — it is that, not justify-content, that pushes the other groups away');
+  // flex-basis:100% is what FORCES the wrap. Without it the tenant rejoins
+  // the button row whenever there happens to be room -- so the layout would
+  // differ between two people purely because one of them sees Broadcast
+  // setup and the other does not.
+  if (!/\.brandline\s*\{[^}]*flex:\s*1 1 100%/.test(live)) {
+    bad('.brandline is not forced to a full-width row, so the tenant can rejoin the button ' +
+        'line whenever there is space');
+  }
+  if (!/\.brandline\s*\{[^}]*order:\s*2/.test(live)) {
+    bad('.brandline is not ordered after the tools');
+  }
+
+  // AND THE SIGNED-IN LINE IS GONE. The avatar menu shows the same address.
+  if (doc.getElementById('signedInAs')) {
+    bad('the "Signed in as ..." line is back — the account menu already says who you are');
   }
 
   // ---- buttons do not resize themselves by their labels ---------------
@@ -88,7 +103,7 @@ if (require.main === module) {
   console.log('=== Dashboard header layout ===\n');
   console.log('Failures: ' + f.length);
   f.forEach(x => console.log('  ' + x));
-  if (!f.length) console.log('  tenant left, tools centre, chrome right — and nothing resizes itself by its label.');
+  if (!f.length) console.log('  tools and account on top, tenant on its own row beneath, and nothing resizes itself by its label.');
   process.exitCode = f.length ? 1 : 0;
 }
 
