@@ -22,8 +22,24 @@ const fs = require('fs');
 const path = require('path');
 const ROOT = path.join(__dirname, '..');
 
+// COMMENTS STRIPPED BEFORE ANY ASSERTION, and this is the whole reason
+// this note exists. The first version of these pages had the .scMark rule
+// inserted INSIDE AN HTML COMMENT — every page carries a comment reading
+// "Loaded BEFORE this page's own <style>", and a naive search for the
+// first "<style>" landed there.
+//
+// The CSS was inert on all seven pages. This check passed anyway, because
+// it searched for the text "width:26px" and the text was present.
+//
+// **Finding a rule in a file is not the same as the rule being in force.**
+const live = f => fs.readFileSync(path.join(ROOT, f), 'utf8')
+  .replace(/<!--[\s\S]*?-->/g, '');
+// The raw source, for asserting markup that legitimately sits near comments.
+const raw = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+
 const MUST_HAVE = ['roster.html', 'create_game.html', 'customize.html',
-                   'account.html', 'broadcast_setup.html', 'help.html'];
+                   'account.html', 'broadcast_setup.html', 'help.html',
+                   'dashboard.html'];
 const TOOLBAR = 'game.html';
 
 // Excluded, each for a stated reason — so a future reader knows the
@@ -35,7 +51,6 @@ const EXCLUDED = {
   'player_report.html': 'print lockup',
   'view.html': 'spectator screen, no chrome',
   'platform.html': 'not tenant-facing; has its own brand row',
-  'dashboard.html': "the tenant's own home — shows THEIR logo and name",
   'login.html': 'has the full mark-and-wordmark lockup',
   'index.html': 'the marketing site',
 };
@@ -45,7 +60,7 @@ function run() {
   const bad = (f, why) => fails.push({ f, why });
 
   for (const f of MUST_HAVE) {
-    const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
+    const s = live(f);
     const marks = (s.match(/class="scMark"/g) || []).length;
     if (marks === 0) { bad(f, 'has no StatChat mark'); continue; }
     if (marks > 1) bad(f, 'has ' + marks + ' marks — one page, one mark');
@@ -54,17 +69,26 @@ function run() {
       bad(f, 'the mark is not 26px — uniform means the same size everywhere, or it ' +
              'reads as decoration rather than as the product');
     }
-    // The wrapper must actually contain the heading, or the mark is
-    // floating somewhere near it rather than beside it.
-    if (!/class="scMark">[\s\S]{0,200}?<h1/.test(s)) {
-      bad(f, 'the mark is not beside the page heading');
-    }
+    // BESIDE THE HEADING, asserted STRUCTURALLY rather than by character
+    // distance. A first version allowed 200 characters between the mark
+    // and the <h1>; dashboard.html came in at 190 because the tenant's own
+    // logo and a divider sit between them. A threshold that a legitimate
+    // page nearly trips is a threshold that will fail on the next one for
+    // no reason worth having.
+    //
+    // What matters is that they are SIBLINGS in one flex row: the mark and
+    // the heading in the same container, nothing block-level between.
+    const row = s.match(/<div class="(?:scMark|brandline)[^"]*">([\s\S]*?)<\/div>\s*(?:<\/div>|<div)/);
+    const rowHasBoth = /class="scMark"/.test(s) &&
+      new RegExp('class="scMark"[\\s\\S]*?<h1').test(s) &&
+      !new RegExp('class="scMark"[\\s\\S]*?</(?:section|main|header)>[\\s\\S]*?<h1').test(s);
+    if (!rowHasBoth) bad(f, 'the mark and the page heading are not in the same row');
     if (!/<img src="logo\.png" alt="StatChat">/.test(s)) {
       bad(f, 'the mark is not logo.png with alt="StatChat"');
     }
   }
 
-  const g = fs.readFileSync(path.join(ROOT, TOOLBAR), 'utf8');
+  const g = live(TOOLBAR);
   if (!/class="scMark-inline"/.test(g)) bad(TOOLBAR, 'has no StatChat mark in the header');
   if (!/\.scMark-inline\s*\{[^}]*width:22px/.test(g)) {
     bad(TOOLBAR, 'the toolbar mark is not 22px');
@@ -75,7 +99,7 @@ function run() {
   for (const [f, why] of Object.entries(EXCLUDED)) {
     const p = path.join(ROOT, f);
     if (!fs.existsSync(p)) continue;
-    const s = fs.readFileSync(p, 'utf8');
+    const s = fs.readFileSync(p, 'utf8').replace(/<!--[\s\S]*?-->/g, '');
     if (/class="scMark"/.test(s)) {
       bad(f, 'has the app mark but is excluded (' + why + ')');
     }
