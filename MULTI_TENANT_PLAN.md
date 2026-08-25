@@ -1202,6 +1202,36 @@ because at the time the flag still described reality. That is the shape
 of the whole `is_our_team` problem: rules that were true when written and
 quietly stopped being true.
 
+### 015-017, AND THE END OF is_our_team — 25 August 2026
+
+**015** rewrote the anon branding policy on `teams`. It used
+`is_our_team = true`, which meant "the only team" when it was written and
+"every team on the platform" once there were two — so a public recap could
+show another school's colours. Demonstrated in scratch before the fix:
+three tenants' teams visible to an anonymous reader.
+
+**016** made deleting a tenant a SOFT delete. `tenants` cascades to five
+tables, so a real DELETE destroys everything that customer ever entered.
+Enforced in one line — `current_tenant_id()` returns NULL for a deleted
+tenant, and NULL never equals anything, so all seventeen policies deny at
+once. The first version had the games policy query `tenants` while the
+tenants policy queried `games`, and Postgres reported **infinite recursion
+in policy for relation "games"** — every public recap would have errored.
+Broken with a SECURITY DEFINER function: two RLS-protected tables that
+reference each other cannot do it by subquery.
+
+**017** dropped `logo_url`, `primary_color` and `secondary_color` from
+`tenants`. 006 copied branding there intending to repoint the app later;
+the app was never repointed, so the copy went stale the day it was made and
+the console showed a logo from August. **A duplicated column is a bug with
+a delay on it** — both copies are right when made, and nothing says which
+one a reader used until they disagree.
+
+**is_our_team is gone from every read.** Twelve files, not the ten a first
+grep found: two queries spanned two lines. `api/og.js` read it with the
+service key, so a shared recap's link-preview card — the image iMessage and
+Slack show — could be painted in another school's colour.
+
 ### The order now
 
     006  columns, backfill, functions, signup trigger   <- DONE 24 Aug

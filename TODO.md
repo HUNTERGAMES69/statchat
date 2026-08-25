@@ -8,7 +8,20 @@ Ordered roughly by how much it would hurt to leave undone.
 
 ---
 
-## 0. THE STATCHAT MARK ON game.html — DONE, and worth reading once
+## 0a. THIS FILE IS 3,300 LINES LONG
+
+52 sections. It opens by saying completed work lives in
+`PROJECT_NOTES.md`, and mostly that has held — but a work list nobody can
+read in one sitting stops being a work list.
+
+- [ ] Split it: near-term items here, everything speculative or
+  long-dated into a separate `BACKLOG.md`. The test is whether somebody
+  picking this up cold can see what to do next in the first screen.
+
+---
+
+
+## 0b. THE STATCHAT MARK ON game.html — DONE, and worth reading once
 
 Seven attempts failed. Every one was overruled by a single rule nobody had
 looked at:
@@ -41,7 +54,7 @@ so nothing put on `.scMarkBox` ever applied.
 ---
 
 
-## 0. IS_OUR_TEAM — CLOSED, 25 August 2026
+## 0c. IS_OUR_TEAM — CLOSED, 25 August 2026
 
 Kept as a record because of how it was found and how far it reached.
 
@@ -77,7 +90,7 @@ LOUDLY for the platform instead of rendering an arbitrary customer.
 ---
 
 
-## 0b. UNFILTERED QUERIES THAT RLS USED TO NARROW — sweep needed
+## 0d. UNFILTERED QUERIES THAT RLS USED TO NARROW — sweep needed
 
 Three found by accident on 24 Aug, all the same shape: a query safe only
 because every account had a tenant, in a codebase that now has one

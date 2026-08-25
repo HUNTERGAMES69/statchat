@@ -3246,3 +3246,105 @@ assertion confirmed a rule EXISTED rather than what it SAID — a 60px logo
 satisfied "there is a `.statchat-mark img` rule", and a blanked honeypot
 satisfied "the key is present". **Asserting that a declaration exists is
 not asserting what it does.** Both were rewritten to read the value.
+
+## The game page's top bar: why anything added to it fights back (25 August 2026)
+
+Adding a 32px logo to `#headerLeft` took **seven attempts**. Every one of
+them was correct in the file and wrong in the browser. Anyone touching
+that row should read this first — the constraints are real, they are not
+written anywhere near each other, and none of them is visible from the
+markup.
+
+### The rule that overruled all seven attempts
+
+```css
+#headerLeft > * {
+  flex:1 1 0; min-width:0; display:flex;
+  height:auto !important; padding:0 12px !important;
+  border-radius:10px !important; margin:0 !important; }
+```
+
+Two things about it:
+
+**`flex:1 1 0` means every child SPLITS THE ROW EQUALLY.** The comment
+above it says as much — it was written for exactly two children, Dashboard
+and ON AIR, each taking half the width and the full banner height. A third
+child silently makes it thirds, which is why ON AIR deformed the moment a
+mark went in front of it. `min-width:0` then permits any child to collapse
+to nothing, which is why the mark kept disappearing rather than
+overflowing.
+
+**It is specificity (1,0,0).** A class selector is (0,1,0). So
+`.scMarkBox { display:block; width:32px }` never applied at all — not from
+the stylesheet, not from an inline style, and no amount of arguing with
+`layoutHeader()` would have helped, because the problem was never the
+JavaScript. The answer is `#headerLeft > .scMarkBox` at (1,1,0), and it
+must answer **every** property the base rule sets:
+
+```
+flex        0 0 auto    do not take a share of the row's width
+min-width   32px        and do not collapse to nothing
+display     block       a <span> is inline, and inline ignores w/h
+align-self  center      not stretched -- see the width budget below
+height      32px !important        }  the base rule marks these
+padding     0 !important           }  !important, and an important
+border-radius 6px !important       }  declaration beats a normal one
+                                      however specific it is
+```
+
+`margin:0 !important` is deliberately left alone: spacing in this row
+comes from `#headerLeft`'s `gap`, not from margins.
+
+### Four other mechanisms rewrite this row
+
+Each of these caught one attempt:
+
+1. **`layoutHeader()`** walks `left.children` — DIRECT children only — and
+   on touch strips `height`/`width` and forces `display:flex !important`.
+   Correct for a button; fatal for an `<img>`, which then falls back to
+   its intrinsic 512px.
+2. **A second `#headerLeft > *`** inside
+   `@media (max-width:1219px), (hover:none) and (pointer:coarse)` re-pads
+   and re-heights every child, again with `!important`. Anything added
+   needs an answer in that block too.
+3. **`syncAir()`** writes the banner's height onto `#headerLeft`, and
+   `align-items:stretch` passes it to every child. So `.hdr-btn` is not
+   30px on a desktop — it is as tall as the banner.
+4. **The row's width is derived, not chosen.**
+   `right: calc(50% + var(--sc-card-half) + 18px)` gives
+   `width = viewport − 16 − (viewport/2 + 380 + 18)`:
+
+   | viewport | row width |
+   |---|---|
+   | 1280 | 226px |
+   | 1440 | 306px |
+   | 1600 | 386px |
+
+   Dashboard (~109px) plus ON AIR (~151px) already needs ~270px, so at
+   1280 the row is over budget with nothing added. **Anything placed here
+   is spending width that may not exist.** A square element stretched to
+   the banner's height is also banner-WIDE, which is the worst possible
+   thing to add.
+
+### How it was actually found, after seven attempts
+
+Not by reading. A diagnostic build printed `getComputedStyle` from the
+live page and reported `display: flex` on an element whose rule said
+`block` — one line of real browser output that immediately located an
+override no amount of source reading had turned up.
+
+**When a style is not applying, instrument the page. Do not re-read the
+file.** Three of the seven attempts were confirmed "fixed" by a check that
+read the source, and the source was correct every time. `gamemock.html`
+exists for exactly this and can be rebuilt from `game.html` in one copy.
+
+### If you add anything to this row
+
+- Put it in `#headerLeft > .selector`, never on a class alone.
+- Answer `flex`, `min-width` and `display` explicitly.
+- Use `!important` on `height`, `padding` and `border-radius`.
+- Add the same override inside the touch media block.
+- Check the width budget above before assuming there is room.
+- Verify in a browser, not in the file. `tests/game_mark_check.js`
+  asserts the relationship rather than the values, so it survives a
+  change to either rule.

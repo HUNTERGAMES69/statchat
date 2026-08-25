@@ -168,6 +168,41 @@ app would have broken all three.
 `login.html` also gained a password reset. The code is done and tested;
 the flow is NOT yet proven end to end — see TODO.
 
+## What closed on 24–25 August — multi-tenancy, and then the polish
+
+**Migrations 006 to 017 all ran against production.** Tenant columns and
+backfill, column defaults, RLS rewritten, per-tenant uniqueness, storage
+scoping, soft delete for games, create-a-tenant, suspend-a-tenant,
+delete-a-tenant, and the stale branding copy dropped. Every one has a DOWN
+script that was RUN rather than read. A second tenant exists in production,
+created through the app.
+
+**The platform console** (`platform.html`) — Tenants with create, suspend
+and delete; Users grouped by tenant, read-only; Recovery tools for deleted
+games and deleted tenants. `statchatadmin@statchat.co` lands there rather
+than on a tenant's dashboard.
+
+**No security gap remains.** `is_our_team` is gone from every read — it
+meant "the only team" and was true for every tenant once there were two.
+That reached twelve files, two service-key endpoints and one anon policy.
+
+Then a run of interface work: the StatChat mark on eight pages, uniform
+Dashboard buttons, the dashboard header rebuilt, roster upload guidance
+with a picture of the spreadsheet, hard caps on roster imports, logo type
+and size validation, halftime totals on the crew view, and the season
+carried back from a report.
+
+### Read before touching the game page's top bar
+
+`PROJECT_NOTES.md` has a section on it. Adding a 32px logo there took seven
+attempts, all of them correct in the file and wrong in the browser, because
+`#headerLeft > *` sets `flex:1 1 0` at specificity (1,0,0) and no class
+rule can outrank it. The width of that row is also derived from the
+viewport and is over budget at 1280px before anything is added.
+
+**When a style is not applying, instrument the page rather than re-reading
+the file.** `gamemock.html` is a copy of `game.html` kept for exactly that.
+
 ## Standing constraints
 
 - **Do not run anything against the production database.** Andy's call.
