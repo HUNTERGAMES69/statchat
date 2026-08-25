@@ -19,39 +19,17 @@
 <meta name="apple-mobile-web-app-title" content="StatChat">
 <title>StatChat — Game Entry</title>
 <style>
-  /* THE STATCHAT MARK, AND THE ARITHMETIC THAT DECIDES WHERE IT CAN GO.
-     ===================================================================
-     #headerLeft is absolutely positioned between the left edge and the
-     entry card, so its width is DERIVED, not chosen:
-
-         width = viewport - 16 - (viewport/2 + 380 + 18)
-
-         1280px viewport -> 226px      1600px -> 386px
-         1440px viewport -> 306px      1920px -> 546px
-
-     Dashboard is about 109px and SET AS ON AIR about 151px, so the row
-     already needs ~270px before anything is added. At 1280 it is over
-     budget on its own; at 1440 it barely fits. Six earlier attempts put a
-     40px mark in front of that and pushed ON AIR out of shape -- not a
-     styling bug, just a row with no room in it.
-
-     SO THE MARK YIELDS, and it is the right thing to yield: on a cramped
-     screen the controls a scorer is using beat the branding.
-       * display:block -- a <span> is inline, and inline ignores width and
-         height. Its absence is why the mark vanished on a PC last time
-         while an iPad looked fine (layoutHeader sets display:flex there).
-       * a BACKGROUND, not an <img> -- a background cannot make its element
-         larger, and an <img> stripped of its height falls back to 512px,
-         which is how the first four attempts failed.
-       * hidden between 1220 and 1439, where the numbers above say there is
-         no space. Above that it shows. Below 1220 the touch layout takes
-         over, the row goes static and wraps, and there is room again. */
+  /* DIAGNOSTIC BUILD. The mark, plus a readout of what the browser
+     actually computes for it -- because seven attempts were reasoned from
+     the source and every one of them was wrong about something the source
+     does not say. */
   .scMarkBox { display:block; flex:0 0 auto; align-self:center;
                width:32px; height:32px; border-radius:6px;
-               background:url('logo.png') center/contain no-repeat; }
-  @media (min-width:1220px) and (max-width:1439px) {
-    .scMarkBox { display:none; }
-  }
+               background:url('logo.png') center/contain no-repeat;
+               outline:2px solid magenta; }
+  #scDiag { position:fixed; left:0; bottom:0; z-index:99999;
+            background:#111; color:#0f0; font:11px/1.45 ui-monospace, Menlo, monospace;
+            padding:8px 10px; max-width:100vw; white-space:pre; }
 
 
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
@@ -441,11 +419,6 @@
       top:auto !important; height:auto !important;
       flex:0 1 auto !important; margin:0 !important;
       padding:8px 14px !important; }
-
-    /* The mark opts out of both, at (1,1,0) so it beats `#headerLeft > *`
-       at (1,0,0). Without the height it collapses to auto, and a
-       background on a zero-height box is nothing at all -- which is what
-       "it disappeared" looked like. */
     #headerLeft > .scMarkBox { padding:0 !important; height:32px !important; }
   }
 
@@ -13690,5 +13663,50 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
      title="How to use StatChat">HELP!</a>
   <a id="launchViewLink" href="#" target="_blank">CREW VIEW &#8599;</a>
 </div>
+<div id="scDiag">measuring…</div>
+<script>
+// WHAT THE BROWSER ACTUALLY THINKS, reported from the page itself.
+// Reasoning from the source has been wrong seven times: the rule was in a
+// comment, then script overwrote it, then #headerLeft > * outranked it,
+// then a span was inline, then the row had no width. Each was invisible in
+// the file and obvious in getComputedStyle.
+(function(){
+  function report(){
+    const el = document.querySelector('.scMarkBox');
+    const hl = document.getElementById('headerLeft');
+    const btn = hl && hl.querySelector('.hdr-btn');
+    const out = [];
+    out.push('viewport      ' + window.innerWidth + ' x ' + window.innerHeight);
+    out.push('mark element  ' + (el ? 'FOUND' : 'NOT IN THE DOM'));
+    if (el){
+      const c = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      out.push('  display     ' + c.display);
+      out.push('  size        ' + Math.round(r.width) + ' x ' + Math.round(r.height));
+      out.push('  position    x=' + Math.round(r.left) + ' y=' + Math.round(r.top));
+      out.push('  visibility  ' + c.visibility + '  opacity=' + c.opacity);
+      out.push('  background  ' + c.backgroundImage.slice(0, 60));
+      out.push('  inline attr ' + (el.getAttribute('style') || '(none)'));
+    }
+    if (hl){
+      const c = getComputedStyle(hl), r = hl.getBoundingClientRect();
+      out.push('#headerLeft   ' + Math.round(r.width) + 'w x ' + Math.round(r.height) + 'h  at x=' + Math.round(r.left));
+      out.push('  position    ' + c.position + '  overflow=' + c.overflow);
+      out.push('  children    ' + hl.children.length);
+      out.push('  scrollWidth ' + hl.scrollWidth + ' (overflowing if > ' + Math.round(r.width) + ')');
+    }
+    if (btn){
+      const r = btn.getBoundingClientRect();
+      out.push('.hdr-btn      ' + Math.round(r.width) + 'w x ' + Math.round(r.height) + 'h');
+    }
+    out.push('media <=1219  ' + window.matchMedia('(max-width:1219px)').matches);
+    out.push('coarse ptr    ' + window.matchMedia('(hover:none) and (pointer:coarse)').matches);
+    out.push('1220-1439     ' + window.matchMedia('(min-width:1220px) and (max-width:1439px)').matches);
+    document.getElementById('scDiag').textContent = out.join('\n');
+  }
+  window.addEventListener('load', () => setTimeout(report, 400));
+  window.addEventListener('resize', () => setTimeout(report, 150));
+})();
+</script>
 </body>
 </html>
