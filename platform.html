@@ -417,13 +417,25 @@
       // 017 drops the stale columns; this reads the live ones through the
       // foreign key. `teams` comes back as an ARRAY because a tenant may
       // field several sports.
-      .from('tenants').select('id, name, full_name, subscription, renews_on, created_at, disabled_at, disabled_reason, teams(logo_url)')
+      .from('tenants').select('id, name, full_name, subscription, renews_on, created_at, disabled_at, disabled_reason, deleted_at, teams(logo_url)')
       .order('name');
     if (error){
       body.innerHTML = '<p class="empty">Could not load tenants: ' + esc(error.message) + '</p>';
       return;
     }
     // A deleted tenant belongs under Recovery tools, not in the live list.
+    // SPLIT ON A COLUMN THAT MUST BE IN THE SELECT ABOVE. `deleted_at`
+    // was added by 016 and never added to the query, so every tenant
+    // read as undefined -- meaning `!t.deleted_at` was true for all of
+    // them. A deleted tenant stayed in this list and never appeared
+    // under Recovery tools, while the database had it right all along.
+    //
+    // An unselected column and a null one are indistinguishable in JS,
+    // which is why this asserts rather than trusting the shape.
+    if (tenants && tenants.length && !('deleted_at' in tenants[0])){
+      showMsg('The tenant list is missing deleted_at — deleted tenants cannot be ' +
+        'told apart from live ones. This is a bug; please report it.', 'error');
+    }
     const liveTenants = (tenants || []).filter(t => !t.deleted_at);
     if (!liveTenants.length){
       body.innerHTML = '<p class="empty">No tenants yet.</p>';
