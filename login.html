@@ -27,28 +27,91 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&display=swap" rel="stylesheet">
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); display:flex; align-items:center; justify-content:center; min-height:100vh; }
-  .card { background:#fff; border-radius:12px; padding:28px 32px 32px; max-width:380px; width:100%; box-shadow:0 2px 12px rgba(0,0,0,0.08); position:relative; }
+  /* DARK, 25 August 2026. Converted at the source rather than by layering
+   an override sheet: this page has one card and eleven colours, so the
+   honest version costs the same as the shortcut.
+
+   Values are index.html's -- the brochure site's dark system. The product
+   must not grow a second one.
+
+   The token names below are statchat.css's own, re-pointed locally. When
+   the rest of the app is converted the same values move into
+   statchat.css and this block disappears. */
+/* TELLS THE BROWSER THE PAGE IS DARK. Without this the UA paints its own
+   chrome light: scrollbars, the caret, spinner buttons, and -- the one
+   that actually bites on a phone -- the yellow-white fill Safari and
+   Chrome put behind an AUTOFILLED email or password field, which on a
+   dark card looks broken. */
+:root{ color-scheme:dark; }
+:root{
+  --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+  --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+  --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+  --sc-navy:#2f3a47;   /* a BUTTON FILL, not an ink. See the note on button. */
+  --sc-green:#a3d93f;  --sc-green-tint:rgba(124,181,24,.14);
+  --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
+  --sc-link:#7cb518;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .card { background:var(--sc-card); border:1px solid var(--sc-rule); color:var(--sc-ink); border-radius:12px; padding:28px 32px 32px; max-width:380px; width:100%; box-shadow:0 2px 12px rgba(0,0,0,0.08); position:relative; }
   /* THE SAME LOCKUP AS THE SITE HEADER: mark and wordmark side by side,
      top of the card, baseline-aligned. The logo used to be absolutely
      positioned in the top-right corner with the word "StatChat" floating
      below it as a separate heading, which read as two unrelated things.
      A visitor arriving from statchat.co should recognise where they are. */
   .brand { display:flex; align-items:center; gap:12px; margin:0 0 22px; }
-  .brand img { width:44px; height:44px; border-radius:8px; display:block; flex:none; }
+  /* The logo is dark-on-light artwork. On charcoal it needs a light plate
+   behind it -- the mark itself is not being redrawn for a theme. */
+    .brand img { width:44px; height:44px; border-radius:8px; display:block; flex:none;
+                 background:#fff; padding:2px; box-sizing:border-box; }
   .brand span { font-family:'Barlow Condensed', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                 font-weight:700; font-size:32px; line-height:1; text-transform:uppercase;
-                letter-spacing:.04em; color:var(--sc-navy, #1a1a2e); }
+                letter-spacing:.04em;
+                /* NOT --sc-navy. That token is a BUTTON FILL here (#2f3a47),
+                   so the wordmark inherited it and came out at 1.43:1 on the
+                   card -- invisible. The same mistake, from the same token,
+                   sank the game page's play ladder.
+                   A wordmark should be the brightest thing on the card, not
+                   the dimmest: pure white at 15.6:1. */
+                color:#fff; }
   h1 { font-size:22px; margin:0 0 6px; }
   /* Present for a screen reader, absent on screen: the lockup above
      names the product, and each view's own h1 names the state. */
   .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px;
              overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-  p.sub { color:#888; margin:0 0 20px; font-size:14px; }
-  label { display:block; font-size:14px; margin-bottom:6px; color:#444; }
-  input { width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:15px; margin-bottom:14px; box-sizing:border-box; }
-  button { width:100%; padding:11px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:15px; font-weight:600; cursor:pointer; }
-  button:disabled { opacity:0.6; cursor:default; }
+  p.sub { color:var(--sc-ink-muted); margin:0 0 20px; font-size:14px; }
+  label { display:block; font-size:14px; margin-bottom:6px; color:var(--sc-ink-muted); }
+  /* An input on a dark card needs to look recessed, not painted on. The
+   fill is darker than the card and the border is the strong rule, which
+   is 3.9:1 against the card -- the WCAG floor for a non-text boundary. */
+    input { width:100%; padding:10px; border:1px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); border-radius:6px; font-size:15px; margin-bottom:14px; box-sizing:border-box; }
+  /* border:none works on white and not on charcoal -- a dark fill on a
+   dark card has no edge. No fill reaches 3:1 against #191f27 without
+   going light grey, so the fill carries the affordance and the border
+   carries the edge. */
+    button { width:100%; padding:11px; border-radius:6px; border:1px solid var(--sc-rule-strong); background:var(--sc-navy, #1a1a2e); color:var(--sc-ink); font-size:15px; font-weight:600; cursor:pointer; }
+  /* opacity on a dark page dims towards the background rather than towards
+   grey, so a disabled button becomes hard to find. An explicit floor
+   keeps it visible AND clearly inactive. */
+    /* AUTOFILL. color-scheme handles most browsers; WebKit needs telling
+       twice, because -webkit-autofill paints with an inset shadow rather
+       than a background and no ordinary rule reaches it. A saved password
+       is the normal way into this page, so this is not an edge case. */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus {
+      -webkit-text-fill-color:var(--sc-ink);
+      -webkit-box-shadow:0 0 0 1000px var(--sc-raise) inset;
+      caret-color:var(--sc-ink);
+      transition:background-color 9999s ease-out 0s;
+    }
+    /* A visible focus ring: the default is a thin dark outline that
+       disappears on a dark card, and this page is all keyboard. */
+    input:focus-visible, button:focus-visible, a:focus-visible {
+      outline:2px solid var(--sc-link); outline-offset:2px;
+    }
+    button:disabled { opacity:1; background:#1b2129; color:#5f6b78;
+                      border-color:#333f4b; cursor:default; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
   .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
   .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
@@ -70,7 +133,7 @@
     <label>Invite code<input type="text" id="codeInput" inputmode="numeric" placeholder="Code from your invite email"></label>
     <p class="sub" style="margin-top:-8px; margin-bottom:14px; font-size:12px;">Enter the full code exactly as it appears in the email — the number of digits can vary.</p>
     <button id="verifyCodeBtn">Verify code</button>
-    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="backToLoginLink" style="color:#1565c0;">Back to sign in</a></p>
+    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="backToLoginLink" style="color:var(--sc-link);">Back to sign in</a></p>
   </div>
 
   <div id="setPasswordView" class="hidden">
@@ -92,7 +155,7 @@
     <div id="resetRequestMsg"></div>
     <label>Email<input type="email" id="resetEmailInput" autocomplete="username"></label>
     <button id="sendResetBtn">Send reset link</button>
-    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="resetBackLink" style="color:#1565c0;">Back to sign in</a></p>
+    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="resetBackLink" style="color:var(--sc-link);">Back to sign in</a></p>
   </div>
 
   <div id="loginView" class="hidden">
@@ -114,15 +177,25 @@
       <button id="mfaLoginBtn" style="margin-top:10px;">Verify</button>
       <button id="mfaCancelBtn" class="secondary" style="margin-top:10px; margin-left:8px;">Cancel</button>
     </div>
-    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="forgotLink" style="color:#1565c0;">Forgot your password?</a></p>
-    <p class="sub" style="margin-top:6px; margin-bottom:0;"><a href="#" id="haveCodeLink" style="color:#1565c0;">Have an invite code?</a></p>
+    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="forgotLink" style="color:var(--sc-link);">Forgot your password?</a></p>
+    <p class="sub" style="margin-top:6px; margin-bottom:0;"><a href="#" id="haveCodeLink" style="color:var(--sc-link);">Have an invite code?</a></p>
   </div>
 
   <div id="loggedInView" class="hidden">
     <h1>You're signed in</h1>
     <p class="sub" id="loggedInAs"></p>
-    <p style="font-size:13px; color:#999;">The real dashboard isn't built yet — this confirms login itself is working end to end.</p>
-    <button id="signOutBtn" style="background:#fff; color:#a32d2d; border:1px solid #a32d2d;">Sign out</button>
+    <!-- Copy corrected 25 Aug. This read "The real dashboard isn't built
+         yet" -- true in early development, and shown to signed-in users
+         ever since. Found while converting the colours. -->
+    <p class="sub" style="font-size:13px;">You're already signed in. Continue to your
+    dashboard, or sign out to use a different account.</p>
+    <a href="dashboard.html"
+       style="display:block; text-align:center; text-decoration:none; padding:11px;
+              border-radius:6px; background:var(--sc-navy);
+              border:1px solid var(--sc-rule-strong); color:var(--sc-ink);
+              font-weight:600; margin-bottom:10px;">Go to dashboard</a>
+    <button id="signOutBtn" style="background:rgba(176,0,32,.16); color:var(--sc-red);
+            border:1px solid #c8455c;">Sign out</button>
   </div>
 </div>
 
