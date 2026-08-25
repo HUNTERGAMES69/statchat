@@ -169,6 +169,13 @@ function audit(file) {
     const r = ratio(c, CARD);
     if (r >= AA_BODY) continue;
     if (ALLOWED_LOW[c.toLowerCase()]) continue;
+    // TEXT INSIDE THE SPREADSHEET PICTURE. The sheet is deliberately
+    // white, so its cell text is deliberately near-black. Measuring it
+    // against the dark card is meaningless -- it never touches the card.
+    {
+      const ctx = src.slice(Math.max(0, m.index - 300), m.index + 40);
+      if (/sheetMock/.test(ctx)) continue;
+    }
     // INK ON AN INVERTED CHIP. An amber or white fill takes near-black
     // text by design; measuring it against the CARD says 1.14:1 and means
     // nothing, because it never touches the card. Recognised by the fill
@@ -232,6 +239,11 @@ function audit(file) {
     // the logo plate, this is a light patch the ARTWORK requires -- not a
     // page that was missed.
     if (/mfaQr|qrcode|qr-code/i.test(around)) continue;
+    // THE SPREADSHEET EXAMPLE stays light. It is a PICTURE of a
+    // spreadsheet -- grey gutters, column letters, white cells -- shown so
+    // a coach knows what file to build. Rendered dark it stops being a
+    // picture of the thing it is describing.
+    if (/sheetMock|sheetNote/.test(around)) continue;
     findings.push({ kind: 'FAIL', msg: 'light background ' + c +
       ' (luminance ' + lum(c).toFixed(2) + ') — converted pages should have none' });
   }
