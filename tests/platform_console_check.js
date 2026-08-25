@@ -157,19 +157,34 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // monogram rather than a gap or a broken image — and "no logo yet" is
   // the ordinary state for a new customer, which is exactly the one the
   // platform is most likely to be looking up.
-  const schoolsHtml = b.d.getElementById('schoolsBody').innerHTML;
-  chk(/<img src="https:\/\/cdn\/neville\.png"/.test(schoolsHtml),
+  // TAB ORDER AND LABELS, asserted because selectTab DERIVES element ids
+  // from the TABS array -- 'tenants' becomes tabTenants and panelTenants.
+  // A renamed panel with a stale array entry throws on click rather than
+  // failing visibly, and only on the tab nobody opened during testing.
+  const tabLabels = [...b.d.querySelectorAll('.tabs button')].map(x => x.textContent.trim());
+  chk(tabLabels.join(' | ') === 'Tenants | Users | Recovery tools',
+      'tabs read Tenants, Users, Recovery tools in that order (got: ' + tabLabels.join(' | ') + ')');
+  const tabsArr = (code.match(/const TABS = \[([^\]]*)\]/) || [])[1] || '';
+  ['tenants','users','recovery'].forEach(t => {
+    chk(tabsArr.includes("'" + t + "'"), 'TABS includes ' + t);
+    const cap = t.charAt(0).toUpperCase() + t.slice(1);
+    chk(!!b.d.getElementById('tab' + cap) && !!b.d.getElementById('panel' + cap),
+        'and tab' + cap + '/panel' + cap + ' both exist, so selectTab can find them');
+  });
+
+  const tenantsHtml = b.d.getElementById('tenantsBody').innerHTML;
+  chk(/<img src="https:\/\/cdn\/neville\.png"/.test(tenantsHtml),
       'a school WITH a logo shows it');
-  chk(/class="crest">R</.test(schoolsHtml),
+  chk(/class="crest">R</.test(tenantsHtml),
       'a school WITHOUT one shows a monogram, not a gap or a broken image');
-  chk(/onerror=/.test(schoolsHtml),
+  chk(/onerror=/.test(tenantsHtml),
       'and a logo that fails to load falls back rather than showing a broken icon');
 
-  const schools = b.d.getElementById('schoolsBody').textContent;
-  chk(/Neville/.test(schools) && /Riverside/.test(schools), 'both schools are listed');
-  chk(/Lapsed|Trial|Active/.test(schools), 'subscription state is shown');
+  const tenants = b.d.getElementById('tenantsBody').textContent;
+  chk(/Neville/.test(tenants) && /Riverside/.test(tenants), 'both schools are listed');
+  chk(/Lapsed|Trial|Active/.test(tenants), 'subscription state is shown');
 
-  const deleted = b.d.getElementById('restoreBody').innerHTML;
+  const deleted = b.d.getElementById('recoveryBody').innerHTML;
   chk(/2026-W2/.test(deleted), 'the deleted game is listed');
   chk(/Neville/.test(deleted),
       'and NAMED WITH ITS SCHOOL — a designator alone is ambiguous since migration 010');
