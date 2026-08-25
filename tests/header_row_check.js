@@ -46,8 +46,18 @@ function assertRow(file, style, label, needsRule) {
   // is why a "fixed" header still looked identical to Andy on a PC. The
   // header/title look he asked for needs the hairline and the padding.
   if (needsRule) {
-    chk(/border-bottom:\s*1px solid/.test(s),
-        file + ': ' + label + ' has a hairline under it');
+    // THE HAIRLINE MUST BE VISIBLE, not merely present. It first shipped
+    // as var(--sc-rule) -- #2b333d, 1.30:1 against the card -- which is a
+    // line you cannot see. The check passed, the page looked unchanged,
+    // and I explained why three times before measuring it.
+    //
+    // 3:1 is the WCAG floor for a non-text boundary. --sc-rule is for
+    // subtle internal dividers; a header separator needs --sc-rule-strong.
+    const border = /border-bottom:\s*1px solid\s*var\(\s*(--[a-z-]+)/.exec(s);
+    chk(!!border, file + ': ' + label + ' has a hairline under it');
+    chk(border && border[1] === '--sc-rule-strong',
+        file + ': ' + label + ' uses --sc-rule-strong (3.91:1), not ' +
+        (border ? border[1] : '?') + ' — --sc-rule is 1.30:1 and invisible');
     chk(/padding-bottom:\s*14px/.test(s) && /margin-bottom:\s*20px/.test(s),
         file + ': ' + label + ' has 14px above the hairline and 20px below');
   }
