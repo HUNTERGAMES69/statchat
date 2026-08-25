@@ -1140,6 +1140,51 @@ Worth recording together, because they are the same mistake:
 
 Verified in production: page links and emailed links both render.
 
+### THE PLATFORM CONSOLE, AND A SECOND TENANT — 24/25 August 2026
+
+**013** creates a tenant and its first team ATOMICALLY. A tenant without
+a team is invisibly broken: twelve pages read the team to find out who
+"we" are, and every one comes back empty. Proven by forcing the team
+insert to fail in scratch — zero rows of either survived.
+
+**014** lets the platform suspend a tenant. A suspended tenant READS
+everything and WRITES nothing. Cutting reads was the obvious reading and
+the wrong one: an overlay is a read, and a crew losing its scoreboard
+mid-broadcast loses it in front of an audience over a decision reversible
+in seconds. Enforced by TRIGGERS rather than policies, because RLS does
+not refuse — it makes rows invisible or matches nothing, and a coach
+would see a silent no-op instead of "This account is currently suspended."
+
+`subscription` and `disabled_at` are separate columns on purpose. The
+first question in the support call is which one it is.
+
+**platform.html** — Tenants, Users, Recovery tools. Tenants shows crests,
+status and counts, and creates or suspends. Users is grouped by tenant
+and READ-ONLY: acting on a customer's staff from here would be the
+platform changing a tenant's people with nothing recording it, and that
+waits for the audit trail.
+
+**A SECOND TENANT NOW EXISTS IN PRODUCTION**, created through the app,
+defaulting to the neutral greys because it has no colours yet. That is
+the proof the whole plan was building toward — and it changes the status
+of everything below from theoretical to live.
+
+### THE SERVICE ROLE HAS NO auth.uid(), AND THAT COST TWO BUGS
+
+`restore_game()` refused from the SQL editor. Correct — `postgres` has no
+`auth.uid()`, so `is_super_admin()` is false. Diagnosed, explained, moved
+on.
+
+Then `create_tenant()` refused the platform account in production, for
+**exactly the same reason**: `api/create-tenant.js` called it with the
+service key. It is the only function in the app invoked from a SERVER
+rather than a browser, which is why it is the only one that hit it.
+
+Fixed by building a second client carrying the caller's own JWT, so
+`auth.uid()` resolves and the function's check means what it says from
+either side. **A lesson learned in one context did not get carried to the
+next one an hour later.**
+
 ### The order now
 
     006  columns, backfill, functions, signup trigger   <- DONE 24 Aug
@@ -1150,13 +1195,44 @@ Verified in production: page links and emailed links both render.
     ---  REMAINING, in order of what blocks a second school:
     010  feed key scoping + per-tenant uniqueness      <- DONE 24 Aug
 
-    NO SECURITY GAP REMAINS. What is left is product, not isolation:
-    ---  create statchatadmin@statchat.co, set is_super_admin
-    ---  the nineteen is_our_team reads (presentation only)
-    ---  the super-admin console and add-a-school screens (mocked)
-    ---  subscription state and read-only lapse
-    ---  audit trail
-    ---  test a vMix browser input when hardware allows
+    011  storage scoping                              <- DONE
+    012  soft delete for games                        <- DONE
+    013  create a tenant atomically                   <- DONE 25 Aug
+    014  suspend a tenant                             <- DONE 25 Aug
+    ---  platform.html console                        <- DONE 25 Aug
+    ---  a second tenant in production                <- DONE 25 Aug
+
+    WHAT REMAINS. No hazard is open, but two items below stopped being
+    theoretical the moment a second tenant existed:
+
+    1. IS_OUR_TEAM, and it is now sharper than 'presentation only'.
+       Twelve files still read `.eq('is_our_team', true)`. For a TENANT
+       user that is harmless: RLS scopes `teams` to their own row, so the
+       query returns the right team. For the PLATFORM it is not. Every
+       tenant's team has the flag TRUE, teams_select returns all of them,
+       and limit(1) picks whichever Postgres feels like -- so
+       customize.html, roster.html and reports.html would show the
+       platform an ARBITRARY tenant's data, and customize.html would let
+       it edit that tenant's branding.
+       The dashboard bounce keeps the platform off those pages by
+       accident, not by design. Fixing this properly is the next real
+       piece of work.
+
+    2. THE SWEEP for unfiltered queries safe only because RLS narrowed
+       them. Three found by accident so far. Same root cause as above.
+
+    3. VIEW A TENANT as the platform -- the Open button. `?as=` is wired
+       into dashboard.html as a named bypass but does NOTHING yet: no
+       scoping, no banner. Both are required before it ships.
+
+    4. AUDIT TRAIL. Every write policy ends `or is_super_admin()`, so the
+       platform can already write into any tenant. Deferring 'Act As'
+       withheld the interface, not the capability.
+
+    5. SUBSCRIPTION AND LAPSE. 014 gives the platform a suspend switch;
+       nothing yet acts on `subscription = 'lapsed'` automatically.
+
+    6. TEST A vMIX BROWSER INPUT when hardware allows.
 
 **008 is held until a real game has been run through 007.** A wrong
 policy does not error; it returns fewer rows, or more. Separating it

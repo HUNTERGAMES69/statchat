@@ -8,6 +8,51 @@ Ordered roughly by how much it would hurt to leave undone.
 
 ---
 
+## 0. IS_OUR_TEAM IS NOW A LIVE CROSS-TENANT BUG — for the platform account
+
+A second tenant exists in production as of 25 Aug 2026, which promotes
+this from tidy-up to a real fault.
+
+Twelve files read `.eq('is_our_team', true)`. For a TENANT user that is
+harmless — migration 009 scopes `teams` to their own row, so the query
+returns the right team. For the PLATFORM account it is not: every
+tenant's team carries the flag, `teams_select` ends `or
+is_super_admin()`, so all of them come back, and `.limit(1)` picks
+whichever Postgres feels like.
+
+    customize.html   would show — and let it EDIT — an arbitrary tenant's branding
+    roster.html      would show an arbitrary tenant's players
+    reports.html     would report on an arbitrary tenant's season
+
+The dashboard bounce keeps the platform off those pages **by accident,
+not by design**: nothing stops it typing the address, and `?as=` will
+deliberately let it through once Open ships.
+
+- [ ] **Drop `is_our_team` and select the team by `tenant_id` instead.**
+  Under 009 a tenant sees exactly one team, so `.single()` is both
+  simpler and correct — and it fails loudly if that stops being true,
+  which `.limit(1)` never does. The flag is redundant for tenants and
+  actively wrong for the platform.
+- [ ] Until then, treat any platform visit to a tenant page as unsafe.
+
+---
+
+## 0b. UNFILTERED QUERIES THAT RLS USED TO NARROW — sweep needed
+
+Three found by accident on 24 Aug, all the same shape: a query safe only
+because every account had a tenant, in a codebase that now has one
+account RLS deliberately does not narrow.
+
+    account.html  "Reset for production"  unfiltered select on games  (feature removed)
+    account.html  user management         gated on role, not tenant   (fixed)
+    api/feed.js   branding                eq('is_our_team', true)      (fixed)
+
+- [ ] Sweep every page for the pattern. Nobody went looking for those
+  three; there is no reason to think they were all of them.
+
+---
+
+
 ## 1. Correctness
 
 ### `converts` is stored, not derived — DOWNGRADED Aug 7, 2026
