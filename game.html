@@ -407,6 +407,9 @@
       top:auto !important; height:auto !important;
       flex:0 1 auto !important; margin:0 !important;
       padding:8px 14px !important; }
+    /* Same answer, same specificity, for the two properties this block
+       forces with !important. */
+    #headerLeft > .scMarkBox { padding:0 !important; height:32px !important; }
   }
 
   /* RIGHT MARGIN RAIL -- validation and live totals.
@@ -547,6 +550,48 @@
        weight and tracking -- and 0.04em here broke it. */
     font-weight:800; letter-spacing:0.06em; white-space:nowrap;
     text-decoration:none; }
+
+  /* THE MARK OPTS OUT OF `#headerLeft > *`, AND THAT RULE IS THE WHOLE
+     STORY OF SEVEN FAILED ATTEMPTS.
+     ===================================================================
+     Directly above:  #headerLeft > * { flex:1 1 0; min-width:0; display:flex; }
+
+     `flex:1 1 0` means every child SPLITS THE ROW EQUALLY. The comment on
+     that rule says so plainly -- it was written for exactly two children,
+     each taking half the width and the full banner height. Adding a third
+     made it thirds, which is why ON AIR deformed the moment a mark went in
+     front of it. `min-width:0` then let the mark collapse to nothing,
+     which is why it kept vanishing.
+
+     And `#headerLeft > *` is specificity (1,0,0). A class rule is (0,1,0),
+     so `.scMarkBox { display:block; width:32px }` never stood a chance --
+     not in a stylesheet, not inline-with-!important-somewhere-else, and no
+     amount of arguing with layoutHeader() was ever going to help. Every
+     attempt was overruled here, silently, and nothing in the file said so.
+
+     `#headerLeft > .scMarkBox` is (1,1,0) and wins. Each property that the
+     rule above sets has to be answered explicitly:
+       flex        0 0 auto  -- do not take a share of the width
+       min-width   32px      -- and do not collapse
+       display     block     -- flex on an empty span with a background is
+                                harmless, but block is what it is
+       align-self  center    -- not stretched to the banner's height, which
+                                on a square would also make it banner-WIDE */
+  #headerLeft > .scMarkBox {
+    /* No !important needed for these three: the rule above sets them
+       plainly, so higher specificity is enough. */
+    flex:0 0 auto; min-width:32px; width:32px;
+    display:block; align-self:center;
+    /* !important IS needed for these three, because the rule above marks
+       them !important too -- and an important declaration beats a normal
+       one no matter how specific the normal one is. Specificity only
+       decides between two importants.
+         height:auto !important     would collapse the box to nothing
+         padding:0 12px !important  would add 24px of width to a 32px mark
+         border-radius:10px         is simply the wrong shape for it */
+    height:32px !important; padding:0 !important; border-radius:6px !important;
+    background:url('logo.png') center/contain no-repeat;
+  }
 
   /* Dashboard, filled like the buttons on the right rather than left as a
      bare link -- it was inheriting only the browser's anchor colour. */
@@ -897,6 +942,7 @@
          longer full-width: it was a wide bar with a short label in the
          middle, and that width is height everywhere else. -->
     <div id="headerLeft">
+        <span class="scMarkBox" role="img" aria-label="StatChat"></span>
       <a class="hdr-btn" href="dashboard.html">&larr; Dashboard</a>
       <button type="button" id="onAirBanner" style="display:none;">&#9679; ON AIR</button>
     </div>

@@ -8,31 +8,35 @@ Ordered roughly by how much it would hurt to leave undone.
 
 ---
 
-## 0. THE STATCHAT MARK ON game.html — REMOVED, revisit with the layout code
+## 0. THE STATCHAT MARK ON game.html — DONE, and worth reading once
 
-Every page reachable from the dashboard carries the mark (see
-`tests/brand_mark_check.js`). **game.html does not**, after four attempts
-that all worked in the file and none in the browser.
+Seven attempts failed. Every one was overruled by a single rule nobody had
+looked at:
 
-That page lays its header out from JavaScript:
+    #headerLeft > * { flex:1 1 0; min-width:0; display:flex;
+                      height:auto !important; padding:0 12px !important; }
 
-  * `layoutHeader()` walks every child of `#headerLeft` and, on touch,
-    strips `height` and `width` and sets `display:flex !important`. Right
-    for a button, fatal for an `<img>` — it falls back to its intrinsic
-    512px.
-  * a separate banner sync sets an explicit `height` on `#headerLeft`,
-    and `align-items:stretch` passes that to the children, so anything
-    measured off a button can be as tall as the score banner.
+`flex:1 1 0` means every child SPLITS THE ROW EQUALLY -- the comment above
+it says so, and it was written for exactly two children. A third made it
+thirds, which deformed ON AIR. `min-width:0` then let the mark collapse,
+which is why it kept vanishing. And at (1,0,0) it beats any class rule,
+so nothing put on `.scMarkBox` ever applied.
 
-A stylesheet rule, an inline style, an exemption inside the loop, and a
-measured height were each tried. All four looked correct in the file.
+**Three lessons, in order of how much time each cost:**
 
-- [ ] **Revisit from inside `layoutHeader()`**, not from CSS. The mark has
-  to be something that function creates and sizes itself, in the same pass
-  that sizes the buttons — anything applied from outside is overwritten by
-  design.
-- [ ] Verify by RENDERING, not by reading. Three of the four failures were
-  confirmed "fixed" by a check that read the file.
+1. **A checker that reads the source cannot see the cascade.** The rule
+   was correct in the file at every attempt. It took a getComputedStyle
+   readout from the live page -- `display:flex` on an element whose rule
+   said `block` -- to find the override. When a style is not applying,
+   instrument the page; do not re-read the file.
+2. **Specificity, then importance, in that order.** `#headerLeft > *` is
+   (1,0,0); a class is (0,1,0). And an `!important` declaration beats a
+   normal one however specific, so the override needs `!important` on
+   exactly the properties the base rule marks.
+3. **The diagnostic build was worth more than four attempts.** One
+   readout ended it.
+
+- [ ] `gamemock.html` can be deleted once this has held for a while.
 
 ---
 
