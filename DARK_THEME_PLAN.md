@@ -125,10 +125,13 @@ Each step is independently shippable and independently revertable.
 
 ### Step 1 — the pages that earn it (1 day)
 
-`platform.html`, `login.html`, `broadcast_setup.html`.
+`login.html`, `broadcast_setup.html`.
 
-Low traffic, no printing, no tenant colour to negotiate. `platform.html` in
-particular is a console the customer never sees, so it is a free rehearsal.
+Low traffic, no printing, no tenant colour to negotiate.
+
+(`platform.html` was originally first on this list, as a console the
+customer never sees and therefore a free rehearsal. It has since been
+ruled OUT entirely — see "What is NOT converted".)
 
 **Stop here and look at it before going further.**
 
@@ -363,6 +366,43 @@ drop to their own line cleanly.
 **Check this at conversion, not after.** It is a phone-only fault and
 invisible on the desktop where the conversion is done.
 
+### Printing pages need the print block FIRST, and it breaks tooling
+
+`help.html` prints. Its `@media print` block re-points the tokens back to
+light values, which is the whole reason the conversion goes through tokens
+rather than hardcoded colours.
+
+Three things that block broke, all in the checker rather than the page:
+
+* **Tokens must be read from the SCREEN theme only.** Built from the whole
+  file, the print block's `--sc-ink:#1a1a1a` overwrote the dark one and
+  every `color:var(--sc-ink)` then resolved to near-black. The page was
+  right; the tool was reading the wrong half of it.
+* **A rule inside `@media print` does not override the screen rule.** The
+  print block restates `.note { background:#eef6f1 !important }`, which
+  made the screen rule look overridden — so a genuinely light note panel
+  became exempt.
+* **Light colours inside the print block are correct.** Exempt them or a
+  page that prints properly can never pass.
+
+Also: the `.btn` spans in the help text are PICTURES of the app's buttons.
+They must follow whatever rule the real buttons follow, or the help stops
+describing the product. In print they become outlines — a solid dark fill
+on paper wastes toner and reads worse.
+
+### Two tooling faults worth remembering
+
+**A checker nobody can wait for is a checker nobody runs.** Override
+detection was a regex with two unbounded `[^{}]*` segments run once per
+declaration against the rest of the file. Fine on small pages; it hung
+outright on help.html at 60k. Rewritten as a single parse: 90+ seconds to
+2.
+
+**Absence needs a positive assertion.** Removing the logo plate leaves no
+light colour behind, so a check that hunts light colours cannot see the
+mark disappear. Converted pages showing `.scMark` are now required to
+plate it.
+
 ### Sign-off, per page
 
 Not "it looks fine":
@@ -381,6 +421,19 @@ Not "it looks fine":
    silver, not Neville's.
 
 ### What is NOT converted
+
+**`platform.html` STAYS LIGHT. Andy's call, 25 August 2026, and it is a
+design decision rather than an omission.**
+
+The platform console and the tenant application look nothing alike now,
+and that is the point: a light page means "you are operating on somebody
+else's data". The platform account can suspend a tenant, delete one, and
+write into any of them, so the strongest available signal that this is not
+an ordinary session is worth more than visual consistency.
+
+Do not "finish the job" by converting it.
+
+### Also not converted
 
 The four printed reports — `recap`, `stat_package`, `season_report`,
 `player_report` — stay light by decision. They are documents whose real
