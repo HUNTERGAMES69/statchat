@@ -94,6 +94,22 @@ chk(/display:\s*(block|flex|inline-block)/.test(rule),
 chk(/align-self:\s*center/.test(rule),
     'the mark is centred, not stretched — stretching it takes width from ON AIR');
 chk(!/align-self:\s*stretch/.test(rule), 'and explicitly not stretched');
+// THE ROW HAS A DERIVED WIDTH, AND IT IS TIGHT.
+//   width = viewport - 16 - (viewport/2 + card-half + 18)
+// which is 226px at a 1280 viewport and 306px at 1440. Dashboard (~109px)
+// plus SET AS ON AIR (~151px) already needs ~270px, so at 1280 the row is
+// over budget with nothing added. Six attempts put a mark in front of that
+// and pushed ON AIR out of shape.
+const half = Number((/--sc-card-half:\s*(\d+)px/.exec(live) || [0, 380])[1]);
+const budget = vw => vw - 16 - (vw / 2 + half + 18);
+chk(Math.round(budget(1280)) < 270,
+    'at a 1280 viewport the row (' + Math.round(budget(1280)) + 'px) cannot hold its two ' +
+    'buttons, let alone a mark — so the mark must be hidden there');
+chk(/@media \(min-width:1220px\) and \(max-width:1439px\)[\s\S]{0,120}display:\s*none/.test(live),
+    'and it is hidden across exactly that range, where the arithmetic says there is no room');
+chk(Math.round(budget(1600)) > 270 + 40,
+    'at 1600 there is room (' + Math.round(budget(1600)) + 'px), so it shows');
+
 const w = /width:\s*(\d+)px/.exec(rule), h = /height:\s*(\d+)px/.exec(rule);
 chk(!!w && !!h && w[1] === h[1],
     'it is square at a fixed size (' + (w ? w[1] : '?') + 'px)');
