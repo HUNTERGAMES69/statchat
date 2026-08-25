@@ -125,9 +125,9 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   b = boot({ id: 'u1', is_super_admin: true, tenant_id: null }, {
     tenants: [{ id:'t1', name:'Neville', full_name:'Neville High School',
                 logo_url:'https://cdn/neville.png',
-                subscription:'active', renews_on:'2027-08-01' },
+                subscription:'active', renews_on:'2027-08-01', disabled_at:null, disabled_reason:null },
               { id:'t2', name:'Riverside', full_name:null, logo_url:null,
-                subscription:'trial', renews_on:null }],
+                subscription:'trial', renews_on:null, disabled_at:'2026-08-24T22:00:00Z', disabled_reason:'Non-payment' }],
     users: [
       { id:'u1', email:'statchatadmin@statchat.co', displayName:'Platform',
         role:'admin', lastSignInAt:'2026-08-24T23:00:00Z', emailConfirmedAt:'x',
@@ -174,11 +174,33 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
 
   const tenantsHtml = b.d.getElementById('tenantsBody').innerHTML;
   chk(/<img src="https:\/\/cdn\/neville\.png"/.test(tenantsHtml),
-      'a school WITH a logo shows it');
+      'a tenant WITH a logo shows it');
   chk(/class="crest">R</.test(tenantsHtml),
-      'a school WITHOUT one shows a monogram, not a gap or a broken image');
+      'a tenant WITHOUT one shows a monogram, not a gap or a broken image');
   chk(/onerror=/.test(tenantsHtml),
       'and a logo that fails to load falls back rather than showing a broken icon');
+
+  // SUSPENSION. Reads keep working on purpose: an overlay is a read, and
+  // a crew that loses its scoreboard mid-broadcast loses it in front of
+  // an audience -- over a decision reversible in seconds.
+  chk(/>Suspend</.test(tenantsHtml), 'an active tenant offers Suspend');
+  chk(/>Restore</.test(tenantsHtml), 'a suspended one offers Restore');
+  chk(/Suspended/.test(tenantsHtml),
+      'and its status reads Suspended, NOT its subscription -- a tenant can be paid up ' +
+      'and still suspended, and the status line must not say Active next to an account ' +
+      'that cannot write');
+  chk(/Non-payment/.test(tenantsHtml), 'the reason is shown, so the support call starts informed');
+
+  // the control calls the function, with the right sense
+  b.w.confirm = () => true;
+  b.w.prompt  = () => 'Testing';
+  const suspendBtn = [...b.d.querySelectorAll('[data-toggle]')].find(x => x.textContent === 'Suspend');
+  suspendBtn.dispatchEvent(new b.w.Event('click', { bubbles: true }));
+  await wait();
+  const sc = b.calls.rpc.find(c => c.name === 'set_tenant_disabled');
+  chk(!!sc, 'suspending calls set_tenant_disabled()');
+  chk(sc && sc.args.p_disabled === true, 'with p_disabled true for an active tenant');
+  chk(sc && sc.args.p_reason === 'Testing', 'and passes the reason through');
 
   const tenants = b.d.getElementById('tenantsBody').textContent;
   chk(/Neville/.test(tenants) && /Riverside/.test(tenants), 'both schools are listed');
@@ -221,12 +243,12 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
 
   const usersHtml = b.d.getElementById('usersBody').innerHTML;
   chk(/Neville/.test(usersHtml) && /Riverside/.test(usersHtml),
-      'users are GROUPED BY SCHOOL — a flat roll of every account is the merged view this ' +
+      'users are GROUPED BY TENANT — a flat roll of every account is the merged view this ' +
       'console exists to avoid');
   chk(/StatChat platform/.test(usersHtml),
       'the platform account is its own group, not filed under a customer');
-  chk(/No school assigned/.test(usersHtml),
-      'and a user with NO school is surfaced — invisible on every other screen, and ' +
+  chk(/No tenant assigned/.test(usersHtml),
+      'and a user with NO tenant is surfaced — invisible on every other screen, and ' +
       'usually somebody invited and never assigned');
   chk(/never/.test(usersHtml), 'a user who has never signed in says so');
   chk(/Invited/.test(usersHtml), 'an unconfirmed invite is marked');
