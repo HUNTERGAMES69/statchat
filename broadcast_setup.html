@@ -21,7 +21,7 @@
      link, so the way back looked different depending on which page you
      were on. One control, one appearance. */
   .backlink { text-decoration:none; padding:8px 14px; border-radius:6px;
-              border:1px solid #ccc; color:#444; font-size:13px; font-weight:600;
+              border:1px solid var(--sc-rule-strong); color:var(--sc-ink); font-size:13px; font-weight:600;
               display:inline-block; }
 
   /* THE STATCHAT MARK, identical on every page reachable from the
@@ -29,21 +29,61 @@
      heading. Uniformity is the point -- a mark that moves or resizes
      between screens reads as decoration rather than as the product. */
   .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
-  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block; }
+  /* Dark-on-light artwork needs a plate on a #191f27 card. */
+  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block;
+                  background:#fff; padding:2px; box-sizing:border-box; }
 
-  :root { --ink:var(--sc-ink, #1a1a1a); --muted:#666; --line:#e0e0e0; --green:var(--sc-green-dark, #0f6e56); }
+  /* DARK, 25 August 2026. Recipe in DARK_THEME_PLAN.md.
+     Every --sc-* this page reads is defined, including those only written
+     as var(--x, #fallback): an undefined token silently becomes the
+     fallback, and every fallback here was chosen for a white page. */
+  :root{ color-scheme:dark; }
+  :root{
+    --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+    --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+    --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+    --sc-navy:#2f3a47;   --sc-green:#a3d93f;  --sc-green-dark:#8ac53e;
+    --sc-green-tint:rgba(124,181,24,.14);
+    --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
+    --sc-amber:#ffc72c;  --sc-amber-text:#ffc72c;
+    --sc-amber-soft:rgba(255,199,44,.10);
+    --sc-blue:#5aa9f0;   --sc-link:#7cb518;
+  }
+  /* --ink was used BOTH as text and as the fill of .fmt.on. Pointed at the
+     light ink, that button becomes near-white with white text -- 1.13:1.
+     Split: --ink for text, --ink-fill for the surface. The same fault
+     --sc-navy caused three times, caught here before shipping. */
+  :root { --ink:var(--sc-ink); --ink-fill:#3a4653;
+          --muted:var(--sc-ink-muted); --line:var(--sc-rule);
+          --green:var(--sc-green); }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--sc-page, #f4f3ef); color:var(--ink);
          font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
   .wrap { max-width:900px; margin:0 auto; padding:24px 20px 60px; }
   h1 { font-size:22px; margin:0 0 4px; }
   p.sub { color:var(--muted); margin:0 0 20px; font-size:14px; }
-  .card { background:#fff; border:1px solid var(--line); border-radius:10px;
+  .card { background:var(--sc-card); border:1px solid var(--line); border-radius:10px; color:var(--sc-ink);
           padding:18px 20px; margin-bottom:16px; }
   h2 { font-size:15px; margin:0 0 10px; letter-spacing:0.02em; }
+  /* ON AIR KEEPS ITS FULL-WEIGHT RED. It tells a crew the overlay is live
+     on a broadcast; a tinted version would read as a mild notice, which is
+     the opposite of what it means. White on #b00020 is 5.9:1. */
   .onair { background:#b00020; color:#fff; padding:14px 18px; border-radius:10px;
            margin-bottom:16px; font-weight:700; }
-  .offair { background:#5a5a5a; color:#fff; padding:14px 18px; border-radius:10px;
+  /* OFF AIR: DARKER THAN THE CARD, NOT LIGHTER.
+     The first attempt lightened it to #4a5563 to separate it from the
+     background -- and that put it at 1.03:1 against the ON AIR red. The
+     two states this page exists to distinguish had almost identical
+     LUMINANCE, so on a colour-safe monitor, or to a red-blind viewer, they
+     read the same at a glance.
+     Darker instead: 1.72:1 from the red, and separation by brightness is
+     the one channel that survives every kind of colour blindness. It also
+     matches the meaning -- OFF AIR is the resting state, ON AIR is the
+     alarm, so the alarm should be the brighter of the two.
+     The border keeps it distinct from the card, which the fill no longer
+     does on its own. */
+  .offair { background:#2c343e; color:#fff; border:1px solid var(--sc-rule-strong);
+            padding:14px 18px; border-radius:10px;
             margin-bottom:16px; font-weight:700; }
   .onair .what, .offair .what { font-size:20px; display:block; margin-top:4px; }
   .onair .note, .offair .note { font-weight:500; font-size:13px; opacity:0.9;
@@ -51,32 +91,34 @@
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th { text-align:left; color:var(--muted); font-weight:600; padding:6px 8px;
        border-bottom:2px solid var(--line); font-size:12px; }
-  td { padding:8px; border-bottom:1px solid #f0f0f0; vertical-align:top; }
+  td { padding:8px; border-bottom:1px solid var(--sc-rule); vertical-align:top; }
   td.what { font-weight:700; white-space:nowrap; }
   td.desc { color:var(--muted); }
   /* Field names, not prose. A production team needs the exact strings to
      bind an overlay to, and twenty-six of them run together in a
      sentence -- as chips they are scannable and obviously literal. */
   td.desc .fields { margin-top:5px; display:flex; flex-wrap:wrap; gap:3px; }
-  td.desc .fields code { background:#eef1f4; border:1px solid #dde1e6; border-radius:4px;
-    padding:1px 5px; font-size:10.5px; color:#2b3440; }
+  td.desc .fields code { background:var(--sc-raise); color:var(--sc-ink); border:1px solid var(--sc-rule); border-radius:4px;
+    padding:1px 5px; font-size:10.5px; color:var(--sc-ink); }
   code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:11px;
-         background:var(--sc-page, #f4f3ef); padding:2px 5px; border-radius:3px; word-break:break-all; }
+         background:var(--sc-raise); color:var(--sc-ink); padding:2px 5px; border-radius:3px; word-break:break-all; }
   button { font-family:inherit; cursor:pointer; }
-  .copy { background:var(--green); color:#fff; border:none; border-radius:5px;
+  /* --green is a LIGHT green now; white text on it is unreadable. Dark ink
+     on a light fill, as the amber buttons get elsewhere. */
+  .copy { background:var(--green); color:#0d1117; border:none; border-radius:5px;
           padding:5px 11px; font-size:12px; font-weight:700; white-space:nowrap; }
-  .copy.done { background:var(--sc-green, #1a7a4c); }
-  .send { background:var(--sc-navy, #1a1a2e); color:#fff; border:none; border-radius:5px;
+  .copy.done { background:var(--sc-green-dark); color:#0d1117; }
+  .send { background:var(--sc-navy); color:var(--sc-ink); border:1px solid var(--sc-rule-strong); border-radius:5px;
           padding:6px 13px; font-size:12px; font-weight:700; }
-  .send.done { background:var(--sc-green, #1a7a4c); }
+  .send.done { background:var(--sc-green-dark); color:#0d1117; border-color:var(--sc-green); }
   .fmt { background:none; border:1px solid var(--line); border-radius:5px;
          padding:4px 10px; font-size:12px; font-weight:600; color:var(--muted); }
-  .fmt.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .fmt.on { background:var(--ink-fill); color:var(--sc-ink); border-color:var(--sc-rule-strong); }
   .hint { font-size:13px; color:var(--muted); line-height:1.6; }
   .hint strong { color:var(--ink); }
   .warn { background:var(--sc-amber-soft, #fff8e6); border-left:3px solid var(--sc-amber-text, #a37a00); padding:10px 14px;
           border-radius:4px; font-size:13px; margin-top:12px; }
-  a.back { color:var(--green); font-weight:600; text-decoration:none; font-size:13px; }
+  a.back { color:var(--sc-link); font-weight:600; text-decoration:none; font-size:13px; }
   #gate { padding:40px 20px; text-align:center; color:var(--muted); }
 </style>
 </head>
