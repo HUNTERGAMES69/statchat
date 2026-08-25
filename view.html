@@ -905,10 +905,66 @@ function extractNameTag(rawName){
         const n = parseFloat(t);
         return isNaN(n) ? true : n !== 0;
       });
+      // LONG NAMES SHORTEN TO AN INITIAL -- BUT NEVER INTO A DUPLICATE.
+      // --------------------------------------------------------------
+      // Opponent rosters are uploaded per game and carry names far longer
+      // than ours (the Neville roster tops out at 16 characters), and one
+      // long name pushes the numeric columns off the tile.
+      //
+      // 18 because the tightest table here is Passing: seven numeric
+      // columns leave roughly 180px for the name in a half-quad, about 26
+      // characters at 13px. 18 sits inside that with room for the
+      // uppercase rendering, and leaves every name on our roster alone.
+      //
+      // THE PART THAT MATTERS MORE THAN THE NUMBER: abbreviating can make
+      // two players identical. "Jarivs Blackston" and "James Blackston"
+      // both become "J. Blackston" -- and in a STATISTICS table that is not
+      // cosmetic, it attributes one player's numbers to another with no way
+      // for a reader to tell. The short form is therefore used only when it
+      // is unique among the names in the SAME table; otherwise the full
+      // name stays and is allowed to be long.
+      // A clipped name is a display problem. A wrong name is a data problem.
+      //
+      // Suffixes are kept: "Kionte' Mims II" -> "K. Mims II", never
+      // "K. Mims", which would lose information AND invite the collision
+      // above against a plain Mims.
+      const NAME_LIMIT = 18;
+      function shortenName(full){
+        const raw = String(full == null ? '' : full).trim();
+        if (raw.length <= NAME_LIMIT) return raw;
+        const parts = raw.split(/\s+/);
+        if (parts.length < 2) return raw;          // one word, no initial to take
+        const first = parts.shift();
+        const last = parts.join(' ');              // everything else, verbatim
+        if (!last) return raw;
+        // SUFFIXES NEED NO SPECIAL CASE. An earlier version popped "Jr." or
+        // "III" off the end and appended it back after the surname -- which
+        // is exactly where joining the remaining parts already puts it. The
+        // branch could not change the output for any input, and a test
+        // written to cover it could not fail. Keeping only the join means
+        // "Kionte' Mims II" -> "K. Mims II" for the same reason every other
+        // trailing word is kept: nothing is thrown away.
+        return first.charAt(0).toUpperCase() + '. ' + last;
+      }
+      // Judged across the whole table at once, because uniqueness only means
+      // anything relative to the other names shown beside it.
+      function shortenAll(rows){
+        const short = rows.map(function(r){ return shortenName(r.name); });
+        const counts = {};
+        short.forEach(function(n){ counts[n] = (counts[n] || 0) + 1; });
+        return rows.map(function(r, idx){
+          const s = short[idx];
+          const clashesWithShort = counts[s] > 1;
+          const clashesWithFull = rows.some(function(o, j){ return j !== idx && o.name === s; });
+          return (clashesWithShort || clashesWithFull) ? r.name : s;
+        });
+      }
+
       const table = (headers, rows, applyLeaderHighlight) => {
         let h = '<table class="player-stat-table"><tr><th></th>' + headers.map(x => '<th>' + x + '</th>').join('') + '</tr>';
+        const displayNames = shortenAll(rows);
         let highlighted = false;
-        rows.forEach(r => {
+        rows.forEach((r, ri) => {
           // Leader highlight, scoped narrowly -- see the note by
           // leaderTint's own declaration above for the full history and
           // reasoning. Three separate gates, all required: leaderTint
@@ -925,7 +981,7 @@ function extractNameTag(rawName){
             r.name !== 'TEAM' && r.name !== 'Unknown';
           if (shouldHighlight) highlighted = true;
           const style = shouldHighlight ? ' style="background:' + leaderTint + ';"' : '';
-          h += '<tr' + style + '><td>' + r.name + '</td>' + r.values.map(v => '<td>' + v + '</td>').join('') + '</tr>';
+          h += '<tr' + style + '><td>' + displayNames[ri] + '</td>' + r.values.map(v => '<td>' + v + '</td>').join('') + '</tr>';
         });
         return h + '</table>';
       };
