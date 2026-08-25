@@ -90,6 +90,11 @@
   .stat-tile-grid { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr 1fr; gap:8px; flex:1; min-height:0; }
   .stat-tile { background:#f5f7fa; border-radius:8px; padding:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
   .stat-tile-value { font-size:34px; font-weight:500; color:var(--sc-navy, #1a1a2e); line-height:1.1; }
+  /* The halftime figure. Option A: same line, smaller, muted -- it is a
+     reference for the number beside it, not a number in its own right.
+     19px against 34px keeps four digits and a bracket on one line, which
+     C (same size, lighter) would not at 1042 [518]. */
+  .stat-tile-half { font-size:19px; font-weight:500; color:#8a94a0; margin-left:6px; }
   .stat-tile-label { font-size:16px; font-weight:700; color:#777; text-transform:uppercase; letter-spacing:0.03em; margin-top:3px; }
   .inline-stat-line { display:flex; gap:5px; margin-bottom:5px; }
   .inline-stat-item { flex:1; white-space:nowrap; text-align:center; background:#f5f7fa; border-radius:6px; padding:7px 4px; display:flex; flex-direction:column; align-items:center; }
@@ -1984,6 +1989,27 @@ function extractNameTag(rawName){
 
   function renderTeamSummary(){
     const box = computeBoxScore(plays);
+
+    // THE GAME AS IT STOOD AT HALFTIME.
+    // ---------------------------------------------------------------------
+    // Total, pass and rush each carry a bracketed second figure from the
+    // second half onward: what that number was when the half ended.
+    //
+    // Computed by running the SAME computeBoxScore over the first-half
+    // plays, not by snapshotting a running total. A snapshot would be wrong
+    // the moment a first-half play is corrected after halftime -- which is
+    // ordinary, since corrections are entered when somebody notices, not
+    // when the mistake happened.
+    //
+    // Quarters 1 and 2, always. Overtime accrues into the game total and
+    // leaves the bracket alone: it is a fixed reference point, and a
+    // reference that moves is not one.
+    const firstHalfPlays = plays.filter(p => (p.quarter || 0) <= 2);
+    const halfBox = computeBoxScore(firstHalfPlays);
+    // FROM THE FIRST SECOND-HALF PLAY, not from the quarter changing. At
+    // the Q3 kickoff the two figures are identical -- "284 [284]" -- which
+    // reads as a bug rather than as information.
+    const showHalf = plays.some(p => (p.quarter || 0) >= 3);
     // Needed for the possession marker on each team's header. This
     // function did not previously care who had the ball.
     const liveState = computeState(plays);
@@ -2036,21 +2062,32 @@ function extractNameTag(rawName){
       const d3 = own.d3Pct !== null ? own.d3conv + ' of ' + own.d3att + ' (' + own.d3Pct + '%)' : '—';
       const pen = penState.penalties[teamKey];
 
-      // Completions and attempts alongside the yardage: 180 passing yards
-      // reads very differently at 12 of 18 than at 12 of 34, and the
-      // number alone hid that. Same for rushing -- yards per carry is the
-      // number a coach actually reacts to, and it needs the attempts.
-      const sumOf = (bucket, key) =>
-        Object.keys(bucket).reduce((t, n) => t + (bucket[n][key] || 0), 0);
-      const passLine = sumOf(s.passing, 'comp') + ' / ' + passYds;
-      const rushLine = sumOf(s.rushing, 'att') + ' / ' + rushYds;
+      // COMPLETIONS AND ATTEMPTS REMOVED FROM THESE TWO TILES, 25 Aug 2026.
+      // ---------------------------------------------------------------
+      // They were here deliberately -- "180 passing yards reads very
+      // differently at 12 of 18 than at 12 of 34" -- and that argument
+      // still holds, which is why comp and att remain in the per-category
+      // tables further down this page. What changed is what these three
+      // tiles are FOR: a game total beside its halftime figure. Two pairs
+      // of numbers in one tile is one pair too many at 34px.
+      const yardsOf = (bucket) =>
+        Object.keys(bucket).reduce((t, n) => t + (bucket[n].yds || 0), 0);
+      const hs = halfBox[teamKey];
+      const halfPass  = yardsOf(hs.passing);
+      const halfRush  = yardsOf(hs.rushing);
+      const halfTotal = halfPass + halfRush;
+      // Interpolated as HTML, so it is built from numbers this function
+      // computed rather than from anything a scorer typed.
+      const withHalf = (val, half) => showHalf
+        ? val + '<span class="stat-tile-half">[' + half + ']</span>'
+        : String(val);
 
       const topSec = (liveState.possessionTime || {})[teamKey] || 0;
       const tiles = [
         [possessions[teamKey] || 0, 'Possessions'],
-        [totalYds, 'Total Yards'],
-        [passLine, 'Comp / Pass Yds'],
-        [rushLine, 'Att / Rush Yds'],
+        [withHalf(totalYds, halfTotal), 'Total Yards'],
+        [withHalf(passYds, halfPass), 'Pass Yards'],
+        [withHalf(rushYds, halfRush), 'Rush Yards'],
         [playsFor(teamKey), 'Total Plays'],
         [turnovers[teamKey] || 0, 'Turnovers'],
         [pen.count + '-' + pen.yds, 'Penalties'],
