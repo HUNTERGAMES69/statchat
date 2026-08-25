@@ -260,6 +260,31 @@ function audit(file) {
     needs.push([/:focus-visible(?![a-zA-Z])/, 'a visible focus ring — the default outline is dark ' +
       'and disappears on a dark card']);
   }
+  // A LATER `background:` SHORTHAND WIPES AN EARLIER background-image.
+  // This has now cost two rounds: once on the dashboard's season picker,
+  // then again on the roster's, two hours after I wrote the rule down. The
+  // chevron is drawn as a background-image; any later shorthand on a
+  // selector that also matches the select silently removes it, and the
+  // field stops looking like a dropdown.
+  //
+  // Checked by parse rather than by reading: find the rule that draws a
+  // chevron, then look for a later rule matching `select` that uses the
+  // shorthand.
+  {
+    const chevron = rules.find(r => /background-image:\s*url\(["']?data:image\/svg/.test(r.body)
+                                 && /select/.test(r.sel));
+    if (chevron) {
+      const wiped = rules.find(r => r.at > chevron.at &&
+        /(^|[;{\s])background\s*:/.test(r.body) &&
+        r.sel.split(',').some(one => /(^|[\s>])select$/.test(one.trim())));
+      if (wiped) {
+        findings.push({ kind: 'FAIL', msg: 'a later `background:` shorthand on "' +
+          wiped.sel + '" resets the chevron drawn by "' + chevron.sel +
+          '" — use background-color there, or the dropdown arrow disappears' });
+      }
+    }
+  }
+
   // THE LOGO PLATE, asserted POSITIVELY. Removing it leaves no light
   // background, so a check that only hunts light colours cannot see the
   // mark vanish into the card. logo.png is dark-on-light artwork.
