@@ -915,9 +915,16 @@
 
   async function init(){
     const { data: teamRows } = await supabaseClient
+      // EXACTLY ONE ROW, OR AN ERROR. `is_our_team` is true for every
+      // tenant's team since there has been more than one tenant, so this
+      // returned all of them and took whichever came first. maybeSingle()
+      // is correct for a tenant (009 scopes teams to one row) and fails
+      // LOUDLY for the platform -- which is the right outcome for a page
+      // that cannot tell whose data it is showing, and on this page could
+      // let it EDIT another customer's branding.
       .from('teams').select('primary_color, secondary_color, logo_url, current_season_year')
-      .eq('is_our_team', true).limit(1);
-    ourBranding = (teamRows && teamRows[0]) || {};
+      .maybeSingle();
+    ourBranding = teamRows || {};
 
     const { data: allGames, error } = await supabaseClient
       .from('games').select('season_year').eq('status', 'final')

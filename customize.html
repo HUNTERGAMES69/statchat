@@ -162,18 +162,29 @@
 
   async function init(){
     const { data, error } = await supabaseClient
+      // EXACTLY ONE ROW, OR AN ERROR. `is_our_team` is true for every
+      // tenant's team since there has been more than one tenant, so this
+      // returned all of them and took whichever came first. maybeSingle()
+      // is correct for a tenant (009 scopes teams to one row) and fails
+      // LOUDLY for the platform -- which is the right outcome for a page
+      // that cannot tell whose data it is showing, and on this page could
+      // let it EDIT another customer's branding.
       .from('teams').select('id, name, full_name, logo_url, primary_color, secondary_color, current_season_year')
-      .eq('is_our_team', true).limit(1);
+      .maybeSingle();
     if (error){
       showView('mainView');
       showMsg('Could not load your team: ' + error.message, 'error');
       return;
     }
-    if (!data || data.length === 0){
+    // maybeSingle(): the row itself, or null. `data.length === 0` was
+    // silently false on an object, so this page would have redirected
+    // to roster.html only when the query errored, never when a team
+    // was genuinely absent.
+    if (!data){
       window.location.href = 'roster.html';
       return;
     }
-    const team = data[0];
+    const team = data;
     ourTeamId = team.id;
     document.getElementById('teamNameInput').value = team.name;
     document.getElementById('fullNameInput').value = team.full_name || '';

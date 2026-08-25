@@ -454,12 +454,22 @@
   async function loadDashboard(){
     const { data, error } = await supabaseClient
       .from('teams')
+      // EXACTLY ONE ROW, OR AN ERROR. maybeSingle() rather than limit(1):
+      // migration 009 scopes `teams` to the caller's tenant, so a tenant
+      // user has precisely one team and this is simply correct. The
+      // PLATFORM account sees every tenant's team, and this now FAILS
+      // LOUDLY instead of silently rendering an arbitrary customer's data
+      // -- which is what `.eq('is_our_team', true).limit(1)` did, because
+      // that flag is true for every tenant.
+      //
+      // A page that cannot tell which tenant it is showing should not
+      // show one.
       .select('name, full_name, logo_url, primary_color, secondary_color, current_season_year')
-      .eq('is_our_team', true)
-      .limit(1);
+      .maybeSingle();
     let seasonYear = new Date().getFullYear();
-    if (!error && data && data.length > 0){
-      const team = data[0];
+    // maybeSingle(): the row itself, or null.
+    if (!error && data){
+      const team = data;
       document.getElementById('teamHeading').textContent = team.full_name || team.name;
       if (team.primary_color){
         document.getElementById('teamHeading').style.color = team.primary_color;

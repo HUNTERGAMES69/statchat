@@ -229,16 +229,26 @@
   async function loadTeam(){
     const { data, error } = await supabaseClient
       .from('teams')
+      // EXACTLY ONE ROW, OR AN ERROR. maybeSingle() rather than limit(1):
+      // migration 009 scopes `teams` to the caller's tenant, so a tenant
+      // user has precisely one team and this is simply correct. The
+      // PLATFORM account sees every tenant's team, and this now FAILS
+      // LOUDLY instead of silently rendering an arbitrary customer's data
+      // -- which is what `.eq('is_our_team', true).limit(1)` did, because
+      // that flag is true for every tenant.
+      //
+      // A page that cannot tell which tenant it is showing should not
+      // show one.
       .select('id, name, current_season_year')
-      .eq('is_our_team', true)
-      .limit(1);
+      .maybeSingle();
     if (error){
       showView('teamSetupView');
       showMsg('teamSetupMsg', 'Could not check for an existing team: ' + error.message, 'error');
       return;
     }
-    if (data && data.length > 0){
-      const team = data[0];
+    // maybeSingle(): the row itself, or null.
+    if (data){
+      const team = data;
       ourTeamId = team.id;
       // Falls back to the calendar year rather than leaving this null
       // outright. A team that has never set a season year is a real,

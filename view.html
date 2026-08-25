@@ -316,6 +316,11 @@
   }
 
   let currentGameId = null;
+  // Held for refreshBranding(), which polls long after the game object
+  // has gone out of scope. Scoping that query needs the tenant, and
+  // re-reading the game every ten minutes to learn it would be a
+  // second query to answer a question already answered once.
+  let currentGameTenantId = null;
   let isResultsMode = false;
   let currentGameStatus = null;
   let TEAMS = { teamA: {}, teamB: {} };
@@ -2242,12 +2247,23 @@ function extractNameTag(rawName){
       return;
     }
     const game = gameRows[0];
+    currentGameTenantId = game.tenant_id;
     gameLabel = game.designator;
     currentGameStatus = game.status;
     quarterLengthSec = game.quarter_length_seconds || 720;
 
+    // BY THE GAME'S OWN TENANT, not by is_our_team.
+    // -----------------------------------------------------------------
+    // `is_our_team` meant "the only team" when there was one tenant. It
+    // is TRUE for every tenant's team now, so this query returned every
+    // team on the platform and .limit(1) took whichever Postgres felt
+    // like -- an arbitrary school's colours on somebody else's page.
+    //
+    // The game already knows whose it is. Asking it is exact for a
+    // tenant, for the platform, and for an anonymous recap reader, none
+    // of which the flag could distinguish.
     const { data: teamRows } = await supabaseClient
-      .from('teams').select('primary_color, secondary_color, logo_url').eq('is_our_team', true).limit(1);
+      .from('teams').select('primary_color, secondary_color, logo_url').eq('tenant_id', game.tenant_id).limit(1);
     const ourBranding = (teamRows && teamRows[0]) || {};
 
     // Requested directly: this has to run and finish BEFORE the current
@@ -2448,8 +2464,10 @@ function extractNameTag(rawName){
       lastBrandingCheck = Date.now();
       try {
         const { data } = await supabaseClient
+        // SCOPED, like the initial load above. This one polls, so it
+        // outlives the game object and needs the tenant kept for it.
           .from('teams').select('primary_color, secondary_color, logo_url')
-          .eq('is_our_team', true).limit(1);
+          .eq('tenant_id', currentGameTenantId).limit(1);
         const b = (data && data[0]) || {};
         if (!TEAMS.teamA) return;
         // Only repaint when something actually differs -- a re-render on

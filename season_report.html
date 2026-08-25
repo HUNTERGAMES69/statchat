@@ -699,9 +699,16 @@ function isAdminMarker(p){
     }
     seasonYearLabel = season;
 
+      // EXACTLY ONE ROW, OR AN ERROR. `is_our_team` is true for every
+      // tenant's team now, so the old query returned all of them and
+      // took whichever came first. This report runs before any game is
+      // loaded, so there is no game to ask -- and maybeSingle() is
+      // correct for a tenant (009 scopes teams to one row) and fails
+      // loudly for the platform, which is the right outcome for a page
+      // that cannot tell whose season it is showing.
     const { data: teamRows } = await supabaseClient
-      .from('teams').select('primary_color, secondary_color, logo_url').eq('is_our_team', true).limit(1);
-    seasonAgg.ourBranding = (teamRows && teamRows[0]) || {};
+      .from('teams').select('primary_color, secondary_color, logo_url').maybeSingle();
+      seasonAgg.ourBranding = teamRows || {};
 
     const { data: gameRows, error: gameError } = await supabaseClient
       .from('games').select('*').eq('season_year', parseInt(season)).eq('status', 'final')

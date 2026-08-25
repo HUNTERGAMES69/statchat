@@ -670,15 +670,28 @@
     editGameId = new URLSearchParams(window.location.search).get('edit');
 
     const { data: teams, error: teamError } = await supabaseClient
-      .from('teams').select('id, name, current_season_year').eq('is_our_team', true).limit(1);
-    if (teamError || !teams || teams.length === 0){
+      // EXACTLY ONE ROW, OR AN ERROR. maybeSingle() rather than limit(1):
+      // migration 009 scopes `teams` to the caller's tenant, so a tenant
+      // user has precisely one team and this is simply correct. The
+      // PLATFORM account sees every tenant's team, and this now FAILS
+      // LOUDLY instead of silently rendering an arbitrary customer's data
+      // -- which is what `.eq('is_our_team', true).limit(1)` did, because
+      // that flag is true for every tenant.
+      //
+      // A page that cannot tell which tenant it is showing should not
+      // show one.
+      .from('teams').select('id, name, current_season_year').maybeSingle();
+    // maybeSingle() returns the ROW or null, never an array. The old
+    // `teams.length === 0` silently evaluated false on an object, so
+    // this page would have reported no team at all.
+    if (teamError || !teams){
       showView('mainView');
       showMsg('setupMsg', 'No team found yet — set up your Team Roster first.', 'error');
       return;
     }
-    ourTeamId = teams[0].id;
-    if (teams[0].current_season_year){
-      document.getElementById('seasonYear').value = teams[0].current_season_year;
+    ourTeamId = teams.id;
+    if (teams.current_season_year){
+      document.getElementById('seasonYear').value = teams.current_season_year;
     }
 
     if (editGameId){

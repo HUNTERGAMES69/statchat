@@ -482,8 +482,18 @@
       return;
     }
 
+    // BY THE GAME'S OWN TENANT, not by is_our_team.
+    // -----------------------------------------------------------------
+    // `is_our_team` meant "the only team" when there was one tenant. It
+    // is TRUE for every tenant's team now, so this query returned every
+    // team on the platform and .limit(1) took whichever Postgres felt
+    // like -- an arbitrary school's colours on somebody else's page.
+    //
+    // The game already knows whose it is. Asking it is exact for a
+    // tenant, for the platform, and for an anonymous recap reader, none
+    // of which the flag could distinguish.
     const { data: teamRows } = await supabaseClient
-      .from('teams').select('primary_color, secondary_color, logo_url').eq('is_our_team', true).limit(1);
+      .from('teams').select('primary_color, secondary_color, logo_url').eq('tenant_id', game.tenant_id).limit(1);
     const ourBranding = (teamRows && teamRows[0]) || {};
 
     buildTeams(game, rosterRows || [], ourBranding);
