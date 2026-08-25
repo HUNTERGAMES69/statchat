@@ -90,9 +90,34 @@ function run() {
 
   const g = live(TOOLBAR);
   if (!/class="scMark-inline"/.test(g)) bad(TOOLBAR, 'has no StatChat mark in the header');
-  if (!/\.scMark-inline\s*\{[^}]*width:22px/.test(g)) {
-    bad(TOOLBAR, 'the toolbar mark is not 22px');
-  }
+  const chkNum = (expected, actual) => {
+    if (expected == null) { bad(TOOLBAR, 'could not read .hdr-btn metrics'); return; }
+    if (actual !== expected) {
+      bad(TOOLBAR, 'the toolbar mark is ' + actual + 'px but .hdr-btn computes to ' +
+          expected + 'px — #headerLeft stretches its children, so a mark that does not ' +
+          'match sits at a different height from the buttons beside it');
+    }
+  };
+  // THE TOOLBAR MARK MUST MATCH .hdr-btn'S BOX. #headerLeft is
+  // align-items:stretch, so the buttons size to the row; a mark with its
+  // own height and align-self:center opts out and lands at a different
+  // height from the controls beside it. Reported 25 Aug.
+  //
+  // Asserted as a RELATIONSHIP: whatever height the mark declares must be
+  // what .hdr-btn's own numbers add up to. A hardcoded 30 here would drift
+  // silently the first time the buttons change.
+  const btn = /\.hdr-btn\s*\{([^}]*)\}/.exec(g);
+  const num = (css, prop) => {
+    const m = new RegExp(prop + ':\\s*(\\d+)px').exec(css || '');
+    return m ? Number(m[1]) : null;
+  };
+  const pad = /padding:\s*(\d+)px/.exec(btn ? btn[1] : '');
+  const expected = btn
+    ? num(btn[1], 'line-height') + (pad ? Number(pad[1]) * 2 : 0) +
+      (num(btn[1], 'border-width') || 0) * 2
+    : null;
+  const markH = num((/\.scMark-inline\s*\{([^}]*)\}/.exec(g) || [])[1], 'height');
+  chkNum(expected, markH);
 
   // The exclusions are asserted too: adding a mark to a print report would
   // double up with the lockup already there.
