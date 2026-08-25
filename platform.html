@@ -445,22 +445,26 @@
   // ---- tenants ----------------------------------------------------------
   // A tenant may field several sports, so the embedded `teams` is a list.
   // The first one with a logo wins; a tenant whose teams have none gets a
-  // ---- demo seeding and reset -------------------------------------------
-  // Both prompt for the game, because a tenant may hold several demos and
-  // picking the wrong one is the whole risk. The uuid is typed rather than
-  // chosen from a list: a list would be friendlier, and this is a control
-  // used a handful of times by one person who has the ids to hand.
+  // ---- demo reset --------------------------------------------------------
+  // ONE ITEM, NO QUESTIONS. An earlier version offered seed and reset as
+  // separate controls with dropdowns for the source game, the target and the
+  // quarter -- three decisions with one right answer each, every time.
+  //
+  // The seed is now captured ONCE by capture_demo_seed() in the SQL editor
+  // and stored as a single static row, so the button has nothing to ask:
+  // reset_demo() takes no arguments and already knows which game it rebuilds.
   document.getElementById('tenantsBody').addEventListener('click', async (e) => {
-    const demoBtn = e.target.closest('[data-demo]');
+    const demoBtn  = e.target.closest('[data-demo]');
+    const resetBtn = e.target.closest('[data-resetdemo]');
+
     if (demoBtn){
       const turningOn = demoBtn.dataset.on === '0';
       if (!confirm((turningOn ? 'Mark' : 'Unmark') + ' ' + demoBtn.dataset.name +
                    ' as a demo school?' +
-                   (turningOn ? '\n\nIts games can then be seeded from a real game ' +
-                                'and reset back afterwards.' : ''))) return;
+                   (turningOn ? '\n\nIts game can then be reset to the demo seed ' +
+                                'from this menu.' : ''))) return;
       const { error } = await supabaseClient.rpc('set_tenant_demo', {
-        p_tenant: demoBtn.getAttribute('data-demo'),
-        p_demo: turningOn
+        p_tenant: demoBtn.getAttribute('data-demo'), p_demo: turningOn
       });
       if (error){ showMsg('Could not change that: ' + esc(error.message), 'error'); return; }
       showMsg(esc(demoBtn.dataset.name) + (turningOn ? ' is now a demo school.'
@@ -469,46 +473,16 @@
       return;
     }
 
-    const seedBtn  = e.target.closest('[data-seed]');
-    const resetBtn = e.target.closest('[data-resetdemo]');
-    if (!seedBtn && !resetBtn) return;
-    const name = (seedBtn || resetBtn).dataset.name;
-
-    if (seedBtn){
-      const demoId = prompt('Seed a demo game for ' + name +
-        '.\n\nGame id of the DEMO game to fill:');
-      if (!demoId) return;
-      const srcId = prompt('Game id of the SOURCE game to copy plays from.\n\n' +
-        'Its players never appear: the demo roster replaces them and the play ' +
-        'text is rewritten.');
-      if (!srcId) return;
-      const q = prompt('Copy plays through which quarter?\n\n' +
-        '2 leaves the demo at halftime with a real first half behind it.', '2');
-      if (q === null) return;
-      showMsg('Seeding\u2026', 'info');
-      const { data, error } = await supabaseClient.rpc('seed_demo_game', {
-        p_demo_game: demoId.trim(), p_source_game: srcId.trim(),
-        p_through_quarter: parseInt(q, 10) || 2
-      });
-      if (error){ showMsg('Could not seed: ' + esc(error.message), 'error'); return; }
-      showMsg('Seeded ' + data + ' plays into the demo game, and saved that as its ' +
-              'reset point.', 'success');
-      await loadTenants();
-      return;
-    }
-
-    // RESET. Named in the prompt, because the risk is the wrong game -- and
-    // unlike the seed this one throws work away.
-    const demoId = prompt('Reset a demo game for ' + name +
-      '.\n\nEverything entered since it was seeded is discarded.\n\n' +
-      'Game id of the demo game to reset:');
-    if (!demoId) return;
+    if (!resetBtn) return;
+    // The one confirmation worth keeping: this throws away whatever was
+    // entered during the last demonstration.
+    if (!confirm('Reset the demo for ' + resetBtn.dataset.name + '?\n\n' +
+                 'Everything entered since the last reset is discarded and the ' +
+                 'game goes back to halftime.')) return;
     showMsg('Resetting\u2026', 'info');
-    const { data, error } = await supabaseClient.rpc('reset_demo_game', {
-      p_demo_game: demoId.trim()
-    });
+    const { data, error } = await supabaseClient.rpc('reset_demo');
     if (error){ showMsg('Could not reset: ' + esc(error.message), 'error'); return; }
-    showMsg('Demo game reset to ' + data + ' plays.', 'success');
+    showMsg('Demo reset \u2014 ' + data + ' plays restored.', 'success');
     await loadTenants();
   });
 
@@ -679,11 +653,11 @@
                 // other, so hiding these is about not offering a control that
                 // would be rejected -- not about safety, which lives in the
                 // function.
+                // ONE ITEM. The seed is captured once in the SQL editor and
+                // never from here, so there is nothing to choose.
                 (t.is_demo
-                  ? '<button data-seed="' + esc(t.id) + '" data-name="' + esc(t.name) + '">' +
-                      'Seed a demo game\u2026</button>' +
-                    '<button data-resetdemo="' + esc(t.id) + '" data-name="' + esc(t.name) + '">' +
-                      'Reset a demo game\u2026</button>'
+                  ? '<button data-resetdemo="' + esc(t.id) + '" data-name="' + esc(t.name) + '">' +
+                      'Reset demo</button>'
                   : '') +
               '</div>' +
             '</div>' +
