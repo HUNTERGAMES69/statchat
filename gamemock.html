@@ -20,16 +20,27 @@
 <title>StatChat — Game Entry</title>
 <style>
   /* THE STATCHAT MARK IN THE GAME HEADER.
-     The BOX is a direct child of #headerLeft and is layoutHeader's to do
-     what it likes with -- it may be flexed, centred, stripped of width.
-     None of that matters, because the size lives on the IMG inside, which
-     that function never sees.
-     30px is .hdr-btn's own box: 18px line-height + 5px+5px padding +
-     1px+1px border, on the same 6px radius. Same numbers, so the mark and
-     the buttons stay level if either changes. */
-  .scMarkBox { display:flex; align-items:center; flex:0 0 auto; }
-  .scMarkBox > img { width:30px; height:30px; border-radius:6px; display:block;
-                     object-fit:contain; }
+     ===================================================================
+     FIXED SIZE, VERTICALLY CENTRED. Not stretched, and that is the point.
+
+     #headerLeft is absolutely positioned with a fixed right edge, so the
+     row has a hard width limit. Stretching the mark to the banner height
+     AND keeping it square made it ~66px WIDE, which took that width from
+     ON AIR -- it is `flex:0 0 auto` on a desktop and cannot shrink, so it
+     was pushed out of shape instead. Height and width are the same
+     property here; you cannot grow one without paying for the other.
+
+     A BACKGROUND IMAGE, NOT AN <img>. A background cannot make its element
+     larger. An <img> whose height is stripped falls back to its intrinsic
+     512px, which is how this failed four times over.
+
+     ON A SPAN THAT IS A DIRECT CHILD, so `#headerLeft > *` and
+     layoutHeader() can do whatever they like to it -- there is no inner
+     element left for them to break. */
+  .scMarkBox { flex:0 0 auto; align-self:center;
+               width:40px; height:40px;
+               background:url('logo.png') center/contain no-repeat;
+               border-radius:6px; }
 
 
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
@@ -427,12 +438,14 @@
        Without this the box takes 8px+8px on a 30px mark and stands 46px
        tall beside 36px buttons. The image carries the whole height here,
        so the box adds nothing. */
-    #headerLeft > .scMarkBox { padding:0 !important; }
-    /* 36px, because that is what .hdr-btn computes to INSIDE this block:
-       18px line-height + 8px+8px padding (set just above) + 1px+1px
-       border. Desktop is 30px, from the same sum with the smaller 5px
-       padding. Two breakpoints, two button heights, two marks. */
-    .scMarkBox > img { width:36px; height:36px; }
+    /* height AND padding, both !important, both at (1,1,0) so they beat
+       `#headerLeft > *` at (1,0,0). Without the height the box collapses
+       to auto -- and a background image on a zero-height box is nothing at
+       all. */
+    #headerLeft > .scMarkBox { padding:0 !important; height:40px !important; }
+    /* Nothing to set here any more. The image is height:100% of a
+       stretched box, so it follows the row at this breakpoint exactly as
+       it does at the other one -- two button heights, one rule. */
   }
 
   /* RIGHT MARGIN RAIL -- validation and live totals.
@@ -941,7 +954,7 @@
              The wrapper is the direct child, so it absorbs all of it. The
              image is one level deeper, where neither loop can reach. No
              exemption, nothing to keep in step with the layout code. -->
-        <span class="scMarkBox"><img src="logo.png" alt="StatChat"></span>
+        <span class="scMarkBox" role="img" aria-label="StatChat"></span>
       <a class="hdr-btn" href="dashboard.html">&larr; Dashboard</a>
       <button type="button" id="onAirBanner" style="display:none;">&#9679; ON AIR</button>
     </div>
