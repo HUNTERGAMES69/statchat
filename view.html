@@ -2427,11 +2427,32 @@ function extractNameTag(rawName){
         });
       };
 
+      // FETCHED ONCE FOR EVERY PRIOR GAME, NOT ONCE PER GAME.
+      // Same fault as the two report pages: two awaits inside the loop, so
+      // each round trip waited for the last. This one runs while a crew is
+      // opening the view page before kickoff, which is the worst possible
+      // moment for a page that looks frozen.
+      // .in('game_id', ids) hits plays_game_idx and game_rosters_game_idx
+      // exactly as the per-game lookups did, under the same RLS.
+      const priorIds = priorGames.map(g => g.id);
+      const [pRosterRes, pPlaysRes] = await Promise.all([
+        supabaseClient.from('game_rosters').select('*').in('game_id', priorIds),
+        supabaseClient.from('plays').select('*').in('game_id', priorIds)
+          .order('sequence_number', { ascending: true })
+      ]);
+      const pRostersBy = new Map(), pPlaysBy = new Map();
+      for (const r of (pRosterRes.data || [])){
+        if (!pRostersBy.has(r.game_id)) pRostersBy.set(r.game_id, []);
+        pRostersBy.get(r.game_id).push(r);
+      }
+      for (const q of (pPlaysRes.data || [])){
+        if (!pPlaysBy.has(q.game_id)) pPlaysBy.set(q.game_id, []);
+        pPlaysBy.get(q.game_id).push(q);
+      }
+
       for (const priorGame of priorGames){
-        const { data: rosterRows } = await supabaseClient
-          .from('game_rosters').select('*').eq('game_id', priorGame.id);
-        const { data: rawPlays } = await supabaseClient
-          .from('plays').select('*').eq('game_id', priorGame.id).order('sequence_number', { ascending: true });
+        const rosterRows = pRostersBy.get(priorGame.id) || [];
+        const rawPlays = pPlaysBy.get(priorGame.id) || [];
         const gamePlays = (rawPlays || []).map(p => ({
           text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
           roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override

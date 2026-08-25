@@ -782,18 +782,49 @@ function isAdminMarker(p){
     }
 
     try {
+      // TWO QUERIES FOR THE WHOLE SEASON, NOT TWO PER GAME.
+      // This was a sequential loop: for each game, await the rosters, then
+      // await the plays, then move on. Every round trip waited for the one
+      // before it, so a 10-game season cost 20 trips end to end -- several
+      // seconds of a page that looks frozen, and it got WORSE as the season
+      // went on, which is exactly backwards.
+      //
+      // .in('game_id', ids) uses the same plays_game_idx and
+      // game_rosters_game_idx that a single-game lookup does, so the
+      // database does no more work; the saving is entirely in not paying
+      // the latency twenty times. RLS is untouched -- the same policies
+      // filter an IN exactly as they filter an equals.
+      //
+      // The two remaining queries run TOGETHER, so the whole load costs
+      // about one round trip regardless of how many games the season has.
+      const gameIds = gameRows.map(g => g.id);
+      const [rosterRes, playsRes] = await Promise.all([
+        supabaseClient.from('game_rosters').select('*').in('game_id', gameIds),
+        supabaseClient.from('plays').select('*').in('game_id', gameIds)
+          .order('sequence_number', { ascending: true })
+      ]);
+      if (rosterRes.error) throw new Error('Rosters: ' + rosterRes.error.message);
+      if (playsRes.error) throw new Error('Plays: ' + playsRes.error.message);
+
+      // Grouped in one pass. The order() is applied per QUERY rather than
+      // per game, but sequence_number is only ever compared within a single
+      // game, so appending in returned order preserves each game's ordering.
+      const rostersByGame = new Map(), playsByGame = new Map();
+      for (const r of (rosterRes.data || [])){
+        if (!rostersByGame.has(r.game_id)) rostersByGame.set(r.game_id, []);
+        rostersByGame.get(r.game_id).push(r);
+      }
+      for (const p of (playsRes.data || [])){
+        if (!playsByGame.has(p.game_id)) playsByGame.set(p.game_id, []);
+        playsByGame.get(p.game_id).push(p);
+      }
+
       for (const game of gameRows){
-        const { data: rosterRows, error: rosterError } = await supabaseClient
-          .from('game_rosters').select('*').eq('game_id', game.id);
-        if (rosterError) throw new Error('Roster for ' + (game.designator||game.id) + ': ' + rosterError.message);
-        const { data: gamePlaysRaw, error: playsError } = await supabaseClient
-          .from('plays').select('*').eq('game_id', game.id).order('sequence_number', { ascending: true });
-        if (playsError) throw new Error('Plays for ' + (game.designator||game.id) + ': ' + playsError.message);
-        const gamePlays = (gamePlaysRaw || []).map(p => ({
+        const gamePlays = (playsByGame.get(game.id) || []).map(p => ({
           text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
           roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
         }));
-        processGame(game, rosterRows || [], gamePlays);
+        processGame(game, rostersByGame.get(game.id) || [], gamePlays);
       }
 
       document.title = 'Season Report — ' + seasonYearLabel;

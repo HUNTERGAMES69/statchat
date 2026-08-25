@@ -904,17 +904,38 @@
       return;
     }
 
+    // TWO QUERIES FOR THE SEASON, NOT TWO PER GAME.
+    // Same fault as season_report.html: a sequential loop awaiting rosters
+    // then plays for each game in turn, so every round trip waited for the
+    // one before it. This is the page that feeds the player dropdown, so
+    // the whole picker sat empty and unresponsive for the duration --
+    // which is what "looks locked up" was.
+    //
+    // .in('game_id', ids) hits the same indexes a per-game lookup does and
+    // is filtered by the same RLS policies; the saving is in paying the
+    // latency once rather than 2N times.
+    const gameIds = gameRows.map(g => g.id);
+    const [rosterRes, playsRes] = await Promise.all([
+      supabaseClient.from('game_rosters').select('*').in('game_id', gameIds),
+      supabaseClient.from('plays').select('*').in('game_id', gameIds)
+        .order('sequence_number', { ascending: true })
+    ]);
+    const rostersByGame = new Map(), playsByGame = new Map();
+    for (const r of (rosterRes.data || [])){
+      if (!rostersByGame.has(r.game_id)) rostersByGame.set(r.game_id, []);
+      rostersByGame.get(r.game_id).push(r);
+    }
+    for (const p of (playsRes.data || [])){
+      if (!playsByGame.has(p.game_id)) playsByGame.set(p.game_id, []);
+      playsByGame.get(p.game_id).push(p);
+    }
+
     for (const game of gameRows){
-      const { data: rosterRows } = await supabaseClient
-        .from('game_rosters').select('*').eq('game_id', game.id);
-      const { data: raw } = await supabaseClient
-        .from('plays').select('*').eq('game_id', game.id)
-        .order('sequence_number', { ascending: true });
-      const gamePlays = (raw || []).map(p => ({
+      const gamePlays = (playsByGame.get(game.id) || []).map(p => ({
         text: p.text, effect: p.effect || {}, team: p.team_side, quarter: p.quarter,
         roles: p.roles, unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
       }));
-      buildTeams(game, rosterRows || [], ourBranding);
+      buildTeams(game, rostersByGame.get(game.id) || [], ourBranding);
       plays = gamePlays;
       const box = computeBoxScore(gamePlays);
       seasonGames.push({
