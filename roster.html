@@ -23,7 +23,7 @@
      inline on the anchor; the class is what the other four use, so there is
      one definition to change rather than five. */
   .backlink { text-decoration:none; padding:8px 14px; border-radius:6px;
-              border:1px solid #ccc; color:#444; font-size:13px; font-weight:600;
+              border:1px solid var(--sc-rule-strong); color:var(--sc-ink); font-size:13px; font-weight:600;
               display:inline-block; }
 
   /* THE SPREADSHEET EXAMPLE. Deliberately looks like a spreadsheet --
@@ -41,39 +41,91 @@
   .sheetMock .corner { background:#dfe4e8; min-width:26px; }
   .sheetMock .rownum { background:#eceff1; text-align:center; font-weight:700;
                        color:#5a636b; min-width:26px; padding:4px 6px; }
-  .sheetNote { margin:6px 0 0; font-size:12.5px; color:#666; }
+  /* The caption sits on the CARD, not on the white sheet above it, so it
+     follows the dark theme even though the sheet does not. */
+  .sheetNote { margin:6px 0 0; font-size:12.5px; color:var(--sc-ink-muted); }
 
   /* THE STATCHAT MARK, identical on every page reachable from the
      dashboard. Same element, same size, same place: beside the page's own
      heading. Uniformity is the point -- a mark that moves or resizes
      between screens reads as decoration rather than as the product. */
   .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
-  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block; }
+  /* Dark-on-light artwork needs a plate on a #191f27 card. */
+  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block;
+                  background:#fff; padding:2px; box-sizing:border-box; }
 
+  /* DARK, 25 August 2026. Recipe in DARK_THEME_PLAN.md.
+     Every --sc-* this page reads is defined, including those only written
+     as var(--x, #fallback): an undefined token silently becomes the
+     fallback, and every fallback here was chosen for a white page. */
+  :root{ color-scheme:dark; }
+  :root{
+    --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+    --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+    --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+    --sc-navy:#2f3a47;   /* A BUTTON FILL. Never text, never a panel. */
+    --sc-green:#a3d93f;  --sc-green-tint:rgba(124,181,24,.14);
+    --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
+    --sc-amber:#ffc72c;  --sc-amber-text:#ffc72c;
+    --sc-amber-tint:rgba(255,199,44,.13);
+    --sc-amber-soft:rgba(255,199,44,.10);
+    --sc-blue:#5aa9f0;   --sc-link:#7cb518;
+    /* Defense. Was red, which means ERROR on every other page -- the
+       sign-out button, a failed upload, delete -- so a whole unit of the
+       roster looked flagged. Violet is 58 degrees from the Offense blue
+       and 138 from the Special amber, and carries no other meaning
+       anywhere in the app. Andy's pick from defense_badge_mock.html. */
+    --sc-violet:#b98cf5;
+  }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
   .wrap { max-width:720px; margin:0 auto; }
-  .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  .card { background:var(--sc-card); border:1px solid var(--sc-rule); color:var(--sc-ink); border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:20px; margin:0 0 6px; }
-  h2 { font-size:16px; margin:0 0 14px; color:#444; }
-  p.sub { color:#888; margin:0 0 20px; font-size:14px; }
-  label { display:block; font-size:13px; margin-bottom:4px; color:#555; }
-  input, select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
-  button { padding:8px 12px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
-  button.secondary { background:#fff; color:#444; border:1px solid #ccc; }
-  button.danger { background:#fff; color:var(--sc-red, #a32d2d); border:1px solid var(--sc-red, #a32d2d); }
+  h2 { font-size:16px; margin:0 0 14px; color:var(--sc-ink); }
+  p.sub { color:var(--sc-ink-muted); margin:0 0 20px; font-size:14px; }
+  label { display:block; font-size:13px; margin-bottom:4px; color:var(--sc-ink-muted); }
+  /* A <select> ON DARK NEEDS appearance:none -- the browser paints the
+     control face natively and ignores `background`. The chevron then has
+     to be drawn back in, as a STROKED path: a fill on an open path renders
+     as a wedge. The option list is drawn by the OS and can only be reached
+     from a stylesheet, never from the select's inline style. */
+  select {
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 9'%3E%3Cpath d='M1 1.5L7 7.5L13 1.5' stroke='%23eef1f4' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 11px center;
+    background-size:12px; padding-right:34px !important; cursor:pointer;
+  }
+  select option { background:var(--sc-card); color:var(--sc-ink); }
+  /* WebKit paints autofill with an inset shadow no background rule reaches. */
+  input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus {
+    -webkit-text-fill-color:var(--sc-ink);
+    -webkit-box-shadow:0 0 0 1000px var(--sc-raise) inset;
+    caret-color:var(--sc-ink);
+    transition:background-color 9999s ease-out 0s;
+  }
+  /* The default focus outline is dark and vanishes on a dark card. */
+  input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
+    outline:2px solid var(--sc-link); outline-offset:2px;
+  }
+  input, select { padding:8px; border:1px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
+  /* Fill for the affordance, border for the edge: no fill reaches 3:1
+     against the card without going light grey. */
+  button { padding:8px 12px; border-radius:6px; border:1px solid var(--sc-rule-strong); background:var(--sc-navy, #1a1a2e); color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
+  button.danger { background:rgba(176,0,32,.16); color:var(--sc-red, #a32d2d); border:1px solid #c8455c; }
   button:disabled { opacity:0.5; cursor:default; }
   .rosterList { display:flex; flex-direction:column; }
-  .rosterRow { padding:10px 0; border-bottom:1px solid #f2f2f2; }
+  .rosterRow { padding:10px 0; border-bottom:1px solid var(--sc-rule); }
   .rosterLine1, .rosterLine2 { display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .rosterLine1 { margin-bottom:4px; }
   .rosterNameNum { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
-  .rosterPos { font-size:13px; color:#888; flex-shrink:0; }
+  .rosterPos { font-size:13px; color:var(--sc-ink-muted); flex-shrink:0; }
   .rosterActions { display:flex; gap:6px; flex-wrap:wrap; flex-shrink:0; }
   .unit-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; flex-shrink:0; }
-  .unit-offense { background:#e3f2fd; color:var(--sc-blue, #1565c0); }
-  .unit-defense { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
-  .unit-special { background:var(--sc-amber-soft, #fff8e6); color:var(--sc-amber-text, #a37a00); }
-  .unit-none { background:#eee; color:#999; }
+  .unit-offense { background:rgba(90,169,240,.16); color:var(--sc-blue); }
+  .unit-defense { background:rgba(185,140,245,.16); color:var(--sc-violet); }
+  .unit-special { background:var(--sc-amber-tint); color:var(--sc-amber-text); }
+  .unit-none { background:var(--sc-raise); color:var(--sc-ink-muted); }
   .add-row { display:flex; gap:8px; align-items:flex-end; margin-top:16px; flex-wrap:wrap; }
   .add-row > div { flex:1 1 100%; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
@@ -125,15 +177,15 @@
         <label for="rosterSeasonPicker" style="margin:0; display:inline; font-size:13px;">Season</label>
         <select id="rosterSeasonPicker" style="width:auto; min-width:100px;"></select>
       </div>
-      <div id="rosterReadOnlyBanner" class="hidden" style="background:#eef1f4; border:1px solid #cfd6dc; border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:13px; color:#4a5563;">
+      <div id="rosterReadOnlyBanner" class="hidden" style="background:var(--sc-raise); border:1px solid var(--sc-rule-strong); border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:13px; color:var(--sc-ink);">
         <strong>Read-only.</strong> Past seasons are kept exactly as they were, for reference — nothing here can be added, edited, or removed. Switch to the current season above to make changes.
       </div>
 
       <div id="rosterEditingControls" style="margin-bottom:16px;">
         <button id="uploadRosterBtn" class="secondary">Upload roster spreadsheet (.xlsx)</button>
         <input type="file" id="rosterFile" accept=".xlsx,.xls" style="display:none;">
-<div id="rosterFormatCard" style="display:none; margin-top:10px; padding:14px 16px; border:2px solid #1a4d2e; border-radius:8px; background:#f2f8f4;">
-          <p style="margin:0 0 8px; font-weight:700; font-size:15px; color:#1a4d2e;">Roster file format</p>
+<div id="rosterFormatCard" style="display:none; margin-top:10px; padding:14px 16px; border:2px solid var(--sc-green); border-radius:8px; background:rgba(124,181,24,.09);">
+          <p style="margin:0 0 8px; font-weight:700; font-size:15px; color:var(--sc-green);">Roster file format</p>
           <p style="margin:0 0 8px; font-size:14px;">A spreadsheet (.xlsx or .xls) with <strong>three columns</strong>, in this order. A header row is fine &mdash; it will be ignored.</p>
           <!-- A PICTURE OF THE FILE, not a description of it. The three-column
                table below it says the same thing in words, and people were
@@ -162,14 +214,14 @@
             <tr><td style="padding:2px 14px 2px 0;">12</td><td style="padding:2px 14px 2px 0;">Bravo Boone</td><td style="padding:2px 0;">QB</td></tr>
           </table>
           <p style="margin:0 0 8px; font-size:14px;"><strong>Position is optional.</strong> Leave column C blank for anyone you do not have a position for &mdash; a roster with positions for the starters only imports fine. <strong>List more than one if you like &mdash; only the first is used.</strong> <em>RB/WR</em>, <em>RB, WR</em> and <em>RB-WR</em> all read as <strong>RB</strong>. Put the position they mostly play first. Two players may share a number; you will be asked which is which.</p>
-          <p style="margin:0 0 10px; font-size:13px; color:#666;"><strong>Offense:</strong> QB RB FB HB TB WR SE FL SLOT TE OL OT OG G T C ATHLETE<br><strong>Defense:</strong> DB CB S FS SS LB OLB ILB MLB WLB DE DT NG NT EDGE DL<br><strong>Special teams:</strong> K P LS DS H KR PR RET</p>
+          <p style="margin:0 0 10px; font-size:13px; color:var(--sc-ink-muted);"><strong>Offense:</strong> QB RB FB HB TB WR SE FL SLOT TE OL OT OG G T C ATHLETE<br><strong>Defense:</strong> DB CB S FS SS LB OLB ILB MLB WLB DE DT NG NT EDGE DL<br><strong>Special teams:</strong> K P LS DS H KR PR RET</p>
           <button type="button" id="rosterFormatContinue">Choose file&hellip;</button>
           <button type="button" id="rosterFormatCancel" class="secondary" style="margin-left:8px;">Cancel</button>
         </div>
         <button id="clearRosterBtn" class="danger" style="margin-left:8px;">Clear this season's roster</button>
       </div>
 
-      <div id="clearRosterPanel" class="hidden" style="border:1px solid #f0d0a0; background:#fffaf0; border-radius:10px; padding:16px; margin-bottom:16px;">
+      <div id="clearRosterPanel" class="hidden" style="border:1px solid #c8922f; background:rgba(255,199,44,.09); border-radius:10px; padding:16px; margin-bottom:16px;">
         <p style="font-weight:700; margin:0 0 8px;">Clear this season's roster</p>
         <p class="sub" style="margin:0 0 8px;">Removes <strong id="clearRosterCount">every player</strong> from the currently selected season. Uploading normally MERGES into what is already here, which is right during a season and wrong when you want a clean start &mdash; use this to wipe a wrong upload and try again.</p>
         <p class="sub" style="margin:0 0 8px;"><strong>Other seasons are never affected</strong> by this, or by anything else on this page &mdash; each season's roster is its own, separate list. Every finished game also keeps its own roster snapshot, taken when the game was created, and all stats are calculated from the plays themselves. Old recaps, stat packages and season reports read exactly the same afterwards.</p>
@@ -180,7 +232,7 @@
           <button class="secondary" id="clearRosterCancelBtn">Cancel</button>
         </div>
       </div>
-      <div id="uploadPreview" class="hidden" style="background:#f7f6f2; border-radius:8px; padding:14px; margin-bottom:16px;"></div>
+      <div id="uploadPreview" class="hidden" style="background:var(--sc-raise); border:1px solid var(--sc-rule); border-radius:8px; padding:14px; margin-bottom:16px;"></div>
       <div class="rosterList" id="rosterBody"></div>
       <div class="add-row" id="rosterAddRow">
         <div><label>#</label><input type="text" id="newNumber" style="width:100%;"></div>
