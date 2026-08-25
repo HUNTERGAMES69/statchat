@@ -39,8 +39,18 @@ const TOPBAR = ['dashboard.html', 'platform.html'];
 let fails = 0;
 const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fails++; };
 
-function assertRow(file, style, label) {
+function assertRow(file, style, label, needsRule) {
   const s = style.replace(/\s+/g, ' ');
+  // A VISIBLE SEPARATION, not just a wrapping one. The wrap/gap/align
+  // rules above are phone-only -- they change nothing on a desktop, which
+  // is why a "fixed" header still looked identical to Andy on a PC. The
+  // header/title look he asked for needs the hairline and the padding.
+  if (needsRule) {
+    chk(/border-bottom:\s*1px solid/.test(s),
+        file + ': ' + label + ' has a hairline under it');
+    chk(/padding-bottom:\s*14px/.test(s) && /margin-bottom:\s*20px/.test(s),
+        file + ': ' + label + ' has 14px above the hairline and 20px below');
+  }
   chk(/flex-wrap:\s*wrap/.test(s), file + ': ' + label + ' wraps');
   chk(/gap:/.test(s), file + ': ' + label + ' has a gap');
   chk(/align-items:\s*center/.test(s),
@@ -56,14 +66,16 @@ for (const f of MARK_ROW) {
   const doc = new JSDOM(fs.readFileSync(p, 'utf8')).window.document;
   const mark = doc.querySelector('.scMark');
   if (!mark) { chk(false, f + ': no .scMark header'); continue; }
-  assertRow(f, mark.parentElement.getAttribute('style') || '', 'header row');
+  assertRow(f, mark.parentElement.getAttribute('style') || '', 'header row', true);
 }
 
 for (const f of TOPBAR) {
   const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
   const m = /\.topbar\s*\{([^}]*)\}/.exec(src);
   if (!m) { chk(false, f + ': no .topbar rule'); continue; }
-  assertRow(f, m[1], '.topbar');
+  // dashboard.html's topbar IS its whole card, so a hairline would sit a
+  // few pixels above the card's own border. The card edge separates it.
+  assertRow(f, m[1], '.topbar', f !== 'dashboard.html');
 }
 
 // AND THE SEVEN MARK ROWS ARE IDENTICAL TO EACH OTHER. The drift that
