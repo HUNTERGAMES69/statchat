@@ -190,13 +190,27 @@ export default async function handler(req) {
     const rows = r.ok ? await r.json() : [];
     game = rows && rows[0];
 
-    const t = await fetch(SUPABASE_URL +
-      '/rest/v1/teams?select=primary_color&is_our_team=is.true&limit=1', {
-      headers: { apikey: SUPABASE_SECRET_KEY,
-                 Authorization: 'Bearer ' + SUPABASE_SECRET_KEY }
-    });
-    const tr = t.ok ? await t.json() : [];
-    if (tr && tr[0] && tr[0].primary_color) ourColour = tr[0].primary_color;
+    // BY THE GAME'S TENANT, and this one RLS was never going to save.
+    // ------------------------------------------------------------------
+    // This endpoint reads with the SERVICE KEY, which bypasses RLS, so
+    // `is_our_team=is.true` returned every tenant's team and limit=1 took
+    // whichever came first. The link-preview card for a shared recap could
+    // therefore be painted in another school's colour -- on the image that
+    // appears in iMessage and Slack, which is the first thing anyone sees.
+    //
+    // The game is already loaded above and knows whose it is.
+    let ourRow = null;
+    if (game && game.tenant_id){
+      const t = await fetch(SUPABASE_URL +
+        '/rest/v1/teams?select=primary_color&tenant_id=eq.' +
+        encodeURIComponent(game.tenant_id) + '&limit=1', {
+        headers: { apikey: SUPABASE_SECRET_KEY,
+                   Authorization: 'Bearer ' + SUPABASE_SECRET_KEY }
+      });
+      const tr = t.ok ? await t.json() : [];
+      ourRow = (tr && tr[0]) || null;
+    }
+    if (ourRow && ourRow.primary_color) ourColour = ourRow.primary_color;
   } catch (e) {
     game = null;
   }
