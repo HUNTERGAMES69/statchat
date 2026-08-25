@@ -54,8 +54,19 @@ begin
   -- The team carries the same name to start with. It is the SPORT within
   -- the school, and a school fielding one sport should not have to think
   -- about the distinction on day one.
-  insert into public.teams (tenant_id, name, is_our_team, sport, current_season_year)
-  values (new_tenant, clean_name, true, 'football',
+  -- FULL NAME GOES ON THE TEAM AS WELL AS THE TENANT.
+  -- --------------------------------------------------------------------
+  -- It was written only to `tenants`, and customize.html reads it from
+  -- `teams` -- so a newly created tenant opened Customize, found the field
+  -- empty, and saw the input's PLACEHOLDER instead. Which read as another
+  -- school's name, because the placeholder was hardcoded "Neville High
+  -- School".
+  --
+  -- Two faults compounding: data written to one table and read from
+  -- another, and a placeholder that looked like a value. Reported as
+  -- "full name did not carry across", which is exactly what happened.
+  insert into public.teams (tenant_id, name, full_name, is_our_team, sport, current_season_year)
+  values (new_tenant, clean_name, nullif(trim(coalesce(p_full_name, '')), ''), true, 'football',
           coalesce(p_season, extract(year from now())::integer));
 
   return new_tenant;
