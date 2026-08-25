@@ -296,6 +296,37 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+  // FETCH EVERY ROW, NOT THE FIRST PAGE OF THEM.
+  // ------------------------------------------------------------------
+  // PostgREST caps a response at 1000 rows by default and says nothing
+  // when it truncates -- no error, no flag, just a short array. Fetching
+  // one game at a time never hit it, because a game is ~150 plays. Asking
+  // for a whole season in one query does: a 10-game season is ~1500 rows,
+  // so 500 went missing, and because the query is ordered by
+  // sequence_number ASCENDING the rows lost are the HIGHEST ones -- the
+  // end of every game. Q3, Q4 and the second half vanished from the
+  // charts and players who only appeared late vanished entirely.
+  //
+  // Pages explicitly with .range() until a short page comes back. Still
+  // two logical fetches rather than two per game, so the speed-up holds;
+  // it just no longer stops at the first thousand rows.
+  async function fetchAllByGame(client, table, ids, orderCol){
+    const PAGE = 1000;
+    const out = [];
+    for (let from = 0; ; from += PAGE){
+      let q = client.from(table).select('*').in('game_id', ids);
+      if (orderCol) q = q.order(orderCol, { ascending: true });
+      const { data, error } = await q.range(from, from + PAGE - 1);
+      if (error) throw error;
+      const rows = data || [];
+      out.push(...rows);
+      // A short page means there is no next one. Equal to PAGE is
+      // ambiguous, so it loops once more and gets an empty page.
+      if (rows.length < PAGE) break;
+    }
+    return out;
+  }
+
   function showView(name){
     ['loading','errorView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
   }
@@ -798,23 +829,40 @@ function isAdminMarker(p){
       // The two remaining queries run TOGETHER, so the whole load costs
       // about one round trip regardless of how many games the season has.
       const gameIds = gameRows.map(g => g.id);
-      const [rosterRes, playsRes] = await Promise.all([
-        supabaseClient.from('game_rosters').select('*').in('game_id', gameIds),
-        supabaseClient.from('plays').select('*').in('game_id', gameIds)
-          .order('sequence_number', { ascending: true })
-      ]);
-      if (rosterRes.error) throw new Error('Rosters: ' + rosterRes.error.message);
-      if (playsRes.error) throw new Error('Plays: ' + playsRes.error.message);
+      let allRosters, allPlays;
+      try {
+        [allRosters, allPlays] = await Promise.all([
+          fetchAllByGame(supabaseClient, 'game_rosters', gameIds, null),
+          fetchAllByGame(supabaseClient, 'plays', gameIds, 'sequence_number')
+        ]);
+      } catch (e) { throw new Error('Season data: ' + e.message); }
+
+      // WHAT WAS ACTUALLY FETCHED, in the console.
+      // I diagnosed this bug once from symptoms and got it wrong -- the row
+      // cap I blamed cannot fire on a one-game season. This prints the real
+      // numbers so the next question is answered with data rather than
+      // another theory. Cheap, silent to the user, and worth keeping.
+      console.log('[season report] games:', gameRows.length,
+                  '| roster rows:', allRosters.length,
+                  '| play rows:', allPlays.length);
+      {
+        const per = {};
+        allPlays.forEach(r => { per[r.game_id] = (per[r.game_id] || 0) + 1; });
+        gameRows.forEach(g => console.log('[season report]  ', (g.designator || g.id),
+          '-> plays:', per[g.id] || 0,
+          '| quarters seen:', [...new Set(allPlays.filter(r => r.game_id === g.id)
+                                                  .map(r => r.quarter))].sort().join(',') || 'none'));
+      }
 
       // Grouped in one pass. The order() is applied per QUERY rather than
       // per game, but sequence_number is only ever compared within a single
       // game, so appending in returned order preserves each game's ordering.
       const rostersByGame = new Map(), playsByGame = new Map();
-      for (const r of (rosterRes.data || [])){
+      for (const r of (allRosters)){
         if (!rostersByGame.has(r.game_id)) rostersByGame.set(r.game_id, []);
         rostersByGame.get(r.game_id).push(r);
       }
-      for (const p of (playsRes.data || [])){
+      for (const p of (allPlays)){
         if (!playsByGame.has(p.game_id)) playsByGame.set(p.game_id, []);
         playsByGame.get(p.game_id).push(p);
       }

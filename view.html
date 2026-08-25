@@ -457,6 +457,37 @@ h2{ color:var(--v-mute) !important; }
   // to scroll regardless of the real screen/browser size. Skipped
   // entirely below the mobile breakpoint, where the layout is already
   // its own natural, responsive, scrolling design.
+
+  // FETCH EVERY ROW, NOT THE FIRST PAGE OF THEM.
+  // ------------------------------------------------------------------
+  // PostgREST caps a response at 1000 rows by default and says nothing
+  // when it truncates -- no error, no flag, just a short array. Fetching
+  // one game at a time never hit it, because a game is ~150 plays. Asking
+  // for a whole season in one query does: a 10-game season is ~1500 rows,
+  // so 500 went missing, and because the query is ordered by
+  // sequence_number ASCENDING the rows lost are the HIGHEST ones -- the
+  // end of every game. Q3, Q4 and the second half vanished from the
+  // charts and players who only appeared late vanished entirely.
+  //
+  // Pages explicitly with .range() until a short page comes back. Still
+  // two logical fetches rather than two per game, so the speed-up holds;
+  // it just no longer stops at the first thousand rows.
+  async function fetchAllByGame(client, table, ids, orderCol){
+    const PAGE = 1000;
+    const out = [];
+    for (let from = 0; ; from += PAGE){
+      let q = client.from(table).select('*').in('game_id', ids);
+      if (orderCol) q = q.order(orderCol, { ascending: true });
+      const { data, error } = await q.range(from, from + PAGE - 1);
+      if (error) throw error;
+      const rows = data || [];
+      out.push(...rows);
+      // A short page means there is no next one. Equal to PAGE is
+      // ambiguous, so it loops once more and gets an empty page.
+      if (rows.length < PAGE) break;
+    }
+    return out;
+  }
   function applyDisplayScale(){
     if (window.innerWidth <= 700){
       document.querySelector('.wrap').style.transform = '';
@@ -2435,17 +2466,16 @@ function extractNameTag(rawName){
       // .in('game_id', ids) hits plays_game_idx and game_rosters_game_idx
       // exactly as the per-game lookups did, under the same RLS.
       const priorIds = priorGames.map(g => g.id);
-      const [pRosterRes, pPlaysRes] = await Promise.all([
-        supabaseClient.from('game_rosters').select('*').in('game_id', priorIds),
-        supabaseClient.from('plays').select('*').in('game_id', priorIds)
-          .order('sequence_number', { ascending: true })
+      const [allPriorRosters, allPriorPlays] = await Promise.all([
+        fetchAllByGame(supabaseClient, 'game_rosters', priorIds, null),
+        fetchAllByGame(supabaseClient, 'plays', priorIds, 'sequence_number')
       ]);
       const pRostersBy = new Map(), pPlaysBy = new Map();
-      for (const r of (pRosterRes.data || [])){
+      for (const r of (allPriorRosters)){
         if (!pRostersBy.has(r.game_id)) pRostersBy.set(r.game_id, []);
         pRostersBy.get(r.game_id).push(r);
       }
-      for (const q of (pPlaysRes.data || [])){
+      for (const q of (allPriorPlays)){
         if (!pPlaysBy.has(q.game_id)) pPlaysBy.set(q.game_id, []);
         pPlaysBy.get(q.game_id).push(q);
       }
