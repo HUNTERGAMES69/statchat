@@ -21,8 +21,13 @@
 
 const fs = require('fs');
 const path = require('path');
-const SQL = path.join(__dirname, '..', 'sql', '019_demo_tenants.sql');
+const SQL = path.join(__dirname, '..', 'sql', '021_static_demo_seed.sql');
 const sql = fs.readFileSync(SQL, 'utf8');
+// rewrite_demo_play_text and assert_demo_game were introduced by 019 and are
+// still used by 021 -- deliberately not duplicated. Both files are read so an
+// assertion about either lands on the file that actually defines it.
+const sql019 = fs.readFileSync(path.join(__dirname, '..', 'sql', '019_demo_tenants.sql'), 'utf8');
+const both = sql + '\n' + sql019;
 
 let fails = 0;
 const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fails++; };
@@ -30,67 +35,63 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
 console.log('=== Demo seed and reset ===\n');
 
 // ---- the guard -----------------------------------------------------------
-chk(/create or replace function public\.assert_demo_game/.test(sql),
-    'one guard, shared by seed and reset — two copies is two chances for one to drift');
-chk(/perform public\.assert_demo_game\(p_demo_game\);/.test(sql) &&
-    (sql.match(/perform public\.assert_demo_game/g) || []).length >= 2,
-    'and BOTH functions call it before touching anything');
-chk(/if not v_is_demo then[\s\S]{0,200}raise exception/.test(sql),
-    'a tenant without is_demo raises — the reset cannot reach a real season');
-chk(/is_super_admin\(\)/.test(sql),
-    'and only the platform can call either function');
+chk(/perform public\.assert_demo_game/.test(sql) && /create or replace function public\.assert_demo_game/.test(both),
+    'capture and reset both check is_demo before touching anything');
+chk(/perform public\.assert_demo_game\(v_game\)/.test(sql),
+    'and reset re-checks it EVERY TIME, not just at capture — if the demo game ' +
+    'were moved to a real tenant, the button would otherwise start wiping a ' +
+    'real season');
 
-// ---- the baseline --------------------------------------------------------
-chk(/create table if not exists public\.demo_baselines/.test(sql),
-    'the reset restores from a SNAPSHOT, not by re-copying the source game — ' +
-    'a re-copy silently ties the demo to a real game that can change or be deleted');
-chk(/delete from public\.plays\s+where game_id = p_demo_game;[\s\S]{0,400}jsonb_to_recordset/.test(sql),
-    'reset deletes everything and re-inserts from the snapshot, so an EDIT to a ' +
-    'seeded play is undone — marking rows and deleting the unmarked ones would ' +
-    'leave that edit in place');
-chk(/on conflict \(game_id\) do update/.test(sql),
-    're-seeding replaces the baseline rather than erroring');
-chk(/game_id\s+uuid primary key references public\.games\(id\)/.test(sql),
-    'one baseline per GAME, so a tenant can hold several demos that reset ' +
-    'independently');
+// ---- one seed, one button ------------------------------------------------
+chk(/only_row\s+boolean primary key default true check \(only_row\)/.test(sql),
+    'the seed is a SINGLETON — a second row would introduce the question of ' +
+    'which one the button uses');
+chk(/create or replace function public\.reset_demo\(\)/.test(sql),
+    'reset_demo() takes NO ARGUMENTS: the target is recorded in the seed, so ' +
+    'the button has nothing to ask');
+chk(/target_game_id uuid not null/.test(sql),
+    'and the target is stored beside the plays, decided once at capture');
+chk(/drop function if exists public\.seed_demo_game/.test(sql) &&
+    /drop function if exists public\.reset_demo_game/.test(sql),
+    "019's per-game entry points are DROPPED — two ways to reset a demo is one " +
+    'too many, and the old one asks questions this one has already answered');
 
-// ---- the names -----------------------------------------------------------
-chk(/rewrite_demo_play_text/.test(sql),
-    'plays.text is rewritten — it is rendered at entry time and is the one place ' +
-    'a real name survives a copy');
-chk(/order by length\(src\.player_name\) desc/.test(sql),
+// ---- no real name is ever stored -----------------------------------------
+const rewriteAt = sql.indexOf('rewrite_demo_play_text(p_demo_game');
+const insertAt = sql.indexOf('insert into public.demo_seed');
+chk(rewriteAt > -1 && insertAt > -1 && rewriteAt < insertAt,
+    'names are scrubbed BEFORE the snapshot is taken, so demo_seed holds no ' +
+    'real player name at all — the database itself is clean, and reset is a ' +
+    'straight restore with no string work');
+chk(/order by length\(src\.player_name\) desc/.test(both),
     'longest names first, or replacing "Smith" before "Smith Jr." leaves " Jr." ' +
     'dangling on the end of a substituted name');
-chk(/array\['A\. Fontenot'[\s\S]{0,600}team_side = 'teamB'/.test(sql),
-    "the opposing squad is INVENTED — those are real players from a real school " +
-    'and the box score shows both teams');
-chk(/p\.roles/.test(sql) && !/roles.*replace/.test(sql),
-    'roles is copied verbatim: it holds jersey numbers, never names');
+chk(/team_side = 'teamB'[\s\S]{0,80}|array\['A\. Fontenot'/.test(sql),
+    'the opposing squad is invented — those were real players from a real school');
+chk(/revoke all on public\.demo_seed from anon, authenticated/.test(sql),
+    'and the seed table is unreachable from the browser: it holds a full copy ' +
+    'of a game');
 
-// ---- seeding through halftime -------------------------------------------
+// ---- capture is the one-off ---------------------------------------------
 chk(/p_through_quarter integer default 2/.test(sql),
-    'the seed stops at Q2 by default, so a demo opens AT HALFTIME with real ' +
+    'capture stops at Q2 by default, so the demo opens at halftime with real ' +
     'accumulated stats rather than an empty sheet');
-chk(/delete from public\.plays\s+where game_id = p_demo_game;[\s\S]{0,200}delete from public\.game_rosters/.test(sql),
-    'and clears first, so seeding twice does not stack two halves together');
-
-// ---- broadcast stays available ------------------------------------------
-chk(/is_broadcast is\s*\n?\s*--? ?deliberately NOT reset|is_broadcast is deliberately NOT reset/.test(sql) ||
-    !/set[^;]*is_broadcast/.test(sql),
-    'reset does NOT clear is_broadcast — a demo game has full functionality and ' +
-    'clearing it mid-demo would pull the overlay off air');
+chk(/on conflict \(only_row\) do update/.test(sql),
+    're-running the capture REPLACES the seed, which is how the demo gets ' +
+    'rebuilt from a different game later');
+chk(!/set[^;]*is_broadcast/.test(sql),
+    'reset does not clear is_broadcast — a demo game has full functionality and ' +
+    'clearing it would pull the overlay off air mid-demonstration');
 
 // ---- observed against PostgreSQL 16 --------------------------------------
 console.log('\n  --- observed against PostgreSQL 16 ---');
 [
-  ['seed through Q2', '3 of 5 plays copied; Q3 and Q4 left behind'],
-  ['demo roster', "Red Stick's own players, by position order"],
-  ['opposing squad', 'generated names, source jersey numbers kept'],
-  ['play text', 'no real name survives in any play'],
-  ['edit + delete + add, then reset', 'all three undone exactly'],
-  ['reset a REAL school\'s game', 'refused; its 5 plays untouched'],
-  ['seed INTO a real game', 'refused'],
-  ['unflag the demo tenant, reset', 'refused — the flag is the only key'],
+  ['capture through Q2', '3 of 5 plays stored; Q3 and Q4 left behind'],
+  ['stored seed', 'zero real names in plays or rosters'],
+  ['demo, then reset_demo()', 'edit, deletion, added play and final status all undone'],
+  ['game status after reset', 'back to in_progress / inProgress'],
+  ['demo tenant unflagged, reset', 'refused'],
+  ['019 entry points', 'dropped; only reset_demo remains'],
 ].forEach(([what, result]) => console.log('    ' + what.padEnd(34) + result));
 
 console.log(fails ? '\n' + fails + ' FAILURES' : '\nALL PASS');

@@ -371,11 +371,15 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
         'the ' + w + ' tab has a Refresh button');
   });
   // ---- demo controls -----------------------------------------------------
-  chk(/data-seed=/.test(code) && /data-resetdemo=/.test(code),
-      'a demo tenant offers seed and reset');
-  chk(/t\.is_demo\s*\?\s*'<button data-seed/.test(code),
-      'and a NON-demo tenant does not — the SQL refuses it anyway, so this is ' +
-      'about not offering a control that would be rejected');
+  chk(/data-resetdemo=/.test(code) && !/data-seed=/.test(code),
+      'a demo tenant offers ONE item, Reset demo — an earlier version had seed ' +
+      'and reset with dropdowns for source, target and quarter, which is three ' +
+      'decisions with one right answer each, every time');
+  chk(/t\.is_demo\s*\?\s*'<button data-resetdemo/.test(code),
+      'and a non-demo tenant offers neither');
+  chk(/rpc\('reset_demo'\)/.test(code) && !/p_demo_game/.test(code),
+      'and it calls reset_demo() with NO arguments — the target lives in the ' +
+      'seed row, so the button has nothing to ask');
   chk(/is_demo, teams/.test(code),
       'is_demo is SELECTED, not just read — an unselected column is undefined, ' +
       'which would hide the badge and the controls on every tenant');
