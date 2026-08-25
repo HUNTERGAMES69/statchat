@@ -249,11 +249,6 @@
             <div id="accountMenu" class="hidden" style="position:absolute; right:0; top:110%; background:#fff; border:1px solid #ddd; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:20; min-width:200px; padding:6px 0;">
               <div id="accountMenuEmail" style="padding:8px 14px; font-size:12px; color:#888; border-bottom:1px solid #f0f0f0;"></div>
               <a href="account.html" class="accountMenuItem" style="display:block; padding:9px 14px; color:#333; font-size:14px; text-decoration:none;">Account settings</a>
-              <!-- REVEALED ONLY FOR THE PLATFORM ACCOUNT. Hidden by default
-                   rather than added at runtime: if the profile lookup fails,
-                   the safe outcome is a missing link, not one that appears
-                   for the wrong person. -->
-              <a href="platform.html" id="platformLink" class="accountMenuItem hidden" style="padding:9px 14px; color:#333; font-size:14px; text-decoration:none; border-top:1px solid #f0f0f0;">Platform console</a>
               <button id="signOutBtn" class="accountMenuItem" style="display:block; width:100%; text-align:left; padding:9px 14px; color:var(--sc-red, #a32d2d); font-size:14px; background:none; border:none;">Sign out</button>
             </div>
           </div>
@@ -368,17 +363,43 @@
     const role = (!error && data && data.length > 0 && data[0].role) || 'view';
     currentIsAdmin = role === 'admin';
 
-      // THE PLATFORM ACCOUNT NEEDS A WAY IN. Without a link the address
-      // has to be remembered, and an address that must be remembered gets
-      // bookmarked -- which is how feed keys ended up in URLs.
-      //
-      // A convenience, never a control: platform.html checks
-      // is_super_admin itself and every query on it is scoped by RLS,
-      // whatever this page chooses to show.
-      if (!error && data && data.length > 0 && data[0].is_super_admin){
-        const pl = document.getElementById('platformLink');
-        if (pl) pl.classList.remove('hidden');
-      }
+    // THE PLATFORM DOES NOT BELONG ON THIS PAGE AT ALL.
+    // -------------------------------------------------------------------
+    // Every page in the app asks "what is MY team" and works outward from
+    // there. The platform account has no tenant and every policy ends
+    // `or is_super_admin()`, so this dashboard shows it a MERGED VIEW of
+    // every school's games with nothing saying whose any of it is. With
+    // one customer that looks like an ordinary dashboard, which is worse
+    // than looking broken.
+    //
+    // login.html already lands the platform on the console. This is the
+    // other sixteen ways in: every 'Dashboard' link in the app points
+    // here, so bouncing once from this page fixes all of them rather than
+    // patching sixteen links across twelve files.
+    //
+    // replace(), not href: a bounce should not leave an entry in history
+    // that Back returns to.
+    //
+    // THE BYPASS IS DELIBERATE AND NAMED. Support, and the Open button on
+    // the console's Tenants tab, both need to see a school's dashboard AS
+    // THE PLATFORM. That is not impersonation -- nothing pretends to be a
+    // coach -- and blocking it would make this bounce the thing that has
+    // to be unpicked later.
+    //
+    // `?as=<tenantId>` is the hatch. It is NOT a permission: the platform
+    // can already read every school, with or without it. It says "I meant
+    // to be here", which is what turns an accidental merged view into a
+    // deliberate one.
+    //
+    // INCOMPLETE ON PURPOSE, and this is the important part: passing ?as=
+    // today gets you the dashboard with NO SCOPING AND NO BANNER, which is
+    // the merged view again. The Open button must add both before it ships
+    // -- see MULTI_TENANT_PLAN.md. Nothing links here with ?as= yet.
+    const viewingAs = new URLSearchParams(location.search).get('as');
+    if (!error && data && data.length > 0 && data[0].is_super_admin && !viewingAs){
+      window.location.replace('platform.html');
+      return;
+    }
     currentCanEnterGames = role === 'admin' || role === 'game_entry';
     // Broadcast setup shows the static feed key, so it is not for view
     // accounts. Scorers get it because the crew sets up the day before.

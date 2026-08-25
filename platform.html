@@ -86,6 +86,12 @@
            background:var(--sc-rule, #e6e6e6); color:#6b7680;
            display:flex; align-items:center; justify-content:center;
            font-weight:700; font-size:13px; }
+  label { display:block; font-size:13px; margin:10px 0 4px; color:#555; font-weight:600; }
+  label input { display:block; width:100%; box-sizing:border-box; padding:8px;
+                border:1px solid var(--sc-rule-strong, #c8c8c8);
+                border-radius:var(--sc-radius-sm, 6px); font-size:14px; font-weight:400;
+                margin-top:4px; }
+  .fieldnote { font-size:12px; color:#6b7680; margin:4px 0 0; }
   .pill { display:inline-block; font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:20px; }
   .pill.live   { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
   .pill.trial  { background:#eef2f8; color:#3d5a80; }
@@ -139,6 +145,31 @@
       <p class="sub">Every school on the platform. Counts are live games only —
          deleted ones are under Recovery tools.</p>
       <div id="tenantsBody"><p class="empty">Loading…</p></div>
+
+      <!-- ADDING A SCHOOL. Collapsed behind a button rather than sitting
+           open: this list is read many times a week and a school is added
+           a handful of times a year, so the common case should not be
+           looking past a form. -->
+      <div style="margin-top:18px; border-top:1px solid var(--sc-rule, #e6e6e6); padding-top:14px;">
+        <button id="showAddBtn" class="act" type="button">Add a school</button>
+        <div id="addPanel" class="hidden" style="margin-top:12px; max-width:460px;">
+          <div id="addMsg"></div>
+          <label>School name<input type="text" id="addName" placeholder="Neville"></label>
+          <p class="fieldnote">Short, the way it appears on a scoreboard.</p>
+          <label>Full name<input type="text" id="addFullName" placeholder="Neville High School"></label>
+          <p class="fieldnote">Optional. Used on printed reports.</p>
+          <label>First admin's email<input type="email" id="addEmail" placeholder="coach@school.edu"></label>
+          <p class="fieldnote">Optional — they get an invite and become the school's admin.
+             Leave it blank to create the school now and invite somebody later.</p>
+          <label>Their name<input type="text" id="addAdminName" placeholder="Dana Whitfield"></label>
+          <p class="fieldnote">Optional. Without it they appear as their email address
+             everywhere in the app.</p>
+          <div style="margin-top:12px;">
+            <button id="createBtn" class="act" type="button">Create school</button>
+            <button id="cancelAddBtn" class="topAct" type="button" style="margin-left:6px;">Cancel</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="panelUsers" class="card hidden">
@@ -197,6 +228,7 @@
     }
   });
 
+  let accessToken = null;
   async function init(session){
     const email = (session.user && session.user.email) || '';
 
@@ -227,7 +259,11 @@
 
     loadTenants();
     loadRecovery();
-    loadUsers(session.access_token);
+    // KEPT for the calls that need it. api/manage-users and
+    // api/create-tenant are server endpoints, not database queries, so
+    // they take the bearer token rather than riding on the client.
+    accessToken = session.access_token;
+    loadUsers(accessToken);
   }
 
   // Signing out is wired unconditionally, not inside the gate: an account
@@ -235,6 +271,72 @@
   document.getElementById('signOutBtn').addEventListener('click', async () => {
     await supabaseClient.auth.signOut();
     window.location.href = '/login.html';
+  });
+
+  // ---- adding a school --------------------------------------------------
+  document.getElementById('showAddBtn').addEventListener('click', () => {
+    document.getElementById('addPanel').classList.remove('hidden');
+    document.getElementById('showAddBtn').classList.add('hidden');
+    document.getElementById('addName').focus();
+  });
+  document.getElementById('cancelAddBtn').addEventListener('click', resetAddForm);
+
+  function resetAddForm(){
+    ['addName','addFullName','addEmail','addAdminName']
+      .forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('addMsg').innerHTML = '';
+    document.getElementById('addPanel').classList.add('hidden');
+    document.getElementById('showAddBtn').classList.remove('hidden');
+  }
+
+  document.getElementById('createBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('createBtn');
+    const msg = document.getElementById('addMsg');
+    const name = document.getElementById('addName').value.trim();
+    if (!name){
+      msg.innerHTML = '<div class="msg error">A school needs a name.</div>';
+      return;
+    }
+    // DISABLED WHILE IT RUNS. Creating a school is two steps and the second
+    // sends an email; a double-click would make two schools, and
+    // create_tenant's duplicate-name check would refuse the second with a
+    // message about a school the operator did not know they had just made.
+    btn.disabled = true;
+    btn.textContent = 'Creating\u2026';
+    msg.innerHTML = '';
+    try {
+      const r = await fetch('/api/create-tenant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json',
+                   Authorization: 'Bearer ' + accessToken },
+        body: JSON.stringify({
+          name,
+          fullName:   document.getElementById('addFullName').value.trim(),
+          adminEmail: document.getElementById('addEmail').value.trim(),
+          adminName:  document.getElementById('addAdminName').value.trim()
+        })
+      });
+      const out = await r.json();
+      if (!r.ok && r.status !== 207) throw new Error(out.error || ('HTTP ' + r.status));
+      if (r.status === 207){
+        // PARTIAL: the school exists, something after it did not. Said
+        // plainly, and the form is cleared, because retrying the whole
+        // thing would hit the duplicate-name check.
+        msg.innerHTML = '<div class="msg error">' + esc(out.error) + '</div>';
+        loadTenants();
+        loadUsers(accessToken);
+        return;
+      }
+      showMsg(esc(out.message), 'success');
+      resetAddForm();
+      loadTenants();
+      loadUsers(accessToken);
+    } catch (err){
+      msg.innerHTML = '<div class="msg error">' + esc(err.message) + '</div>';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Create school';
+    }
   });
 
   // ---- tabs -------------------------------------------------------------
