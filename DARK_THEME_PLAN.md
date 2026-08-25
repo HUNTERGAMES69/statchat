@@ -5,6 +5,35 @@ worked example: everything below is what it taught, generalised.
 
 ---
 
+## WHERE THIS STANDS — 25 August 2026
+
+**Converted and live:** login, dashboard, account, help, roster, customize,
+broadcast_setup, create_game, reports, view. Ten pages.
+
+**Deliberately light, and not to be "finished":**
+
+* `platform.html` — a light page is the signal that you are operating on
+  somebody else's data. See "What is NOT converted".
+* `recap`, `stat_package`, `season_report`, `player_report` — documents
+  whose real form is paper. They carry a rotate prompt for phones instead
+  (`tests/rotate_prompt_check.js`).
+* The three broadcast overlays — transparent by design.
+
+**Remaining: none. `game.html` was converted on 25 August 2026** and is the
+last page. It was built as `gamedark.html` from the approved
+`game_mock.html`, corrected against the audit, then promoted by replacing
+`game.html` outright rather than copying changes into it -- Andy's call, and
+the right one: a copy invites a missed line.
+
+Two things that promotion nearly broke, both caught by comparing against
+the live file rather than trusting the mock:
+
+* **Seven navigation links pointed at `*_mock.html`** -- the mock had been
+  rewired so the bulk preview could be navigated. Dashboard, Broadcast
+  setup and Help would have 404'd, and an expired session would have
+  redirected to `/login_mock.html` and stranded a scorer mid-game.
+* A normalised comparison ignoring colours and comments showed the two
+  files differing by exactly the four intended edits and nothing else.
 ## The decision to make before any of it
 
 **Dark is right for a control room. It is not obviously right for a coach
