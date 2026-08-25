@@ -28,7 +28,11 @@ const src = fs.readFileSync(require('path').join(__dirname, '..', 'game.html'), 
 function run(touch){
   const dom = new JSDOM('<!doctype html><html><body>' +
     '<div id="headerLeft">' +
-      '<img src="logo.png" alt="StatChat" class="scMark-inline">' +
+      // THE REAL ELEMENT, lifted from game.html. A hand-written <img> in the
+    // fixture omitted the inline style the page actually ships, so the
+    // check reported "inline height untouched" for an element that never
+    // had one. A fixture that does not match the page cannot test it.
+    (src.match(/<img[^>]*class="scMark-inline"[^>]*>/s) || ['<img class="scMark-inline">'])[0] +
       '<a class="hdr-btn" href="#">Dashboard</a>' +
       '<button id="onAirBanner" class="hdr-btn">ON AIR</button>' +
     '</div><div id="topActions"></div></body></html>',
@@ -54,18 +58,38 @@ function run(touch){
 let fails = 0;
 const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fails++; };
 
-const BTN_H = 46;                     // what the stubbed .hdr-btn measures
 const touch = run(true), desktop = run(false);
 
-chk(touch.height === BTN_H + 'px',
-    'on touch the mark matches the measured button height (' + touch.height + ')');
-chk(touch.width === BTN_H + 'px', 'and stays square (' + touch.width + ')');
+// TOUCH. The loop must leave the mark's own size alone. It strips height
+// and width from every other child and forces display:flex -- correct for
+// a button, fatal for an <img>, which then falls back to its intrinsic
+// 512px. That is the bug, twice reported.
+chk(touch.height === '30px',
+    'on touch the mark keeps its 30px and is not stripped (' + touch.height + ')');
+// THE INLINE SIZE IS THE INSURANCE, and must not be quietly deleted as
+// redundant. The stylesheet alone was correct twice and the mark still
+// rendered at 512px, because script rewrote it. An inline declaration is
+// the only thing a stylesheet edit cannot lose an argument with.
+chk(/class="scMark-inline"[^>]*style="[^"]*height:30px/.test(
+      require('fs').readFileSync(require('path').join(__dirname, '..', 'game.html'), 'utf8')),
+    'and the size is declared inline on the element, not only in the stylesheet');
 chk(touch.display === 'block',
-    'and is NOT display:flex — the loop forces flex on controls, which on an img ' +
-    'combined with no height gives the intrinsic size (' + touch.display + ')');
+    'and is not forced to display:flex (' + touch.display + ')');
+chk(touch.flex === '0 0 auto', 'and does not stretch with the row (' + touch.flex + ')');
 
+// DESKTOP. Everything inline is cleared and the stylesheet takes over.
 chk(desktop.height === '' && desktop.width === '',
-    'on desktop every inline style is cleared, so the stylesheet 30px applies');
+    'on desktop the inline styles are cleared, so the stylesheet applies');
+
+// NOTHING MEASURES A BUTTON. An earlier version copied a button's height,
+// which is wrong here: the banner sync gives #headerLeft an explicit
+// height and align-items:stretch makes the buttons fill it, so "match a
+// button" can mean "match the whole score banner".
+const srcTxt = require('fs').readFileSync(
+  require('path').join(__dirname, '..', 'game.html'), 'utf8');
+chk(!/getBoundingClientRect\(\)\.height[\s\S]{0,200}scMark-inline/.test(srcTxt) &&
+    !/scMark-inline[\s\S]{0,300}getBoundingClientRect\(\)\.height/.test(srcTxt),
+    'and nothing sizes the mark from a measured button');
 
 // And the stylesheet number must still equal .hdr-btn's own box, or
 // desktop drifts the moment the buttons change.
