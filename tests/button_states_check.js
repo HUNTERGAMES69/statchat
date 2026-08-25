@@ -79,5 +79,35 @@ for (const f of PAGES) {
   }
 }
 
+// ---- the entry columns line up ------------------------------------------
+// The rail opens with a "Scrimmage" label so its first button starts ~25px
+// down, while #entryStage starts at zero -- the play panel sat that much
+// higher than Rush and bunched against the row above it.
+//
+// The fix is an invisible ::before on the stage that copies the label's own
+// font-size and margins, so the two move together. A measured 25px would be
+// right today and wrong after the next edit to .hint, which is exactly the
+// kind of drift nobody notices.
+for (const f of PAGES) {
+  const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
+  if (!/color-scheme:\s*dark/.test(src)) continue;
+  const css = [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m => m[1]).join('\n');
+  if (!/#typeRail/.test(css)) continue;
+
+  const hint = /#typeRail \.hint \{([^}]*)\}/.exec(css);
+  const before = /#entryStage::before \{([\s\S]*?)\}/.exec(css);
+  chk(!!before, f + ': the play panel has a spacer so it lines up with the Rush button');
+  if (hint && before) {
+    const get = (b, p) => { const m = new RegExp(p + ':\\s*([^;]+)').exec(b); return m ? m[1].trim() : null; };
+    chk(get(hint, 'font-size') === get(before, 'font-size') &&
+        get(hint, 'margin') === get(before, 'margin'),
+        f + ': and the spacer copies the rail label exactly, so the two cannot drift ' +
+        '(' + get(hint, 'font-size') + '/' + get(hint, 'margin') + ' vs ' +
+        get(before, 'font-size') + '/' + get(before, 'margin') + ')');
+    chk(/visibility:hidden/.test(before[1]),
+        f + ': the spacer is visibility:hidden — display:none would reserve nothing');
+  }
+}
+
 console.log(fails ? '\n' + fails + ' FAILURES' : '\nALL PASS');
 process.exitCode = fails ? 1 : 0;
