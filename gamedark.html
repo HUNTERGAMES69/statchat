@@ -19,32 +19,78 @@
 <meta name="apple-mobile-web-app-title" content="StatChat">
 <title>StatChat — Game Entry</title>
 <style>
-  /* DARK, 25 August 2026. The last page. Recipe in DARK_THEME_PLAN.md.
+  /* ===================================================================
+     DARK — the approved look from game_mock.html, made self-contained.
+     ===================================================================
+     game_mock.html got these rules from statchat-dark.css, the shared
+     override sheet built during the bulk pass. Every other converted page
+     carries its own tokens, and that sheet is being deleted -- a
+     stylesheet only one page uses is a second source of truth waiting to
+     drift. So the fourteen rules this page actually took from it are
+     inlined here, verbatim.
 
-     EVERY --sc-* THIS PAGE READS IS DEFINED BELOW. Nine of them were read
-     and never defined, each falling back to a white-page colour --
-     #f4f3ef for the page itself, #fff3cd for the amber tints. An undefined
-     token does not fail loudly; it silently becomes the fallback somebody
-     wrote for the old design. That has shipped a light panel into a dark
-     page three times in this conversion already.
-
-     --sc-card-w and --sc-card-half are NOT colours and are left alone:
-     they are the entry card's width, and the left and right rails measure
-     their position from them. Changing either moves the layout. */
+     --sc-card-w and --sc-card-half are NOT colours and are untouched:
+     they are the entry card's width, and both rails measure their
+     position from them. */
   :root{ color-scheme:dark; }
   :root{
-    --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
-    --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
-    --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
-    --sc-navy:#2f3a47;   /* A BUTTON FILL. Never text, never a panel. */
-    --sc-green:#a3d93f;  --sc-green-dark:#8ac53e;
+    --v-ink:#10141a;   --v-panel:#191f27;  --v-raise:#20272f;
+    --v-edge:#2b333d;  --v-mute:#8d99a6;   --v-paper:#eef1f4;
+    --v-brand:#7cb518; --v-brand-hi:#a3d93f; --v-data:#ffc72c;
+    --sc-page:#10141a; --sc-card:#191f27;  --sc-raise:#20272f;
+    --sc-ink:#eef1f4;  --sc-ink-soft:#c7d0da; --sc-ink-muted:#8d99a6;
+    --sc-rule:#2b333d; --sc-rule-strong:#6b7d8f;
+    --sc-navy:#2f3a47;
+    --sc-green:#a3d93f; --sc-green-dark:#8ac53e;
     --sc-green-tint:rgba(124,181,24,.14);
-    --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
-    --sc-amber:#ffc72c;  --sc-amber-text:#ffc72c;
+    --sc-red:#ff8fa3;  --sc-red-tint:rgba(176,0,32,.16);
+    --sc-amber:#ffc72c; --sc-amber-text:#ffc72c;
     --sc-amber-tint:rgba(255,199,44,.13);
     --sc-amber-soft:rgba(255,199,44,.10);
-    --sc-blue:#5aa9f0;   --sc-link:#7cb518;
+    --sc-blue:#5aa9f0; --sc-link:#7cb518;
   }
+  body{ background:var(--v-ink) !important; color:var(--v-paper) !important; }
+  .wrap{ background:transparent !important; }
+  .card, .quad, .panel{ background:var(--v-panel) !important;
+    border-color:var(--v-edge) !important; color:var(--v-paper) !important;
+    box-shadow:none !important; }
+  h1, h2, h3, h4{ color:var(--v-paper) !important; }
+  .sub, .hint, .note, .fieldnote{ color:var(--v-mute) !important; }
+  a{ color:var(--v-brand-hi); }
+  label{ color:var(--v-mute) !important; }
+  input:not([type="radio"]):not([type="checkbox"]), select, textarea{
+    background:var(--v-raise) !important; color:var(--v-paper) !important;
+    border-color:var(--sc-rule-strong) !important; }
+  /* Radios and checkboxes keep native rendering -- a fill and padding turn
+     them into blobs with no visible selected state, and this page has 77. */
+  input[type="radio"], input[type="checkbox"]{
+    accent-color:var(--sc-green); width:16px; height:16px;
+    vertical-align:-2px; cursor:pointer; }
+  button, .button-link, .btn{ background:var(--sc-navy) !important;
+    color:var(--v-paper) !important; border:1px solid var(--sc-rule-strong) !important; }
+  button.ptoggle, button.secondary{ background:#20272f !important;
+    color:#c7d0da !important; border-color:var(--sc-rule-strong) !important; }
+  button.lastresort{ background:#8a3a12 !important; color:#fff !important;
+    border-color:#c26a3a !important; }
+  /* The picked play must stay unmistakable: it decides what gets logged. */
+  button.picked, button.suggested{ background:var(--sc-amber) !important;
+    color:#0d1117 !important; box-shadow:inset 0 0 0 2px rgba(0,0,0,.28) !important; }
+  .msg{ background:var(--v-raise) !important; color:var(--v-paper) !important;
+    border:1px solid var(--v-edge) !important; }
+  table{ color:#dde4ec; }
+  th{ color:var(--v-mute) !important; border-color:var(--v-edge) !important; }
+  td{ border-color:#202831 !important; color:#dde4ec !important; }
+  /* The default focus outline is dark and vanishes on a dark card, and this
+     page is driven at speed. */
+  /* WebKit paints autofill with an inset shadow that no background rule
+     reaches, so it has to be told separately. */
+  input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus{
+    -webkit-text-fill-color:var(--v-paper);
+    -webkit-box-shadow:0 0 0 1000px var(--v-raise) inset;
+    caret-color:var(--v-paper);
+    transition:background-color 9999s ease-out 0s; }
+  input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible{
+    outline:2px solid var(--sc-link); outline-offset:2px; }
 
 
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
@@ -69,34 +115,12 @@
      squeezed the rails and pushed the top row against the banner. */
   :root { --sc-card-w: 760px; --sc-card-half: 380px; }
   .wrap { max-width:var(--sc-card-w, 760px); margin:0 auto; }
-  .card { background:var(--sc-card); border:1px solid var(--sc-rule); color:var(--sc-ink); border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  .card { background:#20272f; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:20px; margin:0; }
-  h2 { font-size:16px; margin:0 0 10px; color:var(--sc-ink); }
-  p.sub { color:var(--sc-ink-muted); margin:0 0 14px; font-size:13px; }
-  label { display:block; font-size:13px; margin-bottom:4px; color:var(--sc-ink-muted); }
-  /* THE CONTROL IS INSIDE THE LABEL on the setup fields, so the label's own
-     margin-bottom sits below both and separates nothing. */
-  label > input:not([type="radio"]):not([type="checkbox"]),
-  label > select, label > textarea { display:block; margin-top:5px; }
-  /* RADIOS AND CHECKBOXES keep native rendering. A blanket input rule gives
-     them padding and a dark fill, so they render as blobs with no visible
-     selected state -- and this page has 73 of them. accent-color is the one
-     property that tints a native control without replacing it. */
-  input[type="radio"], input[type="checkbox"] {
-    accent-color:var(--sc-green); width:16px; height:16px;
-    vertical-align:-2px; cursor:pointer; }
-  /* WebKit paints autofill with an inset shadow no background rule reaches. */
-  input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus {
-    -webkit-text-fill-color:var(--sc-ink);
-    -webkit-box-shadow:0 0 0 1000px var(--sc-raise) inset;
-    caret-color:var(--sc-ink);
-    transition:background-color 9999s ease-out 0s; }
-  /* The default focus outline is dark and vanishes on a dark card. This
-     page is used at speed, often by keyboard. */
-  input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
-    outline:2px solid var(--sc-link); outline-offset:2px; }
-
-  input:not([type=checkbox]):not([type=radio]), select { padding:8px; border:1px solid var(--sc-rule-strong); border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
+  h2 { font-size:16px; margin:0 0 10px; color:#b9c4d0; }
+  p.sub { color:#8d99a6; margin:0 0 14px; font-size:13px; }
+  label { display:block; font-size:13px; margin-bottom:4px; color:#b9c4d0; }
+  input:not([type=checkbox]):not([type=radio]), select { padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; width:100%; }
   input[type=checkbox], input[type=radio] { width:auto; margin-right:6px; vertical-align:middle; }
   /* touch-action:manipulation -- DOUBLE-TAP ZOOM.
      On iOS a second tap inside ~300ms is read as a double-tap and zooms
@@ -115,10 +139,10 @@
      user-select:none is the same tap, other symptom: iOS also treats a
      double-tap as select-the-word, so a fast second tap could leave the
      button's own label highlighted. */
-  button { padding:8px 12px; border-radius:6px; border:none; background:var(--sc-navy); color:#fff; font-size:13px; font-weight:600; cursor:pointer; touch-action:manipulation; -webkit-user-select:none; user-select:none; }
-  button.primary { background:var(--sc-green); }
-  button.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
-  button.danger { background:rgba(176,0,32,.16); color:var(--sc-red); border:1px solid var(--sc-red); }
+  button { padding:8px 12px; border-radius:6px; border:none; background:var(--sc-navy, #1a1a2e); color:#fff; font-size:13px; font-weight:600; cursor:pointer; touch-action:manipulation; -webkit-user-select:none; user-select:none; }
+  button.primary { background:var(--sc-green, #1a7a4c); }
+  button.secondary { background:#20272f; color:#b9c4d0; border:1px solid #ccc; }
+  button.danger { background:#20272f; color:var(--sc-red, #a32d2d); border:1px solid var(--sc-red, #a32d2d); }
   /* Deliberately unlike anything else on the page. Manual entry writes a
      text note that is flagged unresolved and contributes no stats, no
      yardage and no down change -- it is the escape hatch for a play the
@@ -142,18 +166,13 @@
      inline styles so that .picked can actually override it -- an inline
      background beats any class, which is why these buttons never turned
      gold. Declared before .picked so the selected state wins. */
-  button.ptoggle { background:transparent; color:var(--sc-ink); border:2px solid var(--sc-rule-strong); }
-  /* PICKED. --sc-navy is a BUTTON FILL, not an ink -- used as text here it
-     would be #2f3a47 on amber, 3.4:1 and muddy. Near-black instead, which
-     is what every other amber control in the app uses.
-     This is the selected play in the entry ladder; if a scorer cannot see
-     which one is chosen, the wrong play gets logged. */
-  button.picked, button.suggested { background:#ffc72c; color:#0d1117; box-shadow:inset 0 0 0 2px rgba(0,0,0,.28); }
+  button.ptoggle { background:#20272f; color:#b9c4d0; border:2px solid #ccc; }
+  button.picked, button.suggested { background:#ffc72c; color:#0d1117; box-shadow:inset 0 0 0 2px #8a6a00; }
   .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .hidden { display:none; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
-  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red); }
-  .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green); }
+  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
+  .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
   .banner { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; border-radius:10px; padding:12px 16px; margin-bottom:6px; transition:background 0.2s; position:sticky; top:8px; z-index:50; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
   .banner .score { font-size:20px; font-weight:700; }
   /* OFF AIR: white with a dark outline, and a single red dot.
@@ -164,18 +183,12 @@
      turns on, while keeping a solid red fill meaning exactly one thing:
      live. That distinction is the one that matters at a glance mid-game,
      when mistaking "not on air" for "on air" is the expensive error. */
-  /* OFF AIR. The luminance swap left near-black text on a dark fill --
-     1.1:1, unreadable. This and the ON AIR state are the two things a
-     scorer checks at a glance during a broadcast, so they must differ by
-     BRIGHTNESS, not only by hue: brightness is the one channel that
-     survives every kind of colour blindness, and OFF is the resting state
-     so ON should be the brighter of the two. */
-  #onAirBanner.air-off { background:#2c343e !important; color:var(--sc-ink) !important;
-                         border:2px solid var(--sc-rule-strong) !important; gap:10px; }
+  #onAirBanner.air-off { background:#20272f !important; color:#eef1f4 !important;
+                         border:2px solid #12151a !important; gap:10px; }
   #onAirBanner.air-off::before { content:''; width:11px; height:11px;
                                  border-radius:50%; background:#b00020;
                                  flex:0 0 auto; }
-  #onAirBanner.air-off:hover { background:var(--sc-raise) !important; }
+  #onAirBanner.air-off:hover { background:#20272f !important; }
   #onAirBanner { cursor:pointer; }
 #onAirBanner { background:#b00020; color:#fff; padding:7px 14px; border-radius:6px;
                  font-size:13px; font-weight:800; letter-spacing:0.06em;
@@ -184,11 +197,11 @@
   @keyframes onAirPulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
     .banner .downdist { font-size:15px; font-weight:500; }
   .banner .finalTag { margin-left:auto; font-size:26px; font-weight:800; letter-spacing:0.08em; }
-  .hint { font-size:12px; color:var(--sc-ink-muted); margin:6px 0; }
+  .hint { font-size:12px; color:#8d99a6; margin:6px 0; }
   .floating-actions { position:fixed; bottom:16px; right:16px; z-index:90; display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
   .floating-actions button { box-shadow:0 2px 8px rgba(0,0,0,0.2); }
-  #playPanel, #utilPanel { background:var(--sc-raise); border-radius:8px; padding:12px 14px; margin-top:10px; scroll-margin-top:70px; }
-  #confirmCard { background:var(--sc-raise); border:1px solid var(--sc-rule); border-radius:8px; padding:12px 14px; margin-top:8px; }
+  #playPanel, #utilPanel { background:#20272f; border-radius:8px; padding:12px 14px; margin-top:10px; scroll-margin-top:70px; }
+  #confirmCard { background:#20272f; border-radius:8px; padding:12px 14px; margin-top:8px; }
 
   /* ===================================================================
      RAIL LAYOUT. Promoted from gametest3.html on 22 Aug 2026; the old
@@ -228,7 +241,7 @@
      already use for their own toggles -- reusing it would have made a
      rail selection and an in-panel toggle indistinguishable to the
      existing handlers. */
-  #typeRail button.rail-active { box-shadow:inset 0 0 0 3px var(--sc-green), 0 0 0 2px var(--sc-green); }
+  #typeRail button.rail-active { box-shadow:inset 0 0 0 3px var(--sc-green, #1a7a4c), 0 0 0 2px var(--sc-green, #1a7a4c); }
   #entryStage { flex:1 1 auto; min-width:0; }
   #entryStage #playPanel, #entryStage #manualPanel, #entryStage #utilPanel { margin-top:0; }
   #entryStage #confirmCard { position:sticky; bottom:12px; box-shadow:0 -2px 10px rgba(0,0,0,0.10); }
@@ -387,9 +400,9 @@
                   padding:0 16px; border-radius:10px; border:none;
                   display:flex; align-items:center; justify-content:center; }
   /* Colours unchanged, so each stays recognisable where it was. */
-  #broadcastFab { background:var(--sc-navy); border-color:var(--sc-navy); }
-  #helpFab { background:var(--sc-green); border-color:var(--sc-green); }
-  #launchViewLink { background:#b00020; border-color:#b00020; }
+  #broadcastFab { background:var(--sc-navy, #1a1a2e); border-color:var(--sc-navy, #1a1a2e); }
+  #helpFab { background:var(--sc-green, #1a7a4c); border-color:var(--sc-green, #1a7a4c); }
+  #launchViewLink { background:#b00020; border-color:#ff8fa3; }
   /* WIDTH *OR* TOUCH. Added 23 Aug after every tablet fix appeared to do
      nothing on a real iPad.
      ---------------------------------------------------------------------
@@ -488,15 +501,15 @@
   #validationBody, #liveBoxBody { overflow-y:auto; flex:1 1 auto; min-height:0; }
   #validationCount { font-size:12px; font-weight:700; padding:1px 7px; border-radius:9px;
                      vertical-align:middle; margin-left:4px; }
-  .vc-ok { background:rgba(124,181,24,.14); color:var(--sc-green); }
-  .vc-bad { background:var(--sc-red-tint, #fdecea); color:var(--sc-red); }
+  .vc-ok { background:#20272f; color:var(--sc-green, #1a7a4c); }
+  .vc-bad { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
   .v-issue { font-size:12.5px; line-height:1.4; padding:6px 0;
-             border-bottom:1px solid var(--sc-rule); color:var(--sc-red); }
+             border-bottom:1px solid #f2f2f2; color:#ff8fa3; }
   .v-issue:last-child { border-bottom:none; }
   .lb-row { display:flex; align-items:baseline; gap:8px; font-size:13px; padding:4px 0;
             border-bottom:1px solid #f4f4f4; }
   .lb-row:last-child { border-bottom:none; }
-  .lb-label { flex:1 1 auto; color:var(--sc-ink); }
+  .lb-label { flex:1 1 auto; color:#b9c4d0; }
   .lb-val { flex:0 0 58px; text-align:right; font-weight:700; font-variant-numeric:tabular-nums; }
   .ld-block { margin-top:10px; padding-top:8px; border-top:1px solid #eee; }
   .ld-row { display:flex; align-items:baseline; gap:6px; font-size:13.5px; padding:3px 0; }
@@ -505,10 +518,10 @@
      the thing being looked at, and grey-on-white at that size is the first
      thing to go. Still lighter than the names they label, so the hierarchy
      survives -- it is contrast that was missing, not weight. */
-  .ld-tag { flex:0 0 38px; font-size:11px; font-weight:800; color:var(--sc-ink-muted); letter-spacing:0.04em; }
+  .ld-tag { flex:0 0 38px; font-size:11px; font-weight:800; color:#b9c4d0; letter-spacing:0.04em; }
   .ld-name { flex:1 1 auto; font-weight:700; min-width:0; overflow:hidden;
              text-overflow:ellipsis; white-space:nowrap; }
-  .ld-stat { flex:0 0 auto; color:var(--sc-ink); font-variant-numeric:tabular-nums; }
+  .ld-stat { flex:0 0 auto; color:#eef1f4; font-variant-numeric:tabular-nums; }
   /* Stacked: mark on top, label under it, both centred on the same axis. */
   .lb-teamwrap { display:inline-flex; flex-direction:column; align-items:center; gap:3px; }
   /* object-fit:contain so a wide or tall crest is letterboxed rather than
@@ -555,10 +568,10 @@
   #driveDock .dock-undo { display:flex; gap:4px; margin:8px 0 10px; }
   #driveDock .dock-undo button { flex:1 1 calc(50% - 2px); padding:7px 5px;
                                  font-size:12.5px; font-weight:700; border:none;
-                                 border-radius:6px; background:var(--sc-navy); color:#fff; }
+                                 border-radius:6px; background:var(--sc-navy, #1a1a2e); color:#fff; }
   /* Redo is dead except immediately after an Undo, so it reads as
      disabled rather than as a second live action. */
-  #driveDock .dock-undo button:disabled { background:var(--sc-rule); color:#5f6b78; }
+  #driveDock .dock-undo button:disabled { background:var(--sc-rule, #e6e6e6); color:#9a9a9a; }
   /* Below this the margin is too thin to hold it, so it drops back to a
      normal card in the flow -- exactly where it sits today. */
   @media (max-width: 1219px), (hover: none) and (pointer: coarse) {
@@ -573,9 +586,9 @@
     border-width:1px !important; border-style:solid !important;
     margin:0 !important; white-space:nowrap; flex:0 0 auto;
     text-align:center; }
-  #onAirBanner.hdr-btn { border-color:#b00020 !important; letter-spacing:0.04em !important;
+  #onAirBanner.hdr-btn { border-color:#ff8fa3 !important; letter-spacing:0.04em !important;
                          animation:none !important; }
-  a#launchViewLink.hdr-btn { border-color:#b00020 !important; }
+  a#launchViewLink.hdr-btn { border-color:#ff8fa3 !important; }
   /* Share the row. See the note on #topActions above. */
   #topActions > * { flex:1 1 auto; }
 
@@ -656,8 +669,8 @@
   /* Dashboard, filled like the buttons on the right rather than left as a
      bare link -- it was inheriting only the browser's anchor colour. */
   #headerLeft > .hdr-btn {
-    background:var(--sc-navy); color:#fff !important;
-    border:1px solid var(--sc-navy) !important; }
+    background:var(--sc-navy, #1a1a2e); color:#fff !important;
+    border:1px solid var(--sc-navy, #1a1a2e) !important; }
   #headerLeft > .hdr-btn:hover { background:#2a2a40; }
 
   /* 2px, not 1px. The off-air state carries a 2px outline so the control
@@ -752,7 +765,7 @@
      grids start on a common edge too -- a ragged left is the same fault
      as a ragged right. */
   #entryStage #playPanel .pick-row > .pick-label {
-    flex-grow:0; flex-shrink:0; flex-basis:74px; font-size:12.5px; color:var(--sc-ink-muted80; line-height:26px;
+    flex-grow:0; flex-shrink:0; flex-basis:74px; font-size:12.5px; color:#6b7280; line-height:26px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   /* Air between one picker and the next. Requested: inlining the labels
      removed their margins too, which left passer and receiver touching. */
@@ -773,8 +786,8 @@
   #entryStage #playPanel .pick-hidden { display:none !important; }
   #entryStage #playPanel .grid-more {
     padding:5px 9px !important; font-size:11.5px !important; font-weight:700 !important;
-    border:1px dashed #5a6672 !important; background:var(--sc-raise) !important;
-    color:var(--sc-ink) !important; border-radius:6px !important; margin:0 !important; }
+    border:1px dashed #b8b8b8 !important; background:#20272f !important;
+    color:#b9c4d0 !important; border-radius:6px !important; margin:0 !important; }
   #entryStage #playPanel .grid-inline-manual > input, #guidedPanel .grid-inline-manual > input {
     flex-grow:0; flex-shrink:0; flex-basis:88px; width:88px; margin:0; }
 
@@ -846,12 +859,12 @@
   /* Sits directly under Review, in the same amber as the row marks so
      the two read as one complaint rather than two. */
   #playPanel .review-msg { margin-top:8px; padding:8px 12px; border-radius:6px;
-    background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400); color:var(--sc-amber);
+    background:var(--sc-amber-tint, #fff3cd); border:1px solid var(--sc-amber, #e0b400); color:#ffc72c;
     font-size:13px; font-weight:600; }
   #playPanel .row-gap-msg, #guidedPanel .row-gap-msg {
-    font-size:12.5px; font-weight:600; color:var(--sc-amber); margin:6px 0 2px; }
+    font-size:12.5px; font-weight:600; color:#ffc72c; margin:6px 0 2px; }
   #entryStage #playPanel .spot-heading, #guidedPanel .spot-heading {
-    font-size:12.5px; color:var(--sc-ink-muted); margin:9px 0 3px; }
+    font-size:12.5px; color:#6b7280; margin:9px 0 3px; }
   /* With the label on its own line the row above it is already spaced. */
   #entryStage #playPanel .spot-heading + .spot-row,
   #guidedPanel .spot-heading + .spot-row { margin-top:0; }
@@ -869,16 +882,14 @@
   /* The folded passer. Shaped like the picker button it replaces, so the
      line it occupies reads as the same field rather than a new control. */
   .passer-chip { display:block; width:100%; text-align:left; padding:7px 11px;
-                 font-size:13px; font-weight:700; border:1px solid #cfd4da;
-                  /* --sc-navy is a BUTTON FILL, not an ink -- 1.43:1 as text.
-                     The same token has now caused this in five places. */
-                 border-radius:6px; background:var(--sc-raise); color:var(--sc-ink);
+                 font-size:13px; font-weight:700; border:1px solid var(--sc-rule-strong);
+                 border-radius:6px; background:#20272f; color:var(--sc-ink);
                  cursor:pointer; margin:0 0 2px; }
-  .passer-chip:hover { background:rgba(255,255,255,.06); }
+  .passer-chip:hover { background:#20272f; }
   #entryStage #playPanel .opt-toggle { padding:5px 10px; font-size:12px; font-weight:700;
-                                       border:1px dashed #5a6672; border-radius:6px;
-                                       background:var(--sc-raise); color:var(--sc-ink); cursor:pointer; margin-top:6px; }
-  #entryStage #playPanel .opt-block.open > .opt-toggle { border-style:solid; background:var(--sc-raise); }
+                                       border:1px dashed #b8b8b8; border-radius:6px;
+                                       background:#20272f; color:#b9c4d0; cursor:pointer; margin-top:6px; }
+  #entryStage #playPanel .opt-block.open > .opt-toggle { border-style:solid; background:#20272f; }
   /* The field-position card: its own padding and margins are inline. */
   /* TIGHT TO THE TOP OF THE CARD. This rule carries !important, so the
      inline margin on the element itself never applied -- an earlier pass
@@ -896,7 +907,7 @@
   #fieldStripFooter { position:relative; min-height:18px; margin-top:-18px;
                       display:flex; align-items:center; pointer-events:none; }
   #fieldStripFooter > * { pointer-events:auto; }
-  #fieldStripFooter .fs-label { font-size:12px; color:var(--sc-ink-muted); }
+  #fieldStripFooter .fs-label { font-size:12px; color:#8d99a6; }
   #fieldStripFooter #fieldStripToggle { margin-left:auto; padding:2px 9px; font-size:12px; }
   /* Was the old header row's spacing. The first child is now the field
      itself, which needs none. */
@@ -951,7 +962,7 @@
   <div id="errorView" class="hidden card">
     <h1>Couldn't open this game</h1>
     <p class="sub" id="errorMsg"></p>
-    <a href="dashboard.html" style="text-decoration:none; padding:9px 16px; border-radius:6px; background:var(--sc-navy); color:var(--sc-ink); font-weight:600;">← Dashboard</a>
+    <a href="dashboard_mock.html" style="text-decoration:none; padding:9px 16px; border-radius:6px; background:#1a1a2e; color:#fff; font-weight:600;">← Dashboard</a>
   </div>
 
   <div id="mainView" class="hidden">
@@ -986,7 +997,7 @@
     <div id="clockPromptCard" style="display:none; background:rgba(255,199,44,.13); border-radius:8px; padding:12px 14px; margin-bottom:10px;">
       <div id="clockPromptLabel" style="font-size:15px; font-weight:600; margin-bottom:8px;"></div>
       <input autocomplete="off" type="text" id="clockPromptInput" placeholder="M:SS or MSS" style="width:100px; display:inline-block;">
-      <span id="clockPromptLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:var(--sc-raise); border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>
+      <span id="clockPromptLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:#20272f; border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>
       <button class="primary" id="clockPromptSave">Save clock</button>
       <button class="secondary" id="clockPromptSkip">Skip</button>
     </div>
@@ -1005,7 +1016,7 @@
          middle, and that width is height everywhere else. -->
     <div id="headerLeft">
         <span class="scMarkBox" role="img" aria-label="StatChat"></span>
-      <a class="hdr-btn" href="dashboard.html">&larr; Dashboard</a>
+      <a class="hdr-btn" href="dashboard_mock.html">&larr; Dashboard</a>
       <button type="button" id="onAirBanner" style="display:none;">&#9679; ON AIR</button>
     </div>
 
@@ -1048,10 +1059,10 @@
       </div>
       <div id="gameMsg"></div>
       <div id="finalLockBanner" class="hidden" style="background:rgba(255,199,44,.13); border:1px solid #e0b400; border-radius:8px; padding:12px 14px; margin-bottom:16px;">
-        <div style="font-weight:600; color:var(--sc-amber); margin-bottom:4px;">This game is finalized</div>
-        <div style="font-size:13px; color:var(--sc-amber); margin-bottom:10px;">Play entry is locked to prevent accidental changes to a completed game's record. Unlock only if something genuinely needs correcting.</div>
-        <button type="button" id="recheckBtn" class="secondary" style="background:var(--sc-raise);">Run checks again</button>
-        <button type="button" id="unlockFinalBtn" class="secondary" style="background:var(--sc-raise);">Unlock to edit</button>
+        <div style="font-weight:600; color:#ffc72c; margin-bottom:4px;">This game is finalized</div>
+        <div style="font-size:13px; color:#ffc72c; margin-bottom:10px;">Play entry is locked to prevent accidental changes to a completed game's record. Unlock only if something genuinely needs correcting.</div>
+        <button type="button" id="recheckBtn" class="secondary" style="background:#20272f;">Run checks again</button>
+        <button type="button" id="unlockFinalBtn" class="secondary" style="background:#20272f;">Unlock to edit</button>
       </div>
       <!-- No top margin: the strip is the first thing in the card, so the
            card's own padding is the only gap wanted above it. The 8px
@@ -1069,7 +1080,7 @@
            label and Hide are positioned over it rather than stacked
            after it: absolute against the footer, which reserves the
            line's height whether or not there is a possession to show. -->
-      <div id="fieldStrip" style="display:none; background:var(--surface-2,#fff); border:1px solid var(--sc-rule-strong); border-radius:12px; padding:5px 12px 6px; margin:0 0 8px;">
+      <div id="fieldStrip" style="display:none; background:var(--surface-2,#20272f); border:1px solid #ddd; border-radius:12px; padding:5px 12px 6px; margin:0 0 8px;">
         <div id="fieldStripBody"></div>
         <div id="fieldStripFooter">
           <span class="fs-label">Field position</span>
@@ -1082,8 +1093,8 @@
       <!-- Connectivity. Separate from syncStatus below, which only appears
            AFTER a play has failed to save. This one is proactive: it tells
            you the connection is gone before you enter the next play. -->
-      <div id="connStatus" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:rgba(176,0,32,.16); border:1px solid #c8443a; color:var(--sc-red); font-size:13px; font-weight:600;"></div>
-      <div id="syncStatus" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:var(--sc-raise); border:1px solid #e0b84c; font-size:13px;"></div>
+      <div id="connStatus" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:rgba(176,0,32,.16); border:1px solid #c8443a; color:#eef1f4; font-size:13px; font-weight:600;"></div>
+      <div id="syncStatus" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:rgba(255,199,44,.13); border:1px solid #e0b84c; font-size:13px;"></div>
       <input autocomplete="off" type="text" id="code" style="display:none;">
 
       <div class="row" style="margin-bottom:8px;">
@@ -1098,7 +1109,7 @@
         <button class="primary" id="startHalfBtn" style="display:none;">Start 2nd half</button>
         <button class="primary" id="endGameBtn" style="display:none;">End game</button>
         <button id="otUtilBtn" style="display:none;">Start overtime</button>
-        <a id="recapLink" href="#" style="display:none; padding:8px 12px; border-radius:6px; background:var(--sc-green); color:#fff; font-size:13px; font-weight:600; text-decoration:none;">View game recap &rarr;</a>
+        <a id="recapLink" href="#" style="display:none; padding:8px 12px; border-radius:6px; background:#1a7a4c; color:#fff; font-size:13px; font-weight:600; text-decoration:none;">View game recap &rarr;</a>
         <!-- The same Clear the trees carry, at the top of the panel and
              pushed to the far right. The tree's own Clear sits at the
              BOTTOM, below however tall the open tree happens to be; on a
@@ -1151,7 +1162,7 @@
            frequently reached for here, and at half width they were the
            same size and shape as controls pressed once a quarter. -->
       <div class="row rail-wide">
-        <button id="penUtilBtn" style="background:#ffc72c; color:var(--sc-ink);">Penalty</button>
+        <button id="penUtilBtn" style="background:#ffc72c; color:#eef1f4;">Penalty</button>
       </div>
       <div class="row rail-wide">
         <!-- Its own colour because it is its own kind of thing: a clock
@@ -1181,7 +1192,7 @@
       </div>
       <div id="playPanel" style="display:none;"></div>
 
-      <div id="manualPanel" style="display:none; background:var(--sc-raise); border-radius:8px; padding:12px 14px; margin-top:10px;">
+      <div id="manualPanel" style="display:none; background:#20272f; border-radius:8px; padding:12px 14px; margin-top:10px;">
         <p class="hint" style="margin:0 0 6px;">Manual entry (flags as unresolved for later review)</p>
         <label>Insert after<select id="insertAfter" style="width:100%; margin-bottom:8px;"></select></label>
         <input autocomplete="off" type="text" id="manualText" placeholder="Describe the play" style="width:100%; margin-bottom:8px;">
@@ -1189,13 +1200,13 @@
       </div>
 
       <div id="confirmCard" style="display:none;">
-        <div style="font-size:14px; color:#888; margin-bottom:4px;">Parsed as</div>
+        <div style="font-size:14px; color:#8d99a6; margin-bottom:4px;">Parsed as</div>
         <div id="parsedText" style="font-size:16px; font-weight:600; margin-bottom:10px;"></div>
-        <div id="fieldPosWarning" style="display:none; background:rgba(255,199,44,.13); border:1px solid #e0b400; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:13px; color:var(--sc-amber);"></div>
+        <div id="fieldPosWarning" style="display:none; background:rgba(255,199,44,.13); border:1px solid #e0b400; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:13px; color:#eef1f4;"></div>
         <label id="flipRow" style="display:none;"><input autocomplete="off" type="checkbox" id="flipCheck" checked> <span id="flipLabel"></span></label>
         <div id="confirmClockRow" style="display:none; margin-bottom:8px;">
           <span id="confirmClockLabel">Clock</span>&nbsp;<input autocomplete="off" type="text" id="confirmClockInput" placeholder="M:SS or MSS" style="width:90px; display:inline-block;">
-          <span id="confirmClockLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:var(--sc-raise); border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>
+          <span id="confirmClockLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:#20272f; border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>
           <div id="confirmClockWarn" style="font-size:12px; color:var(--sc-amber); margin-top:4px;">
             Optional — but with no clock this possession's time won't be counted.
           </div>
@@ -1255,7 +1266,7 @@
              with the checks: it is the same question -- is the record
              current -- and this tile is where a scorer already looks. -->
         <div id="lastClockRow" style="margin-top:8px; padding-top:8px;
-             border-top:1px solid var(--sc-rule); font-size:13px;">
+             border-top:1px solid var(--sc-rule, #e6e6e6); font-size:13px;">
           <span id="lastClockText"></span>
         </div>
       </div>
@@ -1337,7 +1348,7 @@
     const role = (!error && data && data.length > 0 && data[0].role) || 'view';
     currentUserRole = role;
     const ok = (ROLE_RANK[role] || 0) >= (ROLE_RANK[minRole] || 0);
-    if (!ok) window.location.href = 'dashboard.html';
+    if (!ok) window.location.href = 'dashboard_mock.html';
     return ok;
   }
 
@@ -1347,9 +1358,9 @@
         guardMinRoleOrRedirect(session.user.id, 'game_entry').then(ok => {
           if (ok) init();
         });
-      } else { window.location.href = '/login.html'; }
+      } else { window.location.href = '/login_mock.html'; }
     } else if (event === 'SIGNED_OUT'){
-      window.location.href = '/login.html';
+      window.location.href = '/login_mock.html';
     }
   });
 
@@ -1877,7 +1888,7 @@ function renderLastClockHint(elId){
   if (!el) return;
   const last = absSecToClockStr(getLastClockAbsSec());
   if (!last){
-    el.innerHTML = '<span style="color:#999;">no clock entered yet</span>';
+    el.innerHTML = '<span style="color:#8d99a6;">no clock entered yet</span>';
     return;
   }
   const st = computeState();
@@ -1892,7 +1903,7 @@ function renderLastClockHint(elId){
   // enough to wrap the line. Shortened here, in the shared function,
   // so all five places this hint appears stay consistent with each
   // other rather than drifting into a short version and a long one.
-  el.innerHTML = '<span style="color:var(--sc-ink-muted);">Last entered</span> ' +
+  el.innerHTML = '<span style="color:#b9c4d0;">Last entered</span> ' +
     '<strong style="font-size:15px;">' + last.text + '</strong> ' +
     '<span style="color:' + (stale ? 'var(--sc-amber)' : '#666') + ';">(Q' + last.q + ')</span>';
 }
@@ -3906,12 +3917,12 @@ function attachNameConfirm(inputId, getTeam, getOrder, onResolve){
       // roster page can correct the unit later.
       const safeNum = String(num).replace(/[^0-9]/g, '');
       box.innerHTML =
-        '<div style="padding:8px 10px; background:rgba(255,199,44,.10); border:1px solid #e0b400; border-radius:6px;">' +
+        '<div style="padding:8px 10px; background:#20272f; border:1px solid #e0b400; border-radius:6px;">' +
         '<div style="color:var(--sc-amber); margin-bottom:6px;">#' + num + ' is not on ' +
           TEAMS[teamKey].name + "'s roster. The play will record as #" + num + '.</div>' +
         '<input autocomplete="off" type="text" id="addPlayerName_' + safeNum + '" placeholder="Player name" style="width:190px;">' +
-        '<button type="button" id="addPlayerBtn_' + safeNum + '" style="margin-left:6px; padding:6px 12px; border-radius:6px; border:2px solid var(--sc-green); background:var(--sc-green); color:#fff; font-weight:700; cursor:pointer;">Add to roster</button>' +
-        '<div id="addPlayerMsg_' + safeNum + '" style="font-size:12px; color:var(--sc-ink-muted); margin-top:5px;"></div>' +
+        '<button type="button" id="addPlayerBtn_' + safeNum + '" style="margin-left:6px; padding:6px 12px; border-radius:6px; border:2px solid #1a7a4c; background:#1a7a4c; color:#fff; font-weight:700; cursor:pointer;">Add to roster</button>' +
+        '<div id="addPlayerMsg_' + safeNum + '" style="font-size:12px; color:#b9c4d0; margin-top:5px;"></div>' +
         '</div>';
       const addBtn = document.getElementById('addPlayerBtn_' + safeNum);
       const addInput = document.getElementById('addPlayerName_' + safeNum);
@@ -3930,7 +3941,7 @@ function attachNameConfirm(inputId, getTeam, getOrder, onResolve){
           if (error){
             // Not saved is not the same as saved -- say so rather than
             // updating the screen and letting a reload undo it.
-            addMsg.innerHTML = '<span style="color:var(--sc-red);">Could not save: ' + error.message +
+            addMsg.innerHTML = '<span style="color:#ff8fa3;">Could not save: ' + error.message +
               '. The play will still record as #' + num + '.</span>';
             addBtn.disabled = false;
             return;
@@ -3958,7 +3969,7 @@ function attachNameConfirm(inputId, getTeam, getOrder, onResolve){
     if (onResolve) onResolve(num, others.length ? resolved : null);
     box.innerHTML =
       '<button type="button" disabled style="padding:6px 12px; border-radius:6px; border:2px solid #2e7d32; ' +
-      'background:var(--sc-raise); color:var(--sc-green); font-weight:700; cursor:default; opacity:1;">#' + num + ' ' + resolved + '</button>' +
+      'background:#20272f; color:#a3d93f; font-weight:700; cursor:default; opacity:1;">#' + num + ' ' + resolved + '</button>' +
       (others.length
         ? '<div style="color:var(--sc-amber); margin-top:5px;">#' + num + ' is shared — tap the right player:</div>' +
           others.map((c, i) => '<button type="button" class="nameConfirmAlt" data-i="' + i +
@@ -3967,8 +3978,8 @@ function attachNameConfirm(inputId, getTeam, getOrder, onResolve){
             // the player's name white-on-white -- invisible, leaving
             // just the grey "(unit)" hint looking like an empty button.
             '" style="margin:4px 6px 0 0; padding:6px 12px; border-radius:6px; border:2px solid var(--sc-amber); ' +
-            'background:var(--sc-raise); color:var(--sc-ink); font-weight:600; cursor:pointer;">' +
-            c.name + ' <span style="color:var(--sc-amber); font-weight:400;">(' + c.unit + ')</span></button>').join('')
+            'background:rgba(255,199,44,.13); color:#eef1f4; font-weight:600; cursor:pointer;">' +
+            c.name + ' <span style="color:#ffc72c; font-weight:400;">(' + c.unit + ')</span></button>').join('')
         : '');
     box.querySelectorAll('.nameConfirmAlt').forEach(b => b.addEventListener('click', () => {
       const chosen = others[+b.dataset.i];
@@ -4568,7 +4579,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       count.className = issues.length ? 'vc-bad' : 'vc-ok';
       body.innerHTML = issues.length
         ? issues.map(t => '<div class="v-issue">' + String(t) + '</div>').join('')
-        : '<div style="font-size:12.5px; color:var(--sc-green); padding:6px 0;">' +
+        : '<div style="font-size:12.5px; color:#a3d93f; padding:6px 0;">' +
           'Nothing to flag. Downs, spots, yardage and clock all reconcile.</div>';
     }, 400);
   }
@@ -4689,7 +4700,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     function renderLogLines(list, withControls){
       return list.map(p => {
-        if (p.isDivider) return '<div style="text-align:center; font-size:14px; font-weight:600; color:#888; margin:8px 0; border-top:1px dashed #ccc; padding-top:6px;">' + p.text + '</div>';
+        if (p.isDivider) return '<div style="text-align:center; font-size:14px; font-weight:600; color:#8d99a6; margin:8px 0; border-top:1px dashed #ccc; padding-top:6px;">' + p.text + '</div>';
         // The checks report problems by play number, so the log has to
         // show them or the message is not actionable.
         const pnum = plays.indexOf(p) + 1;
@@ -4697,7 +4708,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // OT, not Q5 -- matching view.html. See the note there for why the
         // round is not numbered on a per-play tag.
         const qtag = p.quarter
-          ? '<span style="color:#999; font-size:12px; margin-right:6px;">' +
+          ? '<span style="color:#8d99a6; font-size:12px; margin-right:6px;">' +
             (p.quarter >= 5 ? 'OT' : 'Q' + p.quarter) + '</span>'
           : '';
         // Controls only on the full log. The drive panels are a summary
@@ -4723,7 +4734,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '</span></div>';
       }).join('');
     }
-    document.getElementById('logScroll').innerHTML = renderLogLines(plays.slice().reverse(), correctionMode) || '<div style="color:#999;">no plays logged yet</div>';
+    document.getElementById('logScroll').innerHTML = renderLogLines(plays.slice().reverse(), correctionMode) || '<div style="color:#8d99a6;">no plays logged yet</div>';
     document.querySelectorAll('#logScroll .logDelBtn').forEach(b =>
       b.addEventListener('click', () => deletePlayById(parseInt(b.dataset.pid), false)));
     document.querySelectorAll('#logScroll .logRedoBtn').forEach(b =>
@@ -4764,8 +4775,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       ? plays.slice(resetIdxs[resetIdxs.length - 1])
       : plays.filter(x => !(x.effect && x.effect.setQuarter));
     const previousDrivePlays = resetIdxs.length >= 2 ? plays.slice(resetIdxs[resetIdxs.length - 2], resetIdxs[resetIdxs.length - 1]) : [];
-    document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.filter(x => !isDriveTileNoise(x)).slice().reverse()) || '<div style="color:#999;">no active drive yet</div>';
-    document.getElementById('prevDriveLogScroll').innerHTML = renderLogLines(previousDrivePlays.filter(x => !isDriveTileNoise(x)).slice().reverse()) || '<div style="color:#999;">no previous drive yet</div>';
+    document.getElementById('driveLogScroll').innerHTML = renderLogLines(currentDrivePlays.filter(x => !isDriveTileNoise(x)).slice().reverse()) || '<div style="color:#8d99a6;">no active drive yet</div>';
+    document.getElementById('prevDriveLogScroll').innerHTML = renderLogLines(previousDrivePlays.filter(x => !isDriveTileNoise(x)).slice().reverse()) || '<div style="color:#8d99a6;">no previous drive yet</div>';
     // The kickoff restriction depends on live game state, so the gating
     // has to be re-evaluated whenever the state changes -- not just at
     // load. Without this the buttons were locked to whatever the state
@@ -4851,14 +4862,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // collided with the ball label whenever the ball was near
       // midfield; pairing them also drops a whole row of height.
       (state.possession
-        ? '<div style="text-align:center; margin-top:-2px; font-size:13px; font-weight:600; color:var(--sc-ink);">' +
+        ? '<div style="text-align:center; margin-top:-2px; font-size:13px; font-weight:600; color:#eef1f4;">' +
           (drivingRight ? '' : '<svg width="26" height="10" style="vertical-align:-1px; margin-right:6px;">' +
-            '<line x1="24" y1="5" x2="8" y2="5" stroke="#eef1f4" stroke-width="3" stroke-linecap="round"/>' +
-            '<path d="M1 5 L10 1 L10 9 Z" fill="#eef1f4"/></svg>') +
+            '<line x1="24" y1="5" x2="8" y2="5" stroke="#1a1a2e" stroke-width="3" stroke-linecap="round"/>' +
+            '<path d="M1 5 L10 1 L10 9 Z" fill="#1a1a2e"/></svg>') +
           TEAMS[state.possession].name +
           (drivingRight ? '<svg width="26" height="10" style="vertical-align:-1px; margin-left:6px;">' +
-            '<line x1="2" y1="5" x2="18" y2="5" stroke="#eef1f4" stroke-width="3" stroke-linecap="round"/>' +
-            '<path d="M25 5 L16 1 L16 9 Z" fill="#eef1f4"/></svg>' : '') +
+            '<line x1="2" y1="5" x2="18" y2="5" stroke="#1a1a2e" stroke-width="3" stroke-linecap="round"/>' +
+            '<path d="M25 5 L16 1 L16 9 Z" fill="#1a1a2e"/></svg>' : '') +
           '</div>'
         : '') +
       '';
@@ -5813,7 +5824,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           (st0.scores.teamA !== st0.scores.teamB
             ? '<button class="secondary" id="ot_endgame" style="margin-left:8px;">End game — ' +
               TEAMS[st0.scores.teamA > st0.scores.teamB ? 'teamA' : 'teamB'].name + ' win</button>'
-            : '<span style="margin-left:10px; font-size:13px; color:#888;">Scores level — another series is needed before the game can end.</span>') +
+            : '<span style="margin-left:10px; font-size:13px; color:#8d99a6;">Scores level — another series is needed before the game can end.</span>') +
         '</div>';
       const endBtn = document.getElementById('ot_endgame');
       if (endBtn){
@@ -5883,7 +5894,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const kickerList = specialTeamsEligible(guided.kickingTeam);
       content.innerHTML =
         '<div style="font-size:16px; margin-bottom:8px;">' + TEAMS[guided.kickingTeam].name + ' kicks off.</div>' +
-        '<p style="font-size:13px; color:#888; margin:0 0 4px;">Kicker</p>' +
+        '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Kicker</p>' +
         '<div id="gk_kicker_grid">' + pickerHtml(kickerList, 'gk_kicker_pick') + '</div>' +
         '<input autocomplete="off" type="text" id="gk_kicker_manual" placeholder="or type #" style="width:100px; margin:4px 0 8px;"><br>' +
         // Asked about the KICKING team, because that is what the coach
@@ -5892,7 +5903,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // driving direction -- no mental inversion required.
         // Recorded once for the whole game; ends alternate by quarter
         // from this answer, so nothing else needs to ask again.
-        '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Which way is ' +
+        '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Which way is ' +
           TEAMS[guided.kickingTeam].name + ' kicking?</p>' +
         '<button type="button" class="gk_dir_btn" data-dir="left">&#8592; left</button> ' +
         '<button type="button" class="gk_dir_btn" data-dir="right">right &#8594;</button>' +
@@ -5964,7 +5975,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const returnerList = returnerEligible(guided.receivingTeam);
       content.innerHTML =
         '<div style="font-size:16px; margin-bottom:8px;">' + TEAMS[guided.receivingTeam].name + ' returns.</div>' +
-        '<p style="font-size:13px; color:#888; margin:0 0 4px;">Returner</p>' +
+        '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Returner</p>' +
         // The box at the END OF THE LIST, as on every other picker. It
         // was a separate element after a <br>, so it claimed a line of
         // its own -- and the guided panel is not inside #entryStage, so
@@ -5983,19 +5994,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // touchdown, then where the ball ended up, and the clock last --
         // the clock is read off the scoreboard after the play is over.
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;">' +
-          '<div style="margin-bottom:6px;"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Return yards</p>' +
+          '<div style="margin-bottom:6px;"><p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Return yards</p>' +
             '<input autocomplete="off" type="text" id="gr_yards" style="width:80px;"></div>' +
           '<div style="margin-bottom:6px;">' +
             '<input autocomplete="off" type="checkbox" id="gr_touchback" style="display:none;">' +
-            '<button type="button" id="gr_touchback_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:13px; font-weight:600; cursor:pointer;">Touchback</button>' +
+            '<button type="button" id="gr_touchback_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:13px; font-weight:600; cursor:pointer;">Touchback</button>' +
           '</div>' +
           '<div id="gr_oob_wrap" style="margin-bottom:6px;">' +
             '<input autocomplete="off" type="checkbox" id="gr_oob" style="display:none;">' +
-            '<button type="button" id="gr_oob_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:13px; font-weight:600; cursor:pointer;">Out of bounds</button>' +
+            '<button type="button" id="gr_oob_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:13px; font-weight:600; cursor:pointer;">Out of bounds</button>' +
           '</div>' +
           '<div id="gr_muff_wrap" style="margin-bottom:6px;">' +
             '<input autocomplete="off" type="checkbox" id="gr_muffed" style="display:none;">' +
-            '<button type="button" id="gr_muffed_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:13px; font-weight:600; cursor:pointer;">Muff / Fumble</button>' +
+            '<button type="button" id="gr_muffed_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:13px; font-weight:600; cursor:pointer;">Muff / Fumble</button>' +
           '</div>' +
           // An onside kick reuses the muff structure -- a live ball either
           // side can recover, with the same two spot fields -- but it is a
@@ -6003,7 +6014,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // as somebody's mistake.
           '<div id="gr_onside_wrap" style="margin-bottom:6px;">' +
             '<input autocomplete="off" type="checkbox" id="gr_onside" style="display:none;">' +
-            '<button type="button" id="gr_onside_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:13px; font-weight:600; cursor:pointer;">Onside kick</button>' +
+            '<button type="button" id="gr_onside_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:13px; font-weight:600; cursor:pointer;">Onside kick</button>' +
           '</div>' +
         '</div>' +
         // "FIELDED AT / RETURNED TO" -- ported from the play panel's
@@ -6015,7 +6026,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // same IDs with a gr_ prefix, same behaviour, adapted only for
         // guided.kickingTeam/guided.receivingTeam in place of off/def.
         '<div id="gr_kofielded_wrap" style="margin-top:10px;">' +
-          '<p style="font-size:13px; color:#888; margin:0 0 4px;">Or enter fielded at</p>' +
+          '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Or enter fielded at</p>' +
           '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
             '<button type="button" class="ptoggle gr_kofieldedSide" data-side="own" ' +
               'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
@@ -6028,7 +6039,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '</div>' +
         '<div id="gr_koretto_wrap" style="margin-top:6px; margin-left:22px; ' +
           'padding-left:22px; border-left:1px solid #d8d8d8;">' +
-          '<p style="font-size:13px; color:#888; margin:0 0 4px;">Or enter returned to</p>' +
+          '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Or enter returned to</p>' +
           '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
             '<button type="button" class="ptoggle gr_koretSide" data-side="own" ' +
               'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
@@ -6038,8 +6049,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
               TEAMS[guided.receivingTeam].name + '</button>' +
             '<input autocomplete="off" type="text" id="gr_koretto_yardline" placeholder="yard line" style="width:90px;">' +
           '</span>' +
-          '<div id="gr_koretto_readout" style="font-size:14px; font-weight:600; color:var(--sc-green); ' +
-            'background:rgba(124,181,24,.12); border-left:3px solid var(--sc-green); border-radius:4px; ' +
+          '<div id="gr_koretto_readout" style="font-size:14px; font-weight:600; color:#a3d93f; ' +
+            'background:#20272f; border-left:3px solid #1a7a4c; border-radius:4px; ' +
             'padding:7px 10px; margin-top:10px;"></div>' +
         '</div>' +
         // FUMBLED DURING THE RETURN -- ported alongside the calculator
@@ -6062,24 +6073,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // record a fumble during a return that never happened.
         '<div id="gr_ko_ret_fumbled_wrap" style="margin-top:10px;">' +
           '<input autocomplete="off" type="checkbox" id="gr_ko_ret_fumbled" style="display:none;">' +
-          '<button type="button" id="gr_ko_ret_fumbled_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:13px; font-weight:600; cursor:pointer;">Fumbled during the return</button>' +
+          '<button type="button" id="gr_ko_ret_fumbled_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:13px; font-weight:600; cursor:pointer;">Fumbled during the return</button>' +
         '</div>' +
         '<div id="gr_ko_ret_fum_wrap" style="display:none; margin-top:10px;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="gr_koret_fumrec" value="r" checked> Recovered by ' + TEAMS[guided.receivingTeam].name + ' (they keep the ball)</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="gr_koret_fumrec" value="k"> Recovered by ' + TEAMS[guided.kickingTeam].name + '</label>' +
-          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
+          '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Recovered by (optional)</p>' +
           '<input autocomplete="off" type="text" id="gr_koret_fumrec_credit" placeholder="type #" style="width:100px;">' +
           '<div id="gr_koretfumspot_wrap" style="display:none;">' + startingSpotFieldsHtml('gr_koretfumspot', 'Spot where ' + TEAMS[guided.kickingTeam].name + ' took over (required)', guided.kickingTeam) + '</div>' +
         '</div>' +
         '<div id="gr_muff_box" style="display:none; margin-top:8px;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="gr_muffrec" value="k" checked> Recovered by ' + TEAMS[guided.kickingTeam].name + ' (the kicking team keeps the ball)</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="gr_muffrec" value="r"> Recovered by ' + TEAMS[guided.receivingTeam].name + '</label>' +
-          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
+          '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Recovered by (optional)</p>' +
           '<input autocomplete="off" type="text" id="gr_muff_rec" placeholder="type #" style="width:100px;">' +
         '</div>' +
         '<div style="margin-top:10px;">' +
           '<input autocomplete="off" type="checkbox" id="gr_td" style="display:none;">' +
-          '<button type="button" id="gr_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button>' +
+          '<button type="button" id="gr_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button>' +
         '</div>' +
         // Two spot fields, only one ever shown. Which team takes over
         // decides which side's yard lines the coach is reading, so a
@@ -6087,9 +6098,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // the moment the kicking team recovers.
         '<div id="gr_spot_recv">' + startingSpotFieldsHtml('gr_spot', 'Ball spot after the return (sets 1st down for ' + TEAMS[guided.receivingTeam].name + ')', guided.receivingTeam) + '</div>' +
         '<div id="gr_spot_kick" style="display:none;">' + startingSpotFieldsHtml('gr_kickspot', 'Spot where ' + TEAMS[guided.kickingTeam].name + ' took over', guided.kickingTeam) + '</div>' +
-        '<p style="font-size:13px; color:#888; margin:10px 0 4px;">Clock</p>' +
+        '<p style="font-size:13px; color:#8d99a6; margin:10px 0 4px;">Clock</p>' +
         '<input autocomplete="off" type="text" id="guidedReturnClock" placeholder="M:SS or MSS" style="width:110px;">' +
-        '<span id="guidedReturnLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:var(--sc-raise); border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>' +
+        '<span id="guidedReturnLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:#20272f; border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>' +
         '<div id="grClockWarn" style="font-size:12px; color:var(--sc-amber); margin-top:4px;">' +
           'Optional — but with no clock this possession\'s time won\'t be counted.</div>' +
         // Named for what it actually does here: two stored rows go away.
@@ -6177,7 +6188,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const retYds = grKoFieldedPos - returnToPos;
           retyEl.value = String(retYds);
           retyEl.disabled = true;
-          retyEl.style.background = 'rgba(124,181,24,.14)'; retyEl.style.borderColor = 'var(--sc-green)'; retyEl.style.fontWeight = '700';
+          retyEl.style.background = '#eef6f1'; retyEl.style.borderColor = '#1a7a4c'; retyEl.style.fontWeight = '700';
           const spotYl = document.getElementById('gr_spot_yardline');
           if (spotYl){
             const ours = spotYl.dataset.fromCalc === '1';
@@ -6228,9 +6239,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // brown here was the last survivor of the per-button styling
           // that made Muff / Fumble the wrong colour.
           grKoRetFumBtn.textContent = on ? '\u2713 Fumbled during the return' : 'Fumbled during the return';
-          grKoRetFumBtn.style.background = on ? 'var(--sc-green)' : 'transparent';
+          grKoRetFumBtn.style.background = on ? '#1a7a4c' : '#fff';
           grKoRetFumBtn.style.color = on ? '#fff' : '#555';
-          grKoRetFumBtn.style.borderColor = on ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+          grKoRetFumBtn.style.borderColor = on ? '#1a7a4c' : '#ccc';
         };
         grKoRetFumBtn.addEventListener('click', () => {
           grKoRetFumCb.checked = !grKoRetFumCb.checked;
@@ -6259,9 +6270,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const paintGrToggle = (btn, isOn, label) => {
         if (!btn) return;
         btn.textContent = (isOn ? '\u2713 ' : '') + label;
-        btn.style.background = isOn ? 'var(--sc-green)' : 'transparent';
+        btn.style.background = isOn ? '#1a7a4c' : '#fff';
         btn.style.color = isOn ? '#fff' : '#555';
-        btn.style.borderColor = isOn ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+        btn.style.borderColor = isOn ? '#1a7a4c' : '#ccc';
       };
       const refreshGrMuff = () => {
         // Muff and onside share this whole block: the same recovery
@@ -6438,9 +6449,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       grTdBtn.addEventListener('click', () => {
         grTdCb.checked = !grTdCb.checked;
         grTdBtn.textContent = grTdCb.checked ? '\u2713 Touchdown' : 'Touchdown';
-        grTdBtn.style.background = grTdCb.checked ? 'var(--sc-green)' : 'transparent';
+        grTdBtn.style.background = grTdCb.checked ? '#1a7a4c' : '#fff';
         grTdBtn.style.color = grTdCb.checked ? '#fff' : '#555';
-        grTdBtn.style.borderColor = grTdCb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+        grTdBtn.style.borderColor = grTdCb.checked ? '#1a7a4c' : '#ccc';
       });
       attachNameConfirm('gr_returner_manual', guided.receivingTeam, ['defense','special','offense']);
       document.getElementById('guidedReturnSave').addEventListener('click', () => {
@@ -7775,8 +7786,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (fp !== null){
         yardsEl.value = String(100 - fp);
         yardsEl.disabled = true;
-        yardsEl.style.background = 'rgba(124,181,24,.14)';
-        yardsEl.style.borderColor = 'var(--sc-green)';
+        yardsEl.style.background = '#eef6f1';
+        yardsEl.style.borderColor = '#1a7a4c';
         yardsEl.style.fontWeight = '700';
         c.say('from ' + markerLabel(fp) + ' to the goal line  =  +' + (100 - fp) + '  (touchdown)');
       }
@@ -7844,11 +7855,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // and an inline style beats any class. Same colours, so they stay
         // in step: if the shared gold ever changes, this changes with it.
         btn.style.setProperty('background', on ? '#ffc72c' : '#ffffff', 'important');
-        btn.style.setProperty('color', '#0d1117', 'important');
+        btn.style.setProperty('color', '#1a1a2e', 'important');
         btn.style.setProperty('box-shadow',
           on ? 'inset 0 0 0 2px #8a6a00' : 'none', 'important');
         btn.style.setProperty('border',
-          on ? '1px solid #8a6a00' : '1px solid var(--sc-rule-strong)ccc', 'important');
+          on ? '1px solid #8a6a00' : '1px solid #cccccc', 'important');
         btn.style.setProperty('font-weight', on ? '800' : '700', 'important');
         // NO SIZE CHANGE. Explicitly cleared rather than merely not set,
         // so a key enlarged by the earlier version cannot stay that way.
@@ -7897,7 +7908,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         (on ? '' : ' onclick="renderPlayPanel(\'' + t + '\')"') +
         ' style="padding:8px 12px; border-radius:6px; border:2px solid ' +
         (on ? '#8a6a00' : '#ccc') + '; background:' + (on ? '#ffc72c' : '#fff') +
-        '; color:' + (on ? '#0d1117' : 'var(--sc-ink)') +
+        '; color:' + (on ? '#1a1a2e' : '#555') +
         '; font-size:14px; font-weight:' + (on ? '700' : '600') + '; cursor:' +
         (on ? 'default' : 'pointer') + ';">' + (on ? '\u2713 ' : '') + label + '</button>';
     };
@@ -7951,13 +7962,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // midpoint of the same two options, not just the key size alone.
     const key = (label, val, style) =>
       '<button type="button" class="padKey" data-k="' + val + '" style="' +
-        'height:42px; border-radius:7.5px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); ' +
-        'font-size:17.5px; font-weight:700; color:var(--sc-ink); cursor:pointer; ' +
+        'height:42px; border-radius:7.5px; border:2px solid #ccc; background:#20272f; ' +
+        'font-size:17.5px; font-weight:700; color:#eef1f4; cursor:pointer; ' +
         'touch-action:manipulation;' + (style || '') + '">' + label + '</button>';
     const el = document.createElement('div');
     el.id = 'ydPad';
-    el.style.cssText = 'position:absolute; z-index:9000; display:none; background:var(--sc-raise); ' +
-      'border:1px solid var(--sc-rule-strong); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.22); ' +
+    el.style.cssText = 'position:absolute; z-index:9000; display:none; background:#20272f; ' +
+      'border:1px solid #ccc; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.22); ' +
       'padding:7px;';
     el.innerHTML =
       // The value is echoed above the keys. On a keypad you are not
@@ -7965,7 +7976,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // it has -- otherwise a stray tap is invisible until review.
       '<div id="ydPadEcho" style="height:30px; display:flex; align-items:center; ' +
         'justify-content:flex-end; padding:0 7.5px; margin-bottom:5.5px; border-radius:6.5px; ' +
-        'background:var(--sc-raise); font-size:20px; font-weight:800; ' +
+        'background:#20272f; font-size:20px; font-weight:800; ' +
         'font-variant-numeric:tabular-nums;">0</div>' +
       '<div style="display:grid; grid-template-columns:repeat(3, 46px); gap:4.5px;">' +
         // 7-8-9 on the top row: the calculator layout, not the phone one.
@@ -7973,9 +7984,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         key('7',7) + key('8',8) + key('9',9) +
         key('4',4) + key('5',5) + key('6',6) +
         key('1',1) + key('2',2) + key('3',3) +
-        key('\u232B','back','font-size:14.5px; color:var(--sc-red);') +
+        key('\u232B','back','font-size:14.5px; color:#ff8fa3;') +
         key('0',0) +
-        key('\u2713','done','background:#1a4d2e; color:#fff; border-color:var(--sc-green);') +
+        key('\u2713','done','background:#1a4d2e; color:#fff; border-color:#a3d93f;') +
       '</div>';
     document.body.appendChild(el);
 
@@ -8476,7 +8487,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
     // Field labels carry the choice being offered, so they were too quiet
     // at 13px #888 -- the same grey as every hint on the page.
-    const fieldLabel = t => '<p style="font-size:14px; font-weight:600; color:var(--sc-ink); margin:8px 0 4px;">' + t + '</p>';
+    const fieldLabel = t => '<p style="font-size:14px; font-weight:600; color:#b9c4d0; margin:8px 0 4px;">' + t + '</p>';
     // withLoss puts LOSS on the same LINE as the input, in the same column.
     // As a sibling of the column it aligned to the TOP of the row -- level
     // with the label, not the box it modifies -- because the row
@@ -8545,7 +8556,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<div style="display:grid; grid-template-columns:repeat(5,36px); gap:4px; width:fit-content;">' +
         Array.from({ length: 10 }, (_, i) => i).map(n =>
           '<button type="button" class="quickYardsBtn" data-for="' + (id||'pp_yards') + '" data-yds="' + n + '" ' +
-          'style="background:var(--sc-raise); color:var(--sc-ink); border:1px solid var(--sc-rule-strong); border-radius:5px; padding:4px 0; font-size:13px; font-weight:700; cursor:pointer;">' + n + '</button>'
+          'style="background:#20272f; color:#eef1f4; border:1px solid #ccc; border-radius:5px; padding:4px 0; font-size:13px; font-weight:700; cursor:pointer;">' + n + '</button>'
         ).join('') +
       '</div></div>';
     // "Tackled on" calculator. fieldPos is possession-relative (0 = own
@@ -8555,8 +8566,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // need is the side, because "the 20" is two different places. The
     // current side is pre-selected so a short gain is still one number.
     const fakeBlockHtml = (idPrefix, kickLabel) =>
-      '<div id="' + idPrefix + '_box" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--sc-rule-strong);">' +
-        '<p style="font-size:13px; color:#888; margin:0 0 6px;">Fake ' + kickLabel +
+      '<div id="' + idPrefix + '_box" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
+        '<p style="font-size:13px; color:#8d99a6; margin:0 0 6px;">Fake ' + kickLabel +
           ' \u2014 recorded as a rush or pass, not as a kick.</p>' +
         '<div style="display:flex; gap:10px; margin-bottom:8px;">' +
           '<button type="button" class="secondary" id="' + idPrefix + '_rush_btn">Rush</button>' +
@@ -8634,7 +8645,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="margin-top:10px;">' +
           '<input autocomplete="off" type="checkbox" id="' + idPrefix + '_td" style="display:none;">' +
           '<button type="button" id="' + idPrefix + '_td_toggle" style="width:100%; padding:12px; ' +
-            'border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); ' +
+            'border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; ' +
             'font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button></div>' +
       '</div>';
 
@@ -8697,17 +8708,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // is cleared.
     // `pre` defaults to pp_calc so every existing caller is unchanged.
     const spotCalcReadoutHtml = (pre) =>
-      '<div id="' + (pre || 'pp_calc') + '_readout" style="display:none; font-size:14px; font-weight:600; color:var(--sc-green); ' +
-      'background:rgba(124,181,24,.12); border-left:3px solid var(--sc-green); border-radius:4px; ' +
+      '<div id="' + (pre || 'pp_calc') + '_readout" style="display:none; font-size:14px; font-weight:600; color:#a3d93f; ' +
+      'background:#20272f; border-left:3px solid #1a7a4c; border-radius:4px; ' +
       'padding:7px 10px; margin-top:10px;"></div>';
 
-    const yardsBlockRet = () => '<div id="pp_retyds_container"><p style="font-size:13px; color:#888; margin:8px 0 4px;">Return yards (optional)</p><input autocomplete="off" type="text" id="pp_retyds" style="width:80px;"></div>';
+    const yardsBlockRet = () => '<div id="pp_retyds_container"><p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Return yards (optional)</p><input autocomplete="off" type="text" id="pp_retyds" style="width:80px;"></div>';
     // Given an id so a fake can hide it. The punt and field goal panels
     // carry their own Touchdown button for a RETURN score; the fake
     // sub-panel has its own for the runner. Both were on screen at once.
     const tdBlock = '<div id="pp_td_wrap_main" style="margin-top:10px;">' +
       '<input autocomplete="off" type="checkbox" id="pp_td" style="display:none;">' +
-      '<button type="button" id="pp_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button>' +
+      '<button type="button" id="pp_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">Touchdown</button>' +
       '</div>';
     const blockedToggleHtml = (id, label) => '<input autocomplete="off" type="checkbox" id="' + id + '" style="display:none;">' +
       '<button type="button" id="' + id + '_toggle" data-cb="' + id + '" data-label="' + (label || 'Blocked') + '" class="pp-blocked-toggle ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + (label || 'Blocked') + '</button>';
@@ -8729,7 +8740,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_rush_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_safety', 'Safety') + '</div></div>' +
         defBlock('Tackled by (optional)') +
         '<div id="pp_rush_td_wrap">' + tdBlock + '</div>' +
-        '<div id="pp_rush_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--sc-rule-strong);">' +
+        '<div id="pp_rush_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_rush_fumrec" value="own"> Recovered by own team</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_rush_fumrec" value="opp" checked> Recovered by opponent</label>' +
           // A fumble that goes out of bounds through the DEFENDING
@@ -8739,7 +8750,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // side, and it was missing from every fumble tree.
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_rush_fumrec" value="tb"> Out of the end zone — touchback</label>' +
           '<div id="pp_rush_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_rushfum_safety" style="display:none;">' +
-          '<button type="button" id="pp_rushfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button>' +
+          '<button type="button" id="pp_rushfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button>' +
           // WHERE THEY RECOVERED IT. Optional -- blank leaves the ball
           // where the play ended, which is the common case: most fumbles
           // are fallen on where they are dropped.
@@ -8770,7 +8781,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_rush_fum_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_rushfum') + yardsBlock('Return yards (optional)', 'pp_rushfum_retyds') +
             startingSpotFieldsHtml('pp_rushfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
             '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_rushfum_td" style="display:none;">' +
-            '<button type="button" id="pp_rushfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
+            '<button type="button" id="pp_rushfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
           
 '</div>' +
         '</div>';
@@ -8786,7 +8797,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_pass_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_pass_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_pass_safety', 'Safety') + '</div></div>' +
         '<div id="pp_pass_extra">' + defBlock('Tackled by (optional)') + '<div id="pp_pass_td_wrap">' + tdBlock + '</div></div>' +
-        '<div id="pp_pass_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--sc-rule-strong);">' +
+        '<div id="pp_pass_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pass_fumrec" value="own"> Recovered by own team</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pass_fumrec" value="opp" checked> Recovered by opponent</label>' +
           // A fumble that goes out of bounds through the DEFENDING
@@ -8796,7 +8807,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // side, and it was missing from every fumble tree.
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pass_fumrec" value="tb"> Out of the end zone — touchback</label>' +
           '<div id="pp_pass_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_passfum_safety" style="display:none;">' +
-          '<button type="button" id="pp_passfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button>' +
+          '<button type="button" id="pp_passfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button>' +
           // WHERE THEY RECOVERED IT. Optional -- blank leaves the ball
           // where the play ended, which is the common case: most fumbles
           // are fallen on where they are dropped.
@@ -8822,7 +8833,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_pass_fum_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_passfum') + yardsBlock('Return yards (optional)', 'pp_passfum_retyds') +
             startingSpotFieldsHtml('pp_passfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
             '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_passfum_td" style="display:none;">' +
-            '<button type="button" id="pp_passfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
+            '<button type="button" id="pp_passfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
           
 '</div>' +
         '</div>';
@@ -8851,7 +8862,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_sack_fumbled_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_sack_fumbled', 'Fumbled') + '</div>' +
         '<div id="pp_sack_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_sack_safety', 'Safety') + '</div></div>' +
         '<div id="pp_sack_credit_wrap">' + defBlock('Sacked by') + '</div>' +
-        '<div id="pp_sack_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--sc-rule-strong);">' +
+        '<div id="pp_sack_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_sack_fumrec" value="own"> Recovered by own team</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_sack_fumrec" value="opp" checked> Recovered by opponent</label>' +
           // A fumble that goes out of bounds through the DEFENDING
@@ -8861,7 +8872,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // side, and it was missing from every fumble tree.
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_sack_fumrec" value="tb"> Out of the end zone — touchback</label>' +
           '<div id="pp_sack_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_sackfum_safety" style="display:none;">' +
-          '<button type="button" id="pp_sackfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button>' +
+          '<button type="button" id="pp_sackfum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button>' +
           // WHERE THEY RECOVERED IT. Optional -- blank leaves the ball
           // where the play ended, which is the common case: most fumbles
           // are fallen on where they are dropped.
@@ -8887,7 +8898,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_sack_fum_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_sackfum') + yardsBlock('Return yards (optional)', 'pp_sackfum_retyds') +
             startingSpotFieldsHtml('pp_sackfum_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
             '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_sackfum_td" style="display:none;">' +
-            '<button type="button" id="pp_sackfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
+            '<button type="button" id="pp_sackfum_td_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown (defense)</button></div>' +
           
 '</div>' +
         '</div>';
@@ -8909,7 +8920,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // kickoff touchback does -- there is nothing that happened after
         // the catch to describe.
         '<div style="margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_int_tb" style="display:none;">' +
-        '<button type="button" id="pp_int_tb_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:15px; font-weight:700; cursor:pointer;">Downed in the end zone — touchback</button></div>' +
+        '<button type="button" id="pp_int_tb_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">Downed in the end zone — touchback</button></div>' +
         '<div id="pp_int_return_wrap">' + yardsBlock('Return yards (optional)') + tdBlock +
           // FUMBLED AFTER THE INTERCEPTION.
           // -------------------------------------------------------------
@@ -8927,7 +8938,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_int_fum_wrap" style="margin-top:10px;">' +
             blockedToggleHtml('pp_int_fumbled', 'Fumbled on the return') +
           '</div>' +
-          '<div id="pp_int_fum_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--sc-rule-strong);">' +
+          '<div id="pp_int_fum_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #ddd;">' +
             '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" ' +
               'name="pp_int_fumrec" value="own" checked> Recovered by ' +
               TEAMS[otherTeam(computeState().possession)].name + ' (they keep it)</label>' +
@@ -8960,8 +8971,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
               TEAMS[otherTeam(computeState().possession)].name + '</button>' +
             '<input autocomplete="off" type="text" id="pp_intspot_yardline" placeholder="yard line" style="width:90px;">' +
           '</span>' +
-          '<div id="pp_intspot_readout" style="font-size:14px; font-weight:600; color:var(--sc-green); ' +
-            'background:rgba(124,181,24,.12); border-left:3px solid var(--sc-green); border-radius:4px; ' +
+          '<div id="pp_intspot_readout" style="font-size:14px; font-weight:600; color:#a3d93f; ' +
+            'background:#20272f; border-left:3px solid #1a7a4c; border-radius:4px; ' +
             'padding:7px 10px; margin-top:10px;"></div>' +
         '</div>';
     else if (type === 'fumble') html = offBlock('carrier','Who fumbled') +
@@ -8974,7 +8985,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // side, and it was missing from every fumble tree.
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="tb"> Out of the end zone — touchback</label></div>' +
         '<div id="pp_fum_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_fum_safety" style="display:none;">' +
-        '<button type="button" id="pp_fum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
+        '<button type="button" id="pp_fum_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
         '<div id="pp_fum_opp" style="">' + defBlock('Recovered by') + yardsBlock('Return yards (optional)') + tdBlock + startingSpotFieldsHtml('pp_spot', null, def) + '</div>';
     else if (type === 'safety') html =
         '<p class="hint" style="margin:0 0 10px;">Offense tackled, or committed a foul, in their own end zone. Always 2 points for the defense, and ends the drive — the scoring team kicks off next, logged as its own play afterward.</p>' +
@@ -8990,7 +9001,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // splitting the two halves of the same question apart.
         // Pre-selected with whatever is already known, so a normal
         // kickoff needs no extra tap; only a correction does.
-        '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Which way is ' + TEAMS[off].name + ' kicking?</p>' +
+        '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Which way is ' + TEAMS[off].name + ' kicking?</p>' +
         '<button type="button" class="koDirBtn" data-dir="left">&#8592; left</button> ' +
         '<button type="button" class="koDirBtn" data-dir="right">right &#8594;</button>' +
         // THE WHOLE RETURN GROUP COLLAPSES, as on the punt tree.
@@ -9039,7 +9050,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // itself, so it does not resurrect a stat the app deliberately
           // stopped tracking.
           '<div id="pp_kofielded_wrap" style="margin-top:10px;">' +
-            '<p style="font-size:13px; color:#888; margin:0 0 4px;">Or enter fielded at</p>' +
+            '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Or enter fielded at</p>' +
             '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
               '<button type="button" class="ptoggle kofieldedSide" data-side="own" ' +
                 'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
@@ -9052,7 +9063,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '</div>' +
           '<div id="pp_koretto_wrap" style="margin-top:6px; margin-left:22px; ' +
             'padding-left:22px; border-left:1px solid #d8d8d8;">' +
-            '<p style="font-size:13px; color:#888; margin:0 0 4px;">Or enter returned to</p>' +
+            '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Or enter returned to</p>' +
             '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
               '<button type="button" class="ptoggle koretSide" data-side="own" ' +
                 'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
@@ -9062,8 +9073,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
                 TEAMS[def].name + '</button>' +
               '<input autocomplete="off" type="text" id="pp_koretto_yardline" placeholder="yard line" style="width:90px;">' +
             '</span>' +
-            '<div id="pp_koretto_readout" style="font-size:14px; font-weight:600; color:var(--sc-green); ' +
-              'background:rgba(124,181,24,.12); border-left:3px solid var(--sc-green); border-radius:4px; ' +
+            '<div id="pp_koretto_readout" style="font-size:14px; font-weight:600; color:#a3d93f; ' +
+              'background:#20272f; border-left:3px solid #1a7a4c; border-radius:4px; ' +
               'padding:7px 10px; margin-top:10px;"></div>' +
           '</div>' +
           // FUMBLED DURING THE RETURN -- same shape as punt's equivalent.
@@ -9076,7 +9087,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_ko_ret_fum_wrap" style="display:none; margin-top:10px;">' +
             '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_koret_fumrec" value="r" checked> Recovered by ' + TEAMS[def].name + ' (they keep the ball)</label>' +
             '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_koret_fumrec" value="k"> Recovered by ' + TEAMS[off].name + '</label>' +
-            '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
+            '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Recovered by (optional)</p>' +
             '<input autocomplete="off" type="text" id="pp_koret_fumrec_credit" placeholder="type #" style="width:100px;">' +
             '<div id="pp_koretfumspot_wrap" style="display:none;">' + startingSpotFieldsHtml('pp_koretfumspot', 'Spot where the kicking team took over (required)', off) + '</div>' +
           '</div>' +
@@ -9099,14 +9110,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_ko_onside_box" style="display:none;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_ko_onsiderec" value="r" checked> Recovered by ' + TEAMS[def].name + '</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_ko_onsiderec" value="k"> Recovered by ' + TEAMS[off].name + ' (they keep the ball)</label>' +
-          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
+          '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Recovered by (optional)</p>' +
           '<input autocomplete="off" type="text" id="pp_ko_onside_rec" placeholder="type #" style="width:100px;">' +
           '<div id="pp_ko_onside_spot_wrap">' + startingSpotFieldsHtml('pp_koonsidespot', 'Spot where the ball was recovered', off) + '</div>' +
         '</div>' +
         '<div id="pp_ko_muff" style="display:none;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_ko_muffrec" value="k" checked> Recovered by the kicking team (they keep the ball)</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_ko_muffrec" value="r"> Recovered by the receiving team</label>' +
-          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
+          '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Recovered by (optional)</p>' +
           '<input autocomplete="off" type="text" id="pp_ko_muff_rec" placeholder="type #" style="width:100px;">' +
           yardsBlock('Return yards after recovery (optional)', 'pp_ko_muff_retyds') +
           '<div id="pp_ko_muff_spot_wrap">' + startingSpotFieldsHtml('pp_komuffspot', 'Spot where the kicking team took over (required)', off) + '</div>' +
@@ -9168,8 +9179,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
                 TEAMS[def].name + '</button>' +
               '<input autocomplete="off" type="text" id="pp_retto_yardline" placeholder="yard line" style="width:90px;">' +
             '</span>' +
-            '<div id="pp_retto_readout" style="font-size:14px; font-weight:600; color:var(--sc-green); ' +
-              'background:rgba(124,181,24,.12); border-left:3px solid var(--sc-green); border-radius:4px; ' +
+            '<div id="pp_retto_readout" style="font-size:14px; font-weight:600; color:#a3d93f; ' +
+              'background:#20272f; border-left:3px solid #1a7a4c; border-radius:4px; ' +
               'padding:7px 10px; margin-top:10px;"></div>' +
           '</div>' +
           // FUMBLED DURING THE RETURN -- a third, independent spot.
@@ -9189,7 +9200,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="pp_ret_fum_wrap" style="display:none; margin-top:10px;">' +
             '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_puntret_fumrec" value="r" checked> Recovered by the receiving team (they keep the ball)</label>' +
             '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_puntret_fumrec" value="k"> Recovered by the kicking team</label>' +
-            '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
+            '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Recovered by (optional)</p>' +
             '<input autocomplete="off" type="text" id="pp_retfum_rec" placeholder="type #" style="width:100px;">' +
             // ONLY SHOWN when the kicking team recovers. Their own frame,
             // same as pp_muffspot -- no flip happens, so no conversion.
@@ -9216,9 +9227,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // down in their own end zone.
           '<div id="pp_muff_safety_wrap" style="display:none; margin:10px 0;">' +
             '<input autocomplete="off" type="checkbox" id="pp_muff_safety" style="display:none;">' +
-            '<button type="button" id="pp_muff_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:15px; font-weight:700; cursor:pointer;">Recovered in our own end zone — SAFETY</button>' +
+            '<button type="button" id="pp_muff_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">Recovered in our own end zone — SAFETY</button>' +
           '</div>' +
-          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Recovered by (optional)</p>' +
+          '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Recovered by (optional)</p>' +
           '<input autocomplete="off" type="text" id="pp_muff_rec" placeholder="type #" style="width:100px;">' +
           yardsBlock('Return yards after recovery (optional)', 'pp_muff_retyds') +
           '<div id="pp_muff_spot_wrap">' + startingSpotFieldsHtml('pp_muffspot', 'Spot where the kicking team took over (required)', off) + '</div>' +
@@ -9228,7 +9239,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_punt_blockrec" value="own"> Recovered by own team</label>' +
           '<div id="pp_punt_block_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_pb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + '</div>' +
           '<div id="pp_punt_block_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_punt_safety" style="display:none;">' +
-          '<button type="button" id="pp_punt_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
+          '<button type="button" id="pp_punt_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
         '</div>' +
         '<div id="pp_punt_td_wrap">' + tdBlock + '</div>' + startingSpotFieldsHtml('pp_spot', 'Spot where the ensuing drive starts (required)', def);
     else if (type === 'fg') html =
@@ -9251,8 +9262,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
               TEAMS[otherTeam(computeState().possession)].name + '</button>' +
             '<input autocomplete="off" type="text" id="pp_fgtee_yardline" placeholder="yard line" style="width:90px;">' +
           '</span>' +
-          '<div id="pp_fgtee_readout" style="font-size:14px; font-weight:600; color:var(--sc-green); ' +
-            'background:rgba(124,181,24,.12); border-left:3px solid var(--sc-green); border-radius:4px; ' +
+          '<div id="pp_fgtee_readout" style="font-size:14px; font-weight:600; color:#a3d93f; ' +
+            'background:#20272f; border-left:3px solid #1a7a4c; border-radius:4px; ' +
             'padding:7px 10px; margin-top:10px;"></div>' +
         '</div></div>' +
         // BLOCKED / MUFFED HOLD / FAKE, one row, equal widths. Reported
@@ -9299,7 +9310,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div style="margin-top:10px;">' +
             '<input autocomplete="off" type="checkbox" id="pp_fgb_safety" style="display:none;">' +
             '<button type="button" id="pp_fgb_safety_toggle" style="width:100%; padding:12px; ' +
-              'border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); ' +
+              'border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; ' +
               'font-size:15px; font-weight:700; cursor:pointer;">Recovered in own end zone — safety</button>' +
           '</div>' +
         '</div>' +
@@ -9336,7 +9347,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div style="margin-top:10px;">' +
             '<input autocomplete="off" type="checkbox" id="pp_fgmuff_safety" style="display:none;">' +
             '<button type="button" id="pp_fgmuff_safety_toggle" style="width:100%; padding:12px; ' +
-              'border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); ' +
+              'border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; ' +
               'font-size:15px; font-weight:700; cursor:pointer;">Recovered in own end zone — safety</button>' +
           '</div>' +
         '</div>' +
@@ -9371,7 +9382,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // NFL allow a defensive two, which is where these controls came
         // from -- they simply do not apply to high-school football.
         '<div id="pp_pat_blocked" style="display:none;">' + defBlock('Blocked by (optional)') +
-        '<p style="font-size:12px; color:#888; margin:6px 0 0;">NFHS: the try ends when the defense gains possession — no return, and the defense cannot score.</p></div>';
+        '<p style="font-size:12px; color:#8d99a6; margin:6px 0 0;">NFHS: the try ends when the defense gains possession — no return, and the defense cannot score.</p></div>';
     else if (type === 'twopt') html =
         '<div style="margin-bottom:10px;"><label>Play type</label><div class="row">' +
         '<button type="button" class="secondary" id="pp_2pt_rush_btn">Rush</button>' +
@@ -9411,9 +9422,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       tdToggle.addEventListener('click', () => {
         const cb = document.getElementById('pp_td');
         cb.checked = !cb.checked;
-        tdToggle.style.background = cb.checked ? 'var(--sc-green)' : 'transparent';
+        tdToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
         tdToggle.style.color = cb.checked ? '#fff' : '#555';
-        tdToggle.style.borderColor = cb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+        tdToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
         tdToggle.textContent = cb.checked ? '✓ Touchdown' : 'Touchdown';
         refreshSpotCalcContext(panel);
         // INTERCEPTION touchdown auto-fill, added 19 Aug 2026, reported
@@ -9463,8 +9474,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
               if (fp !== null){
                 turnoverYardsEl.value = String(fp);
                 turnoverYardsEl.disabled = true;
-                turnoverYardsEl.style.background = 'rgba(124,181,24,.14)';
-                turnoverYardsEl.style.borderColor = 'var(--sc-green)';
+                turnoverYardsEl.style.background = '#eef6f1';
+                turnoverYardsEl.style.borderColor = '#1a7a4c';
                 turnoverYardsEl.style.fontWeight = '700';
               }
             } else {
@@ -9482,9 +9493,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       rushFumTdToggle.addEventListener('click', () => {
         const cb = document.getElementById('pp_rushfum_td');
         cb.checked = !cb.checked;
-        rushFumTdToggle.style.background = cb.checked ? 'var(--sc-green)' : 'transparent';
+        rushFumTdToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
         rushFumTdToggle.style.color = cb.checked ? '#fff' : '#555';
-        rushFumTdToggle.style.borderColor = cb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+        rushFumTdToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
         rushFumTdToggle.textContent = cb.checked ? '✓ Returned for touchdown (defense)' : 'Returned for touchdown (defense)';
       });
     }
@@ -9493,9 +9504,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       passFumTdToggle.addEventListener('click', () => {
         const cb = document.getElementById('pp_passfum_td');
         cb.checked = !cb.checked;
-        passFumTdToggle.style.background = cb.checked ? 'var(--sc-green)' : 'transparent';
+        passFumTdToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
         passFumTdToggle.style.color = cb.checked ? '#fff' : '#555';
-        passFumTdToggle.style.borderColor = cb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+        passFumTdToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
         passFumTdToggle.textContent = cb.checked ? '✓ Returned for touchdown (defense)' : 'Returned for touchdown (defense)';
       });
     }
@@ -9797,8 +9808,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // if there is no yards field for this panel to begin with.
         const yeLock = yardsEl();
         if (yeLock){
-          yeLock.style.background = 'rgba(124,181,24,.14)';
-          yeLock.style.borderColor = 'var(--sc-green)';
+          yeLock.style.background = '#eef6f1';
+          yeLock.style.borderColor = '#1a7a4c';
           yeLock.style.fontWeight = '700';
         }
         // The sign comes out of the arithmetic, so LOSS is driven from
@@ -9936,7 +9947,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         writing = true;
         retyEl.value = String(retYds);
         retyEl.disabled = true;
-        retyEl.style.background = 'rgba(124,181,24,.14)'; retyEl.style.borderColor = 'var(--sc-green)'; retyEl.style.fontWeight = '700';
+        retyEl.style.background = '#eef6f1'; retyEl.style.borderColor = '#1a7a4c'; retyEl.style.fontWeight = '700';
         writing = false;
 
         // THE TAKEOVER SPOT FOLLOWS THE RETURN, NOT THE CATCH.
@@ -10007,9 +10018,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (fakeTdBtn){
           fakeTdBtn.addEventListener('click', () => {
             fakeTdCb.checked = !fakeTdCb.checked;
-            fakeTdBtn.style.background = fakeTdCb.checked ? 'var(--sc-green)' : 'transparent';
+            fakeTdBtn.style.background = fakeTdCb.checked ? '#1a7a4c' : '#fff';
             fakeTdBtn.style.color = fakeTdCb.checked ? '#fff' : '#555';
-            fakeTdBtn.style.borderColor = fakeTdCb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+            fakeTdBtn.style.borderColor = fakeTdCb.checked ? '#1a7a4c' : '#ccc';
             fakeTdBtn.textContent = fakeTdCb.checked ? '\u2713 Touchdown' : 'Touchdown';
           });
         }
@@ -10157,7 +10168,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           if (btn){
             btn.textContent = (on ? '\u2713 ' : '') + 'Downed in the end zone — touchback';
             btn.style.background = on ? '#ffc72c' : '#fff';
-            btn.style.color = on ? '#0d1117' : 'var(--sc-ink)';
+            btn.style.color = on ? '#1a1a2e' : '#555';
             btn.style.borderColor = on ? '#8a6a00' : '#ccc';
           }
           currentSpotGetter = on ? touchbackReset : intSpotGetter;
@@ -10477,9 +10488,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         rushFumSafetyToggle.addEventListener('click', () => {
           const cb = document.getElementById('pp_rushfum_safety');
           cb.checked = !cb.checked;
-          rushFumSafetyToggle.style.background = cb.checked ? 'var(--sc-green)' : 'transparent';
+          rushFumSafetyToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
           rushFumSafetyToggle.style.color = cb.checked ? '#fff' : '#555';
-          rushFumSafetyToggle.style.borderColor = cb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+          rushFumSafetyToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
           rushFumSafetyToggle.textContent = cb.checked ? '✓ In the end zone — safety' : 'In the end zone — safety';
         });
       }
@@ -10537,9 +10548,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         passFumSafetyToggle.addEventListener('click', () => {
           const cb = document.getElementById('pp_passfum_safety');
           cb.checked = !cb.checked;
-          passFumSafetyToggle.style.background = cb.checked ? 'var(--sc-green)' : 'transparent';
+          passFumSafetyToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
           passFumSafetyToggle.style.color = cb.checked ? '#fff' : '#555';
-          passFumSafetyToggle.style.borderColor = cb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+          passFumSafetyToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
           passFumSafetyToggle.textContent = cb.checked ? '✓ In the end zone — safety' : 'In the end zone — safety';
         });
       }
@@ -10596,9 +10607,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         sackFumSafetyToggle.addEventListener('click', () => {
           const cb = document.getElementById('pp_sackfum_safety');
           cb.checked = !cb.checked;
-          sackFumSafetyToggle.style.background = cb.checked ? 'var(--sc-green)' : 'transparent';
+          sackFumSafetyToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
           sackFumSafetyToggle.style.color = cb.checked ? '#fff' : '#555';
-          sackFumSafetyToggle.style.borderColor = cb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+          sackFumSafetyToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
           sackFumSafetyToggle.textContent = cb.checked ? '✓ In the end zone — safety' : 'In the end zone — safety';
         });
       }
@@ -10607,9 +10618,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         sackFumTdToggle.addEventListener('click', () => {
           const cb = document.getElementById('pp_sackfum_td');
           cb.checked = !cb.checked;
-          sackFumTdToggle.style.background = cb.checked ? 'var(--sc-green)' : 'transparent';
+          sackFumTdToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
           sackFumTdToggle.style.color = cb.checked ? '#fff' : '#555';
-          sackFumTdToggle.style.borderColor = cb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+          sackFumTdToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
           sackFumTdToggle.textContent = cb.checked ? '✓ Returned for touchdown (defense)' : 'Returned for touchdown (defense)';
         });
       }
@@ -10630,9 +10641,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         fumSafetyToggle.addEventListener('click', () => {
           const cb = document.getElementById('pp_fum_safety');
           cb.checked = !cb.checked;
-          fumSafetyToggle.style.background = cb.checked ? 'var(--sc-green)' : 'transparent';
+          fumSafetyToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
           fumSafetyToggle.style.color = cb.checked ? '#fff' : '#555';
-          fumSafetyToggle.style.borderColor = cb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+          fumSafetyToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
           fumSafetyToggle.textContent = cb.checked ? '✓ In the end zone — safety' : 'In the end zone — safety';
         });
       }
@@ -10759,7 +10770,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           writing = true;
           retyEl.value = String(retYds);
           retyEl.disabled = true;
-          retyEl.style.background = 'rgba(124,181,24,.14)'; retyEl.style.borderColor = 'var(--sc-green)'; retyEl.style.fontWeight = '700';
+          retyEl.style.background = '#eef6f1'; retyEl.style.borderColor = '#1a7a4c'; retyEl.style.fontWeight = '700';
           writing = false;
 
           // THE TAKEOVER SPOT FOLLOWS THE RETURN -- this was MISSING
@@ -11096,9 +11107,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         puntSafetyToggle.addEventListener('click', () => {
           const cb = document.getElementById('pp_punt_safety');
           cb.checked = !cb.checked;
-          puntSafetyToggle.style.background = cb.checked ? 'var(--sc-green)' : 'transparent';
+          puntSafetyToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
           puntSafetyToggle.style.color = cb.checked ? '#fff' : '#555';
-          puntSafetyToggle.style.borderColor = cb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+          puntSafetyToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
           puntSafetyToggle.textContent = cb.checked ? '✓ In the end zone — safety' : 'In the end zone — safety';
           refreshPuntMode();
         });
@@ -11112,9 +11123,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         muffSafetyToggle.addEventListener('click', () => {
           const cb = document.getElementById('pp_muff_safety');
           cb.checked = !cb.checked;
-          muffSafetyToggle.style.background = cb.checked ? 'var(--sc-green)' : 'transparent';
+          muffSafetyToggle.style.background = cb.checked ? '#1a7a4c' : '#fff';
           muffSafetyToggle.style.color = cb.checked ? '#fff' : '#555';
-          muffSafetyToggle.style.borderColor = cb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+          muffSafetyToggle.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
           muffSafetyToggle.textContent = cb.checked ? '\u2713 Recovered in our own end zone — SAFETY' : 'Recovered in our own end zone — SAFETY';
           refreshPuntMode();
         });
@@ -11169,9 +11180,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (!btn || !cb) return;
         const paint = () => {
           btn.textContent = (cb.checked ? '\u2713 ' : '') + 'Recovered in own end zone — safety';
-          btn.style.background = cb.checked ? 'var(--sc-green)' : 'transparent';
+          btn.style.background = cb.checked ? '#1a7a4c' : '#fff';
           btn.style.color = cb.checked ? '#fff' : '#555';
-          btn.style.borderColor = cb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+          btn.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
         };
         btn.addEventListener('click', () => {
           cb.checked = !cb.checked;
@@ -11332,8 +11343,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const where = (side === 'own' ? TEAMS[st.possession].name : TEAMS[otherTeam(st.possession)].name) + ' ' + yl;
           readout.textContent = 'tee on ' + where + '  +10  =  ' + dist + ' yard attempt';
           yardsEl.value = String(dist);
-          yardsEl.style.background = 'rgba(124,181,24,.14)';
-          yardsEl.style.borderColor = 'var(--sc-green)';
+          yardsEl.style.background = '#eef6f1';
+          yardsEl.style.borderColor = '#1a7a4c';
           yardsEl.style.fontWeight = '700';
         }
 
@@ -12664,14 +12675,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const driveTeamLabel = TEAMS[driveTeam].name + "'s side";
     const otherTeamLabel = TEAMS[otherTeam(driveTeam)].name + "'s side";
     panel.innerHTML =
-      '<p style="font-size:13px; color:#888; margin:0 0 6px;">Adjust down / distance — ' +
+      '<p style="font-size:13px; color:#8d99a6; margin:0 0 6px;">Adjust down / distance — ' +
       'leave anything blank to keep it as it is</p>' +
       '<div style="margin-bottom:8px;"><span style="font-size:13px; margin-right:6px;">Down</span>' +
       ['1','2','3','4'].map(d => '<button type="button" class="driveDownBtn" data-d="' + d + '">' + (d==='1'?'1st':d==='2'?'2nd':d==='3'?'3rd':'4th') + '</button>').join(' ') + '</div>' +
       '<label class="inline">Distance <input autocomplete="off" type="text" id="drive_dist" style="width:60px; display:inline-block;"></label>' +
       '<div style="margin-top:8px;"><button type="button" class="driveSideBtn" data-side="own">' + driveTeamLabel + '</button> <button type="button" class="driveSideBtn" data-side="opp">' + otherTeamLabel + '</button> ' +
       '<input autocomplete="off" type="text" id="drive_yardline" style="width:70px; display:inline-block;" placeholder="Yard line"></div>' +
-      '<p style="font-size:13px; color:#888; margin:10px 0 4px;">Which way is ' + TEAMS[computeState().possession].name + ' driving? (optional)</p>' +
+      '<p style="font-size:13px; color:#8d99a6; margin:10px 0 4px;">Which way is ' + TEAMS[computeState().possession].name + ' driving? (optional)</p>' +
       '<button type="button" class="driveDirBtn" data-dir="left">&#8592; left</button> ' +
       '<button type="button" class="driveDirBtn" data-dir="right">right &#8594;</button>' +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="drive_review">Review</button><button class="secondary" id="drive_clear">Clear</button></div>';
@@ -12759,8 +12770,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // unreachable. Kept as a backstop: it reads the SAME table that
       // greys the button, so the two cannot disagree, and if a render ever
       // leaves the button live the illegal marker still cannot be written.
-      panel.innerHTML = '<p style="font-size:13px; color:#888; margin:0 0 6px;">Mark start of quarter</p>' +
-        '<p style="font-size:14px; color:var(--sc-amber); background:rgba(255,199,44,.13); border:1px solid #e0b400; ' +
+      panel.innerHTML = '<p style="font-size:13px; color:#8d99a6; margin:0 0 6px;">Mark start of quarter</p>' +
+        '<p style="font-size:14px; color:#ffc72c; background:rgba(255,199,44,.13); border:1px solid #e0b400; ' +
         'border-radius:6px; padding:8px 12px; margin:0;">' +
         quarterMarkerNextStep(nowQ) + '</p>' +
         '<div class="row" style="margin-top:10px;"><button class="secondary" id="qMarkClose">Close</button></div>';
@@ -12769,7 +12780,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
       return;
     }
-    panel.innerHTML = '<p style="font-size:13px; color:#888; margin:0 0 6px;">Mark start of quarter</p>' +
+    panel.innerHTML = '<p style="font-size:13px; color:#8d99a6; margin:0 0 6px;">Mark start of quarter</p>' +
       allowed.map(q => '<button type="button" class="qMarkBtn" data-q="' + q + '">Start Q' + q + '</button>').join(' ');
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
     panel.querySelectorAll('.qMarkBtn').forEach(b => b.addEventListener('click', () => {
@@ -13027,7 +13038,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const who = st.possession;
     if (!who){
       panel.innerHTML = '<p class="hint">Set clock</p>' +
-        '<p style="font-size:14px; color:var(--sc-amber); background:rgba(255,199,44,.13); border:1px solid #e0b400; ' +
+        '<p style="font-size:14px; color:#ffc72c; background:rgba(255,199,44,.13); border:1px solid #e0b400; ' +
         'border-radius:6px; padding:8px 12px; margin:0;">Nobody has the ball yet, so there is no ' +
         'possession to time. Enter the kickoff first.</p>' +
         '<div class="row" style="margin-top:10px;"><button class="secondary" id="setclock_clear">Close</button></div>';
@@ -13043,15 +13054,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // the drive's time of possession comes out short and every
       // per-possession average built on it is wrong -- silently, because
       // nothing else looks off.
-      '<p style="font-size:15px; font-weight:700; color:var(--sc-red); background:rgba(176,0,32,.16); ' +
+      '<p style="font-size:15px; font-weight:700; color:#ff8fa3; background:rgba(176,0,32,.16); ' +
       'border:2px solid #d33; border-radius:6px; padding:10px 12px; margin:0 0 10px;">' +
       '⚠ ONLY USE THIS ON A NEW POSSESSION.</p>' +
-      '<p style="font-size:13px; color:var(--sc-ink-muted); margin:0 0 10px;">Records the clock at the start of ' +
+      '<p style="font-size:13px; color:#b9c4d0; margin:0 0 10px;">Records the clock at the start of ' +
       TEAMS[who].name + '\u2019s possession — for when a change of possession was saved without one. ' +
       'It does not change the down, the spot or the score.</p>' +
       '<label class="inline">Clock <input autocomplete="off" type="text" id="setclock_val" ' +
       'placeholder="M:SS or MSS" style="width:110px; display:inline-block; margin-left:6px;"></label>' +
-      '<span id="setclockLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:var(--sc-raise); border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>' +
+      '<span id="setclockLastHint" style="display:inline-block; margin-left:12px; padding:4px 10px; background:#20272f; border:1px solid #dde1e6; border-radius:6px; font-size:13px; vertical-align:middle;"></span>' +
       '<div class="row" style="margin-top:12px;">' +
       '<button class="primary" id="setclock_save">Save clock</button>' +
       '<button class="secondary" id="setclock_clear">Cancel</button></div>';
@@ -13104,8 +13115,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // yards box so the panel reads in the order the call is made: who,
       // what, how far.
       '<div id="pen_type_wrap" style="margin-top:10px; display:none;">' +
-        '<p style="font-size:13px; color:#888; margin:0 0 4px;">Penalty (optional)</p>' +
-        '<select id="pen_type" style="min-width:260px; padding:8px; font-size:15px; border-radius:6px; border:1px solid var(--sc-rule-strong);"></select>' +
+        '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Penalty (optional)</p>' +
+        '<select id="pen_type" style="min-width:260px; padding:8px; font-size:15px; border-radius:6px; border:1px solid #ccc;"></select>' +
       '</div>' +
       '<div style="margin-top:8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
         '<label class="inline">Yards <input autocomplete="off" type="text" id="pen_yds" style="width:70px; display:inline-block; margin-left:6px;"></label>' +
@@ -13207,7 +13218,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (p && p.yards !== undefined){
         ydsEl.value = String(p.yards);
         ydsEl.dataset.autofill = '1';
-        ydsEl.style.background = 'rgba(124,181,24,.14)'; ydsEl.style.borderColor = 'var(--sc-green)'; ydsEl.style.fontWeight = '700';
+        ydsEl.style.background = '#eef6f1'; ydsEl.style.borderColor = '#1a7a4c'; ydsEl.style.fontWeight = '700';
       } else if (ydsEl.dataset.autofill === '1'){
         // The foul just switched to one with NO book number (chop block
         // -- sources disagree, see PENALTIES) or back to "not specified".
@@ -13223,13 +13234,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const readout = document.getElementById('pen_half_readout');
       readout.style.display = 'block';
       if (!penTeam){
-        readout.style.color = 'var(--sc-red)';
+        readout.style.color = '#a32d2d';
         readout.textContent = 'Pick On offense / On defense first.';
         return;
       }
       const fp = computeState().fieldPos;
       if (fp === null){
-        readout.style.color = 'var(--sc-red)';
+        readout.style.color = '#a32d2d';
         readout.textContent = 'Field position is not set -- enter the yardage directly.';
         return;
       }
@@ -13245,8 +13256,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const half = Math.max(0, Math.ceil(distToGoal / 2));
       ydsEl.value = String(half);
       ydsEl.dataset.autofill = '1';
-      ydsEl.style.background = 'rgba(124,181,24,.14)'; ydsEl.style.borderColor = 'var(--sc-green)'; ydsEl.style.fontWeight = '700';
-      readout.style.color = 'var(--sc-green)';
+      ydsEl.style.background = '#eef6f1'; ydsEl.style.borderColor = '#1a7a4c'; ydsEl.style.fontWeight = '700';
+      readout.style.color = '#1a7a4c';
       readout.textContent = 'Half the distance to the goal: ' + half + (half === 1 ? ' yard.' : ' yards.');
       // .picked is the app's own gold "this is the active choice" cue,
       // used everywhere else in this panel (the team buttons, the three
@@ -13283,11 +13294,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const panel = document.getElementById('playPanel');
     panel.style.display = 'block';
     panel.innerHTML =
-      '<p style="font-size:13px; color:#888; margin:0 0 6px;">Bad snap — recorded as a team rush, ' +
+      '<p style="font-size:13px; color:#8d99a6; margin:0 0 6px;">Bad snap — recorded as a team rush, ' +
       'so no player is charged with the attempt or the yardage.</p>' +
       '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">' +
         '<div>' +
-          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Yards lost</p>' +
+          '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Yards lost</p>' +
           '<input autocomplete="off" type="text" id="badsnap_yds" placeholder="0" style="width:80px;">' +
         '</div>' +
         // A CALCULATOR HERE TOO.
@@ -13302,7 +13313,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // that depends on that closure. This is the same arithmetic in
         // about twenty lines rather than a refactor of four hundred.
         '<div style="margin-left:22px; padding-left:22px; border-left:1px solid #d8d8d8;">' +
-          '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Or enter recovered on</p>' +
+          '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Or enter recovered on</p>' +
           '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
             '<button type="button" class="ptoggle bsCalcSide" data-side="own" ' +
               'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
@@ -13312,8 +13323,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
               TEAMS[otherTeam(computeState().possession)].name + '</button>' +
             '<input autocomplete="off" type="text" id="bs_calc_yardline" placeholder="yard line" style="width:90px;">' +
           '</span>' +
-          '<div id="bs_calc_readout" style="font-size:14px; font-weight:600; color:var(--sc-green); ' +
-            'background:rgba(124,181,24,.12); border-left:3px solid var(--sc-green); border-radius:4px; ' +
+          '<div id="bs_calc_readout" style="font-size:14px; font-weight:600; color:#a3d93f; ' +
+            'background:#20272f; border-left:3px solid #1a7a4c; border-radius:4px; ' +
             'padding:7px 10px; margin-top:10px;"></div>' +
         '</div>' +
       '</div>' +
@@ -13330,11 +13341,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<div id="bs_own_box" style="margin-top:8px;">' +
         '<input autocomplete="off" type="checkbox" id="bs_safety" style="display:none;">' +
         '<button type="button" id="bs_safety_toggle" style="width:100%; padding:12px; ' +
-          'border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); ' +
+          'border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; ' +
           'font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button>' +
       '</div>' +
       '<div id="bs_def_box" style="display:none; margin-top:8px;">' +
-        '<p style="font-size:13px; color:#888; margin:0 0 4px;">Recovered by (optional)</p>' +
+        '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Recovered by (optional)</p>' +
         '<input autocomplete="off" type="text" id="bs_recoverer" placeholder="type #" style="width:100px;">' +
         // AND THE DEFENCE CAN SCORE ON IT. They recovered a loose ball
         // behind the line; running it in is a defensive touchdown, and the
@@ -13342,7 +13353,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div style="margin-top:10px;">' +
           '<input autocomplete="off" type="checkbox" id="bs_def_td" style="display:none;">' +
           '<button type="button" id="bs_def_td_toggle" style="width:100%; padding:12px; ' +
-            'border-radius:8px; border:2px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); ' +
+            'border-radius:8px; border:2px solid #ccc; background:#20272f; color:#b9c4d0; ' +
             'font-size:15px; font-weight:700; cursor:pointer;">Returned for touchdown</button>' +
         '</div>' +
         startingSpotFieldsHtml('bs_spot', 'Spot where ' + TEAMS[otherTeam(computeState().possession)].name + ' took over', otherTeam(computeState().possession)) +
@@ -13376,9 +13387,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (!btn || !cb) return;
       const paint = () => {
         btn.textContent = (cb.checked ? '\u2713 ' : '') + label;
-        btn.style.background = cb.checked ? 'var(--sc-green)' : 'transparent';
+        btn.style.background = cb.checked ? '#1a7a4c' : '#fff';
         btn.style.color = cb.checked ? '#fff' : '#555';
-        btn.style.borderColor = cb.checked ? 'var(--sc-green)' : 'var(--sc-rule-strong)';
+        btn.style.borderColor = cb.checked ? '#1a7a4c' : '#ccc';
         // A score settles where the ball is, so the takeover spot stops
         // being a question.
         const sw = document.getElementById('bs_spot_wrap');
@@ -13443,8 +13454,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const lost = Math.abs(delta);
         readout.textContent = 'from ' + here + ' to ' + there + '  =  ' + lost + ' yards lost';
         yardsEl.value = String(lost);
-        yardsEl.style.background = 'rgba(124,181,24,.14)';
-        yardsEl.style.borderColor = 'var(--sc-green)';
+        yardsEl.style.background = '#eef6f1';
+        yardsEl.style.borderColor = '#1a7a4c';
         yardsEl.style.fontWeight = '700';
       }
 
@@ -13497,9 +13508,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const panel = document.getElementById('playPanel');
     panel.style.display = 'block';
     panel.innerHTML =
-      '<p style="font-size:13px; color:#888; margin:0 0 6px;">QB kneel — recorded as a team rush, ' +
+      '<p style="font-size:13px; color:#8d99a6; margin:0 0 6px;">QB kneel — recorded as a team rush, ' +
       'so no quarterback is charged with the attempt or the yardage.</p>' +
-      '<p style="font-size:13px; color:#888; margin:8px 0 4px;">Yards lost</p>' +
+      '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Yards lost</p>' +
       // PREFILLED 0. A kneel is nearly always taken at the spot -- the
       // loss is the exception, not the rule -- so the common case should
       // need no typing. The old placeholder of 1 asked for a number on
@@ -13535,11 +13546,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const panel = document.getElementById('playPanel');
     panel.style.display = 'block';
     panel.innerHTML =
-      '<p style="font-size:13px; color:#888; margin:0 0 6px;">Timeout</p>' +
+      '<p style="font-size:13px; color:#8d99a6; margin:0 0 6px;">Timeout</p>' +
       ['teamA', 'teamB'].map(k =>
         '<button type="button" class="toTeamBtn" data-team="' + k + '"' +
         (state.timeouts[k] <= 0 ? ' disabled' : '') + '>' + TEAMS[k].name +
-        ' <span style="color:#888;">(' + state.timeouts[k] + ' left)</span></button> ').join('') +
+        ' <span style="color:#8d99a6;">(' + state.timeouts[k] + ' left)</span></button> ').join('') +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="to_clear">Cancel</button></div>';
     panel.querySelectorAll('.toTeamBtn').forEach(b => b.addEventListener('click', () => {
       const team = b.dataset.team;
@@ -13559,8 +13570,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // Undo fixes it, but only if the scorer notices. One tap to confirm
       // is cheaper than a wrong timeout count for the rest of a half.
       panel.innerHTML =
-        '<p style="font-size:13px; color:#888; margin:0 0 6px;">Timeout</p>' +
-        '<div style="font-size:17px; font-weight:700; color:var(--sc-ink); margin-bottom:10px;">' +
+        '<p style="font-size:13px; color:#8d99a6; margin:0 0 6px;">Timeout</p>' +
+        '<div style="font-size:17px; font-weight:700; color:#eef1f4; margin-bottom:10px;">' +
           text + '</div>' +
         '<div class="row"><button class="primary" id="to_save">Save timeout</button>' +
         '<button class="secondary" id="to_back">\u2190 Back</button></div>';
@@ -13750,10 +13761,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
      Positioned by script from the banner, like #onAirBanner, so all three
      sit on the banner's own line whatever its height turns out to be. -->
 <div id="topActions">
-  <a href="broadcast_setup.html" target="_blank" rel="noopener" id="broadcastFab"
+  <a href="broadcast_setup_mock.html" target="_blank" rel="noopener" id="broadcastFab"
      title="Broadcast setup — feed addresses for the production team"
      style="display:none;">BROADCAST SETUP</a><!-- shown as flex, not block: see the role check -->
-  <a href="help.html" target="_blank" rel="noopener" id="helpFab"
+  <a href="help_mock.html" target="_blank" rel="noopener" id="helpFab"
      title="How to use StatChat">HELP!</a>
   <a id="launchViewLink" href="#" target="_blank">CREW VIEW &#8599;</a>
 </div>
