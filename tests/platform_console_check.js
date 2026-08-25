@@ -129,9 +129,14 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
     // uploaded a logo. 017 dropped it.
     tenants: [{ id:'t1', name:'Neville', full_name:'Neville High School',
                 teams:[{ logo_url:'https://cdn/neville.png' }],
-                subscription:'active', renews_on:'2027-08-01', disabled_at:null, disabled_reason:null },
+                subscription:'active', renews_on:'2027-08-01', disabled_at:null,
+                disabled_reason:null, deleted_at:null },
               { id:'t2', name:'Riverside', full_name:null, teams:[{ logo_url:null }],
-                subscription:'trial', renews_on:null, disabled_at:'2026-08-24T22:00:00Z', disabled_reason:'Non-payment' }],
+                subscription:'trial', renews_on:null, disabled_at:'2026-08-24T22:00:00Z',
+                disabled_reason:'Non-payment', deleted_at:null },
+              { id:'t3', name:'Oak Grove', full_name:null, teams:[],
+                subscription:'trial', renews_on:null, disabled_at:null,
+                disabled_reason:null, deleted_at:'2026-08-25T01:00:00Z' }],
     users: [
       { id:'u1', email:'statchatadmin@statchat.co', displayName:'Platform',
         role:'admin', lastSignInAt:'2026-08-24T23:00:00Z', emailConfirmedAt:'x',
@@ -213,6 +218,31 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // Asserted explicitly rather than left to be caught incidentally by the
   // page throwing on a missing element, which is not the same as testing
   // that the control exists.
+  // A DELETED TENANT LEAVES THE LIVE LIST AND APPEARS UNDER RECOVERY.
+  // -------------------------------------------------------------------
+  // Asserted on the RENDERED LISTS, not on the rpc call. The delete
+  // worked in production and the screen did not move, because
+  // `deleted_at` was never added to the tenants select -- so every row
+  // read as undefined, `!t.deleted_at` was true for all of them, and a
+  // deleted tenant stayed put. The rpc assertions all passed.
+  //
+  // **Testing that an action was CALLED is not testing that it had an
+  // effect.**
+  chk(!/Oak Grove/.test(tenantsHtml),
+      'a deleted tenant is NOT in the live tenants list');
+  const delTenants = b.d.getElementById('delTenantsBody').innerHTML;
+  chk(/Oak Grove/.test(delTenants),
+      'and IS under Recovery tools, where it can be restored');
+  chk(/data-untenant=/.test(delTenants), 'with a Restore control');
+  chk(/Neville/.test(tenantsHtml) && !/Neville/.test(delTenants),
+      'while a live tenant stays in the live list and out of the deleted one');
+
+  // The column the split depends on must actually be requested.
+  const tCols = (code.match(/tenants'\)\.select\('([^']*)'/) || [])[1] || '';
+  chk(/\bdeleted_at\b/.test(tCols),
+      'the tenants query selects deleted_at — an unselected column and a null one are ' +
+      'indistinguishable in JS, so omitting it makes every tenant look live');
+
   chk(/id="refreshTenantsBtn"/.test(raw), 'the Tenants tab has a Refresh control');
 
   chk(/data-menu=/.test(tenantsHtml), 'each tenant row has an actions menu');
