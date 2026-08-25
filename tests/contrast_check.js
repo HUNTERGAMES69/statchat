@@ -81,6 +81,24 @@ function isOverridden(src, at) {
   return new RegExp('(^|[,{}\\s])[^{}]*' + esc + '[^{}]*\\{[^}]*color\\s*:[^;}]*!important', 'm').test(after);
 }
 
+// The background twin of the above. isOverriddenBg only matched an
+// override repeating the selector verbatim, so it missed
+//   .quad, .card{ background:... !important }
+// overriding `.quad` and `.card` separately -- and reported two dead rules
+// on view.html as live failures.
+function overriddenBgGrouped(src, at) {
+  const open = src.lastIndexOf('{', at);
+  if (open === -1) return false;
+  const selStart = Math.max(src.lastIndexOf('}', open), src.lastIndexOf(';', open)) + 1;
+  const sel = src.slice(selStart, open).trim().split('\n').pop().trim();
+  if (!sel || sel.length > 120) return false;
+  const key = sel.split(',').pop().trim().split(/\s+/).pop();
+  if (!key) return false;
+  const esc = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const after = src.slice(src.indexOf('}', at) + 1);
+  return new RegExp('(^|[,{}\\s])[^{}]*' + esc + '[^{}]*\\{[^}]*background[^;}]*!important', 'm').test(after);
+}
+
 function isOverriddenBg(src, at) {
   const open = src.lastIndexOf('{', at);
   if (open === -1) return false;
@@ -103,9 +121,22 @@ function audit(file) {
 
   const tokens = {};
   for (const m of src.matchAll(/(--[a-z-]+)\s*:\s*(#[0-9a-fA-F]{3,6})\b/g)) tokens[m[1]] = m[2];
+  // AN UNDEFINED TOKEN SILENTLY BECOMES ITS FALLBACK, and every fallback
+  // in this codebase was chosen for a white page. `var(--sc-blue, #1565c0)`
+  // on the dashboard rendered as #1565c0 -- 2.89:1 on the menu -- because
+  // --sc-blue was never defined there. Returning null for that case meant
+  // the audit skipped it entirely and reported the page clean.
+  //
+  // So: resolve to the token when defined, and to the FALLBACK when not,
+  // which is what the browser does.
+  const undefinedTokens = new Set();
   const resolve = v => {
-    const t = /var\(\s*(--[a-z-]+)/.exec(v);
-    if (t) return tokens[t[1]] || null;
+    const t = /var\(\s*(--[a-z-]+)\s*(?:,\s*(#[0-9a-fA-F]{3,6}))?/.exec(v);
+    if (t) {
+      if (tokens[t[1]]) return tokens[t[1]];
+      if (t[2]) { undefinedTokens.add(t[1] + ' -> ' + t[2]); return t[2]; }
+      return null;
+    }
     return /^#[0-9a-fA-F]{3,6}$/.test(v) ? v : null;
   };
 
@@ -133,11 +164,28 @@ function audit(file) {
   }
 
   // ---- light backgrounds, by luminance ---------------------------------
-  const keep = new Set(['#ffc72c', '#7cb518', '#a3d93f', '#fff', '#ffffff']);
+  // #fff USED TO BE ON THIS LIST and it hid two bugs: the row menu and
+  // the account menu were both `background:#fff` inside a JavaScript
+  // string, so eight dark-theme labels sat on a white panel. The audit
+  // passed both times, because white was exempt.
+  //
+  // It is exempt only where it is deliberate -- the logo plate, which is
+  // dark artwork needing a light backing. That is `.scMark`/`logo.png`,
+  // so the exemption is now scoped to that context rather than granted to
+  // the colour everywhere it appears.
+  const keep = new Set(['#ffc72c', '#7cb518', '#a3d93f']);
   for (const m of src.matchAll(/background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,6})\b/g)) {
     const c = m[1].toLowerCase();
     if (keep.has(c) || lum(c) <= 0.5) continue;
-    if (isOverriddenBg(src, m.index)) continue;
+    if (isOverriddenBg(src, m.index) || overriddenBgGrouped(src, m.index)) continue;
+    // The logo plate: white behind dark artwork, within ~200 chars of the
+    // mark's own selector or filename.
+    // The logo plate. The selector can sit some way above the colour --
+    // a multi-line rule with a comment in it -- so the window is generous,
+    // and `padding:2px` is required alongside, which is what makes it a
+    // plate rather than a panel that happens to be white.
+    const around = src.slice(Math.max(0, m.index - 600), m.index + 120);
+    if (/scMark|splashIcon|\.brand img/.test(around) && /padding:\s*2px/.test(around)) continue;
     findings.push({ kind: 'FAIL', msg: 'light background ' + c +
       ' (luminance ' + lum(c).toFixed(2) + ') — converted pages should have none' });
   }
@@ -160,6 +208,9 @@ function audit(file) {
 
   const inline = [...new Set([...src.matchAll(
     /style\s*=\s*["'][^"']*?(?<![-a-zA-Z])color\s*:\s*(#[0-9a-fA-F]{3,6})/g)].map(m => m[1]))];
+
+  undefinedTokens.forEach(t => findings.push({ kind: 'FAIL',
+    msg: 'undefined token falls back to a light-theme colour: ' + t }));
 
   return { file, findings, inline, tokens: Object.keys(tokens).length };
 }
