@@ -177,6 +177,13 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
       'a tenant WITH a logo shows it');
   chk(/class="crest">R</.test(tenantsHtml),
       'a tenant WITHOUT one shows a monogram, not a gap or a broken image');
+  // NO PREFILLED-LOOKING PLACEHOLDERS on the add form. "Neville" as a
+  // placeholder reads as a value, and it is a REAL tenant: somebody
+  // glances at a filled-looking form, presses Create, and is told a tenant
+  // of that name already exists -- about a name they never typed.
+  chk(!/id="add(?:Name|FullName|Email|AdminName)"[^>]*placeholder=/.test(raw),
+      'the add-tenant fields carry no placeholders that read as prefilled values');
+
   chk(/onerror=/.test(tenantsHtml),
       'and a logo that fails to load falls back rather than showing a broken icon');
 
@@ -273,13 +280,30 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // shows for the one account that has no tenant.
   const dash = fs.readFileSync(path.join(__dirname, '..', 'dashboard.html'), 'utf8')
     .replace(/\/\/[^\n]*/g, '');
-  chk(/is_super_admin[\s\S]{0,60}location\.replace\('platform\.html'\)/.test(dash),
+  chk(/is_super_admin[\s\S]{0,80}location\.replace\('platform\.html'\)/.test(dash),
       'dashboard.html bounces the platform to the console');
+  // AND IT MUST RUN BEFORE FIRST PAINT. The bounce used to sit in
+  // loadIsAdmin(), which runs after showView() -- so the platform saw a
+  // full frame of the dashboard, loading splash and TENANT LOGO included,
+  // before being redirected. Reported as 'a black flash with the Neville
+  // N in it'. A redirect after the wrong thing is painted has not
+  // prevented it, only shortened it.
+  const bounceAt = dash.indexOf("location.replace('platform.html')");
+  const paintAt  = dash.indexOf("showView('dashboardView')");
+  chk(bounceAt !== -1 && paintAt !== -1 && bounceAt < paintAt,
+      'and it runs BEFORE showView, so no frame of a tenant dashboard is painted first');
+  chk((dash.match(/location\.replace\('platform\.html'\)/g) || []).length === 1,
+      'and there is exactly one bounce, not a live one plus a dead one left behind');
   // THE BYPASS IS PART OF THE DESIGN, not a hole. Support and the Open
   // button both need to see a school's dashboard AS THE PLATFORM, and a
   // bounce with no way past it would be the thing that has to be unpicked
   // when that ships. Asserted so it is not 'tidied away' as dead code.
-  chk(/get\('as'\)/.test(dash) && /&& !viewingAs/.test(dash),
+  // CHECKING THAT viewingAs IS *USED*, not merely declared. A mutation
+  // replacing `if (!viewingAs)` with `if (true)` left the declaration
+  // standing and passed an assertion that only looked for the name.
+  // Both shapes this has taken are accepted -- an && clause and a
+  // wrapping if -- because the behaviour is what matters, not which one.
+  chk(/get\('as'\)/.test(dash) && /(if\s*\(\s*!viewingAs|&&\s*!viewingAs)/.test(dash),
       'and has a named bypass (?as=) so viewing a school is not blocked later');
   chk(!/id="platformLink"/.test(dash),
       'and the menu link it replaced is gone, not left as dead markup the platform ' +
