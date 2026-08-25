@@ -1391,13 +1391,38 @@ function isAdminMarker(p){
     window.addEventListener('resize', function(){ if (!isPhonePortrait()) hide(); });
     window.addEventListener('beforeprint', hide);
 
+    /* WAIT FOR THE HOST TO HAVE A HEIGHT, do not guess at a delay.
+       The overlay is position:absolute inset:0 inside the report
+       container, and that container sits in a wrapper that stays hidden
+       until the data loads. Appended while the host is still zero-height,
+       the overlay renders as nothing -- which is exactly what happened:
+       the prompt appeared on stat_package.html, the fastest of the four,
+       and on none of the others. A single 600ms timeout is a guess about
+       how long a fetch takes, and it was wrong three times out of four.
+
+       ResizeObserver where available, a bounded poll otherwise. Both stop
+       as soon as the host has size, so neither runs longer than it must. */
+    function showWhenReady(){
+      if (dismissed() || !isPhonePortrait()) return;
+      if (host.offsetHeight > 0) { maybeShow(); return true; }
+      return false;
+    }
+
+    if (typeof ResizeObserver === 'function') {
+      var ro = new ResizeObserver(function(){
+        if (showWhenReady()) ro.disconnect();
+      });
+      ro.observe(host);
+      setTimeout(function(){ ro.disconnect(); }, 15000);
+    } else {
+      var tries = 0;
+      var poll = setInterval(function(){
+        if (showWhenReady() || ++tries > 60) clearInterval(poll);
+      }, 250);
+    }
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', maybeShow);
-    } else { maybeShow(); }
-    /* The report is rendered asynchronously, so the container may be empty
-       at load. A short delay lets it size itself before the overlay is
-       measured against it. */
-    setTimeout(maybeShow, 600);
+      document.addEventListener('DOMContentLoaded', showWhenReady);
+    } else { showWhenReady(); }
   })();
 </script>
 </body>
