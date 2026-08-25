@@ -198,6 +198,127 @@ spending a day on it; if it is dead, delete it instead.
 
 ---
 
+## THE RECIPE — settled on login.html, 25 August 2026
+
+Apply this to every page. It is not a style guide; every line is here
+because getting it wrong produced a visible bug on a page that had
+already been "converted".
+
+### The token block
+
+Paste this into the page's own `<style>`, at the top. When every page is
+converted these values move into `statchat.css` and the per-page blocks
+come out.
+
+```css
+:root{ color-scheme:dark; }
+:root{
+  --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+  --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+  --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+  --sc-navy:#2f3a47;   /* A BUTTON FILL. Never text. See below. */
+  --sc-green:#a3d93f;  --sc-green-tint:rgba(124,181,24,.14);
+  --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
+  --sc-amber:#ffc72c;  --sc-amber-tint:rgba(255,199,44,.13);
+  --sc-link:#7cb518;
+}
+```
+
+### The rules, and the bug each one prevents
+
+**`--sc-navy` IS A BUTTON FILL, NOT AN INK.** It reads like an ink name and
+it is not. Pointing it at a dark value and letting text inherit it has now
+caused two bugs: `game.html`'s play ladder vanished at 1.00:1 against the
+page, and `login.html`'s STATCHAT wordmark at 1.43:1 against the card.
+**Before re-pointing any token, grep for what reads it.**
+
+**Buttons need a border, not a lighter fill.** No fill reaches the 3:1 WCAG
+floor for a non-text boundary against `#191f27` without going light grey —
+`#2f3a47` is 1.43:1. So: fill `var(--sc-navy)` for the affordance, `1px
+solid var(--sc-rule-strong)` for the edge, which is 3.91:1. `border:none`
+works on white and nowhere else.
+
+**Disabled is a colour, not an opacity.** `opacity:0.6` on dark dims toward
+the background rather than toward grey, so a disabled button becomes hard to
+find. Use `background:#1b2129; color:#5f6b78; border-color:#333f4b;
+opacity:1`. That is 3.05:1 — deliberately below body AA, because it must
+read as unavailable while staying findable.
+
+**Inputs are recessed.** `background:var(--sc-raise)` (darker than the
+card) with `border:1px solid var(--sc-rule-strong)`. A card-coloured input
+with a hairline looks painted on.
+
+**`color-scheme:dark` is mandatory.** Without it the browser paints its own
+chrome light — scrollbars, caret, spinners, and the yellow-white fill
+Safari and Chrome put behind **autofilled** fields. On any page with a
+login form that is the normal path, not an edge case.
+
+**WebKit autofill needs telling twice**, because it paints with an inset
+shadow no background rule reaches:
+```css
+input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus{
+  -webkit-text-fill-color:var(--sc-ink);
+  -webkit-box-shadow:0 0 0 1000px var(--sc-raise) inset;
+  caret-color:var(--sc-ink);
+  transition:background-color 9999s ease-out 0s;
+}
+```
+
+**A visible focus ring.** The default is a thin dark outline that
+disappears on a dark card. `outline:2px solid var(--sc-link);
+outline-offset:2px` on `:focus-visible`.
+
+**The logo needs a plate.** `logo.png` is dark-on-light artwork and sinks
+into the card. `background:#fff; padding:2px; box-sizing:border-box` on the
+img. The mark is not being redrawn for a theme.
+
+**The wordmark is the brightest thing on the card** — `#fff`, 16.58:1. It
+is the brand; it should not be dimmer than the body text.
+
+**Tenant colour is an accent, never a fill.** It comes from the database
+and a school may pick something pale. Filled, it is a bright hole in a dark
+screen and any `safeTextColor()` logic then flips the label, so two teams
+end up with different contrast. A 5px spine on a `#171d25` bar works for
+every colour.
+
+### Spacing: the header must read as a header
+
+Reported on the dashboard 25 Aug and it applies everywhere. Two shapes:
+
+**Pages where the tools sit ABOVE the title** (dashboard): the row gap was
+12px, which made the buttons and the tenant's name read as one crowded
+block. **26px**, so the name is the title and the buttons are chrome above
+it. The column gap stays 16px — that one is between buttons and was fine.
+
+**Pages where the title and the Dashboard button share a row** (everything
+else): the row ran straight into the content beneath it.
+**`margin-bottom:18px`** on the header row.
+
+A header that touches its content is not a header.
+
+### Sign-off, per page
+
+Not "it looks fine":
+
+1. `node tests/contrast_check.js <page>` passes — it resolves the tokens
+   and reports every colour against the card.
+2. No hardcoded light background survives. **Find them by luminance, not
+   by listing names** — an enumerated list missed 7 on `game.html` and 23
+   across the other mocks.
+3. Tab through it on a desktop: the focus ring must be visible.
+4. On a phone: **an autofilled field**, which is the one that looks broken.
+5. If the page prints, print it to PDF.
+6. If it shows tenant colour, view it with a pale primary — gold or
+   silver, not Neville's.
+
+### What is NOT converted
+
+The four printed reports — `recap`, `stat_package`, `season_report`,
+`player_report` — stay light by decision. They are documents whose real
+form is paper. `reports.html`, the landing page, does go dark.
+
+The three broadcast overlays are transparent by design.
+
 ## The five traps, all found the hard way on view.html
 
 **1. Inline colours cannot be reached from a stylesheet.** Not at any

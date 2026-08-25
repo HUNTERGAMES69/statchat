@@ -53,12 +53,18 @@
    A wrapping flex row rather than a grid: .brandline is forced to 100%
    below, so it always takes a line of its own however many buttons the
    role happens to show. */
-.topbar { display:flex; flex-wrap:wrap; align-items:center; gap:12px 16px;
+/* 26px between the rows, not 12. At 12 the buttons sat on top of the
+     tenant's name and the whole thing read as one crowded block rather
+     than as chrome above a title. Reported 25 Aug.
+     Column gap stays 16 -- that one is between buttons and was fine. */
+  .topbar { display:flex; flex-wrap:wrap; align-items:center; gap:26px 16px;
           margin-bottom:4px; }
   /* Its own full-width row, hard left. flex-basis:100% is what forces the
    wrap -- without it the tenant would rejoin the button row whenever there
    happened to be space, so the layout would change with the role. */
-.brandline { display:flex; align-items:center; gap:10px; min-width:0;
+/* A little air under the title too: without it the name butts against
+     whatever the card holds next, and the header stops reading as a header. */
+  .brandline { padding-bottom:2px; display:flex; align-items:center; gap:10px; min-width:0;
              flex:1 1 100%; order:2; }
 #teamHeading { min-width:0; overflow-wrap:anywhere; margin:0; }
 /* The tools take the top line and push the account to its end. */
@@ -91,7 +97,7 @@
     #teamLogo { height:36px; width:36px; }
     /* Still two lines at every width -- the tenant is a heading, not a
        chip beside the buttons. nowrap here would put it back in the row. */
-    .topbar { flex-direction:row; flex-wrap:wrap; align-items:center; gap:12px 16px; }
+    .topbar { flex-direction:row; flex-wrap:wrap; align-items:center; gap:26px 16px; }
     /* Back to natural widths here: there is room, so four equal cells would
        stretch "How to use" to the width of "Customize team" for no reason.
        auto-flow keeps them on one line and lets each be its own size. */
@@ -114,6 +120,26 @@
     .games-head h1 { margin-right:2px; }
     #newGameLink { display:block !important; text-align:center; }
   }
+  /* A <select> ON DARK NEEDS appearance:none.
+     Setting `background` alone is not enough: the browser paints the
+     control's FACE natively and ignores it, which is why the season
+     picker still came out white on a converted page. The chevron then has
+     to be drawn back in, because appearance:none removes it.
+     The <option> list is painted by the OS and can only be reached from a
+     stylesheet -- never from the inline style on the select. */
+  select {
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    background-color:var(--sc-raise) !important;
+    color:var(--sc-ink) !important;
+    border:1px solid var(--sc-rule-strong) !important;
+    background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%238d99a6' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;
+    background-position:right 10px center;
+    background-size:11px;
+    padding-right:30px !important;
+  }
+  select option { background:var(--sc-card); color:var(--sc-ink); }
+
   p.sub { color:var(--sc-ink-muted); margin:0 0 20px; font-size:15px; }
   button { padding:8px 10px; border-radius:6px; border:1px solid var(--sc-rule-strong); background:var(--sc-navy, #1a1a2e); color:#fff; font-size:13px; font-weight:600; cursor:pointer; }
   button.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
