@@ -344,6 +344,25 @@ else): the row ran straight into the content beneath it.
 
 A header that touches its content is not a header.
 
+### The header row must WRAP
+
+Reported on the account page and it applies to every one. That row holds
+a logo, a title and one or two controls; without `flex-wrap:wrap` they all
+compete for a single line and collide on a phone. Three things:
+
+* **`flex-wrap:wrap`** — or the row cannot break at all.
+* **`gap`** — or the pieces touch the moment it does break.
+* **`align-items:center`, not `baseline`** — once a row wraps, baseline
+  aligns a button to the text of a heading on a different line, which
+  looks like a mistake.
+
+`platform.html` had four items on one non-wrapping line and was the worst
+case. Its "signed in as" text now takes the leftover width so the controls
+drop to their own line cleanly.
+
+**Check this at conversion, not after.** It is a phone-only fault and
+invisible on the desktop where the conversion is done.
+
 ### Sign-off, per page
 
 Not "it looks fine":
@@ -354,7 +373,9 @@ Not "it looks fine":
    by listing names** — an enumerated list missed 7 on `game.html` and 23
    across the other mocks.
 3. Tab through it on a desktop: the focus ring must be visible.
-4. On a phone: **an autofilled field**, which is the one that looks broken.
+4. On a phone: **an autofilled field**, which is the one that looks
+   broken — and **narrow the window until the header wraps**, which is the
+   fault that does not show at desktop width.
 5. If the page prints, print it to PDF.
 6. If it shows tenant colour, view it with a pale primary — gold or
    silver, not Neville's.
