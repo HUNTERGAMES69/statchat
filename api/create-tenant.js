@@ -50,6 +50,32 @@ module.exports = async (req, res) => {
     auth: { autoRefreshToken: false, persistSession: false }
   });
 
+  // A SECOND CLIENT, ACTING AS THE SIGNED-IN USER.
+  // ---------------------------------------------------------------------
+  // create_tenant() is SECURITY DEFINER and checks is_super_admin(), which
+  // reads `profiles where id = auth.uid()`. Called through the `admin`
+  // client above, **auth.uid() is NULL** -- the service role is not a user
+  // -- so the check fails and the function refuses the very account that
+  // is allowed to call it. Reported as "only the platform can create a
+  // tenant", from the platform account.
+  //
+  // This is the same trap as running restore_game() in the SQL editor,
+  // where the postgres role also has no auth.uid(). The lesson did not get
+  // carried across to the first function called from a SERVER.
+  //
+  // Passing the user's own JWT makes auth.uid() resolve, so the function's
+  // check means what it says and behaves identically whether it is called
+  // from a browser or from here. The inserts inside it are SECURITY
+  // DEFINER, so RLS is not in the way.
+  //
+  // The publishable key is the same one every page ships in plain text; it
+  // grants nothing on its own.
+  const asUser = createClient(SUPABASE_URL,
+    process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d', {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Authorization: 'Bearer ' + token } }
+    });
+
   const { data: userData, error: userError } = await admin.auth.getUser(token);
   if (userError || !userData || !userData.user) {
     res.status(401).json({ error: 'Invalid or expired session — please sign in again' });
@@ -85,7 +111,8 @@ module.exports = async (req, res) => {
   }
 
   // ---- step 1: the school itself ------------------------------------
-  const { data: tenantId, error: createError } = await admin
+  // THROUGH asUser, not admin -- see the note where asUser is built.
+  const { data: tenantId, error: createError } = await asUser
     .rpc('create_tenant', {
       p_name: name,
       p_full_name: fullName || null,
