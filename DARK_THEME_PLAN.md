@@ -296,11 +296,20 @@ Five more of these existed across two pages. An undefined token does not
 fail loudly; it quietly becomes the colour somebody wrote for the old
 design. `tests/contrast_check.js` now resolves fallbacks and flags them.
 
-**2. THE `background:` SHORTHAND RESETS `background-image`.** The season
+**2. THE `background:` SHORTHAND RESETS `background-image`. THIS HAS NOW
+COST TWO ROUNDS — I wrote this entry after the dashboard and reproduced it
+on the roster two hours later, so it is enforced by
+`tests/contrast_check.js` rather than left as advice.** The season
 picker's inline style used the shorthand, which wiped the chevron drawn by
 a stylesheet rule — and inline always wins, so the field stopped looking
-like a dropdown. Use `background-color:` in inline styles on any element
-whose stylesheet gives it an image.
+like a dropdown. On the roster it was not inline at all: a LATER rule,
+`input, select { background:... }`, sitting below the rule that draws the
+chevron. Same reset, different route.
+
+Use `background-color:` anywhere — inline or in a later rule — on any
+element whose stylesheet gives it a background-image. The check now finds
+the rule that draws a chevron and fails if any later rule matching
+`select` uses the shorthand.
 
 **3. TWO DECLARATIONS OF THE SAME PROPERTY IN ONE INLINE STYLE.** The
 picker read `background:var(--sc-raise); … background:#fff;`. The later
@@ -421,6 +430,27 @@ outright on help.html at 60k. Rewritten as a single parse: 90+ seconds to
 light colour behind, so a check that hunts light colours cannot see the
 mark disappear. Converted pages showing `.scMark` are now required to
 plate it.
+
+### DELETE A PAGE'S MOCK THE MOMENT THE REAL PAGE IS CONVERTED
+
+The `*_mock.html` files were generated in one batch, before the decision
+to convert real pages one at a time. Each one is a snapshot of the bulk
+approach and stops matching its real page the moment that page is done
+properly.
+
+**This cost an hour.** Andy reported "no change" on the dashboard and help
+headers three times running. Each report was accurate — he was looking at
+`dashboard_mock.html` and `help_mock.html`, which are frozen at the bulk
+conversion and never received any of the header work. I kept diagnosing
+the real pages, which were fine.
+
+So: **when a page is converted, its mock is deleted in the same batch.**
+A stale preview is worse than no preview, because it looks authoritative.
+
+Also gone once their pages are done: `view_mock.html` and `viewmock.html`
+(view.html is live), and `statchat-dark.css` (the bulk override sheet —
+converted pages carry their own tokens, and a sheet that only some pages
+use is a second source of truth).
 
 ### Sign-off, per page
 
