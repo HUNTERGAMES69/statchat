@@ -192,7 +192,10 @@
 
     <div id="mainView" class="hidden">
       <div class="topbar no-print">
-        <a href="reports.html">&larr; Back to reports</a>
+        <!-- The season travels back with you. See the note where this href is
+             set: landing on the current season after reading a 2023 report
+             meant re-picking 2023 every time. -->
+        <a id="backToReports" href="reports.html">&larr; Back to reports</a>
         <button id="downloadPdfBtn" type="button">Download PDF</button>
       </div>
       <p id="printFallback" class="no-print hidden"
@@ -943,10 +946,18 @@
     const fallback = ourBranding.current_season_year || years[0];
     const start = years.includes(asked) ? asked : (years.includes(fallback) ? fallback : years[0]);
 
+    // BACK TO THE SEASON ON SCREEN, not the one this page was opened with.
+    // There is a picker here, so the two can differ -- and the season you
+    // are looking at is the one you expect to return to.
+    const syncBackLink = (y) => {
+      const back = document.getElementById('backToReports');
+      if (back && y) back.href = 'reports.html?season=' + encodeURIComponent(y);
+    };
     const seasonPicker = document.getElementById('seasonPicker');
     seasonPicker.innerHTML = years.map(y =>
       '<option value="' + y + '">' + y + ' season</option>').join('');
     if (start) seasonPicker.value = String(start);
+    syncBackLink(start);
 
     showView('mainView');
     if (!years.length){
@@ -955,7 +966,10 @@
       return;
     }
 
-    seasonPicker.addEventListener('change', () => loadSeason(parseInt(seasonPicker.value, 10)));
+    seasonPicker.addEventListener('change', () => {
+      syncBackLink(seasonPicker.value);
+      loadSeason(parseInt(seasonPicker.value, 10));
+    });
     document.getElementById('playerPicker').addEventListener('change', renderForSelectedPlayer);
     await loadSeason(parseInt(seasonPicker.value, 10));
   }

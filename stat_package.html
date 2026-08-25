@@ -258,7 +258,8 @@
     </div>
     <div id="mainView" class="hidden">
       <div class="topbar no-print">
-        <a href="reports.html">&larr; Back to reports</a>
+        <!-- The season travels back with you; set once the game loads. -->
+        <a id="backToReports" href="reports.html">&larr; Back to reports</a>
         <div class="actions">
           <button class="xls" id="downloadXlsBtn" type="button">Download XLS</button>
           <button class="pdf" id="downloadPdfBtn" type="button">Download PDF</button>
@@ -437,6 +438,14 @@ function isAdminMarker(p){
       return;
     }
     const game = gameRows[0];
+    // BACK TO THIS GAME'S SEASON. There is no ?season= on this page -- it
+    // is opened with a game id -- but the game knows which season it is in,
+    // and returning to reports on the CURRENT season after reading a 2023
+    // stat package means re-picking 2023.
+    if (game && game.season_year){
+      const back = document.getElementById('backToReports');
+      if (back) back.href = 'reports.html?season=' + encodeURIComponent(game.season_year);
+    }
     gameLabel = game.designator;
     gameDate = game.game_date;
     quarterLengthSec = game.quarter_length_seconds || 720;

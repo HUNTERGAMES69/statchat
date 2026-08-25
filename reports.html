@@ -13,6 +13,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StatChat — Statistics Reports</title>
 <style>
+  /* THE SAME DASHBOARD BUTTON AS every other page. */
+  .backlink { text-decoration:none; padding:8px 14px; border-radius:6px;
+              border:1px solid #ccc; color:#444; font-size:13px; font-weight:600;
+              display:inline-block; }
+  /* THE STATCHAT MARK, identical on every page reachable from the
+     dashboard. */
+  .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
+  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block; }
+
   html, body { margin:0; padding:0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); color:var(--sc-ink, #1a1a1a); }
   .wrap { max-width:640px; margin:0 auto; padding:24px; box-sizing:border-box; }
@@ -43,8 +52,16 @@
       <p id="errorMsg" class="msg error"></p>
     </div>
     <div id="mainView" class="hidden">
-      <div class="topbar"><a href="dashboard.html">&larr; Back to dashboard</a></div>
-      <h1>Statistics reports</h1>
+      <!-- SAME ROW, SAME PLACE AS EVERY OTHER PAGE: heading left, the way
+           back top-right. This was a plain text link on a line of its own
+           above the heading. -->
+      <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:10px;">
+        <div class="scMark">
+          <img src="logo.png" alt="StatChat">
+          <h1>Statistics reports</h1>
+        </div>
+        <a class="backlink" href="dashboard.html" style="white-space:nowrap; flex-shrink:0;">&larr; Dashboard</a>
+      </div>
       <select id="seasonPicker"></select>
       <div id="seasonReportCard" class="card hidden">
         <h2>Full season report</h2>
@@ -116,7 +133,14 @@
     if (!years.includes(seasonYear)) years.unshift(seasonYear);
     const picker = document.getElementById('seasonPicker');
     picker.innerHTML = years.map(y => '<option value="' + y + '">' + y + ' season</option>').join('');
-    picker.value = seasonYear;
+    // COMING BACK FROM A REPORT LANDS ON THE SEASON YOU LEFT.
+    // -------------------------------------------------------------------
+    // "Back to reports" used to drop you on the CURRENT season whatever you
+    // had been looking at, so reading three 2023 reports meant re-picking
+    // 2023 three times. The report pages now name the season they came
+    // from, and it is honoured here if it is a season that exists.
+    const askedFor = parseInt(new URLSearchParams(location.search).get('season'), 10);
+    picker.value = (!isNaN(askedFor) && years.includes(askedFor)) ? askedFor : seasonYear;
     picker.addEventListener('change', renderForSelectedSeason);
 
     renderForSelectedSeason();

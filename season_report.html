@@ -241,7 +241,10 @@
     </div>
     <div id="mainView" class="hidden">
       <div class="topbar no-print">
-        <a href="reports.html">&larr; Back to reports</a>
+        <!-- The season travels back with you. See the note where this href is
+             set: landing on the current season after reading a 2023 report
+             meant re-picking 2023 every time. -->
+        <a id="backToReports" href="reports.html">&larr; Back to reports</a>
         <div class="actions">
           <button class="xls" id="downloadXlsBtn" type="button">Download XLS</button>
           <button class="pdf" id="downloadPdfBtn" type="button">Download PDF</button>
@@ -701,6 +704,14 @@ function isAdminMarker(p){
   async function init(){
     const params = new URLSearchParams(window.location.search);
     const season = params.get('season');
+    // BACK TO THE SEASON YOU CAME FROM. reports.html defaulted to the
+    // CURRENT season however you got there, so reading three 2023 reports
+    // meant picking 2023 three times. This page already knows which season
+    // it is showing; it just never said so on the way out.
+    if (season){
+      const back = document.getElementById('backToReports');
+      if (back) back.href = 'reports.html?season=' + encodeURIComponent(season);
+    }
     if (!season){
       showView('errorView');
       document.getElementById('errorMsg').textContent = 'No season specified.';
