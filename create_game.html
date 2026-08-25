@@ -66,6 +66,13 @@
     --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
     --sc-amber:#ffc72c;  --sc-amber-text:#ffc72c;
     --sc-amber-tint:rgba(255,199,44,.13);
+    /* --sc-amber-soft was READ by the shared-number box and never DEFINED
+       here, so it fell back to #fff8e6 -- a cream panel carrying light
+       text. Third time an undefined token has shipped a light-theme colour
+       into a dark page, and the first two were caught by the audit; this
+       one slipped because the audit only scanned LITERAL hex backgrounds,
+       not var(--undefined, #hex). That gap is closed now. */
+    --sc-amber-soft:rgba(255,199,44,.10);
     --sc-blue:#5aa9f0;   --sc-link:#7cb518;
   }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
@@ -472,8 +479,15 @@
         cands.map(n =>
           '<button type="button" class="seedPick" data-side="' + side + '" data-role="' + role +
           '" data-name="' + n.replace(/"/g, '&quot;') + '" style="margin:4px 6px 0 0; padding:4px 10px; ' +
-          'font-size:13px; border-radius:6px; border:2px solid ' + (chosen === n ? '#1a7a4c' : '#ccc') +
-          '; background:' + (chosen === n ? '#1a7a4c' : '#fff') + '; color:' + (chosen === n ? '#fff' : '#555') +
+            // CHOSEN vs NOT must differ by more than a tint. This control
+            // records which of two players wears a shared number; getting
+            // it wrong seeds the whole game to the wrong person. The chosen
+            // one is a solid green fill with dark ink, the others outlined.
+            'font-size:13px; border-radius:6px; border:2px solid ' +
+            (chosen === n ? 'var(--sc-green)' : 'var(--sc-rule-strong)') +
+            '; background:' + (chosen === n ? 'var(--sc-green)' : 'transparent') +
+            '; color:' + (chosen === n ? '#0d1117' : 'var(--sc-ink)') +
+            '; font-weight:' + (chosen === n ? '700' : '600') +
           '; cursor:pointer;">' + (chosen === n ? '✓ ' : '') + n + '</button>').join('') +
         '</div>');
     });
