@@ -123,10 +123,14 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
 
   // ---- the platform gets in ------------------------------------------
   b = boot({ id: 'u1', is_super_admin: true, tenant_id: null }, {
+    // THE CREST LIVES ON `teams`, embedded through the foreign key -- it
+    // is NOT a column on tenants. 006 put a copy there, the app was never
+    // repointed at it, and that copy went stale the first time a tenant
+    // uploaded a logo. 017 dropped it.
     tenants: [{ id:'t1', name:'Neville', full_name:'Neville High School',
-                logo_url:'https://cdn/neville.png',
+                teams:[{ logo_url:'https://cdn/neville.png' }],
                 subscription:'active', renews_on:'2027-08-01', disabled_at:null, disabled_reason:null },
-              { id:'t2', name:'Riverside', full_name:null, logo_url:null,
+              { id:'t2', name:'Riverside', full_name:null, teams:[{ logo_url:null }],
                 subscription:'trial', renews_on:null, disabled_at:'2026-08-24T22:00:00Z', disabled_reason:'Non-payment' }],
     users: [
       { id:'u1', email:'statchatadmin@statchat.co', displayName:'Platform',
@@ -184,6 +188,17 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   chk(!/id="add(?:Name|FullName|Email|AdminName)"[^>]*placeholder=/.test(raw),
       'the add-tenant fields carry no placeholders that read as prefilled values');
 
+  // AND IT MUST COME FROM teams, not a column on tenants. The stale copy
+  // is what made a freshly uploaded logo invisible in this console.
+  chk(/teams\(logo_url\)/.test(code),
+      'the crest is read from teams through the foreign key, not from a tenants column');
+  // Checking the COLUMN LIST, not the whole select string: `teams(logo_url)`
+  // legitimately contains "logo_url", and a first version of this matched
+  // it and failed correct code.
+  const tenantCols = (code.match(/tenants'\)\.select\('([^']*)'/) || [])[1] || '';
+  chk(!/(^|,\s*)logo_url/.test(tenantCols.replace(/teams\([^)]*\)/g, '')),
+      'and tenants is not asked for a logo_url column it no longer has');
+
   chk(/onerror=/.test(tenantsHtml),
       'and a logo that fails to load falls back rather than showing a broken icon');
 
@@ -193,6 +208,13 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // ACTIONS LIVE IN A PER-ROW MENU. Suspend and Delete side by side as
   // buttons on a list is a misclick waiting to happen, and one of them is
   // destructive.
+  // REFRESH. The list goes stale while you look at it -- a tenant uploads
+  // a logo or finishes a game in another window and nothing here knows.
+  // Asserted explicitly rather than left to be caught incidentally by the
+  // page throwing on a missing element, which is not the same as testing
+  // that the control exists.
+  chk(/id="refreshTenantsBtn"/.test(raw), 'the Tenants tab has a Refresh control');
+
   chk(/data-menu=/.test(tenantsHtml), 'each tenant row has an actions menu');
   chk(/>Suspend</.test(tenantsHtml), 'the menu offers Suspend for an active tenant');
   chk(/>Restore access</.test(tenantsHtml), 'and Restore access for a suspended one');
