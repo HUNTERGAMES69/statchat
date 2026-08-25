@@ -37,7 +37,12 @@
   --sc-page:#10141a;  --sc-card:#191f27;
   --sc-ink:#eef1f4;   --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
   --sc-rule:#2b333d;  --sc-rule-strong:#3a4552;
-  --sc-navy:#0f141a;
+  /* --sc-navy IS A BUTTON FILL, NOT AN INK. Pointed at #0f141a it landed
+     within 1.00:1 of the page and every button on the play ladder sank
+     into the background -- reported 25 Aug. game.html's base rule is
+     `button { background:var(--sc-navy, #1a1a2e) }`, so this one token
+     colours the whole entry ladder. */
+  --sc-navy:#2f3a47;
   --sc-green:#7cb518; --sc-green-dark:#5e8f0f; --sc-green-tint:rgba(124,181,24,.13);
   --sc-amber:#ffc72c; --sc-amber-tint:rgba(255,199,44,.13); --sc-amber-text:#ffc72c;
   --sc-amber-soft:rgba(255,199,44,.08);
@@ -69,10 +74,39 @@ input, select, textarea{
   border-color:var(--v-edge) !important;
 }
 input::placeholder, textarea::placeholder{ color:#6b7788 !important; }
+/* BUTTONS NEED AN EDGE, NOT JUST A LIGHTER FILL.
+   No fill reaches the 3:1 WCAG floor for a non-text boundary against a
+   dark card without going light grey -- #2f3a47 on #191f27 is 1.43:1. So
+   the fill carries the affordance and a 1px border carries the edge:
+   #6b7d8f is 3.91:1 against the card, which is what makes a row of
+   ladder buttons legible as separate controls. */
 button, .button-link, .btn{
-  background:var(--v-raise); color:var(--v-paper);
-  border-color:var(--v-edge);
+  background:var(--sc-navy) !important; color:var(--v-paper) !important;
+  border:1px solid #6b7d8f !important;
 }
+button:hover:not(:disabled), .button-link:hover{ background:#3a4653 !important; }
+/* Disabled at 0.5 opacity on a dark page is very nearly invisible. Given
+   an edge and a floor it still reads as a control that is switched off,
+   which is the point -- "Redo last" greyed out should be findable. */
+button:disabled{ opacity:1 !important; background:#1b2129 !important;
+                 color:#5f6b78 !important; border-color:#333f4b !important; }
+/* The states that already carry their own colour keep it; they were
+   chosen to be found quickly and none of them is a dark fill. */
+button.primary{ background:var(--v-brand) !important; color:#0d1117 !important;
+                border-color:var(--v-brand-hi) !important; }
+button.picked, button.suggested{ background:var(--v-data) !important;
+                color:#0d1117 !important; border-color:#ffd964 !important;
+                box-shadow:inset 0 0 0 2px rgba(0,0,0,.25) !important; }
+button.danger{ background:rgba(176,0,32,.18) !important; color:#ff8fa3 !important;
+               border-color:#c8455c !important; }
+button.lastresort{ background:#8a3a12 !important; color:#fff !important;
+                   border-color:#c26a3a !important; }
+button.ptoggle, button.secondary{ background:#20272f !important;
+               color:#c7d0da !important; border-color:#6b7d8f !important; }
+/* .opt-toggle was #f0f0f0 -- a light chip my bulk swap did not catch
+   because it is a background, not a text colour. */
+.opt-toggle{ background:#20272f !important; border-color:#6b7d8f !important;
+             color:var(--v-paper) !important; }
 /* The way back, on every page. Kept as an outline so it reads as
    navigation rather than as one of the page's actions. */
 .backlink, .topAct, .secondary{
