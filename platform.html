@@ -17,12 +17,12 @@
      The super-admin account has no tenant. Every other page in this app
      asks "what is MY team" and works outward from there, so signing in as
      the platform and landing on dashboard.html shows a MERGED VIEW of
-     every school at once, with nothing on screen saying whose data any of
+     every tenant at once, with nothing on screen saying whose data any of
      it is. With one customer that is invisible. With two it is actively
      misleading, and the person most likely to be misled is the one who can
      change anything.
 
-     So this is the platform's landing page: it names the school before it
+     So this is the platform's landing page: it names the tenant before it
      shows you anything belonging to one.
 
      NO NEW SQL. Everything here reads through policies that already exist
@@ -32,8 +32,8 @@
 
      WHAT THIS IS NOT: it is not "Act As". MULTI_TENANT_PLAN.md defers
      impersonation until there is a real audit trail, and this page must
-     not quietly become it. Everything here reads a school's data AS THE
-     PLATFORM. There is no button that makes you a member of a school, and
+     not quietly become it. Everything here reads a tenant's data AS THE
+     PLATFORM. There is no button that makes you a member of a tenant, and
      adding one is a decision, not a convenience. -->
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -80,7 +80,7 @@
   td.name { color:var(--sc-ink, #1a1a1a); font-weight:600; }
   td.right { text-align:right; }
 
-  /* The stand-in for a school with no crest yet. Deliberately plain: it
+  /* The stand-in for a tenant with no crest yet. Deliberately plain: it
      should read as "not set" rather than as a design decision. */
   .crest { width:28px; height:28px; border-radius:5px; flex:none;
            background:var(--sc-rule, #e6e6e6); color:#6b7680;
@@ -142,30 +142,30 @@
 
     <div id="panelTenants" class="card">
       <h1>Tenants</h1>
-      <p class="sub">Every school on the platform. Counts are live games only —
+      <p class="sub">Every tenant on the platform. Counts are live games only —
          deleted ones are under Recovery tools.</p>
       <div id="tenantsBody"><p class="empty">Loading…</p></div>
 
       <!-- ADDING A SCHOOL. Collapsed behind a button rather than sitting
-           open: this list is read many times a week and a school is added
+           open: this list is read many times a week and a tenant is added
            a handful of times a year, so the common case should not be
            looking past a form. -->
       <div style="margin-top:18px; border-top:1px solid var(--sc-rule, #e6e6e6); padding-top:14px;">
-        <button id="showAddBtn" class="act" type="button">Add a school</button>
+        <button id="showAddBtn" class="act" type="button">Add a tenant</button>
         <div id="addPanel" class="hidden" style="margin-top:12px; max-width:460px;">
           <div id="addMsg"></div>
-          <label>School name<input type="text" id="addName" placeholder="Neville"></label>
+          <label>Tenant name<input type="text" id="addName" placeholder="Neville"></label>
           <p class="fieldnote">Short, the way it appears on a scoreboard.</p>
-          <label>Full name<input type="text" id="addFullName" placeholder="Neville High School"></label>
+          <label>Full name<input type="text" id="addFullName" placeholder="Neville High Tenant"></label>
           <p class="fieldnote">Optional. Used on printed reports.</p>
           <label>First admin's email<input type="email" id="addEmail" placeholder="coach@school.edu"></label>
-          <p class="fieldnote">Optional — they get an invite and become the school's admin.
-             Leave it blank to create the school now and invite somebody later.</p>
+          <p class="fieldnote">Optional — they get an invite and become the tenant's admin.
+             Leave it blank to create the tenant now and invite somebody later.</p>
           <label>Their name<input type="text" id="addAdminName" placeholder="Dana Whitfield"></label>
           <p class="fieldnote">Optional. Without it they appear as their email address
              everywhere in the app.</p>
           <div style="margin-top:12px;">
-            <button id="createBtn" class="act" type="button">Create school</button>
+            <button id="createBtn" class="act" type="button">Create tenant</button>
             <button id="cancelAddBtn" class="topAct" type="button" style="margin-left:6px;">Cancel</button>
           </div>
         </div>
@@ -175,10 +175,10 @@
     <div id="panelUsers" class="card hidden">
       <h1>Users</h1>
       <p class="sub">Everyone with an account, grouped by tenant. This is the platform's
-         view; a school's own admin manages their people from their account page.</p>
+         view; a tenant's own admin manages their people from their account page.</p>
       <div id="usersBody"><p class="empty">Loading…</p></div>
       <p class="note"><strong>Read-only, deliberately.</strong> Changing somebody's role,
-         resetting their password or removing them is a school's own admin's job, and doing
+         resetting their password or removing them is a tenant's own admin's job, and doing
          it from here would be acting on a customer's staff with nothing recording that it
          was the platform. That belongs with the audit trail, not before it.</p>
     </div>
@@ -273,7 +273,7 @@
     window.location.href = '/login.html';
   });
 
-  // ---- adding a school --------------------------------------------------
+  // ---- adding a tenant --------------------------------------------------
   document.getElementById('showAddBtn').addEventListener('click', () => {
     document.getElementById('addPanel').classList.remove('hidden');
     document.getElementById('showAddBtn').classList.add('hidden');
@@ -294,13 +294,13 @@
     const msg = document.getElementById('addMsg');
     const name = document.getElementById('addName').value.trim();
     if (!name){
-      msg.innerHTML = '<div class="msg error">A school needs a name.</div>';
+      msg.innerHTML = '<div class="msg error">A tenant needs a name.</div>';
       return;
     }
-    // DISABLED WHILE IT RUNS. Creating a school is two steps and the second
-    // sends an email; a double-click would make two schools, and
+    // DISABLED WHILE IT RUNS. Creating a tenant is two steps and the second
+    // sends an email; a double-click would make two tenants, and
     // create_tenant's duplicate-name check would refuse the second with a
-    // message about a school the operator did not know they had just made.
+    // message about a tenant the operator did not know they had just made.
     btn.disabled = true;
     btn.textContent = 'Creating\u2026';
     msg.innerHTML = '';
@@ -319,7 +319,7 @@
       const out = await r.json();
       if (!r.ok && r.status !== 207) throw new Error(out.error || ('HTTP ' + r.status));
       if (r.status === 207){
-        // PARTIAL: the school exists, something after it did not. Said
+        // PARTIAL: the tenant exists, something after it did not. Said
         // plainly, and the form is cleared, because retrying the whole
         // thing would hit the duplicate-name check.
         msg.innerHTML = '<div class="msg error">' + esc(out.error) + '</div>';
@@ -335,12 +335,12 @@
       msg.innerHTML = '<div class="msg error">' + esc(err.message) + '</div>';
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Create school';
+      btn.textContent = 'Create tenant';
     }
   });
 
   // ---- tabs -------------------------------------------------------------
-  // GENERALISED FROM A BOOLEAN. It was `isSchools` and two toggles, which
+  // GENERALISED FROM A BOOLEAN. It was `isTenants` and two toggles, which
   // is exactly the shape that stops working the moment a third tab exists
   // -- and adding one was the first thing asked for after it shipped.
   const TABS = ['tenants', 'users', 'recovery'];   // order here is wiring; the DOM decides display order
@@ -356,22 +356,22 @@
     document.getElementById('tab' + cap).addEventListener('click', () => selectTab(t));
   });
 
-  // ---- schools ----------------------------------------------------------
+  // ---- tenants ----------------------------------------------------------
   async function loadTenants(){
     const body = document.getElementById('tenantsBody');
     const { data: tenants, error } = await supabaseClient
-      .from('tenants').select('id, name, full_name, logo_url, subscription, renews_on, created_at')
+      .from('tenants').select('id, name, full_name, logo_url, subscription, renews_on, created_at, disabled_at, disabled_reason')
       .order('name');
     if (error){
-      body.innerHTML = '<p class="empty">Could not load schools: ' + esc(error.message) + '</p>';
+      body.innerHTML = '<p class="empty">Could not load tenants: ' + esc(error.message) + '</p>';
       return;
     }
     if (!tenants || !tenants.length){
-      body.innerHTML = '<p class="empty">No schools yet.</p>';
+      body.innerHTML = '<p class="empty">No tenants yet.</p>';
       return;
     }
 
-    // Counted in ONE query rather than one per school. Two tenants makes
+    // Counted in ONE query rather than one per tenant. Two tenants makes
     // no difference; twenty would, and this page is the one that has to
     // still work when there are twenty.
     const { data: games } = await supabaseClient
@@ -383,20 +383,27 @@
     });
 
     body.innerHTML =
-      '<table><tr><th>School</th><th>Subscription</th><th>Renews</th>' +
-      '<th>Games</th><th>Deleted</th></tr>' +
+      '<table><tr><th>Tenant</th><th>Status</th><th>Renews</th>' +
+      '<th>Games</th><th>Deleted</th><th></th></tr>' +
       tenants.map(t => {
-        const pill = t.subscription === 'active' ? 'live'
+        // SUSPENDED OUTRANKS EVERYTHING. A tenant can be paid up and
+        // still suspended; showing 'Active' next to an account that
+        // cannot write is the status line lying about the thing the
+        // operator is looking it up to find out.
+        const off = !!t.disabled_at;
+        const pill = off ? 'lapsed'
+                   : t.subscription === 'active' ? 'live'
                    : t.subscription === 'lapsed' ? 'lapsed' : 'trial';
-        const label = t.subscription === 'lapsed' ? 'Lapsed — read only'
+        const label = off ? 'Suspended'
+                    : t.subscription === 'lapsed' ? 'Lapsed \u2014 read only'
                     : t.subscription.charAt(0).toUpperCase() + t.subscription.slice(1);
         return '<tr>' +
-          // THE CREST, ONCE THEY HAVE ONE. A school is recognised by its
+          // THE CREST, ONCE THEY HAVE ONE. A tenant is recognised by its
           // badge long before its name is read, and this list is the one
           // place the platform decides which customer it is looking at.
           //
           // A MISSING LOGO GETS A MONOGRAM, not a broken image and not a
-          // blank. New schools have no crest until somebody visits
+          // blank. New tenants have no crest until somebody visits
           // Customize, so "no logo yet" is the ordinary state for exactly
           // the customer you are most likely to be looking up.
           //
@@ -418,6 +425,15 @@
           '<td>' + fmtDate(t.renews_on) + '</td>' +
           '<td>' + (live[t.id] || 0) + '</td>' +
           '<td>' + (gone[t.id] || 0) + '</td>' +
+          '<td class="right">' +
+            '<button class="topAct' + (off ? '' : ' danger') + '" ' +
+              'data-toggle="' + esc(t.id) + '" data-off="' + (off ? '1' : '0') + '" ' +
+              'data-name="' + esc(t.name) + '">' +
+              (off ? 'Restore' : 'Suspend') + '</button>' +
+            (off && t.disabled_reason
+              ? '<div style="font-size:12px; color:#6b7680; margin-top:4px;">' +
+                esc(t.disabled_reason) + '</div>' : '') +
+          '</td>' +
         '</tr>';
       }).join('') + '</table>';
   }
@@ -426,7 +442,7 @@
   async function loadRecovery(){
     const body = document.getElementById('recoveryBody');
     // The join is what makes this readable: a designator on its own says
-    // nothing about WHOSE game it is, and two schools may legitimately
+    // nothing about WHOSE game it is, and two tenants may legitimately
     // both have a "2026-W1" since migration 010.
     const { data: rows, error } = await supabaseClient
       .from('games')
@@ -443,7 +459,7 @@
       return;
     }
     body.innerHTML =
-      '<table><tr><th>School</th><th>Game</th><th>Played</th><th>Deleted</th><th></th></tr>' +
+      '<table><tr><th>Tenant</th><th>Game</th><th>Played</th><th>Deleted</th><th></th></tr>' +
       rows.map(g =>
         '<tr data-game="' + esc(g.id) + '">' +
           '<td class="name">' + esc((g.tenants && g.tenants.name) || '—') + '</td>' +
@@ -455,6 +471,50 @@
           '<td class="right"><button class="act" data-restore="' + esc(g.id) + '">Restore</button></td>' +
         '</tr>').join('') + '</table>';
   }
+
+  // Delegated: the rows are rebuilt after every change, so a listener
+  // bound to a button that no longer exists does nothing.
+  document.getElementById('tenantsBody').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-toggle]');
+    if (!btn) return;
+    const id = btn.getAttribute('data-toggle');
+    const off = btn.getAttribute('data-off') === '1';
+    const name = btn.getAttribute('data-name');
+
+    let reason = null;
+    if (!off){
+      // A REASON IS ASKED FOR, not required. The first question in the
+      // support call is always why, and 'nobody wrote it down' is a bad
+      // answer -- but refusing to suspend without one would mean somebody
+      // typing 'x' to get past the box.
+      reason = prompt('Suspend ' + name + '?\n\n' +
+        'They keep full read access -- reports, recaps and the broadcast overlay all ' +
+        'keep working -- but nobody can enter plays, edit games or change the roster ' +
+        'until it is restored.\n\nReason (optional, shown to nobody but you):');
+      if (reason === null) return;   // cancelled
+    } else if (!confirm('Restore ' + name + '? They will be able to write again immediately.')){
+      return;
+    }
+
+    btn.disabled = true;
+    const { data, error } = await supabaseClient.rpc('set_tenant_disabled', {
+      p_tenant: id, p_disabled: !off, p_reason: reason || null
+    });
+    if (error){
+      showMsg('Could not change that tenant: ' + esc(error.message), 'error');
+      btn.disabled = false;
+      return;
+    }
+    if (data === false){
+      showMsg('That tenant no longer exists — the list was out of date.', 'error');
+    } else {
+      showMsg(off
+        ? esc(name) + ' restored. They can write again.'
+        : esc(name) + ' suspended. They can still read everything, including their ' +
+          'broadcast overlay, but cannot enter or change anything.', 'success');
+    }
+    loadTenants();
+  });
 
   // ---- users ------------------------------------------------------------
   // Through api/manage-users.js rather than a direct query, because
@@ -484,7 +544,7 @@
     // GROUPED BY SCHOOL, because a flat roll of every account on the
     // platform is precisely the merged view this console exists to avoid.
     // Two buckets get their own heading and sort to the ends: the platform
-    // itself, and anyone with no school at all -- who is invisible on every
+    // itself, and anyone with no tenant at all -- who is invisible on every
     // other screen and is usually somebody invited and never assigned.
     const groups = new Map();
     users.forEach(u => {
@@ -496,7 +556,7 @@
     });
 
     const heading = k => k === '\u0000platform' ? 'StatChat platform'
-                       : k === '\uffffunassigned' ? 'No school assigned'
+                       : k === '\uffffunassigned' ? 'No tenant assigned'
                        : k;
     body.innerHTML = [...groups.keys()].sort().map(k => {
       const rows = groups.get(k).sort((a, b) =>
@@ -543,7 +603,7 @@
       // another tab.
       showMsg('That game was not deleted — the list was out of date.', 'error');
     } else {
-      showMsg('Game restored. It is back on that school\'s dashboard, with every play ' +
+      showMsg('Game restored. It is back on that tenant\'s dashboard, with every play ' +
               'and its roster snapshot.', 'success');
     }
     loadRecovery();
