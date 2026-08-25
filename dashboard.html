@@ -344,11 +344,50 @@
         currentUserId = session.user.id;
         currentUserEmail = session.user.email;
         document.getElementById('signedInAs').textContent = 'Signed in as ' + session.user.email;
-        showView('dashboardView');
-        loadIsAdmin().then(() => {
-          loadDashboard();
-        });
-        loadAccountMenu();
+
+        // THE PLATFORM IS TURNED AWAY BEFORE ANYTHING RENDERS.
+        // -----------------------------------------------------------------
+        // The bounce used to live in loadIsAdmin(), which runs AFTER
+        // showView() below -- so the platform account got a full frame of
+        // this dashboard first: the loading splash, complete with the
+        // TENANT'S OWN LOGO, before being sent to the console. Reported as
+        // "a black flash with the Neville N in it", which is exactly what
+        // it was.
+        //
+        // A redirect that happens after the wrong thing is painted has not
+        // prevented anything; it has just made it brief.
+        //
+        // The query is the same one loadIsAdmin() makes moments later. The
+        // cost is one round trip before first paint for every user, which
+        // is the price of not showing one customer's branding to somebody
+        // who is not their customer.
+        //
+        // WHY BOUNCE AT ALL: every 'Dashboard' link in the app points here
+        // -- sixteen of them across twelve files -- so bouncing once fixes
+        // all of them rather than patching sixteen links.
+        //
+        // THE BYPASS IS DELIBERATE. Support, and the Open button on the
+        // console's Tenants tab, both need to see a tenant's dashboard AS
+        // THE PLATFORM. `?as=` says "I meant to be here"; it is not a
+        // permission, since the platform can already read every tenant.
+        //
+        // INCOMPLETE ON PURPOSE: passing ?as= today gets the dashboard with
+        // NO SCOPING AND NO BANNER, which is the merged view again. Open
+        // must add both before it ships. Nothing links here with ?as= yet.
+        (async () => {
+          const viewingAs = new URLSearchParams(location.search).get('as');
+          if (!viewingAs){
+            const { data: me } = await supabaseClient
+              .from('profiles').select('is_super_admin').eq('id', session.user.id).limit(1);
+            if (me && me[0] && me[0].is_super_admin){
+              window.location.replace('platform.html');
+              return;
+            }
+          }
+          showView('dashboardView');
+          loadIsAdmin().then(() => { loadDashboard(); });
+          loadAccountMenu();
+        })();
       } else {
         window.location.href = '/login.html';
       }
@@ -363,43 +402,6 @@
     const role = (!error && data && data.length > 0 && data[0].role) || 'view';
     currentIsAdmin = role === 'admin';
 
-    // THE PLATFORM DOES NOT BELONG ON THIS PAGE AT ALL.
-    // -------------------------------------------------------------------
-    // Every page in the app asks "what is MY team" and works outward from
-    // there. The platform account has no tenant and every policy ends
-    // `or is_super_admin()`, so this dashboard shows it a MERGED VIEW of
-    // every school's games with nothing saying whose any of it is. With
-    // one customer that looks like an ordinary dashboard, which is worse
-    // than looking broken.
-    //
-    // login.html already lands the platform on the console. This is the
-    // other sixteen ways in: every 'Dashboard' link in the app points
-    // here, so bouncing once from this page fixes all of them rather than
-    // patching sixteen links across twelve files.
-    //
-    // replace(), not href: a bounce should not leave an entry in history
-    // that Back returns to.
-    //
-    // THE BYPASS IS DELIBERATE AND NAMED. Support, and the Open button on
-    // the console's Tenants tab, both need to see a school's dashboard AS
-    // THE PLATFORM. That is not impersonation -- nothing pretends to be a
-    // coach -- and blocking it would make this bounce the thing that has
-    // to be unpicked later.
-    //
-    // `?as=<tenantId>` is the hatch. It is NOT a permission: the platform
-    // can already read every school, with or without it. It says "I meant
-    // to be here", which is what turns an accidental merged view into a
-    // deliberate one.
-    //
-    // INCOMPLETE ON PURPOSE, and this is the important part: passing ?as=
-    // today gets you the dashboard with NO SCOPING AND NO BANNER, which is
-    // the merged view again. The Open button must add both before it ships
-    // -- see MULTI_TENANT_PLAN.md. Nothing links here with ?as= yet.
-    const viewingAs = new URLSearchParams(location.search).get('as');
-    if (!error && data && data.length > 0 && data[0].is_super_admin && !viewingAs){
-      window.location.replace('platform.html');
-      return;
-    }
     currentCanEnterGames = role === 'admin' || role === 'game_entry';
     // Broadcast setup shows the static feed key, so it is not for view
     // accounts. Scorers get it because the crew sets up the day before.
