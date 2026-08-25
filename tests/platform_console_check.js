@@ -190,8 +190,14 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // SUSPENSION. Reads keep working on purpose: an overlay is a read, and
   // a crew that loses its scoreboard mid-broadcast loses it in front of
   // an audience -- over a decision reversible in seconds.
-  chk(/>Suspend</.test(tenantsHtml), 'an active tenant offers Suspend');
-  chk(/>Restore</.test(tenantsHtml), 'a suspended one offers Restore');
+  // ACTIONS LIVE IN A PER-ROW MENU. Suspend and Delete side by side as
+  // buttons on a list is a misclick waiting to happen, and one of them is
+  // destructive.
+  chk(/data-menu=/.test(tenantsHtml), 'each tenant row has an actions menu');
+  chk(/>Suspend</.test(tenantsHtml), 'the menu offers Suspend for an active tenant');
+  chk(/>Restore access</.test(tenantsHtml), 'and Restore access for a suspended one');
+  chk(/data-del=/.test(tenantsHtml), 'and Delete tenant');
+  chk(/class="menu hidden"/.test(tenantsHtml), 'the menu starts closed');
   chk(/Suspended/.test(tenantsHtml),
       'and its status reads Suspended, NOT its subscription -- a tenant can be paid up ' +
       'and still suspended, and the status line must not say Active next to an account ' +
@@ -208,6 +214,30 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   chk(!!sc, 'suspending calls set_tenant_disabled()');
   chk(sc && sc.args.p_disabled === true, 'with p_disabled true for an active tenant');
   chk(sc && sc.args.p_reason === 'Testing', 'and passes the reason through');
+
+  // DELETING A TENANT is a typed confirmation, not a yes/no. The row is
+  // chosen from a list, and typing the name means READING it -- the only
+  // thing that reliably catches the wrong row.
+  b.w.prompt = () => 'Neville';
+  const delBtn = [...b.d.querySelectorAll('[data-del]')][0];
+  delBtn.dispatchEvent(new b.w.Event('click', { bubbles: true }));
+  await wait();
+  const dc = b.calls.rpc.find(c => c.name === 'set_tenant_deleted');
+  chk(!!dc, 'deleting calls set_tenant_deleted()');
+  chk(dc && dc.args.p_deleted === true, 'with p_deleted true');
+
+  // AND A MISTYPED NAME CHANGES NOTHING.
+  b.calls.rpc.length = 0;
+  b.w.prompt = () => 'not the name';
+  b.d.querySelectorAll('[data-del]')[0].dispatchEvent(new b.w.Event('click', { bubbles: true }));
+  await wait();
+  chk(!b.calls.rpc.some(c => c.name === 'set_tenant_deleted'),
+      'a mistyped name deletes nothing');
+
+  // The delete path must NOT be a hard delete: tenants cascades to five
+  // tables, so a DELETE would destroy every game, play and roster row.
+  chk(!/\.from\('tenants'\)[^;]*\.delete\(/.test(code),
+      'nothing hard-deletes a tenant — the row cascades to five tables');
 
   const tenants = b.d.getElementById('tenantsBody').textContent;
   chk(/Neville/.test(tenants) && /Riverside/.test(tenants), 'both schools are listed');
