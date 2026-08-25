@@ -49,8 +49,17 @@ chk(!/Comp \/ Pass Yds|Att \/ Rush Yds/.test(live),
     'comp and att are off these tiles');
 chk(/'Pass Yards'/.test(live) && /'Rush Yards'/.test(live),
     'and the labels say what is left');
-chk(/\.stat-tile-half \{[^}]*font-size:19px/.test(live),
-    'the halftime figure is 19px — smaller than the 34px it sits beside');
+// SIZED AS A RATIO OF THE VALUE IT SITS BESIDE, not as a fixed number.
+// A hardcoded 19 here failed the moment Andy asked for it 30% larger --
+// the check was pinning an implementation detail rather than the thing
+// that matters, which is that the bracket stays clearly subordinate to the
+// figure it annotates while still being readable across a room.
+const tileSize = Number(/\.stat-tile-value \{[^}]*font-size:(\d+)px/.exec(live)[1]);
+const halfSize = Number(/\.stat-tile-half \{[^}]*font-size:(\d+)px/.exec(live)[1]);
+const ratio = halfSize / tileSize;
+chk(ratio > 0.4 && ratio < 0.85,
+    'the halftime figure is subordinate but legible — ' + halfSize + 'px against ' +
+    tileSize + 'px is ' + Math.round(ratio * 100) + '% (want 40-85%)');
 
 // ---- the behaviour, RUN rather than read -----------------------------
 // Every assertion above is a text match, and text matches are what let
