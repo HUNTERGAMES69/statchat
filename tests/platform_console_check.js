@@ -342,11 +342,40 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   chk(/never/.test(usersHtml), 'a user who has never signed in says so');
   chk(/Invited/.test(usersHtml), 'an unconfirmed invite is marked');
 
-  // READ-ONLY, DELIBERATELY. Acting on a customer's staff from here would
-  // be the platform changing a school's people with nothing recording it.
-  chk(!/data-action=/.test(usersHtml) && !/setRole|setPassword|Delete/.test(usersHtml),
-      'the users tab offers no actions — that waits for the audit trail');
-
+  // THE USERS TAB NOW ACTS. Andy asked for it, 25 August 2026, and this
+  // assertion was reversed rather than deleted -- the reasoning it carried
+  // is still true and is now a known, accepted gap rather than a
+  // prohibition:
+  //
+  //   "Acting on a customer's staff from here would be the platform
+  //    changing a school's people with nothing recording it."
+  //
+  // Still true. There is no audit trail yet (it remains on the TODO), so
+  // what mitigates it instead is that the destructive actions are the
+  // reversible ones -- disable can be undone, an invite can be resent, and
+  // a password set here is TEMPORARY and forces the owner to replace it, so
+  // the operator cannot quietly keep working access. Delete is still not
+  // offered from this tab.
+  //
+  // If the audit trail lands, this comment is the record of what it is for.
+  chk(/data-act="resendInvite"/.test(usersHtml) && /data-act="sendReset"/.test(usersHtml) &&
+      /data-act="setPassword"/.test(usersHtml) && /data-act="setDisabled"/.test(usersHtml),
+      'the users tab offers resend-invite, send-reset, temp-password and disable');
+  chk(!/data-act="delete"/.test(usersHtml),
+      'and NOT delete — the one action nothing can undo stays off this tab while ' +
+      'there is no audit trail');
+  // Asserted against the RENDERED rows, not the page source. An earlier
+  // version of this line searched the source for the guard expression --
+  // which passes whether or not the render ever reaches it, and is the
+  // same class of mistake as checking that a rule exists rather than that
+  // it applies.
+  chk(!/data-act="setDisabled"[^>]*data-id="u1"/.test(usersHtml),
+      'no disable control is rendered for the signed-in operator -- the endpoint\n' +
+      '      refuses it too, but the control that would lock you out of the only\n' +
+      '      console that could undo it should not be there to tap');
+  chk(/data-act="setDisabled"[^>]*data-id="u2"/.test(usersHtml),
+      'while another operator\'s row DOES get one — without this the check above ' +
+      'would pass on a page that rendered no disable buttons at all');
   // ---- and the OTHER half of this: account.html --------------------------
   // The platform saw every school's users on its own account page, under a
   // heading about its own account. Not a leak -- the platform is entitled
