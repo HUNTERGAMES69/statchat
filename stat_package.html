@@ -13,6 +13,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StatChat — Statistics Report</title>
 <style>
+  /* ===== ROTATE PROMPT (phone, portrait) — added 25 August 2026 =========
+     Andy's call: let a phone reader see these reports, but tell them once
+     that landscape is better. The report layout is NOT changed; this is a
+     prompt laid over it and nothing else.
+
+     IT COVERS THE REPORT, NOT THE TOOLBAR. Positioned against the content
+     container rather than the viewport, so it cannot end up over Download
+     PDF or Download XLS however long the page gets. Those must keep
+     working in portrait -- someone who only wants the file should not have
+     to dismiss anything first, which is why the prompt says so.
+
+     HIDDEN WHEN PRINTING. PDF export here is window.print(), the browser's
+     own print-to-PDF, so an overlay left visible would be baked into the
+     PDF as a grey box across the first page. */
+  .rotateGate { display:none; }
+  .rotateGate.show { position:absolute; inset:0; z-index:400;
+    background:rgba(16,20,26,.80); display:flex; align-items:flex-start;
+    justify-content:center; padding:26px 20px; border-radius:10px; }
+  .rotateBox { background:#fff; border-radius:14px; padding:20px 18px; max-width:300px;
+    text-align:center; box-shadow:0 12px 40px rgba(0,0,0,.35); }
+  .rotateBox .glyph { font-size:34px; line-height:1; display:block; margin-bottom:10px; }
+  .rotateBox h4 { margin:0 0 6px; font-size:16px; }
+  .rotateBox p { margin:0 0 14px; font-size:13.5px; color:#555; line-height:1.5; }
+  .rotateBox button { width:100%; padding:11px; border-radius:8px; border:none;
+    background:var(--sc-navy, #1a1a2e); color:#fff; font-size:14px; font-weight:600;
+    cursor:pointer; }
+  .rotateBox small { display:block; margin-top:10px; color:#777; font-size:12px; }
+  @media print { .rotateGate, .rotateGate.show { display:none !important; } }
   html, body { margin:0; padding:0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); color:var(--sc-ink, #1a1a1a); }
   .wrap { max-width:960px; margin:0 auto; padding:24px 24px 60px; box-sizing:border-box; }
@@ -1154,6 +1182,77 @@ function isAdminMarker(p){
     html += '<div class="print-endmark"><img src="logo.png" alt="StatChat"></div>';
     return html;
   }
+
+  /* ===== ROTATE PROMPT ================================================
+     Shown once per visit, on a PHONE in PORTRAIT only.
+
+     Detected by viewport width AND a coarse pointer, never by user-agent:
+     UA sniffing is wrong on every device released after it was written. An
+     iPad in portrait is 768px+ and reads fine, so tablets never see this.
+
+     sessionStorage, not localStorage: opening a recap and then a stat
+     package should not prompt twice, but a genuinely new visit should be
+     told again. Wrapped in try/catch because storage throws outright in
+     private mode on some browsers, and a prompt is not worth a broken page.
+
+     It removes itself if the phone is turned while it is open -- telling
+     someone already in landscape to rotate reads as a bug -- and before
+     printing, so it is never captured in the PDF. */
+  (function(){
+    var KEY = 'sc_rotate_dismissed';
+    var host = document.getElementById('reportContent');
+    if (!host) return;
+
+    function dismissed(){
+      try { return sessionStorage.getItem(KEY) === '1'; } catch (e) { return false; }
+    }
+    function remember(){
+      try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
+    }
+    function isPhonePortrait(){
+      var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+      var narrow = Math.min(window.innerWidth, window.innerHeight) <= 500;
+      var portrait = window.innerHeight >= window.innerWidth;
+      return coarse && narrow && portrait;
+    }
+
+    var gate = document.createElement('div');
+    gate.className = 'rotateGate';
+    gate.setAttribute('role', 'dialog');
+    gate.setAttribute('aria-modal', 'false');
+    gate.setAttribute('aria-label', 'Rotate your phone for a better view');
+    gate.innerHTML =
+      '<div class="rotateBox">' +
+        '<span class="glyph" aria-hidden="true">&#128260;</span>' +
+        '<h4>Turn your phone sideways</h4>' +
+        '<p>These reports are built for a wide screen. In portrait the stat tables ' +
+        'run off the edge.</p>' +
+        '<button type="button" class="rotateDismiss">View anyway</button>' +
+        '<small>Download PDF and XLS work either way.</small>' +
+      '</div>';
+
+    function hide(){ gate.classList.remove('show'); }
+    function maybeShow(){
+      if (dismissed() || !isPhonePortrait()) { hide(); return; }
+      if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+      if (!gate.parentNode) host.appendChild(gate);
+      gate.classList.add('show');
+    }
+
+    gate.addEventListener('click', function(e){
+      if (e.target.classList.contains('rotateDismiss')) { remember(); hide(); }
+    });
+    window.addEventListener('resize', function(){ if (!isPhonePortrait()) hide(); });
+    window.addEventListener('beforeprint', hide);
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', maybeShow);
+    } else { maybeShow(); }
+    /* The report is rendered asynchronously, so the container may be empty
+       at load. A short delay lets it size itself before the overlay is
+       measured against it. */
+    setTimeout(maybeShow, 600);
+  })();
 </script>
 </body>
 </html>
