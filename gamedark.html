@@ -6799,7 +6799,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const btn = e.target.closest('button');
       if (!btn || !rail.contains(btn)) return;
       clearActive();
-      btn.classList.add('rail-active');
+        // ONLY HIGHLIGHT WHAT IS ACTUALLY OPEN.
+        // Two listeners fire on one click: the button's own (target phase)
+        // and this one on the rail (bubble phase), in that order. On a
+        // SECOND click the button handler collapses the tree and clears the
+        // highlight -- then this handler ran and put it straight back,
+        // leaving a highlighted button with nothing open under it.
+        // __ladderOpen() is the same currentLadderType the button handler
+        // just updated, so this asks the single record of what is open
+        // rather than keeping a second one here that could disagree.
+        // Buttons that are not play types -- Manual entry, the utilities --
+        // are not in that record and highlight as before.
+        const isPlayType = btn.classList.contains('ptypeBtn');
+        const stillOpen = !isPlayType ||
+          (typeof window.__ladderOpen === 'function' &&
+           window.__ladderOpen() === btn.dataset.type);
+        if (stillOpen) btn.classList.add('rail-active');
       // EVERY PLAY TYPE LOCKS TO THE TOP OF THE FRAME. Requested
       // directly: the buttons ABOVE Penalty -- Scrimmage and Special
       // teams -- open their tree at the top, the way Rush and Pass
