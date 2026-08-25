@@ -20,10 +20,6 @@
 <link rel="apple-touch-icon" id="appleTouchIcon" href="">
 <title>StatChat — Dashboard</title>
 <style>
-  /* THE STATCHAT MARK, identical on every page reachable from the
-     dashboard. Same element, same size, same place. */
-  .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
-  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block; }
   /* The hairline between the product and the customer. Decorative, so it
      is aria-hidden in the markup -- a screen reader hears "StatChat" then
      the team name, which is the whole meaning. */
@@ -34,37 +30,54 @@
   .card { background:#fff; border-radius:12px; padding:20px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
   h1 { font-size:22px; margin:0; line-height:1.15; }
   #teamHeading { font-size:20px; }
-  .topbar { display:flex; flex-direction:column; align-items:flex-start; gap:12px; margin-bottom:4px; }
-  .brandline { display:flex; align-items:center; gap:10px; min-width:0; }
+  /* PHONE FIRST. One column, each part on its own line, tenant at the top. */
+.topbar { display:flex; flex-direction:column; align-items:stretch; gap:12px; margin-bottom:4px; }
+  /* The tenant claims the leftover width, so its name starts hard left and
+   the rest of the row is pushed away from it. min-width:0 lets a long name
+   ellipsis rather than forcing the row wider. */
+.brandline { display:flex; align-items:center; gap:10px; min-width:0; flex:1 1 auto; }
+#teamHeading { min-width:0; overflow-wrap:anywhere; }
+/* App chrome: product mark, hairline, account. Never wraps, never grows. */
+.headerRight { display:flex; align-items:center; gap:10px; flex:0 0 auto; }
+.scMark-dash { width:24px; height:24px; border-radius:5px; display:block; flex:none;
+               opacity:.85; }
+.brandDiv { width:1px; height:22px; background:var(--sc-rule, #e6e6e6); flex:none; }
   #teamLogo { height:32px; width:32px; object-fit:contain; border-radius:6px; display:none; flex-shrink:0; }
-  .navlinks { display:flex; gap:8px; flex-wrap:wrap; width:100%; }
-  .navlinks a, .navlinks button { flex:1 1 auto; text-align:center; white-space:nowrap; }
+  /* Equal columns rather than flex, at every width. `flex:1 1 auto` sized
+   each button by its LABEL, so "How to use" and "Customize team" came out
+   different widths and the row's proportions changed with the wording. A
+   grid gives four equal cells whatever the labels say -- and Broadcast
+   setup only appears for some roles, so the COUNT changes too, which flex
+   wrapping could never make look the same for two different people. */
+.navlinks { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; }
+  .navlinks a, .navlinks button { text-align:center; white-space:nowrap; }
   @media (min-width: 768px) {
     body { padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
     .card { padding:28px; }
     h1 { font-size:24px; }
     #teamHeading { font-size:24px; }
     #teamLogo { height:36px; width:36px; }
-    .topbar { flex-direction:row; justify-content:space-between; align-items:center; }
-    .navlinks { width:auto; }
+    /* ONE ROW: tenant | tools | chrome. No justify-content -- the tenant
+       carries flex:1 1 auto and pushes the other two right itself, which
+       keeps its name hard left instead of centring the gap between three
+       groups. */
+    .topbar { flex-direction:row; align-items:center; flex-wrap:nowrap; gap:16px; }
+    /* Back to natural widths here: there is room, so four equal cells would
+       stretch "How to use" to the width of "Customize team" for no reason.
+       auto-flow keeps them on one line and lets each be its own size. */
+    .navlinks { display:flex; width:auto; flex:0 0 auto; flex-wrap:nowrap; }
     .navlinks a, .navlinks button { flex:none; }
     button, a.button-link { padding:9px 16px; font-size:14px; }
   }
-  /* MOBILE. The page is otherwise mobile-first with a min-width
-     breakpoint above, but the header controls were left to wrap on their
-     own and landed unevenly: four buttons in a ragged 2-1-1, with the
-     avatar squeezed against whichever one finished the row. */
+  /* MOBILE. The grid and the stacking are in the BASE rules now, since
+     this page is mobile-first -- these were duplicating them. What remains
+     is only what phones need and wider screens do not. */
   @media (max-width: 767px) {
-    /* A grid, so the four buttons are two tidy rows of equal width
-       whatever their labels say. Broadcast only appears for some roles,
-       so the count itself changes -- a flex wrap could not be relied on
-       to look the same for two different people. */
-    .navlinks { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-    .navlinks a.button-link { text-align:center; }
-    /* The avatar gets its own right-aligned row rather than sitting in a
-       cell: it is not one of the four, and putting it in the grid made it
-       look like a fifth button. */
-    .navlinks > div:last-child { grid-column:1 / -1; justify-self:end; margin-left:0 !important; }
+    /* The tenant and the app chrome share the top line: the mark and
+       avatar are small, and giving them a line of their own wasted one. */
+    .topbar { flex-direction:row; flex-wrap:wrap; align-items:center; }
+    .brandline { flex:1 1 60%; }
+    .navlinks { order:3; }
     /* Games, the season picker and Refresh read as one line -- the h1 is
        block-level, which is what was breaking them apart. */
     .games-head { align-items:center; }
@@ -239,31 +252,46 @@
   <div id="dashboardView" class="hidden">
     <div class="card">
       <div class="topbar">
-        <div class="brandline">
-          <!-- STATCHAT FIRST, THEN THE TENANT, with a hairline between.
-               This is the only page where the mark shares a row with a
-               customer's own logo and name, and the order matters: the
-               product frames the tenant rather than competing with it.
-               Reads as "StatChat | Neville High School".
+        <!-- THREE PARTS, EACH LAYING OUT ON ITS OWN.
+             ----------------------------------------------------------
+             The avatar used to sit INSIDE .navlinks with margin-left:auto,
+             making it a flex item among the buttons -- so when the row ran
+             short of width it wrapped onto a line of its own, right-aligned
+             underneath them. That is the jumble Andy reported.
 
-               #teamLogo keeps its 32px because an id beats `.scMark > img`
-               on specificity -- the tenant stays the larger of the two,
-               deliberately. This is their home screen. -->
-          <div class="scMark">
-            <img src="logo.png" alt="StatChat">
-            <span class="brandDiv" aria-hidden="true"></span>
-          </div>
+             The buttons also carried `flex:1 1 auto`, which stretches each
+             one by however long its label happens to be, so the row's
+             proportions changed with the wording rather than staying put.
+
+             Now: tenant, then tools, then app chrome. The tenant claims the
+             leftover space, so its name is hard left at every width. -->
+        <div class="brandline">
           <img id="teamLogo" alt="">
           <h1 id="teamHeading">StatChat</h1>
         </div>
-        <div class="navlinks">
+
+        <nav class="navlinks">
           <a class="button-link secondary" id="helpLink" href="help.html">How to use</a>
           <a class="button-link secondary" id="rosterLink" href="roster.html">Team Roster</a>
           <a class="button-link secondary" id="customizeLink" href="customize.html">Customize team</a>
           <!-- In the header, not the avatar menu. The production team needs
-               this and should not have to hunt for it behind an avatar. -->
-          <a class="button-link secondary" id="broadcastLink" href="broadcast_setup.html" style="display:none;">Broadcast</a>
-          <div style="position:relative; margin-left:auto;">
+               this and should not have to hunt for it behind an avatar.
+               "Broadcast setup" in full: the page sets a broadcast up, and
+               "Broadcast" alone reads like a verb -- something you press to
+               go live. -->
+          <a class="button-link secondary" id="broadcastLink" href="broadcast_setup.html" style="display:none;">Broadcast setup</a>
+        </nav>
+
+        <!-- APP CHROME, kept together and away from the tenant. The StatChat
+             mark used to sit in FRONT of the team name, which is exactly
+             where a customer's own identity should begin. -->
+        <div class="headerRight">
+          <img src="logo.png" alt="StatChat" class="scMark-dash">
+          <span class="brandDiv" aria-hidden="true"></span>
+          <!-- margin-left:auto removed: it pushed this to the end of
+                 .navlinks, which is what made it wrap to its own line.
+                 .headerRight positions it now. -->
+            <div style="position:relative;">
             <button id="accountBtn" class="secondary" style="border-radius:50%; width:36px; height:36px; padding:0; display:inline-flex; align-items:center; justify-content:center; overflow:hidden;">
               <img id="accountAvatarImg" style="display:none; width:100%; height:100%; object-fit:cover;">
               <span id="accountInitial" style="font-weight:700; font-size:14px;">?</span>
