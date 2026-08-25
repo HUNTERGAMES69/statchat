@@ -19,36 +19,39 @@
 <meta name="apple-mobile-web-app-title" content="StatChat">
 <title>StatChat — Game Entry</title>
 <style>
-  /* THE STATCHAT MARK IN THE GAME HEADER.
+  /* THE STATCHAT MARK, AND THE ARITHMETIC THAT DECIDES WHERE IT CAN GO.
      ===================================================================
-     FIXED SIZE, VERTICALLY CENTRED. Not stretched, and that is the point.
+     #headerLeft is absolutely positioned between the left edge and the
+     entry card, so its width is DERIVED, not chosen:
 
-     #headerLeft is absolutely positioned with a fixed right edge, so the
-     row has a hard width limit. Stretching the mark to the banner height
-     AND keeping it square made it ~66px WIDE, which took that width from
-     ON AIR -- it is `flex:0 0 auto` on a desktop and cannot shrink, so it
-     was pushed out of shape instead. Height and width are the same
-     property here; you cannot grow one without paying for the other.
+         width = viewport - 16 - (viewport/2 + 380 + 18)
 
-     A BACKGROUND IMAGE, NOT AN <img>. A background cannot make its element
-     larger. An <img> whose height is stripped falls back to its intrinsic
-     512px, which is how this failed four times over.
+         1280px viewport -> 226px      1600px -> 386px
+         1440px viewport -> 306px      1920px -> 546px
 
-     ON A SPAN THAT IS A DIRECT CHILD, so `#headerLeft > *` and
-     layoutHeader() can do whatever they like to it -- there is no inner
-     element left for them to break. */
-  .scMarkBox { display:block;
-               /* ^ NOT OPTIONAL, and its absence is why the mark vanished on a
-                  PC while looking right on an iPad. A <span> is display:inline
-                  by default, and an inline box IGNORES width and height -- so
-                  the element had no size and the background painted on
-                  nothing. On the iPad layoutHeader() sets display:flex
-                  !important on every child of #headerLeft, which gave it a
-                  size by accident. Desktop never runs that branch. */
-               flex:0 0 auto; align-self:center;
-               width:40px; height:40px;
-               background:url('logo.png') center/contain no-repeat;
-               border-radius:6px; }
+     Dashboard is about 109px and SET AS ON AIR about 151px, so the row
+     already needs ~270px before anything is added. At 1280 it is over
+     budget on its own; at 1440 it barely fits. Six earlier attempts put a
+     40px mark in front of that and pushed ON AIR out of shape -- not a
+     styling bug, just a row with no room in it.
+
+     SO THE MARK YIELDS, and it is the right thing to yield: on a cramped
+     screen the controls a scorer is using beat the branding.
+       * display:block -- a <span> is inline, and inline ignores width and
+         height. Its absence is why the mark vanished on a PC last time
+         while an iPad looked fine (layoutHeader sets display:flex there).
+       * a BACKGROUND, not an <img> -- a background cannot make its element
+         larger, and an <img> stripped of its height falls back to 512px,
+         which is how the first four attempts failed.
+       * hidden between 1220 and 1439, where the numbers above say there is
+         no space. Above that it shows. Below 1220 the touch layout takes
+         over, the row goes static and wraps, and there is room again. */
+  .scMarkBox { display:block; flex:0 0 auto; align-self:center;
+               width:32px; height:32px; border-radius:6px;
+               background:url('logo.png') center/contain no-repeat; }
+  @media (min-width:1220px) and (max-width:1439px) {
+    .scMarkBox { display:none; }
+  }
 
 
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); }
@@ -439,21 +442,11 @@
       flex:0 1 auto !important; margin:0 !important;
       padding:8px 14px !important; }
 
-    /* THE MARK OPTS OUT OF THAT PADDING, and needs a higher-specificity
-       selector to do it: `#headerLeft > *` is (1,0,0) and !important, so a
-       class alone cannot win. `#headerLeft > .scMarkBox` is (1,1,0).
-
-       Without this the box takes 8px+8px on a 30px mark and stands 46px
-       tall beside 36px buttons. The image carries the whole height here,
-       so the box adds nothing. */
-    /* height AND padding, both !important, both at (1,1,0) so they beat
-       `#headerLeft > *` at (1,0,0). Without the height the box collapses
-       to auto -- and a background image on a zero-height box is nothing at
-       all. */
-    #headerLeft > .scMarkBox { padding:0 !important; height:40px !important; }
-    /* Nothing to set here any more. The image is height:100% of a
-       stretched box, so it follows the row at this breakpoint exactly as
-       it does at the other one -- two button heights, one rule. */
+    /* The mark opts out of both, at (1,1,0) so it beats `#headerLeft > *`
+       at (1,0,0). Without the height it collapses to auto, and a
+       background on a zero-height box is nothing at all -- which is what
+       "it disappeared" looked like. */
+    #headerLeft > .scMarkBox { padding:0 !important; height:32px !important; }
   }
 
   /* RIGHT MARGIN RAIL -- validation and live totals.
@@ -944,24 +937,6 @@
          longer full-width: it was a wide bar with a short label in the
          middle, and that width is height everywhere else. -->
     <div id="headerLeft">
-        <!-- A WRAPPER, AND THAT IS THE WHOLE TRICK.
-             ---------------------------------------------------------
-             layoutHeader() iterates `left.children` -- DIRECT children
-             only -- and on touch strips height and width from each and
-             forces display:flex !important. On desktop it clears the same
-             properties again. Correct for a <button>, fatal for an <img>:
-             remove the only thing giving it a size and the browser falls
-             back to the intrinsic 512px.
-
-             Four earlier attempts fought that from the outside -- a
-             stylesheet rule, an inline style, an exemption in the loop, a
-             measured height -- and every one was overwritten, because
-             those are inline !important and a stylesheet cannot outrank
-             them.
-
-             The wrapper is the direct child, so it absorbs all of it. The
-             image is one level deeper, where neither loop can reach. No
-             exemption, nothing to keep in step with the layout code. -->
         <span class="scMarkBox" role="img" aria-label="StatChat"></span>
       <a class="hdr-btn" href="dashboard.html">&larr; Dashboard</a>
       <button type="button" id="onAirBanner" style="display:none;">&#9679; ON AIR</button>
