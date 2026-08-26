@@ -76,6 +76,29 @@ const DESKTOP  = { w: 1600, h: 900, coarse: false, dismissed: false };
 const PAGES = ['recap.html','stat_package.html','player_report.html','season_report.html'];
 
 // ---- the export path, which is the reason this design looks like it does
+// ---- THE HOST MAY FILL LONG AFTER LOAD ----------------------------------
+// player_report.html shows a picker first and leaves #playerContent EMPTY
+// until somebody chooses a player. That wait is HUMAN-paced -- land, read
+// the list, decide -- not network-paced like the other three.
+//
+// The observer used to be disconnected after 15 seconds, a guess at how long
+// a FETCH takes. Past that the host could fill and fire nothing, so the
+// prompt worked if you picked quickly and looked broken otherwise -- which
+// reads as never working.
+for (const page of PAGES) {
+  const src = fs.readFileSync(require('path').join(__dirname, '..', page), 'utf8');
+  chk(!/ro\.disconnect\(\); \}, 15000\)/.test(src),
+      page + ': no deadline on the wait — the observer lives until there is ' +
+      'something to show');
+  chk(/if \(showWhenReady\(\)\) ro\.disconnect\(\)/.test(src),
+      page + ': and disconnects once shown, so nothing is left running');
+  const poll = /tries > (\d+)/.exec(src);
+  chk(poll && parseInt(poll[1], 10) >= 240,
+      page + ': the no-ResizeObserver fallback allows minutes, not 15 seconds' +
+      (poll ? ' (' + (poll[1] * 0.25) + 's)' : ''));
+}
+
+
 for (const page of PAGES) {
   const src = fs.readFileSync(require('path').join(__dirname,'..',page), 'utf8');
   // SHOWN EVERY PAGE VIEW, NOT ONCE PER SESSION. Andy's call, 25 August
@@ -144,3 +167,57 @@ chk(dom.shown, 'a fresh visit shows it');
 
 console.log(fails ? '\n' + fails + ' FAILURES' : '\nALL PASS');
 process.exitCode = fails ? 1 : 0;
+
+// ---- BEHAVIOURAL: a host that fills LATER, via ResizeObserver ------------
+// The run() harness above stubs offsetHeight to 400 before the code executes
+// and sets ResizeObserver to undefined -- so it only ever proved the case
+// where the report is ALREADY rendered, on the poll path. That is exactly
+// the case player_report.html is not.
+//
+// This drives the real IIFE with a host that starts at zero height and gains
+// it later, with a working ResizeObserver, which is what happens when a
+// player is picked from the intermediary screen.
+(function lateFill(){
+  const { JSDOM } = require('jsdom');
+  const path = require('path');
+
+  for (const page of PAGES) {
+    const src = fs.readFileSync(path.join(__dirname, '..', page), 'utf8');
+    const hostId = /var host = document\.getElementById\('([^']+)'\)/.exec(src)[1];
+
+    const dom = new JSDOM('<div id="' + hostId + '"></div>', { runScripts: 'outside-only' });
+    const w = dom.window, d = w.document;
+    const el = d.getElementById(hostId);
+
+    let height = 0;                       // starts EMPTY, like the picker screen
+    Object.defineProperty(el, 'offsetHeight', { get: () => height, configurable: true });
+    w.matchMedia = () => ({ matches: true });      // coarse pointer
+    Object.defineProperty(w, 'innerWidth',  { value: 390, configurable: true });
+    Object.defineProperty(w, 'innerHeight', { value: 844, configurable: true });
+    w.getComputedStyle = () => ({ position: 'static' });
+
+    // a ResizeObserver we can fire by hand, as the browser would
+    let fire = null;
+    w.ResizeObserver = function(cb){
+      this.observe = () => { fire = cb; };
+      this.disconnect = () => { fire = null; };
+    };
+
+    const m = /\n  \(function\(\)\{\n    \/\* SHOWN EVERY TIME[\s\S]*?\n  \}\)\(\);/.exec(src);
+    w.__w = w; w.__d = d;
+    w.eval('(function(window, document){' + m[0] + '})(__w, __d);');
+
+    const shownNow = () => !!d.querySelector('.rotateGate.show');
+    chk(!shownNow(),
+        page + ': nothing shown while the host is empty — on the player report ' +
+        'that is the picker screen, where there are no tables to warn about');
+
+    // the human picks a player: the host gains height and the observer fires
+    height = 400;
+    if (fire) fire();
+    chk(shownNow(),
+        page + ': and it appears once the content arrives, however long that ' +
+        'took — the 15s deadline made this fail whenever a person took longer ' +
+        'than a fetch would');
+  }
+})();
