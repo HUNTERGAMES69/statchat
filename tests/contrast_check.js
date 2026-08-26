@@ -621,6 +621,44 @@ console.log('\nPages with findings: ' + bad + ' of ' + files.length);
   }
 })();
 
+// ---- the score banner must sit ABOVE the quad, not below it -------------
+// It was a gradient from #161c24 to #11161d, both DARKER than the #191f27
+// quad they sit in. On an already-dark page that made the most important
+// line on the screen recede -- it read as a gap above the content rather
+// than a header for it.
+(function bannerLifted(){
+  const src = require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'view.html'), 'utf8');
+  const m = /\.banner\{\s*background:([^;!]+)/.exec(src);
+  if (!m) { console.log('  FAIL view.html: no .banner background rule found'); bad++; return; }
+  const fill = m[1].trim();
+
+  if (/linear-gradient/.test(fill)) {
+    console.log('  FAIL view.html: the banner is a gradient again — it ran light to ' +
+                'dark left to right, putting the quarter in the dimmest corner of a ' +
+                'wide screen, for an effect too subtle to see');
+    bad++; return;
+  }
+  const hex = /^#[0-9a-fA-F]{6}$/.test(fill) ? fill : null;
+  if (!hex) { console.log('  FAIL view.html: banner fill is not a plain colour: ' + fill); bad++; return; }
+
+  const QUAD = '#191f27';
+  if (ratio(hex, QUAD) < 1.25) {
+    console.log('  FAIL view.html: the banner (' + hex + ') is only ' +
+                ratio(hex, QUAD).toFixed(2) + ':1 off the quad — the score line has to ' +
+                'lead, and a header that sinks into its own panel does not');
+    bad++;
+  }
+  // and the score must still read on it
+  const scoreInk = '#eef1f4';
+  if (ratio(scoreInk, hex) < 7) {
+    console.log('  FAIL view.html: the score reads at ' + ratio(scoreInk, hex).toFixed(1) +
+                ':1 on the banner — this is the line a crew reads at a glance from ' +
+                'across a booth');
+    bad++;
+  }
+})();
+
 // EXIT LAST. This line used to sit above the message-tint audit, so any
 // failure it found was counted after the exit code had already been decided
 // -- the audit could go red and the run still exit 0.
