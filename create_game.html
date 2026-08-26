@@ -25,7 +25,7 @@
               display:inline-block; }
 
   /* THE SPREADSHEET EXAMPLE. Deliberately looks like a spreadsheet --
-     column letters, row numbers, grey gutters -- because that is the thing
+     column letters, row numbers, gray gutters -- because that is the thing
      the reader is about to go and build. A plain three-column table left
      people guessing which column was which. */
   .sheetMock { margin:0 0 12px; }
@@ -68,7 +68,7 @@
     --sc-amber-tint:rgba(255,199,44,.13);
     /* --sc-amber-soft was READ by the shared-number box and never DEFINED
        here, so it fell back to #fff8e6 -- a cream panel carrying light
-       text. Third time an undefined token has shipped a light-theme colour
+       text. Third time an undefined token has shipped a light-theme color
        into a dark page, and the first two were caught by the audit; this
        one slipped because the audit only scanned LITERAL hex backgrounds,
        not var(--undefined, #hex). That gap is closed now. */
@@ -114,7 +114,7 @@
   }
   /* RADIOS AND CHECKBOXES ARE EXCLUDED, and their absence from this rule
      is the whole point. A blanket `input` selector gave every radio in the
-     conflict-resolution box 8px of padding, a dark fill and a grey border
+     conflict-resolution box 8px of padding, a dark fill and a gray border
      -- so they rendered as dark blobs with no visible selected state, on a
      control whose entire job is showing which option is chosen.
      They keep the browser's native rendering; `accent-color` is the one
@@ -143,9 +143,19 @@
   button { padding:9px 16px; border-radius:6px; border:1px solid var(--sc-rule-strong); background:var(--sc-navy, #1a1a2e); color:var(--sc-ink); font-size:14px; cursor:pointer; }
   button.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
   button:disabled { opacity:0.5; cursor:default; }
+  /* MESSAGE TINTS, MEASURED AGAINST THE DARK CARD.
+     --sc-red and --sc-green were re-pointed to light inks for the dark
+     theme, but the TINTS behind them were left as their light-theme
+     fallbacks -- #fdecea and #e8f5e9, both near-white. So every status
+     message rendered pale ink on a near-white block: errors at 1.89:1 and
+     successes at 1.49:1, which is invisible.
+     That is why a wrong password on the login page appeared to do nothing:
+     the message was there the whole time, in a color nobody could read.
+     Fills now defined here rather than inherited, and paired with their own
+     ink -- a fill change has to bring its ink with it. */
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
-  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
-  .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
+  .msg.error { background:#2a1519; color:#ff8fa3; border:1px solid #4a2028; }
+  .msg.success { background:#16210f; color:#a3d93f; border:1px solid #2c3d18; }
   .hidden { display:none; }
   .conflict-block { background:var(--sc-amber-tint, #fff3cd); border-radius:8px; padding:12px 14px; margin-top:12px; }
   .conflict-row { font-size:13px; margin-bottom:6px; }
@@ -177,7 +187,7 @@
         <div style="font-size:13px; color:var(--sc-amber); margin-bottom:10px;">Setup is locked to prevent accidental changes to a completed game's record. Unlock only if something genuinely needs correcting.</div>
         <!-- The inline white was forcing this .secondary button back to a
              white fill, which the class no longer uses. Dropped rather than
-             recoloured: the class already says what a secondary button is. -->
+             recolored: the class already says what a secondary button is. -->
         <button type="button" id="unlockFinalBtn" class="secondary">Unlock to edit</button>
       </div>
       <p class="sub">Set this game up now, start entering stats whenever you're ready — no need to do both at once.</p>
@@ -592,7 +602,7 @@
       // one of them unreachable for the whole game -- the number resolved
       // to whoever was picked, and the other simply did not exist.
       //
-      // A position we do not recognise is still a genuine question, and a
+      // A position we do not recognize is still a genuine question, and a
       // number with two UNKNOWN-unit players still needs a hand, since
       // game_rosters has nowhere to file them.
       resolved[num] = {
@@ -1213,7 +1223,7 @@
         // in, which is strictly worse than leaving them blank: a guess is
         // indistinguishable from a fact once it is in the database.
         //
-        // A position that IS given still has to be one we recognise.
+        // A position that IS given still has to be one we recognize.
         // "Blank" is incomplete; "FLANKERBACK" is wrong, and only the
         // second is worth stopping the import for.
         if (!pos) blankPositions++;
@@ -1230,7 +1240,7 @@
           return;
         }
         const { cleanName, explicitUnit } = extractNameTag(rawName);
-        // firstPos, not pos -- the compound form is normalised away at the
+        // firstPos, not pos -- the compound form is normalized away at the
         // door so no later reader has to know the rule.
         entries.push({ number: num, name: cleanName, position: firstPos, explicitUnit });
       });
@@ -1464,13 +1474,13 @@
       // WHITE, ALWAYS, ON EVERY LOGO UPLOAD. Andy's call, 25 Aug.
       // -----------------------------------------------------------------
       // This used to derive the secondary from the logo -- either its second
-      // detected colour or whatever contrasted with the primary -- so two
+      // detected color or whatever contrasted with the primary -- so two
       // tenants uploading crests got two different answers, neither of which
       // anybody chose.
       //
       // White is the one that is right almost always: the secondary is text
-      // and trim over the primary, and a school colour dark enough to be a
-      // primary carries white. It is still a plain colour input directly
+      // and trim over the primary, and a school color dark enough to be a
+      // primary carries white. It is still a plain color input directly
       // below, so a school with a pale primary can change it in one click --
       // which is a better default than a guess that is confidently wrong.
       document.getElementById('oppSecondaryColorInput').value = '#ffffff';

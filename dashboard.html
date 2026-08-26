@@ -165,8 +165,18 @@
   button.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
   a.button-link { display:inline-block; text-decoration:none; padding:8px 10px; border-radius:6px; background:var(--sc-navy, #1a1a2e); border:1px solid var(--sc-rule-strong); color:#fff; font-size:13px; font-weight:600; }
   a.button-link.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
+  /* MESSAGE TINTS, MEASURED AGAINST THE DARK CARD.
+     --sc-red and --sc-green were re-pointed to light inks for the dark
+     theme, but the TINTS behind them were left as their light-theme
+     fallbacks -- #fdecea and #e8f5e9, both near-white. So every status
+     message rendered pale ink on a near-white block: errors at 1.89:1 and
+     successes at 1.49:1, which is invisible.
+     That is why a wrong password on the login page appeared to do nothing:
+     the message was there the whole time, in a color nobody could read.
+     Fills now defined here rather than inherited, and paired with their own
+     ink -- a fill change has to bring its ink with it. */
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
-  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
+  .msg.error { background:#2a1519; color:#ff8fa3; border:1px solid #4a2028; }
   .hidden { display:none; }
   a.button-link.hidden { display:none; }
   .game-list { border-top:0.5px solid var(--sc-rule); }
@@ -591,6 +601,21 @@
     const role = (!error && data && data.length > 0 && data[0].role) || 'view';
     currentIsAdmin = role === 'admin';
 
+    // IS TWO-FACTOR ALREADY ON? Same call account.html uses. A 'verified'
+    // TOTP factor is the only thing that counts -- an enrollment that was
+    // started and abandoned sits at 'unverified' and protects nothing.
+    if (currentIsAdmin){
+      try {
+        const { data: mfaData } = await supabaseClient.auth.mfa.listFactors();
+        gsHasMfa = !!((mfaData && mfaData.totp || []).find(f => f.status === 'verified'));
+      } catch (e) {
+        // Unreachable check reads as "not on", which shows a step that may
+        // not be needed. The other way round would hide a security step from
+        // somebody who has not done it.
+        gsHasMfa = false;
+      }
+    }
+
     currentCanEnterGames = role === 'admin' || role === 'game_entry';
     // Broadcast setup shows the static feed key, so it is not for view
     // accounts. Scorers get it because the crew sets up the day before.
@@ -644,6 +669,7 @@
   // loadDashboard -- so these are module scope rather than locals.
   let gsCustomized = false;
   let gsPlayerCount = 0;
+  let gsHasMfa = false;
 
   async function loadDashboard(){
     const { data, error } = await supabaseClient
@@ -822,7 +848,9 @@
       customized: gsCustomized,
       hasRoster:  gsPlayerCount > 0,
       playerCount: gsPlayerCount,
-      hasGames:   allGames.length > 0
+      hasGames:   allGames.length > 0,
+      isAdmin:    currentIsAdmin,
+      hasMfa:     gsHasMfa
     });
   }
 
@@ -991,12 +1019,34 @@
         doneDesc: 'Done.',
         href:  'create_game.html', label: 'New game' }
     ];
+
+    // FOURTH STEP, ADMINS ONLY. An admin can change the roster, delete
+    // games and invite people; a view or game-entry account cannot, so the
+    // exposure is not the same and neither is the nagging.
+    //
+    // LAST, not first. The three above are needed before a game can be
+    // scored at all -- this is not, and putting security ahead of the thing
+    // somebody signed in to do is how a checklist gets ignored wholesale.
+    if (state.isAdmin){
+      steps.push({
+        done: state.hasMfa,
+        title: 'Turn on two-factor sign-in',
+        desc:  'An authenticator app code as well as your password. Recommended ' +
+               'for accounts that can change the roster or delete games.',
+        doneDesc: 'On.',
+        href:  'account.html', label: 'Account'
+      });
+    }
     const left = steps.filter(s => !s.done).length;
     if (left === 0){ card.style.display = 'none'; return; }
 
+    // COUNTED, not hardcoded. It said "Three things" while an admin now sees
+    // four -- a caption that contradicts the list under it.
     document.getElementById('gsSub').textContent =
-      left === steps.length ? 'Three things before your first game.'
-      : left === 1 ? 'One to go.' : left + ' to go.';
+      left === steps.length
+        ? (steps.length === 1 ? 'One thing before your first game.'
+                              : left + ' things before your first game.')
+        : left === 1 ? 'One to go.' : left + ' to go.';
 
     document.getElementById('gsSteps').innerHTML = steps.map((s, i) =>
       '<div class="gs-step' + (s.done ? ' done' : '') + '">' +

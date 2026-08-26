@@ -28,7 +28,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&display=swap" rel="stylesheet">
 <style>
   /* DARK, 25 August 2026. Converted at the source rather than by layering
-   an override sheet: this page has one card and eleven colours, so the
+   an override sheet: this page has one card and eleven colors, so the
    honest version costs the same as the shortcut.
 
    Values are index.html's -- the brochure site's dark system. The product
@@ -58,7 +58,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
      top of the card, baseline-aligned. The logo used to be absolutely
      positioned in the top-right corner with the word "StatChat" floating
      below it as a separate heading, which read as two unrelated things.
-     A visitor arriving from statchat.co should recognise where they are. */
+     A visitor arriving from statchat.co should recognize where they are. */
   .brand { display:flex; align-items:center; gap:12px; margin:0 0 22px; }
   /* The logo is dark-on-light artwork. On charcoal it needs a light plate
    behind it -- the mark itself is not being redrawn for a theme. */
@@ -95,11 +95,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
     input { width:100%; padding:10px; border:1px solid var(--sc-rule-strong); background:var(--sc-raise); color:var(--sc-ink); border-radius:6px; font-size:15px; margin-bottom:14px; box-sizing:border-box; }
   /* border:none works on white and not on charcoal -- a dark fill on a
    dark card has no edge. No fill reaches 3:1 against #191f27 without
-   going light grey, so the fill carries the affordance and the border
+   going light gray, so the fill carries the affordance and the border
    carries the edge. */
     button { width:100%; padding:11px; border-radius:6px; border:1px solid var(--sc-rule-strong); background:var(--sc-navy, #1a1a2e); color:var(--sc-ink); font-size:15px; font-weight:600; cursor:pointer; }
   /* opacity on a dark page dims towards the background rather than towards
-   grey, so a disabled button becomes hard to find. An explicit floor
+   gray, so a disabled button becomes hard to find. An explicit floor
    keeps it visible AND clearly inactive. */
     /* AUTOFILL. color-scheme handles most browsers; WebKit needs telling
        twice, because -webkit-autofill paints with an inset shadow rather
@@ -120,9 +120,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
     }
     button:disabled { opacity:1; background:#1b2129; color:#5f6b78;
                       border-color:#333f4b; cursor:default; }
+  /* MESSAGE TINTS, MEASURED AGAINST THE DARK CARD.
+     --sc-red and --sc-green were re-pointed to light inks for the dark
+     theme, but the TINTS behind them were left as their light-theme
+     fallbacks -- #fdecea and #e8f5e9, both near-white. So every status
+     message rendered pale ink on a near-white block: errors at 1.89:1 and
+     successes at 1.49:1, which is invisible.
+     That is why a wrong password on the login page appeared to do nothing:
+     the message was there the whole time, in a color nobody could read.
+     Fills now defined here rather than inherited, and paired with their own
+     ink -- a fill change has to bring its ink with it. */
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
-  .msg.error { background:var(--sc-red-tint, #fdecea); color:var(--sc-red, #a32d2d); }
-  .msg.success { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
+  .msg.error { background:#2a1519; color:#ff8fa3; border:1px solid #4a2028; }
+  .msg.success { background:#16210f; color:#a3d93f; border:1px solid #2c3d18; }
   .hidden { display:none; }
 </style>
 </head>
@@ -154,7 +164,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
 
   <!-- REQUESTING a reset. The link Supabase emails lands back on this
        same page with type=recovery in the hash, which the handler below
-       already recognises -- the receiving half of this flow was built
+       already recognizes -- the receiving half of this flow was built
        with the invite flow and has been sitting unused because nothing
        could trigger it. -->
   <div id="resetRequestView" class="hidden">
@@ -194,7 +204,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
     <p class="sub" id="loggedInAs"></p>
     <!-- Copy corrected 25 Aug. This read "The real dashboard isn't built
          yet" -- true in early development, and shown to signed-in users
-         ever since. Found while converting the colours. -->
+         ever since. Found while converting the colors. -->
     <p class="sub" style="font-size:13px;">You're already signed in. Continue to your
     dashboard, or sign out to use a different account.</p>
     <a href="dashboard.html"
@@ -511,12 +521,40 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
     }
   });
 
+  // ENTER SIGNS IN. The reset field and the MFA field both had this; the
+  // sign-in form did not, so pressing Enter after typing a password did
+  // nothing whatsoever -- no attempt, no error, no feedback. Combined with
+  // an error message that was invisible, the page looked inert either way.
+  ['loginEmail', 'loginPassword'].forEach(function(id){
+    document.getElementById(id).addEventListener('keydown', function(e){
+      if (e.key === 'Enter'){ e.preventDefault(); document.getElementById('loginBtn').click(); }
+    });
+  });
+
   document.getElementById('loginBtn').addEventListener('click', async () => {
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
+    if (!email || !password){
+      showMsg('loginMsg', 'Enter your email and password.', 'error');
+      return;
+    }
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error){
-      showMsg('loginMsg', error.message, 'error');
+      // SUPABASE'S OWN WORDING, TRANSLATED FOR THE TWO CASES THAT MATTER.
+      // "Invalid login credentials" is accurate but reads like a system
+      // fault rather than a typo, and it deliberately does not say WHICH of
+      // the two was wrong -- that is correct, and worth preserving: telling
+      // somebody the email exists but the password is wrong confirms an
+      // account to anyone guessing.
+      var msg = error.message || 'Sign-in failed.';
+      if (/invalid login credentials/i.test(msg)){
+        msg = 'Incorrect email or password. Check both and try again.';
+      } else if (/email not confirmed/i.test(msg)){
+        msg = 'This account has not been confirmed yet \u2014 check your email for the invite link.';
+      }
+      showMsg('loginMsg', msg, 'error');
+      document.getElementById('loginPassword').value = '';
+      document.getElementById('loginPassword').focus();
       return;
     }
     // No MFA check here: onAuthStateChange fires SIGNED_IN as soon as the
