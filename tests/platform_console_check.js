@@ -371,15 +371,15 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
         'the ' + w + ' tab has a Refresh button');
   });
   // ---- demo controls -----------------------------------------------------
-  chk(/data-resetdemo=/.test(code) && !/data-seed=/.test(code),
-      'a demo tenant offers ONE item, Reset demo — an earlier version had seed ' +
-      'and reset with dropdowns for source, target and quarter, which is three ' +
-      'decisions with one right answer each, every time');
-  chk(/t\.is_demo\s*\?\s*'<button data-resetdemo/.test(code),
-      'and a non-demo tenant offers neither');
-  chk(/rpc\('reset_demo'\)/.test(code) && !/p_demo_game/.test(code),
-      'and it calls reset_demo() with NO arguments — the target lives in the ' +
-      'seed row, so the button has nothing to ask');
+  // NO DEMO RESET CONTROL. Andy removed it, 25 August 2026: the demo is filled
+  // and cleared by sql/copy_plays_into_demo_game.sql run against the database,
+  // so a button here would be a second way to do the same thing -- and the one
+  // that can be pressed by accident.
+  chk(!/data-resetdemo=/.test(code) && !/data-seed=/.test(code),
+      'the tenant menu offers no demo seed or reset control');
+  chk(!/rpc\('reset_demo'\)/.test(code),
+      'and nothing calls reset_demo() from the browser');
+
   chk(/is_demo, teams/.test(code),
       'is_demo is SELECTED, not just read — an unselected column is undefined, ' +
       'which would hide the badge and the controls on every tenant');
