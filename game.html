@@ -181,7 +181,36 @@
      The 2px border and heavier type made it visibly larger than every
      other utility button -- the color alone is enough to mark it out. */
   button.lastresort { background:#8a3a12; color:#fff; }
-  button:disabled { opacity:0.5; cursor:default; }
+  /* DISABLED MEANS RECEDED, NOT FADED.
+     ------------------------------------------------------------------
+     This was `opacity:0.5`, carried over from the light theme where it
+     works: half-fading a white button pushes it toward a white page and it
+     flattens away. On the dark card the same fade only DIMS -- a faded
+     button still sits above the surface at 1.19:1 where a live one is
+     1.43:1 -- so a row of mostly-disabled buttons read as uniform. After a
+     touchdown, or after a try when only Kickoff is live, there was no way
+     to see which one you could press.
+
+     On a dark page "unavailable" has to mean CLOSER TO THE BACKGROUND. The
+     fill drops to the card colour itself, so a dead button has no raise at
+     all and the live ones are the only things standing off the surface.
+
+     Ink is #727e8c at 4.0:1 -- above the 3:1 floor this project holds
+     everything to. A first version used 2.7:1 on the grounds that WCAG
+     exempts disabled controls, and contrast_check flagged it. The exemption
+     is real but taking it would have been the first carve-out in that
+     audit, and an audit with an exception stops being a floor.
+     It costs nothing: what signals "disabled" is the DIFFERENCE between the
+     two states, not how dark the text is. Live ink reads at 14.6:1 against
+     the same card, so the two are still 3.6:1 apart.
+     Andy's call, 25 August 2026. */
+  button:disabled, button[disabled] {
+    background:var(--sc-card, #191f27);
+    color:#727e8c;
+    border:1px solid #252d36;
+    cursor:default;
+    box-shadow:none;
+  }
   /* Selection used to set background only. Buttons are dark navy with
      WHITE text, so a pale fill left white-on-pale and read as a washed
      out gray. Gold with dark text is the app's existing "active" cue
@@ -635,7 +664,13 @@
                                  border-radius:6px; background:var(--sc-navy, #1a1a2e); color:#fff; }
   /* Redo is dead except immediately after an Undo, so it reads as
      disabled rather than as a second live action. */
-  #driveDock .dock-undo button:disabled { background:var(--sc-rule, #e6e6e6); color:#9a9a9a; }
+  /* THE DOCK'S UNDO FOLLOWS THE SAME RULE. This was #2b333d, which is
+     LIGHTER than a live button -- so a spent Undo looked more available than
+     one you could press. More specific than the global rule above, so it
+     would have kept winning; matched to it rather than left to fight. */
+  #driveDock .dock-undo button:disabled {
+    background:var(--sc-card, #191f27); color:#727e8c; border:1px solid #252d36;
+  }
   /* Below this the margin is too thin to hold it, so it drops back to a
      normal card in the flow -- exactly where it sits today. */
   @media (max-width: 1219px), (hover: none) and (pointer: coarse) {

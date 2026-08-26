@@ -86,7 +86,36 @@
   button { padding:9px 16px; border-radius:6px; border:1px solid var(--sc-rule-strong); background:var(--sc-navy, #1a1a2e); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
   button.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
   button.danger { background:rgba(176,0,32,.18); color:var(--sc-red); border-color:#c8455c; }
-  button:disabled { opacity:0.5; cursor:default; }
+  /* DISABLED MEANS RECEDED, NOT FADED.
+     ------------------------------------------------------------------
+     This was `opacity:0.5`, carried over from the light theme where it
+     works: half-fading a white button pushes it toward a white page and it
+     flattens away. On the dark card the same fade only DIMS -- a faded
+     button still sits above the surface at 1.19:1 where a live one is
+     1.43:1 -- so a row of mostly-disabled buttons read as uniform. After a
+     touchdown, or after a try when only Kickoff is live, there was no way
+     to see which one you could press.
+
+     On a dark page "unavailable" has to mean CLOSER TO THE BACKGROUND. The
+     fill drops to the card colour itself, so a dead button has no raise at
+     all and the live ones are the only things standing off the surface.
+
+     Ink is #727e8c at 4.0:1 -- above the 3:1 floor this project holds
+     everything to. A first version used 2.7:1 on the grounds that WCAG
+     exempts disabled controls, and contrast_check flagged it. The exemption
+     is real but taking it would have been the first carve-out in that
+     audit, and an audit with an exception stops being a floor.
+     It costs nothing: what signals "disabled" is the DIFFERENCE between the
+     two states, not how dark the text is. Live ink reads at 14.6:1 against
+     the same card, so the two are still 3.6:1 apart.
+     Andy's call, 25 August 2026. */
+  button:disabled, button[disabled] {
+    background:var(--sc-card, #191f27);
+    color:#727e8c;
+    border:1px solid #252d36;
+    cursor:default;
+    box-shadow:none;
+  }
   .row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
   /* MESSAGE TINTS, MEASURED AGAINST THE DARK CARD.
      --sc-red and --sc-green were re-pointed to light inks for the dark
