@@ -2675,6 +2675,27 @@ function extractNameTag(rawName){
       return;
     }
 
+    // A SPINE HAS TO BE VISIBLE, WHATEVER THE BRAND COLOR IS.
+    // ------------------------------------------------------------------
+    // The spine is the tenant's own color, and some are very dark. Against
+    // the old #171d25 heading a navy brand sat at 1.46:1 and a near-black
+    // one at 1.09:1 -- already invisible, before this change. The lighter
+    // heading improves the near-black case and worsens navy, so rather than
+    // trade one for the other the color is lifted until it actually shows.
+    //
+    // Mixed toward white in steps rather than replaced: a school's navy
+    // stays recognisably navy, just light enough to see. Only touched when
+    // it fails -- gold, green and pale brands pass on the first check and
+    // come through exactly as the customer set them.
+    function spineColor(hex){
+      if (!hex) return '#6b7d8f';
+      var c = hex;
+      for (var i = 0; i < 8 && contrastRatio(c, '#363a3e') < 2.2; i++){
+        c = mixHex(c, '#ffffff', 0.15);
+      }
+      return c;
+    }
+
     buildTeams(game, rosterRows || [], ourBranding);
     ['teamA', 'teamB'].forEach(teamKey => {
       const h = document.getElementById(teamKey === 'teamA' ? 'teamAHeading' : 'teamBHeading');
@@ -2691,9 +2712,14 @@ function extractNameTag(rawName){
       // punches a hole in a dark screen and safeTextColor then has to
       // flip the label to near-black. As an edge it always works, and
       // the heading keeps one predictable contrast.
-      h.style.background = '#171d25';
+      //
+      // LIFTED, NOT SUNK. This fill was #171d25, DARKER than the #191f27
+      // quad it sits in, so the heading receded into its own panel instead
+      // of leading it -- the same fault the score banner had. #363a3e is
+      // the value used there, so the two headers on the page match.
+      h.style.background = '#363a3e';
       h.style.color = '#eef1f4';
-      h.style.borderLeft = '5px solid ' + TEAMS[teamKey].bg;
+      h.style.borderLeft = '5px solid ' + spineColor(TEAMS[teamKey].bg);
       h.style.padding = '6px 12px';
       h.style.borderRadius = '0 6px 6px 0';
       h.style.display = 'table';
