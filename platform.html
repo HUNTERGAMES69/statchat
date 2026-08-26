@@ -455,7 +455,6 @@
   // reset_demo() takes no arguments and already knows which game it rebuilds.
   document.getElementById('tenantsBody').addEventListener('click', async (e) => {
     const demoBtn  = e.target.closest('[data-demo]');
-    const resetBtn = e.target.closest('[data-resetdemo]');
 
     if (demoBtn){
       const turningOn = demoBtn.dataset.on === '0';
@@ -473,17 +472,6 @@
       return;
     }
 
-    if (!resetBtn) return;
-    // The one confirmation worth keeping: this throws away whatever was
-    // entered during the last demonstration.
-    if (!confirm('Reset the demo for ' + resetBtn.dataset.name + '?\n\n' +
-                 'Everything entered since the last reset is discarded and the ' +
-                 'game goes back to halftime.')) return;
-    showMsg('Resetting\u2026', 'info');
-    const { data, error } = await supabaseClient.rpc('reset_demo');
-    if (error){ showMsg('Could not reset: ' + esc(error.message), 'error'); return; }
-    showMsg('Demo reset \u2014 ' + data + ' plays restored.', 'success');
-    await loadTenants();
   });
 
   // ONE HANDLER FOR ALL THREE REFRESH BUTTONS.
@@ -653,12 +641,12 @@
                 // other, so hiding these is about not offering a control that
                 // would be rejected -- not about safety, which lives in the
                 // function.
-                // ONE ITEM. The seed is captured once in the SQL editor and
-                // never from here, so there is nothing to choose.
-                (t.is_demo
-                  ? '<button data-resetdemo="' + esc(t.id) + '" data-name="' + esc(t.name) + '">' +
-                      'Reset demo</button>'
-                  : '') +
+                // NO RESET CONTROL. The demo is filled and cleared by a script
+                // run against the database (sql/copy_plays_into_demo_game.sql),
+                // so a button here would be a second way to do the same thing --
+                // and the one that can be pressed by accident.
+                // is_demo and its badge stay: knowing which tenant is the demo
+                // is useful on its own.
               '</div>' +
             '</div>' +
             (off && t.disabled_reason
