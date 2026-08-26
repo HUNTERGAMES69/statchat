@@ -12,7 +12,7 @@
 // have to keep getting right.
 //
 // PDF export here is window.print(), the browser's own print-to-PDF. An
-// overlay left visible would be baked into the PDF as a grey box across
+// overlay left visible would be baked into the PDF as a gray box across
 // the first page, so it is hidden in @media print AND dismissed on
 // beforeprint.
 //
@@ -43,7 +43,10 @@ function run(page, {w, h, coarse, dismissed}) {
   Object.defineProperty(d.getElementById(host), 'offsetHeight', { value: 400, configurable: true });
   w2.ResizeObserver = undefined;
 
-  const m = /\n  \(function\(\)\{\n    var KEY = 'sc_rotate_dismissed';[\s\S]*?\n  \}\)\(\);/.exec(src);
+  // Anchored on `var dismissedThisView`, which is unique to this IIFE. The
+  // old anchor was the sessionStorage key, which no longer exists.
+  const m = /\n  \(function\(\)\{\n    \/\* SHOWN EVERY TIME[\s\S]*?\n  \}\)\(\);/.exec(src);
+  if (!m) { chk(false, page + ': could not extract the rotate IIFE to run it'); return; }
   w2.__w = w2; w2.__d = d;
   w2.eval('(function(window, document){' + m[0] + '})(__w, __d);');
   // The component defers to DOMContentLoaded when the document is still
@@ -75,6 +78,31 @@ const PAGES = ['recap.html','stat_package.html','player_report.html','season_rep
 // ---- the export path, which is the reason this design looks like it does
 for (const page of PAGES) {
   const src = fs.readFileSync(require('path').join(__dirname,'..',page), 'utf8');
+  // SHOWN EVERY PAGE VIEW, NOT ONCE PER SESSION. Andy's call, 25 August
+  // 2026, after never seeing the prompt at all. It was remembered in
+  // sessionStorage under a key shared by all four pages, so one tap of
+  // "View anyway" silenced every report for the life of the tab -- and a
+  // mobile tab keeps sessionStorage for weeks. The prompt is a RESPONSE TO
+  // A CONDITION, and the condition is still true on the next report.
+  chk(!/sessionStorage\.(get|set)Item/.test(src),
+      page + ': no storage — dismissal lasts for this page view only');
+  chk(/var dismissedThisView = false/.test(src),
+      page + ': and is a plain variable, so a reload brings the prompt back');
+
+  // SYMMETRIC. The old resize handler only ever called hide(), so a report
+  // opened in landscape and then turned to portrait never showed it.
+  chk(/addEventListener\('resize', maybeShow\)/.test(src),
+      page + ': rotating INTO portrait shows the prompt, not just out of it');
+  chk(/addEventListener\('orientationchange'/.test(src),
+      page + ': and orientationchange is handled too — iOS Safari fires it ' +
+      'more reliably than resize');
+
+  // TABLETS STAY EXCLUDED. An iPad in portrait is 744px or wider and renders
+  // these tables readably.
+  chk(/Math\.min\(window\.innerWidth, window\.innerHeight\) <= 500/.test(src),
+      page + ': phones only — every iPad is 744px+ in portrait and is silent ' +
+      'by design');
+
   chk(/@media print \{ \.rotateGate/.test(src),
       page + ': the prompt is hidden when printing — PDF export is window.print(), so an ' +
       'overlay would be baked into the PDF');
@@ -100,7 +128,14 @@ for (const page of PAGES) {
   chk(!run(page, PHONE_L).shown, page + ': NOT in landscape — telling someone already sideways to rotate reads as a bug');
   chk(!run(page, TABLET_P).shown, page + ': NOT on a tablet — 820px portrait reads fine');
   chk(!run(page, DESKTOP).shown, page + ': NOT on a desktop');
-  chk(!run(page, { ...PHONE_P, dismissed: true }).shown, page + ': NOT once dismissed this visit');
+  // WAS: "NOT once dismissed this visit", driven by a sessionStorage flag
+  // the harness pre-set. That flag is gone -- dismissal is per page view now,
+  // so a FRESH LOAD must show the prompt even if a previous page was
+  // dismissed. Asserting the opposite is what the old design did, and it is
+  // why the prompt was never seen.
+  chk(run(page, { ...PHONE_P, dismissed: true }).shown,
+      page + ': STILL shows on a fresh load — a dismissal on another report ' +
+      'no longer silences this one');
 }
 
 // dismissing records it
