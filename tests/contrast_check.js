@@ -649,6 +649,62 @@ console.log('\nPages with findings: ' + bad + ' of ' + files.length);
                 'lead, and a header that sinks into its own panel does not');
     bad++;
   }
+  // THE BOTTOM TILE HEADINGS get the same treatment, set inline in JS.
+  // They were #171d25 -- 1.02:1 against the quad, i.e. sunk into it.
+  const headFill = /h\.style\.background = '(#[0-9a-fA-F]{6})'/.exec(src);
+  if (!headFill) {
+    console.log('  FAIL view.html: could not find the tile heading fill'); bad++;
+  } else {
+    if (ratio(headFill[1], QUAD) < 1.25) {
+      console.log('  FAIL view.html: the bottom tile headings (' + headFill[1] + ') sink ' +
+                  'into the quad at ' + ratio(headFill[1], QUAD).toFixed(2) + ':1');
+      bad++;
+    }
+    if (headFill[1] !== hex) {
+      console.log('  FAIL view.html: the tile headings (' + headFill[1] + ') and the score ' +
+                  'banner (' + hex + ') are different colours — two headers on one screen ' +
+                  'at different weights reads as an accident');
+      bad++;
+    }
+  }
+
+  // A SPINE MUST SURVIVE A DARK BRAND. Some schools are navy or near-black,
+  // and at #1f3864 the spine sat at 1.01:1 on the lifted heading.
+  if (!/function spineColor/.test(src) ||
+      !/borderLeft = '5px solid ' \+ spineColor\(/.test(src)) {
+    console.log('  FAIL view.html: the team spine is painted raw — a navy or ' +
+                'near-black brand disappears against the heading');
+    bad++;
+  } else {
+    // RUN IT. Checking the function exists and is called still passed when the
+    // correction loop was neutered -- the shape was right and the behaviour was
+    // gone. These are real brand colours a school might set.
+    try {
+      const eng = require('../engine.js');
+      const fnSrc = /function spineColor\(hex\)\{[\s\S]*?\n    \}/.exec(src)[0];
+      const spineColor = new Function('mixHex', 'contrastRatio',
+        fnSrc + '; return spineColor;')(eng.mixHex, eng.contrastRatio);
+      for (const brand of ['#1f3864', '#101418', '#5c0a1e', '#0b3d91', '#123b1e']) {
+        const out = spineColor(brand);
+        if (ratio(out, headFill ? headFill[1] : '#363a3e') < 2.0) {
+          console.log('  FAIL view.html: brand ' + brand + ' yields a spine of ' + out +
+                      ' at ' + ratio(out, '#363a3e').toFixed(2) + ':1 — invisible against ' +
+                      'the heading, so that tile loses its team marker entirely');
+          bad++;
+        }
+      }
+      // and a brand that already works must come through UNCHANGED
+      if (spineColor('#f5b921') !== '#f5b921') {
+        console.log('  FAIL view.html: a bright brand is being altered when it did not ' +
+                    'need to be — a school\'s colour should survive untouched when it works');
+        bad++;
+      }
+    } catch (e) {
+      console.log('  FAIL view.html: could not run spineColor — ' + e.message);
+      bad++;
+    }
+  }
+
   // and the score must still read on it
   const scoreInk = '#eef1f4';
   if (ratio(scoreInk, hex) < 7) {
