@@ -1,8 +1,8 @@
-// Every colour on a converted page, measured against what is behind it
+// Every color on a converted page, measured against what is behind it
 // ====================================================================
 // Built while converting view.html, extended on login.html. It exists
 // because converting a page by eye does not work: on view.html eleven
-// colours read fine on white and nearly vanished on charcoal, and only
+// colors read fine on white and nearly vanished on charcoal, and only
 // TWO of them were caught by looking at the screen.
 //
 // **Legible enough to miss by eye is not the same as legible.**
@@ -15,10 +15,10 @@
 //     play ladder and login.html's wordmark -- so the check follows the
 //     variable to its value.
 //   * FINDS LIGHT BACKGROUNDS BY LUMINANCE, not by matching names. An
-//     enumerated list of light colours missed 7 on game.html and 23
+//     enumerated list of light colors missed 7 on game.html and 23
 //     across the other pages. "A pale notice panel" is not a set anyone
 //     can recall.
-//   * LISTS INLINE COLOURS SEPARATELY, because no stylesheet reaches them
+//   * LISTS INLINE COLORS SEPARATELY, because no stylesheet reaches them
 //     at any specificity. That is why the view.html conversion took two
 //     passes.
 //   * CHECKS THE DARK-THEME PREREQUISITES -- color-scheme, the WebKit
@@ -36,7 +36,7 @@ const CARD = '#191f27';   // what text normally sits on
 const PAGE = '#10141a';
 const AA_BODY = 4.5, AA_LARGE = 3.0;
 
-// Colours that are deliberately below body AA, with the reason. Anything
+// Colors that are deliberately below body AA, with the reason. Anything
 // not on this list that falls short is a finding.
 const ALLOWED_LOW = {
   '#5f6b78': 'disabled control — must read as unavailable, not vanish',
@@ -62,7 +62,7 @@ const ratio = (a, b) => {
 // OVERRIDE DETECTION BY PARSING, NOT BY REGEX.
 // The first version built a pattern like
 //   (^|[,{}\s])[^{}]*<selector>[^{}]*\{[^}]*color\s*:[^;}]*!important
-// and ran it against the rest of the file once per colour declaration.
+// and ran it against the rest of the file once per color declaration.
 // Two unbounded [^{}]* segments with no match is textbook catastrophic
 // backtracking: it was fine on small pages and hung outright on help.html,
 // which is 60k and has 22 declarations. **A checker nobody can wait for is
@@ -121,7 +121,7 @@ function overriddenBy(rules, at, prop, src) {
 
 function audit(file) {
   const raw = fs.readFileSync(path.join(ROOT, file), 'utf8');
-  // Comments carry example colours and explanations. Matching them
+  // Comments carry example colors and explanations. Matching them
   // reports failures against code that does not exist -- a mistake this
   // project has made four separate times.
   const src = raw.replace(/<!--[\s\S]*?-->/g, '')
@@ -142,7 +142,7 @@ function audit(file) {
   }
   // ALIASES: A TOKEN POINTING AT ANOTHER TOKEN.
   // broadcast_setup.html defines `--green: var(--sc-green)` -- a local name
-  // for a shared colour, which is reasonable and common. Resolving only one
+  // for a shared color, which is reasonable and common. Resolving only one
   // hop left --green unknown, so a button using it could not be measured
   // and its dark ink was reported against the card instead of against the
   // light green it actually sits on.
@@ -178,7 +178,7 @@ function audit(file) {
   const rules = parseRules(src);
   const findings = [];
 
-  // ---- text colours -----------------------------------------------------
+  // ---- text colors -----------------------------------------------------
   for (const m of src.matchAll(/(?<![-a-zA-Z])color\s*:\s*(var\([^)]*\)|#[0-9a-fA-F]{3,6})/g)) {
     const c = resolve(m[1]);
     if (!c) continue;
@@ -194,7 +194,7 @@ function audit(file) {
     }
     // INK ON AN INVERTED CHIP. An amber or white fill takes near-black
     // text by design; measuring it against the CARD says 1.14:1 and means
-    // nothing, because it never touches the card. Recognised by the fill
+    // nothing, because it never touches the card. Recognized by the fill
     // sitting in the same rule.
     {
       const ruleStart = src.lastIndexOf('{', m.index);
@@ -246,7 +246,7 @@ function audit(file) {
   // It is exempt only where it is deliberate -- the logo plate, which is
   // dark artwork needing a light backing. That is `.scMark`/`logo.png`,
   // so the exemption is now scoped to that context rather than granted to
-  // the colour everywhere it appears.
+  // the color everywhere it appears.
   const keep = new Set(['#ffc72c', '#7cb518', '#a3d93f']);
   // A BACKGROUND CAN BE LIGHT VIA A FALLBACK, NOT ONLY A LITERAL.
   // `background:var(--sc-amber-soft, #fff8e6)` renders cream when the
@@ -276,7 +276,7 @@ function audit(file) {
     if (inPrintBlock(src, m.index)) continue;
     // The logo plate: white behind dark artwork, within ~200 chars of the
     // mark's own selector or filename.
-    // The logo plate. The selector can sit some way above the colour --
+    // The logo plate. The selector can sit some way above the color --
     // a multi-line rule with a comment in it -- so the window is generous,
     // and `padding:2px` is required alongside, which is what makes it a
     // plate rather than a panel that happens to be white.
@@ -288,7 +288,7 @@ function audit(file) {
     // page that was missed.
     if (/mfaQr|qrcode|qr-code/i.test(around)) continue;
     // THE SPREADSHEET EXAMPLE stays light. It is a PICTURE of a
-    // spreadsheet -- grey gutters, column letters, white cells -- shown so
+    // spreadsheet -- gray gutters, column letters, white cells -- shown so
     // a coach knows what file to build. Rendered dark it stops being a
     // picture of the thing it is describing.
     if (/sheetMock|sheetNote/.test(around)) continue;
@@ -304,7 +304,7 @@ function audit(file) {
 
   // ---- A BRIGHT FILL MUST BRING ITS OWN INK -----------------------------
   // `button.primary { background:var(--sc-green) }` set the fill and left
-  // the colour to the base `button` rule -- light ink on a light green,
+  // the color to the base `button` rule -- light ink on a light green,
   // 1.48:1, across 21 buttons including Save, Start game and End game.
   // The ladder's active item was right only because it sets BOTH.
   //
@@ -327,7 +327,7 @@ function audit(file) {
     if (!bg || lum(bg) < 0.4) continue;          // only bright fills
     // A PLATE HOLDS AN IMAGE, NOT TEXT. The logo plate, the QR code and the
     // spreadsheet picture are deliberately light and contain no ink at all,
-    // so "sets a fill but no colour" is exactly right for them.
+    // so "sets a fill but no color" is exactly right for them.
     if (/scMark|logoPreview|mfaQr|sheetMock|splashIcon|\.brand img/.test(m.sel)) continue;
     // AND AN OVERRIDDEN RULE IS NOT A FINDING -- the same allowance the
     // text and background scans already make. view.html is themed by an
@@ -336,10 +336,10 @@ function audit(file) {
     if (overriddenBy(rules, m.at + 1, 'background', src)) continue;
     if (inPrintBlock(src, m.at)) continue;
     const inkm = /(?<![-a-zA-Z])color:\s*(var\(\s*--[a-z-]+[^)]*\)|#[0-9a-fA-F]{3,6})/.exec(body);
-    // no ink at all is the actual bug: the colour comes from elsewhere
+    // no ink at all is the actual bug: the color comes from elsewhere
     if (!inkm) {
       findings.push({ kind: 'FAIL', msg: '"' + m.sel.slice(0, 44) + '" sets a bright fill (' +
-        bg + ') but no colour — the ink comes from a rule written for a dark ' +
+        bg + ') but no color — the ink comes from a rule written for a dark ' +
         'background and will be unreadable' });
       continue;
     }
@@ -378,7 +378,7 @@ function audit(file) {
 
   // ---- SVG PAINT, which no stylesheet can reach -------------------------
   // `fill="#1a1a2e"` and `stroke="..."` are ATTRIBUTES. No CSS rule, token
-  // or override touches them, so they survive every recolouring pass
+  // or override touches them, so they survive every recoloring pass
   // untouched. That is twice on this page: the field strip stayed a pale
   // green pitch, and then the direction arrow under it stayed near-black
   // at 1.03:1 after the pitch was fixed, because the arrow sits on the
@@ -394,7 +394,7 @@ function audit(file) {
     if (ratio(c, CARD) >= 3) continue;
     findings.push({ kind: 'FAIL', msg: 'SVG paint ' + c + ' is ' + ratio(c, CARD).toFixed(2) +
       ':1 on the card — a fill= attribute is not reachable by any stylesheet, ' +
-      'so it survives every recolouring pass' });
+      'so it survives every recoloring pass' });
   }
 
   // ---- BORDERS, the third surface ---------------------------------------
@@ -404,7 +404,7 @@ function audit(file) {
   // by design and the brightest thing in the tile on charcoal. Andy
   // reported the Live totals rules; the other 49 were the same fault
   // nobody had looked at yet.
-  // Deliberate accent edges: an amber or green border on a coloured chip is
+  // Deliberate accent edges: an amber or green border on a colored chip is
   // the signal, not an oversight. Listed rather than inferred, so adding one
   // is a decision somebody makes on purpose.
   const BORDER_OK = new Set(['#e0b84c', '#a3d93f', '#ffc72c', '#ffd964',
@@ -443,7 +443,7 @@ function audit(file) {
   // shorthand.
   {
     // A CHEVRON CAN BE DECLARED EITHER WAY -- `background-image:url(...)`
-    // or inside the `background` shorthand. The detector only recognised
+    // or inside the `background` shorthand. The detector only recognized
     // the first, so reports.html, which uses the shorthand deliberately to
     // make the reset impossible, was invisible to it. A check that only
     // sees one of two correct spellings will eventually bless the wrong
@@ -470,7 +470,7 @@ function audit(file) {
   }
 
   // THE LOGO PLATE, asserted POSITIVELY. Removing it leaves no light
-  // background, so a check that only hunts light colours cannot see the
+  // background, so a check that only hunts light colors cannot see the
   // mark vanish into the card. logo.png is dark-on-light artwork.
   if (/class="scMark"|class='scMark'/.test(src) &&
       !/\.scMark\s*>\s*img\s*\{[^}]*background:\s*#(?:fff|ffffff)/.test(src)) {
@@ -486,7 +486,7 @@ function audit(file) {
     /style\s*=\s*["'][^"']*?(?<![-a-zA-Z])color\s*:\s*(#[0-9a-fA-F]{3,6})/g)].map(m => m[1]))];
 
   undefinedTokens.forEach(t => findings.push({ kind: 'FAIL',
-    msg: 'undefined token falls back to a light-theme colour: ' + t }));
+    msg: 'undefined token falls back to a light-theme color: ' + t }));
 
   return { file, findings, inline, tokens: Object.keys(tokens).length };
 }
@@ -518,8 +518,49 @@ for (const f of files) {
   const fails = a.findings.filter(x => x.kind === 'FAIL');
   if (fails.length) bad++;
   console.log('  ' + (fails.length ? 'FAIL' : ' ok ') + '  ' + f.padEnd(22) +
-              a.tokens + ' tokens' + (a.inline.length ? ', ' + a.inline.length + ' inline colours' : ''));
+              a.tokens + ' tokens' + (a.inline.length ? ', ' + a.inline.length + ' inline colors' : ''));
   a.findings.forEach(x => console.log('          [' + x.kind + '] ' + x.msg));
 }
 console.log('\nPages with findings: ' + bad + ' of ' + files.length);
+
+// ---- status messages must be readable on the dark card ------------------
+// --sc-red and --sc-green were re-pointed to light inks for the dark theme,
+// but the TINTS behind them were left as their light-theme fallbacks --
+// #fdecea and #e8f5e9, both near-white. Every status message rendered pale
+// ink on a near-white block: errors at 1.89:1, successes at 1.49:1.
+//
+// It is why a wrong password on the login page looked like nothing happened.
+// The message was there the whole time, in a color nobody could read. A FILL
+// HAS TO BRING ITS OWN INK -- the fifth time that rule has been learned here.
+(function msgTints(){
+  const DARK = ['login','dashboard','account','roster','customize','create_game',
+                'reports','view','game'];
+  for (const name of DARK) {
+    const f = require('path').join(__dirname, '..', name + '.html');
+    if (!require('fs').existsSync(f)) continue;
+    const src = require('fs').readFileSync(f, 'utf8');
+    for (const kind of ['error','success','warn','info']) {
+      const m = new RegExp('\\.msg\\.' + kind + '\\s*\\{([^}]*)\\}').exec(src);
+      if (!m) continue;
+      const bg = /background:\s*(#[0-9a-fA-F]{6})/.exec(m[1]);
+      const fg = /color:\s*(#[0-9a-fA-F]{6})/.exec(m[1]);
+      if (!bg || !fg) {
+        console.log('  FAIL ' + name + '.html .msg.' + kind +
+                    ': fill or ink is inherited, not stated — that is how the ' +
+                    'light tint survived the dark conversion');
+        bad++; continue;
+      }
+      const r = ratio(fg[1], bg[1]);
+      if (r < 4.5) {
+        console.log('  FAIL ' + name + '.html .msg.' + kind + ' ' + fg[1] +
+                    ' on ' + bg[1] + ' = ' + r.toFixed(2) + ':1');
+        bad++;
+      }
+    }
+  }
+})();
+
+// EXIT LAST. This line used to sit above the message-tint audit, so any
+// failure it found was counted after the exit code had already been decided
+// -- the audit could go red and the run still exit 0.
 process.exitCode = bad ? 1 : 0;

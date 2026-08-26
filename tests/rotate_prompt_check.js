@@ -62,7 +62,14 @@ function run(page, {w, h, coarse, dismissed}) {
   // jsdom reports 0 for offsetHeight always, so it is stubbed here to
   // model a loaded report.
   const gate = d.querySelector('.rotateGate');
-  return { shown: !!gate && gate.classList.contains('show'), store };
+  const out = { shown: !!gate && gate.classList.contains('show'), store };
+  // CLOSE THE WINDOW. This harness forces the no-ResizeObserver path, whose
+  // poll now runs for four minutes rather than fifteen seconds -- long enough
+  // to keep node alive past the end of the run and turn a passing test into a
+  // hang (exit 124). A real browser discards those timers when the tab
+  // closes; jsdom has to be told.
+  try { dom.window.close(); } catch (e) {}
+  return out;
 }
 
 let fails = 0;

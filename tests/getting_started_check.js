@@ -2,7 +2,7 @@
 // ==============================================================
 // A brand-new tenant admin used to land on a dashboard whose only guidance
 // was "No games yet -- click New game to set up your first one". That is
-// STEP THREE: creating a game needs a roster and asks for team colours, and
+// STEP THREE: creating a game needs a roster and asks for team colors, and
 // help.html's own first section is called "Before the first game".
 //
 // The card reads real state rather than a "seen it" flag. That matters more
@@ -57,7 +57,7 @@ chk(/customized: gsCustomized/.test(code) && /hasRoster:\s+gsPlayerCount > 0/.te
 
 // ---- the state is honest -------------------------------------------------
 chk(/gsCustomized = !!\(team\.primary_color \|\| team\.logo_url\)/.test(code),
-    'CUSTOMISED means a colour or logo was chosen — create_tenant() writes the ' +
+    'CUSTOMIZED means a color or logo was chosen — create_tenant() writes the ' +
     'team row with a name but neither, so a null primary_color is an honest ' +
     '"nobody has been to that page"');
 chk(/count: 'exact', head: true/.test(code),
@@ -69,7 +69,11 @@ chk(/allGames\.length > 0/.test(code) && !/games\.length > 0/.test(
     'first one because the season selector moved would be wrong');
 
 // ---- a failed count must not break the page -----------------------------
-const countBlock = /try \{[\s\S]*?from\('players'\)[\s\S]*?\} catch \(e\) \{[\s\S]*?\}/.exec(code);
+const countStart = code.indexOf("from('players')");
+const countBlock = countStart > -1
+  ? [code.slice(code.lastIndexOf('try {', countStart),
+               code.indexOf('}', code.indexOf('catch (e) {', countStart)) + 1)]
+  : null;
 chk(!!countBlock, 'the count is wrapped in try/catch');
 const catchBody = countBlock ? /catch \(e\) \{([\s\S]*?)\}/.exec(countBlock[0]) : null;
 chk(catchBody && catchBody[1].trim() === '',
@@ -87,6 +91,66 @@ const use  = code.indexOf('customized: gsCustomized');
 chk(decl > -1 && decl < use,
     'gsCustomized is declared before it is read — a `let` is in its temporal ' +
     'dead zone until then');
+
+// ---- the fourth step, admins only ---------------------------------------
+// An admin can change the roster, delete games and invite people; a view or
+// game-entry account cannot, so the exposure differs and so should the
+// nagging. It is LAST because the three above are needed before a game can
+// be scored at all -- putting security ahead of the thing somebody signed in
+// to do is how a checklist gets ignored wholesale.
+{
+  const { JSDOM } = require('jsdom');
+  const fnSrc = /  function renderGettingStarted[\s\S]*?\n  \}/.exec(code)[0];
+  const dom = new JSDOM('<div id="gettingStarted" style="display:none">' +
+    '<p id="gsSub"></p><div id="gsSteps"></div></div>', { runScripts: 'outside-only' });
+  const w = dom.window, d2 = dom.window.document;
+  w.__d = d2;
+  w.eval('(function(document){' + fnSrc + '; window.__render = renderGettingStarted;})(__d);');
+  const render = st => { w.__render(st); return {
+    hidden: d2.getElementById('gettingStarted').style.display === 'none',
+    sub: d2.getElementById('gsSub').textContent,
+    steps: [...d2.querySelectorAll('.gs-t')].map(e => e.textContent),
+    done: d2.querySelectorAll('.gs-step.done').length }; };
+
+  const ALL = { customized:true, hasRoster:true, playerCount:48, hasGames:true };
+
+  let r = render({ ...ALL, customized:false, hasRoster:false, hasGames:false,
+                   playerCount:0, isAdmin:true, hasMfa:false });
+  chk(r.steps.length === 4, 'an admin sees four steps');
+  chk(/two-factor/i.test(r.steps[3]),
+      'and two-factor is LAST — the other three are needed before a game can ' +
+      'be scored, this is not');
+  chk(r.sub === '4 things before your first game.',
+      'the caption COUNTS the steps rather than saying "Three" — it would ' +
+      'otherwise contradict the list under it (got: "' + r.sub + '")');
+
+  r = render({ ...ALL, customized:false, hasRoster:false, hasGames:false,
+               playerCount:0, isAdmin:false, hasMfa:false });
+  chk(r.steps.length === 3,
+      'a NON-admin sees three — a view account cannot change the roster or ' +
+      'delete a game, so the exposure is not the same');
+
+  r = render({ ...ALL, isAdmin:false, hasMfa:false });
+  chk(r.hidden,
+      'and their card disappears at three, not held open by a step they were ' +
+      'never shown');
+
+  r = render({ ...ALL, isAdmin:true, hasMfa:false });
+  chk(!r.hidden && r.done === 3 && r.sub === 'One to go.',
+      'an admin with the first three done still sees the card, with two-factor ' +
+      'outstanding');
+
+  r = render({ ...ALL, isAdmin:true, hasMfa:true });
+  chk(r.hidden, 'and it goes once two-factor is on');
+}
+
+// ---- the MFA state is honest --------------------------------------------
+chk(/f\.status === 'verified'/.test(code),
+    "only a VERIFIED factor counts — an enrollment started and abandoned sits " +
+    "at 'unverified' and protects nothing");
+chk(/catch \(e\) \{[\s\S]{0,220}gsHasMfa = false/.test(code),
+    'and an unreachable check reads as NOT on — the other way round would hide ' +
+    'a security step from somebody who has not done it');
 
 // ---- the guide is reachable forever -------------------------------------
 chk(!!doc.getElementById('helpLink'),
