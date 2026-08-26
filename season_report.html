@@ -1359,16 +1359,36 @@ function isAdminMarker(p){
      someone already in landscape to rotate reads as a bug -- and before
      printing, so it is never captured in the PDF. */
   (function(){
-    var KEY = 'sc_rotate_dismissed';
+    /* SHOWN EVERY TIME THE PAGE IS OPENED IN PORTRAIT.
+       ------------------------------------------------------------------
+       This used to remember a dismissal in sessionStorage under a key
+       SHARED BY ALL FOUR report pages. Wrong in principle and broken in
+       practice.
+
+       Wrong in principle: the prompt is not an announcement, it is a
+       RESPONSE TO A CONDITION -- this screen is too narrow for these
+       tables. That is still true of the next report you open, so
+       suppressing it leaves you looking at columns running off the edge
+       with nothing saying why.
+
+       Broken in practice: one tap of "View anyway", ever, silenced all four
+       pages for the life of the browser tab, and a mobile tab left open
+       keeps sessionStorage for weeks. An earlier build did show this on
+       stat_package.html; a single dismissal then would explain never seeing
+       it since.
+
+       Dismissal now lasts for THIS PAGE VIEW only -- a plain variable, no
+       storage at all. Tap "View anyway" and it stays gone while you read;
+       open another report or reload and it is back, because the condition
+       is back.
+
+       PHONES ONLY, by viewport and pointer, never user-agent. An iPad in
+       portrait is 744px or wider and renders these tables readably, so
+       tablets stay excluded -- Andy's call, 25 August 2026. */
+    var dismissedThisView = false;
     var host = document.getElementById('reportContent');
     if (!host) return;
 
-    function dismissed(){
-      try { return sessionStorage.getItem(KEY) === '1'; } catch (e) { return false; }
-    }
-    function remember(){
-      try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
-    }
     function isPhonePortrait(){
       var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
       var narrow = Math.min(window.innerWidth, window.innerHeight) <= 500;
@@ -1393,31 +1413,35 @@ function isAdminMarker(p){
 
     function hide(){ gate.classList.remove('show'); }
     function maybeShow(){
-      if (dismissed() || !isPhonePortrait()) { hide(); return; }
+      if (dismissedThisView || !isPhonePortrait()) { hide(); return; }
+      if (host.offsetHeight === 0) return;
       if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
       if (!gate.parentNode) host.appendChild(gate);
       gate.classList.add('show');
     }
 
     gate.addEventListener('click', function(e){
-      if (e.target.classList.contains('rotateDismiss')) { remember(); hide(); }
+      if (e.target.classList.contains('rotateDismiss')) { dismissedThisView = true; hide(); }
     });
-    window.addEventListener('resize', function(){ if (!isPhonePortrait()) hide(); });
+
+    /* SYMMETRIC. The old handler only ever called hide(), so a report opened
+       in landscape and then turned to portrait never showed the prompt --
+       the one orientation change most likely to need it. orientationchange
+       as well as resize, on a short delay: iOS Safari fires it more
+       reliably, and the new dimensions are not readable until the frame
+       after. */
+    window.addEventListener('resize', maybeShow);
+    window.addEventListener('orientationchange', function(){ setTimeout(maybeShow, 120); });
     window.addEventListener('beforeprint', hide);
 
-    /* WAIT FOR THE HOST TO HAVE A HEIGHT, do not guess at a delay.
-       The overlay is position:absolute inset:0 inside the report
-       container, and that container sits in a wrapper that stays hidden
-       until the data loads. Appended while the host is still zero-height,
-       the overlay renders as nothing -- which is exactly what happened:
-       the prompt appeared on stat_package.html, the fastest of the four,
-       and on none of the others. A single 600ms timeout is a guess about
-       how long a fetch takes, and it was wrong three times out of four.
-
-       ResizeObserver where available, a bounded poll otherwise. Both stop
-       as soon as the host has size, so neither runs longer than it must. */
+    /* WAIT FOR THE HOST TO HAVE A HEIGHT, do not guess at a delay. The
+       overlay is absolute inset:0 inside the report container, which sits in
+       a wrapper hidden until the data loads. Appended while the host is
+       zero-height it renders as nothing -- which is what happened before:
+       the prompt appeared on stat_package.html, the fastest of the four, and
+       on none of the others. */
     function showWhenReady(){
-      if (dismissed() || !isPhonePortrait()) return;
+      if (dismissedThisView || !isPhonePortrait()) return false;
       if (host.offsetHeight > 0) { maybeShow(); return true; }
       return false;
     }
