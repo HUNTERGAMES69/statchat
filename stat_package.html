@@ -1286,16 +1286,32 @@ function isAdminMarker(p){
       return false;
     }
 
+    /* NO DEADLINE ON THE WAIT. This used to disconnect the observer after
+       15 seconds -- a guess at how long a FETCH takes, which is the wrong
+       unit for the player report.
+
+       There the host stays empty until somebody CHOOSES a player from the
+       picker. That wait is human-paced: land, read the list, decide. Longer
+       than 15 seconds is ordinary, and after that the observer was gone, so
+       filling the host fired nothing. The prompt worked if you picked
+       quickly and appeared broken otherwise, which is why it read as never
+       working at all.
+
+       The observer now lives until it has something to show, then
+       disconnects. One ResizeObserver on one element costs nothing to keep,
+       and "wait until the content exists" is the actual condition -- a timer
+       was only ever standing in for it. */
     if (typeof ResizeObserver === 'function') {
       var ro = new ResizeObserver(function(){
         if (showWhenReady()) ro.disconnect();
       });
       ro.observe(host);
-      setTimeout(function(){ ro.disconnect(); }, 15000);
     } else {
+      // The fallback still ends, because an interval that never stops is a
+      // real cost -- but four minutes covers a human reading a picker.
       var tries = 0;
       var poll = setInterval(function(){
-        if (showWhenReady() || ++tries > 60) clearInterval(poll);
+        if (showWhenReady() || ++tries > 960) clearInterval(poll);
       }, 250);
     }
     if (document.readyState === 'loading') {
