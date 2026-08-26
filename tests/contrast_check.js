@@ -560,6 +560,67 @@ console.log('\nPages with findings: ' + bad + ' of ' + files.length);
   }
 })();
 
+// ---- a disabled button must RECEDE, not fade ----------------------------
+// The rule was `opacity:0.5`, carried over from the light theme where it
+// works -- half-fading a white button pushes it toward a white page and it
+// flattens away. On the dark card the same fade only DIMS: a faded button
+// still sits above the surface at 1.19:1 where a live one is 1.43:1. So a
+// row of mostly-disabled buttons read as uniform, and after a touchdown, or
+// after a try when only Kickoff is live, there was no way to see which one
+// could be pressed.
+//
+// On a dark page "unavailable" has to mean CLOSER TO THE BACKGROUND.
+(function disabledRecedes(){
+  const DARK = ['game','account','roster','create_game','login','dashboard',
+                'customize','reports','view'];
+  for (const name of DARK) {
+    const f = require('path').join(__dirname, '..', name + '.html');
+    if (!require('fs').existsSync(f)) continue;
+    const src = require('fs').readFileSync(f, 'utf8');
+    const m = /button:disabled[^{]*\{([^}]*)\}/.exec(src);
+    if (!m) continue;
+
+    if (/opacity\s*:\s*0?\.\d/.test(m[1])) {
+      console.log('  FAIL ' + name + '.html: disabled buttons FADE rather than recede — ' +
+                  'on a dark card that only dims them, so a dead button still ' +
+                  'sits above the surface');
+      bad++;
+      continue;
+    }
+
+    const tok = {};
+    for (const t of src.matchAll(/(--sc-[a-z-]+):\s*(#[0-9a-fA-F]{3,6})/g)) tok[t[1]] = t[2];
+    const card = tok['--sc-card'] || '#191f27';
+    const live = tok['--sc-navy'] || '#2f3a47';
+    const bgm = /background:\s*(?:var\((--[a-z-]+),\s*)?(#[0-9a-fA-F]{6})/.exec(m[1]);
+    if (!bgm) {
+      console.log('  FAIL ' + name + '.html: disabled buttons state no fill, so they ' +
+                  'inherit the live one');
+      bad++; continue;
+    }
+    const bg = tok[bgm[1]] || bgm[2];
+    // THE GAP BETWEEN THE TWO STATES is what a scorer reads, not each fill
+    // against the card. A first version of this compared them separately and
+    // passed #2b333d -- the original bug -- because it sits 1.30:1 off the
+    // card while being only 1.11:1 from a live button. Indistinguishable
+    // from live IS the fault, however it relates to the card.
+    const gap = ratio(bg, live);
+    if (gap < 1.25) {
+      console.log('  FAIL ' + name + '.html: the disabled fill (' + bg + ') is only ' +
+                  gap.toFixed(2) + ':1 from a live button — mid-drive, a row of ' +
+                  'mostly-disabled buttons reads as uniform and there is no way ' +
+                  'to see which one can be pressed');
+      bad++;
+    }
+    if (ratio(bg, card) > ratio(live, card)) {
+      console.log('  FAIL ' + name + '.html: the disabled fill stands off the card ' +
+                  'MORE than a live button — a dead control more prominent than ' +
+                  'one you can press');
+      bad++;
+    }
+  }
+})();
+
 // EXIT LAST. This line used to sit above the message-tint audit, so any
 // failure it found was counted after the exit code had already been decided
 // -- the audit could go red and the run still exit 0.
