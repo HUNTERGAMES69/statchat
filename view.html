@@ -953,11 +953,39 @@ function extractNameTag(rawName){
       // "K. Mims", which would lose information AND invite the collision
       // above against a plain Mims.
       const NAME_LIMIT = 18;
+      // SECOND TIER: DROP THE NICKNAME, NOT THE FIRST NAME.
+      // ------------------------------------------------------------------
+      // Tier 1 alone was not enough. `Antuan "AJ" Robinson Jr.` is 24
+      // characters and comes out of tier 1 at 20 -- still long enough to
+      // push the XP Made column off the edge of the special-teams tile.
+      //
+      // The obvious second tier is last-name-only, and it is the wrong one.
+      // It saves 3 characters and collapses `Parker Robinson` and
+      // `Jaylen Robinson` -- brothers on one roster is ordinary -- into two
+      // identical rows. The collision guard would then hand BOTH of them
+      // their full names back, so on exactly the roster where it is needed
+      // it switches itself off.
+      //
+      // The quoted nickname is the thing to lose. It saves 5 characters
+      // here, and it keeps the initial AND the surname, so it adds no
+      // ambiguity that tier 1 does not already carry: A. Robinson Jr. at 15.
+      // A nickname is how a name is spoken, not which player it is, and the
+      // initial is already doing the identifying.
+      const NICKNAME = /\s*["'\u201c\u2018][^"'\u201d\u2019]*["'\u201d\u2019]\s*/g;
       function shortenName(full){
         const raw = String(full == null ? '' : full).trim();
         if (raw.length <= NAME_LIMIT) return raw;
-        const parts = raw.split(/\s+/);
-        if (parts.length < 2) return raw;          // one word, no initial to take
+        let work = raw;
+        const parts0 = work.split(/\s+/);
+        if (parts0.length < 2) return raw;         // one word, no initial to take
+        let first0 = parts0[0];
+        let tier1 = first0.charAt(0).toUpperCase() + '. ' + parts0.slice(1).join(' ');
+        if (tier1.length <= NAME_LIMIT) return tier1;
+        // Still too long: strip the nickname and rebuild from the remainder.
+        const stripped = work.replace(NICKNAME, ' ').replace(/\s+/g, ' ').trim();
+        if (stripped && stripped !== work) work = stripped;
+        const parts = work.split(/\s+/);
+        if (parts.length < 2) return work.length < raw.length ? work : raw;
         const first = parts.shift();
         const last = parts.join(' ');              // everything else, verbatim
         if (!last) return raw;
@@ -1292,6 +1320,52 @@ function extractNameTag(rawName){
       if (overA <= 0 && overB <= 0) break;
       const worst = Math.max(overA / targetA, overB / targetB);
       scale = Math.max(0.5, scale * (1 - Math.min(0.2, worst)));
+      quadBL.style.setProperty('--stat-scale', scale);
+      quadBR.style.setProperty('--stat-scale', scale);
+    }
+
+    // WIDTH MATTERS TOO, AND THIS LOOP ONLY EVER ASKED ABOUT HEIGHT.
+    // ------------------------------------------------------------------
+    // The tables are table-layout:auto with white-space:nowrap, so a row
+    // that does not fit does not wrap -- it makes the table wider than the
+    // tile and the right-hand columns are clipped. On the special-teams
+    // table that meant XP Made simply was not there.
+    //
+    // Worse, this scaler is allowed to GROW to 1.5x to fill vertical space.
+    // A tile with few rows and one long name would scale UP, spending the
+    // characters the shortener had just saved and pushing the numbers off.
+    // Height was satisfied and the thing a viewer came for was gone.
+    //
+    // A number you cannot see is a worse failure than a small one, so width
+    // now backs the scale off after height has had its say. Same shape as
+    // the loop above: measure, reduce, re-measure, stop when it fits.
+    for (let i = 0; i < 8; i++){
+      const overflow = (id) => {
+        const host = document.getElementById(id);
+        if (!host) return 0;
+        let worstOver = 0;
+        const avail = host.clientWidth;
+        if (!avail) return 0;
+        host.querySelectorAll('table.player-stat-table').forEach(t => {
+          // MEASURED THREE WAYS, largest wins. The table is width:100%, so
+          // when nowrap content forces it past its container the overflow
+          // shows up differently depending on the browser: sometimes the
+          // table's own offsetWidth grows, sometimes only scrollWidth does,
+          // and sometimes neither and it is the widest ROW that tells you.
+          // Taking the largest means a browser that reports it in only one
+          // of the three still triggers the back-off.
+          let widest = Math.max(t.scrollWidth, t.offsetWidth);
+          const firstRow = t.rows && t.rows[0];
+          if (firstRow) widest = Math.max(widest, firstRow.scrollWidth);
+          const over = widest - avail;
+          if (over > worstOver) worstOver = over;
+        });
+        return worstOver;
+      };
+      const wA = overflow('boxScoreTeamA'), wB = overflow('boxScoreTeamB');
+      if (wA <= 0 && wB <= 0) break;
+      if (scale <= 0.5) break;
+      scale = Math.max(0.5, scale * 0.94);
       quadBL.style.setProperty('--stat-scale', scale);
       quadBR.style.setProperty('--stat-scale', scale);
     }
