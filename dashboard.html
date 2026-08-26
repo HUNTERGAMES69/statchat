@@ -319,6 +319,35 @@
                    line-height:1.5; }
   .status-notstarted { color:var(--sc-ink-muted); font-weight:600; }
   .empty-state { color:var(--sc-ink-muted); padding:16px 0; }
+
+  /* Getting started. Dark page, so the numbered discs are RAISED against the
+     card rather than sunk -- there is nothing to recede into. */
+  .gs-step { display:flex; gap:12px; align-items:flex-start; padding:10px 0;
+             border-bottom:1px solid var(--sc-rule, #2b333d); }
+  .gs-step:last-child { border-bottom:none; }
+  .gs-num { flex:0 0 24px; height:24px; border-radius:50%;
+            background:var(--sc-raise, #20272f);
+            border:1px solid var(--sc-rule-strong, #6b7d8f);
+            display:flex; align-items:center; justify-content:center;
+            font-size:12px; font-weight:700; }
+  /* A COMPLETED STEP CARRIES ITS OWN INK. Green fill with light text is
+     1.5:1 -- the fill has to bring dark text with it. */
+  .gs-step.done .gs-num { background:var(--sc-green, #a3d93f);
+                          border-color:var(--sc-green, #a3d93f); color:#0d1117; }
+  .gs-step.done .gs-t { color:var(--sc-ink-muted, #8d99a6); text-decoration:line-through; }
+  .gs-t { font-weight:600; font-size:14px; }
+  .gs-d { color:var(--sc-ink-muted, #8d99a6); font-size:12.5px; margin-top:2px; }
+  .gs-go { margin-left:auto; align-self:center; padding:6px 12px; border-radius:6px;
+           background:var(--sc-navy, #2f3a47);
+           border:1px solid var(--sc-rule-strong, #6b7d8f);
+           color:var(--sc-ink, #eef1f4); font-size:12.5px; font-weight:600;
+           text-decoration:none; white-space:nowrap; }
+  .gs-go:hover { background:var(--sc-raise, #20272f); }
+  @media (max-width: 767px) {
+    /* The button drops below the text rather than squeezing it to nothing. */
+    .gs-step { flex-wrap:wrap; }
+    .gs-go { margin-left:36px; margin-top:8px; }
+  }
   /* THE SPLASH MUST BE DARK TOO. It covers the whole viewport before the
      page paints; left white it is a full-screen flash on every load, which
      is worse on a dark theme than having no splash at all. */
@@ -403,6 +432,15 @@
       <div id="seasonRecord" class="hidden"></div>
     </div>
 
+      <!-- GETTING STARTED. Rendered only while something is still missing,
+           and it reads real state rather than a "seen it" flag -- so it ticks
+           itself off, disappears when the third step is done, and comes back
+           if a new season starts with an empty roster. -->
+      <div id="gettingStarted" class="card" style="display:none;">
+        <h2 style="font-size:15px; margin:0 0 3px;">Getting started</h2>
+        <p class="sub" id="gsSub" style="margin:0 0 12px;"></p>
+        <div id="gsSteps"></div>
+      </div>
     <div class="card">
       <!-- Shown only when the selected season is not the current one.
            Filled by renderSeasonNotice(). -->
@@ -602,6 +640,11 @@
   }
 
 
+  // Read by renderGettingStarted, which runs later in the render cycle than
+  // loadDashboard -- so these are module scope rather than locals.
+  let gsCustomized = false;
+  let gsPlayerCount = 0;
+
   async function loadDashboard(){
     const { data, error } = await supabaseClient
       .from('teams')
@@ -618,9 +661,29 @@
       .select('name, full_name, logo_url, primary_color, secondary_color, current_season_year')
       .maybeSingle();
     let seasonYear = new Date().getFullYear();
+
+    // THE ONE EXTRA QUERY. The dashboard already knows the team and the
+    // games; it has never had a reason to count players. head:true with an
+    // exact count returns the number without fetching a single row.
+    let playerCount = 0;
+    try {
+      const { count } = await supabaseClient
+        .from('players').select('id', { count: 'exact', head: true });
+      playerCount = count || 0;
+      gsPlayerCount = playerCount;
+    } catch (e) {
+      // A COUNT THAT FAILS MUST NOT BLOCK THE DASHBOARD. Worst case the
+      // roster step reads as not done and the card offers a link the person
+      // does not need -- far better than a page that will not load.
+    }
+
     // maybeSingle(): the row itself, or null.
     if (!error && data){
       const team = data;
+      // CUSTOMISED MEANS A COLOUR OR LOGO HAS BEEN CHOSEN. create_tenant()
+      // writes the team row with a name but no colours and no logo (sql/013),
+      // so a null primary_color is an honest "nobody has been to that page".
+      gsCustomized = !!(team.primary_color || team.logo_url);
       document.getElementById('teamHeading').textContent = team.full_name || team.name;
       if (team.primary_color){
         document.getElementById('teamHeading').style.color = team.primary_color;
@@ -752,6 +815,15 @@
     // selector changes.
     renderSeasonRecord(games);
     renderGames(games);
+    // Uses allGames, not the season-filtered list: a school that played last
+    // year has created a game, and being shown "create your first game"
+    // because the season selector moved would be wrong.
+    renderGettingStarted({
+      customized: gsCustomized,
+      hasRoster:  gsPlayerCount > 0,
+      playerCount: gsPlayerCount,
+      hasGames:   allGames.length > 0
+    });
   }
 
   // A STANDING NOTICE WHENEVER THIS IS NOT THE CURRENT SEASON.
@@ -885,10 +957,65 @@
     }
   }
 
+  // GETTING STARTED, DERIVED FROM WHAT IS ACTUALLY TRUE.
+  // ----------------------------------------------------------------------
+  // The old empty state said "No games yet -- click New game", which is the
+  // wrong first step: creating a game needs a roster and asks for team
+  // colours. help.html's own first section is "Before the first game".
+  //
+  // No "seen it" flag anywhere. The card reads the three things it is asking
+  // for, so it ticks itself off, vanishes when they are all done, and comes
+  // back on its own if a new season starts with an empty roster. A flag
+  // would have to be stored, could be wrong in both directions, and would
+  // hide the card at exactly the moment it became useful again.
+  //
+  // ORDER IS DELIBERATE: colours, then roster, then game. Andy's call --
+  // branding is what the roster and game pages are shown against.
+  function renderGettingStarted(state){
+    const card = document.getElementById('gettingStarted');
+    if (!card) return;
+    const steps = [
+      { done: state.customized,
+        title: 'Set your team name and colours',
+        desc:  'Used on the dashboard, the crew view and every broadcast overlay.',
+        doneDesc: 'Done.',
+        href:  'customize.html', label: 'Customize' },
+      { done: state.hasRoster,
+        title: 'Add your roster',
+        desc:  'Numbers, names and positions. Paste a list or add players one at a time.',
+        doneDesc: state.playerCount + ' player' + (state.playerCount === 1 ? '' : 's') + '.',
+        href:  'roster.html', label: 'Roster' },
+      { done: state.hasGames,
+        title: 'Create your first game',
+        desc:  'Opponent, date, and the opposing roster if you have it.',
+        doneDesc: 'Done.',
+        href:  'create_game.html', label: 'New game' }
+    ];
+    const left = steps.filter(s => !s.done).length;
+    if (left === 0){ card.style.display = 'none'; return; }
+
+    document.getElementById('gsSub').textContent =
+      left === steps.length ? 'Three things before your first game.'
+      : left === 1 ? 'One to go.' : left + ' to go.';
+
+    document.getElementById('gsSteps').innerHTML = steps.map((s, i) =>
+      '<div class="gs-step' + (s.done ? ' done' : '') + '">' +
+        '<span class="gs-num">' + (s.done ? '\u2713' : (i + 1)) + '</span>' +
+        '<div><div class="gs-t">' + s.title + '</div>' +
+             '<div class="gs-d">' + (s.done ? s.doneDesc : s.desc) + '</div></div>' +
+        (s.done ? '' : '<a class="gs-go" href="' + s.href + '">' + s.label + '</a>') +
+      '</div>').join('');
+    card.style.display = '';
+  }
+
   function renderGames(games){
     const body = document.getElementById('gamesBody');
     if (games.length === 0){
-      body.innerHTML = '<div class="empty-state">No games yet — click "New game" to set up your first one.</div>';
+      // WAS "click New game to set up your first one", which sent a brand-new
+      // admin to step three: creating a game needs a roster and asks for team
+      // colours. The Getting started card above now carries that guidance in
+      // the right order, so this says only what it knows.
+      body.innerHTML = '<div class="empty-state">No games yet.</div>';
       return;
     }
     body.innerHTML = games.map(g => {
