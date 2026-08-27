@@ -216,7 +216,19 @@
       <h1>Users</h1>
       <p class="sub">Everyone with an account, grouped by tenant. This is the platform's
          view; a tenant's own admin manages their people from their account page.</p>
-      <button id="refreshUsersBtn" class="topAct" type="button" style="margin-bottom:10px;">Refresh</button>
+      <div style="display:flex; align-items:center; gap:14px; margin-bottom:10px; flex-wrap:wrap;">
+        <button id="refreshUsersBtn" class="topAct" type="button">Refresh</button>
+        <!-- DISABLED ACCOUNTS ARE OUT OF THE WAY BY DEFAULT. They are the
+             minority and the least likely to need action, and on a list
+             grouped by tenant they push the live accounts down. The count in
+             the label is what makes hiding them honest -- you can see there
+             are some without having to turn it on. -->
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px;
+               color:var(--sc-ink-soft, #3a3a3a); cursor:pointer;">
+          <input type="checkbox" id="showDisabledUsers" style="cursor:pointer;">
+          <span id="showDisabledLabel">Show disabled accounts</span>
+        </label>
+      </div>
       <div id="usersBody"><p class="empty">Loading…</p></div>
       <p class="note"><strong>These actions have no audit trail yet.</strong> Resending an
          invite, sending a reset, setting a temporary password or disabling an account are
@@ -484,6 +496,14 @@
   // the tabs until the whole page was reloaded, so "Test School deleted" was
   // still on screen ten minutes and three tabs later, describing something
   // that had already happened.
+  // Re-renders through the same loader rather than showing and hiding rows
+  // in place: the group counts and the empty state have to change with it,
+  // and a second path that filtered in the DOM would drift from this one.
+  {
+    const t = document.getElementById('showDisabledUsers');
+    if (t) t.addEventListener('change', () => loadUsers(accessToken));
+  }
+
   ['Tenants', 'Users', 'Recovery'].forEach(which => {
     const btn = document.getElementById('refresh' + which + 'Btn');
     if (!btn) return;
@@ -927,8 +947,27 @@
       body.innerHTML = '<p class="empty">Could not load users: ' + esc(err.message) + '</p>';
       return;
     }
-    const users = payload.users || [];
-    if (!users.length){ body.innerHTML = '<p class="empty">No users.</p>'; return; }
+    const allUsers = payload.users || [];
+    if (!allUsers.length){ body.innerHTML = '<p class="empty">No users.</p>'; return; }
+
+    // HIDDEN, BUT COUNTED. Disabled accounts are the minority and the least
+    // likely to need action, and on a list grouped by tenant they push the
+    // live ones down. Saying how many there are is what makes hiding them
+    // honest -- you can tell they exist without turning the toggle on.
+    const showDisabled = !!(document.getElementById('showDisabledUsers') || {}).checked;
+    const disabledCount = allUsers.filter(u => u.disabled).length;
+    const lbl = document.getElementById('showDisabledLabel');
+    if (lbl){
+      lbl.textContent = disabledCount
+        ? 'Show disabled accounts (' + disabledCount + ')'
+        : 'Show disabled accounts';
+    }
+    const users = showDisabled ? allUsers : allUsers.filter(u => !u.disabled);
+    if (!users.length){
+      body.innerHTML = '<p class="empty">Every account is disabled. ' +
+        'Turn on \u201cShow disabled accounts\u201d to see them.</p>';
+      return;
+    }
 
     // GROUPED BY SCHOOL, because a flat roll of every account on the
     // platform is precisely the merged view this console exists to avoid.
@@ -947,13 +986,36 @@
     const heading = k => k === '\u0000platform' ? 'StatChat platform'
                        : k === '\uffffunassigned' ? 'No tenant assigned'
                        : k;
-    body.innerHTML = [...groups.keys()].sort().map(k => {
+    // ONE TABLE FOR EVERY GROUP.
+    // ------------------------------------------------------------------
+    // Each tenant used to render its own <table>, so every one sized its
+    // columns to its own content and nothing lined up down the page -- a
+    // tenant with one short name gave a narrow Name column, the next gave a
+    // wide one. A group heading is a full-width row inside the single table
+    // instead, which is what actually holds the columns together.
+    //
+    // The widths are fixed rather than left to the content: the two action
+    // columns hold buttons of known size, and letting them fight the text
+    // columns for space is how this drifted in the first place.
+    const COLS =
+      '<colgroup>' +
+        '<col style="width:20%;"><col style="width:26%;">' +
+        '<col style="width:11%;"><col style="width:15%;">' +
+        '<col style="width:12%;"><col style="width:16%;">' +
+      '</colgroup>';
+
+    const groupRow = (k, n) =>
+      '<tr><td colspan="6" style="padding:18px 10px 6px; border-bottom:none; ' +
+        'font-size:14px; font-weight:700; color:var(--sc-ink-soft, #3a3a3a);">' +
+        esc(heading(k)) +
+        ' <span style="font-weight:400; color:#6b7680;">(' + n + ')</span></td></tr>';
+
+    body.innerHTML = '<table style="table-layout:fixed;">' + COLS +
+      '<tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th><th></th></tr>' +
+      [...groups.keys()].sort().map(k => {
       const rows = groups.get(k).sort((a, b) =>
         (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
-      return '<h2 style="font-size:14px; margin:18px 0 8px; ' +
-               'color:var(--sc-ink-soft, #3a3a3a);">' + esc(heading(k)) +
-               ' <span style="font-weight:400; color:#6b7680;">(' + rows.length + ')</span></h2>' +
-        '<table><tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th><th></th></tr>' +
+      return groupRow(k, rows.length) +
         rows.map(u =>
           '<tr>' +
             '<td class="name">' + esc(u.displayName || '—') + '</td>' +
@@ -991,8 +1053,8 @@
                   '" data-disabled="' + (u.disabled ? '0' : '1') + '">' +
                   (u.disabled ? 'Enable' : 'Disable') + '</button>') +
             '</td>' +
-          '</tr>').join('') + '</table>';
-    }).join('');
+          '</tr>').join('');
+    }).join('') + '</table>';
   }
 
   // Delegated, because the rows are rebuilt after every restore and a
