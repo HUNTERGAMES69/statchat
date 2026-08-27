@@ -84,8 +84,25 @@ const fnAt = src.indexOf('function buildAndReview');
 chk(guardAt > -1 && fnAt > -1 && guardAt > fnAt && guardAt - fnAt < 400,
     'refused at Review play, where the scorer is already looking at the ' +
     'panel and the field needing attention is still in front of them');
-chk(/el\.scrollIntoView\(\{ block: 'center' \}\); el\.focus\(\)/.test(src),
-    'and the offending field is scrolled to and focused, not just named');
+// REPORTED THE SAME WAY A MISSING RUSHER IS. The first version wrote into
+// gameMsg -- which is exactly what the comment on missingPlayer warns
+// against: writing there grows the top of the document and shoves the panel
+// out from under the scorer's thumb at the moment they are reading a
+// refusal.
+{
+  const guard = /A POSSESSION CHANGE HAS TO CARRY A SPOT[\s\S]*?\n    \}\n/.exec(src)[0];
+  chk(/showReviewMsg\('Nothing has been saved — still needed: '/.test(guard),
+      'the refusal reads like the missing-rusher one and sits beside Review ' +
+      'play, not at the top of the page');
+  chk(/markRowGap\(/.test(guard),
+      'and the field itself is marked, so the message is not the only clue');
+  chk(!/showMsg\('gameMsg'/.test(guard),
+      'and NOT written into gameMsg, which grows the top of the document and ' +
+      'moves the panel under the scorer at the worst moment');
+  chk(/confirmCard/.test(guard),
+      'the confirm card is hidden, so a stale review from a previous attempt ' +
+      'is not left on screen looking like this play was accepted');
+}
 
 // ---- THE GUARD ACTUALLY REFUSES -----------------------------------------
 // Every assertion above checks a PIECE -- the state function, the exemption,
@@ -96,12 +113,12 @@ chk(/el\.scrollIntoView\(\{ block: 'center' \}\); el\.focus\(\)/.test(src),
   chk(!!guard, 'the guard block is present');
   if (guard) {
     const g = guard[0];
-    chk(/if \(st === 'noSide' \|\| st === 'noYardline' \|\| st === 'empty'\)/.test(g),
+    chk(/if \(spotState === 'noSide' \|\| spotState === 'noYardline' \|\| spotState === 'empty'\)/.test(g),
         'and its condition names the three refusable states — not a constant, ' +
         'and not a subset');
-    chk(/showMsg\('gameMsg'/.test(g) && /return;/.test(g),
+    chk(/showReviewMsg\(/.test(g) && /return;/.test(g),
         'it reports and RETURNS, so the play is not built');
-    const showAt = g.indexOf("showMsg('gameMsg'");
+    const showAt = g.indexOf('showReviewMsg(');
     const retAt = g.indexOf('return;', showAt);
     chk(showAt > -1 && retAt > showAt,
         'in that order — a return before the message would refuse silently');
