@@ -39,7 +39,7 @@
   body.debug { background:#123 !important; }     /* ?debug=1     */
 </style>
 </head>
-<body>
+<body class="sponsor-none">
 <!-- TRANSPARENT BACKGROUND, like every other overlay here: vMix keys this
      page over the programme feed, so anything opaque outside the panel
      would black out the game. -->
@@ -1079,7 +1079,14 @@ function extractNameTag(rawName){
     // browser source has, and returns sponsorBar. Applied in
     // fetchAndRender when that answer arrives; until then the class stays
     // on, so the bar cannot flash up on a tenant that should never see it.
-    document.body.classList.add('sponsor-none');
+    // NOT SET HERE. renderAll() runs on EVERY poll, so adding the class
+    // here put it straight back after fetchAndRender had removed it -- the
+    // server said show, this said hide, and this ran last. The bar never
+    // appeared for the tenant that owns it.
+    //
+    // The class now starts on the <body> in the markup and is only ever
+    // removed, once, by the answer from the server. A default belongs
+    // somewhere that runs once; renderAll is not that place.
     document.body.classList.toggle('debug', p.get('debug') === '1');
   }
 
