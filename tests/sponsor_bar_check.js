@@ -45,9 +45,21 @@ chk(/sponsorBar: !!\(/.test(api),
 // ---- the overlay obeys, and fails safe -----------------------------------
 chk(!/get\('sponsor'\)/.test(overlay),
     'the ?sponsor URL parameter is gone — it could be typed by anyone');
-chk(/document\.body\.classList\.add\('sponsor-none'\)/.test(overlay),
-    'the bar starts HIDDEN, so it cannot flash up on a tenant that should ' +
-    'never see it while the fetch is in flight');
+// THE DEFAULT MUST NOT LIVE IN THE RENDER LOOP.
+// First version put classList.add('sponsor-none') inside renderAll(), which
+// runs on EVERY poll -- so it re-hid the bar immediately after
+// fetchAndRender had revealed it. The server said show, this said hide, and
+// this ran last. The bar never appeared for the tenant that owns it, and the
+// database, the API and the overlay all looked correct in isolation.
+chk(/<body[^>]*class="[^"]*sponsor-none/.test(overlay),
+    'the bar starts hidden via the BODY TAG — a default belongs somewhere ' +
+    'that runs once');
+{
+  const renderAll = /function renderAll\(\)\{[\s\S]*?\n  \}/.exec(overlay);
+  chk(!renderAll || !/sponsor-none/.test(renderAll[0]),
+      'and renderAll() never touches the class — it runs on every poll, so ' +
+      'anything it sets overrides the server on the very next refresh');
+}
 chk(/d\.sponsorBar !== true/.test(overlay),
     'and only a literal true reveals it');
 
