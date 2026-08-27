@@ -1079,6 +1079,36 @@
     <a href="dashboard.html" style="text-decoration:none; padding:9px 16px; border-radius:6px; background:#1a1a2e; color:#fff; font-weight:600;">← Dashboard</a>
   </div>
 
+  <!-- GAME ENTRY IS NOT A PHONE JOB.
+       ------------------------------------------------------------------
+       The play panel is a ladder of buttons beside a card that assumes
+       roughly 760px of width, and a scorer works it under time pressure
+       with a live game in front of them. On a phone the ladder wraps into
+       a column, the panel goes below the fold, and a mis-tap is a wrong
+       statistic -- not an inconvenience.
+       A SEPARATE VIEW rather than an overlay: it takes the place of the
+       app instead of sitting on top of it, so there is nothing behind it
+       to poke at by accident. -->
+  <div id="phoneView" class="hidden card">
+    <h1>Use a laptop or tablet for this</h1>
+    <p class="sub">Entering plays needs the width of a laptop, an iPad or a
+      desktop. On a phone the buttons stack into a column and the play panel
+      falls below the fold, which is how a wrong number gets saved.</p>
+    <p class="sub">Everything else works here: the crew view, recaps and
+      reports are all built for a phone.</p>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
+      <a href="dashboard.html" style="text-decoration:none; padding:10px 16px;
+         border-radius:6px; background:#2f3a47; color:#eef1f4; font-weight:700;
+         font-size:13px;">&larr; Dashboard</a>
+      <button type="button" id="phoneAnyway" style="padding:10px 16px;
+        border-radius:6px; background:transparent; border:1px solid #6b7d8f;
+        color:#c7d0da; font-weight:700; font-size:13px;">Open it anyway</button>
+    </div>
+    <p class="sub" style="margin-top:12px; font-size:12.5px;">If you are on a
+      tablet and seeing this, open it anyway &mdash; and tell Andy, because the
+      check is wrong.</p>
+  </div>
+
   <div id="mainView" class="hidden">
     <div class="banner" id="banner">
       <img id="bannerLogoA" style="display:none; height:28px; width:28px; object-fit:contain; border-radius:4px;">
@@ -1411,8 +1441,39 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+  // IS THIS A PHONE? Not "is it small" -- a narrow desktop window is still
+  // a desktop, and a scorer resizing one should not be locked out.
+  //
+  // Two signals together: a COARSE pointer (finger, not mouse) and a
+  // smallest-dimension of 500px or less. Deliberately not portrait-only,
+  // unlike the rotate prompt on the report pages: a phone turned sideways
+  // is still a phone and still cannot run play entry.
+  //
+  // Never user-agent. That string is wrong about every device released
+  // after it is written, and this has to be right about a phone nobody has
+  // bought yet. An iPad is 744px or more in its narrow dimension and passes.
+  function isPhone(){
+    var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    var narrow = Math.min(window.innerWidth, window.innerHeight) <= 500;
+    return !!(coarse && narrow);
+  }
+  // Lasts for this page view only. No storage: a scorer who dismissed this
+  // once on their own phone should still be warned the next time, because
+  // the reason has not changed.
+  var phoneOverride = false;
+
+  // Wired once, at parse time: the button is in the static markup, so it
+  // exists whether or not the notice is ever shown.
+  document.addEventListener('DOMContentLoaded', function(){
+    var b = document.getElementById('phoneAnyway');
+    if (b) b.addEventListener('click', function(){
+      phoneOverride = true;
+      enterMainView();
+    });
+  });
+
   function showView(name){
-    ['loading','errorView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+    ['loading','errorView','phoneView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
   }
   function showMsg(elId, text, type, opts){
     // `entry` marks a message that belongs to the open play panel rather
@@ -1660,6 +1721,29 @@
     gamePhase = game.game_phase || (plays.length === 0 ? 'notStarted' : 'firstHalf');
     if (currentGameStatus === 'final') gamePhase = 'ended';
     guided = (game.guided_state && game.guided_state.active) ? game.guided_state : { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
+    // A PHONE GETS THE NOTICE INSTEAD OF THE APP.
+    // ------------------------------------------------------------------
+    // Checked HERE, at the point the app would otherwise appear, rather
+    // than on load: the game still has to be fetched and any real error --
+    // wrong id, no access -- has to win over this. A scorer told "use a
+    // laptop" for a game that does not exist has been sent to the wrong
+    // problem.
+    //
+    // Dismissible on purpose. This is a judgement about screen width, and
+    // a false positive on some tablet nobody has tested would otherwise
+    // lock a scorer out mid-game -- which is far worse than a cramped
+    // panel. The escape hatch says so, and asks to be told.
+    if (isPhone() && !phoneOverride){
+      showView('phoneView');
+      return;
+    }
+    enterMainView();
+  }
+
+  // THE FOUR LINES THAT OPEN THE APP, IN ONE PLACE. "Open it anyway" on the
+  // phone notice has to do exactly what the normal path does -- and a second
+  // copy of a four-line sequence is a second copy to forget to update.
+  function enterMainView(){
     showView('mainView');
     renderAll();
     renderGuided();
