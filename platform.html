@@ -218,13 +218,29 @@
          view; a tenant's own admin manages their people from their account page.</p>
       <div style="display:flex; align-items:center; gap:14px; margin-bottom:10px; flex-wrap:wrap;">
         <button id="refreshUsersBtn" class="topAct" type="button">Refresh</button>
+        <!-- NOTHING UNTIL A TENANT IS CHOSEN. Every account across every
+             customer at once is a list nobody reads: the platform admin is
+             almost always here about ONE tenant, and scrolling past five
+             others to reach it is how the wrong Disable button gets pressed.
+             Populated from the accounts themselves rather than the tenant
+             table, so a user whose tenant was deleted still has a group to
+             appear under. -->
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px;
+               color:var(--sc-ink-soft, #3a3a3a); white-space:nowrap;">
+          <span>Tenant</span>
+          <select id="userTenantPick" style="padding:6px 8px; border-radius:6px;
+            border:1px solid var(--sc-rule, #e6e6e6); font-size:13px;
+            background:#fff; color:var(--sc-ink, #1a1a1a); min-width:190px;">
+            <option value="">Select a tenant&hellip;</option>
+          </select>
+        </label>
         <!-- DISABLED ACCOUNTS ARE OUT OF THE WAY BY DEFAULT. They are the
              minority and the least likely to need action, and on a list
              grouped by tenant they push the live accounts down. The count in
              the label is what makes hiding them honest -- you can see there
              are some without having to turn it on. -->
         <label style="display:flex; align-items:center; gap:6px; font-size:13px;
-               color:var(--sc-ink-soft, #3a3a3a); cursor:pointer;">
+               color:var(--sc-ink-soft, #3a3a3a); cursor:pointer; white-space:nowrap;">
           <input type="checkbox" id="showDisabledUsers" style="cursor:pointer;">
           <span id="showDisabledLabel">Show disabled accounts</span>
         </label>
@@ -502,6 +518,8 @@
   {
     const t = document.getElementById('showDisabledUsers');
     if (t) t.addEventListener('change', () => loadUsers(accessToken));
+    const tp = document.getElementById('userTenantPick');
+    if (tp) tp.addEventListener('change', () => loadUsers(accessToken));
   }
 
   ['Tenants', 'Users', 'Recovery'].forEach(which => {
@@ -954,18 +972,68 @@
     // likely to need action, and on a list grouped by tenant they push the
     // live ones down. Saying how many there are is what makes hiding them
     // honest -- you can tell they exist without turning the toggle on.
+    // ONE DEFINITION OF WHAT GROUP AN ACCOUNT BELONGS TO. The selector and
+    // the grouping below both need it, and two copies of this rule would
+    // eventually disagree about where a tenantless super admin goes.
+    // The \u0000 and \uffff prefixes sort the platform to the top and the
+    // unassigned to the bottom without a special case in the sort.
+    function groupKeyFor(u){
+      return u.isSuperAdmin ? '\u0000platform'
+           : !u.tenantId    ? '\uffffunassigned'
+           : u.tenantName || u.tenantId;
+    }
+    const heading = k => k === '\u0000platform' ? 'StatChat platform'
+                       : k === '\uffffunassigned' ? 'No tenant assigned'
+                       : k;
+
+    // THE TENANT LIST COMES FROM THE ACCOUNTS, not the tenants table: a user
+    // whose tenant row was deleted still needs somewhere to appear, and that
+    // is exactly the account most worth finding.
+    const pick = document.getElementById('userTenantPick');
+    if (pick){
+      const keys = [...new Set(allUsers.map(u =>
+        u.isSuperAdmin ? '\u0000platform'
+      : !u.tenantId    ? '\uffffunassigned'
+      : u.tenantName || u.tenantId))].sort();
+      const current = pick.value;
+      pick.innerHTML = '<option value="">Select a tenant\u2026</option>' +
+        '<option value="\u0001all">All tenants (' + allUsers.length + ')</option>' +
+        keys.map(k => '<option value="' + esc(k) + '">' + esc(heading(k)) +
+          ' (' + allUsers.filter(u => groupKeyFor(u) === k).length + ')</option>').join('');
+      // A tenant that has gone away between refreshes must not leave the
+      // control showing a name that is no longer in the list.
+      pick.value = [...pick.options].some(o => o.value === current) ? current : '';
+    }
+    const chosen = pick ? pick.value : '\u0001all';
+    if (!chosen){
+      body.innerHTML = '<p class="empty">Choose a tenant above to see its accounts.</p>';
+      return;
+    }
+
     const showDisabled = !!(document.getElementById('showDisabledUsers') || {}).checked;
-    const disabledCount = allUsers.filter(u => u.disabled).length;
+    // Counted within the CHOSEN tenant, not across everything: a count that
+    // says 3 while you are looking at a tenant with none of them is worse
+    // than no count at all.
+    const inScope = chosen === '\u0001all'
+      ? allUsers
+      : allUsers.filter(u => groupKeyFor(u) === chosen);
+    const disabledCount = inScope.filter(u => u.disabled).length;
     const lbl = document.getElementById('showDisabledLabel');
     if (lbl){
       lbl.textContent = disabledCount
         ? 'Show disabled accounts (' + disabledCount + ')'
         : 'Show disabled accounts';
     }
-    const users = showDisabled ? allUsers : allUsers.filter(u => !u.disabled);
+    const scoped = chosen === '\u0001all'
+      ? allUsers
+      : allUsers.filter(u => groupKeyFor(u) === chosen);
+    const users = showDisabled ? scoped : scoped.filter(u => !u.disabled);
     if (!users.length){
-      body.innerHTML = '<p class="empty">Every account is disabled. ' +
-        'Turn on \u201cShow disabled accounts\u201d to see them.</p>';
+      body.innerHTML = '<p class="empty">' +
+        (disabledCount
+          ? 'Every account here is disabled. Turn on \u201cShow disabled ' +
+            'accounts\u201d to see ' + (disabledCount === 1 ? 'it' : 'them') + '.'
+          : 'No accounts.') + '</p>';
       return;
     }
 
@@ -976,16 +1044,12 @@
     // other screen and is usually somebody invited and never assigned.
     const groups = new Map();
     users.forEach(u => {
-      const key = u.isSuperAdmin ? '\u0000platform'
-                : !u.tenantId    ? '\uffffunassigned'
-                : u.tenantName || u.tenantId;
+      const key = groupKeyFor(u);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(u);
     });
 
-    const heading = k => k === '\u0000platform' ? 'StatChat platform'
-                       : k === '\uffffunassigned' ? 'No tenant assigned'
-                       : k;
+
     // ONE TABLE FOR EVERY GROUP.
     // ------------------------------------------------------------------
     // Each tenant used to render its own <table>, so every one sized its
@@ -994,15 +1058,14 @@
     // wide one. A group heading is a full-width row inside the single table
     // instead, which is what actually holds the columns together.
     //
-    // The widths are fixed rather than left to the content: the two action
-    // columns hold buttons of known size, and letting them fight the text
-    // columns for space is how this drifted in the first place.
-    const COLS =
-      '<colgroup>' +
-        '<col style="width:20%;"><col style="width:26%;">' +
-        '<col style="width:11%;"><col style="width:15%;">' +
-        '<col style="width:12%;"><col style="width:16%;">' +
-      '</colgroup>';
+    // WIDTHS ARE LEFT TO THE CONTENT, deliberately. A first version added
+    // table-layout:fixed with declared percentages on top of this, and that
+    // is what pushed the table off the card: a fixed column cannot grow past
+    // its share, and the actions cell holds three buttons at roughly 340px
+    // against a 16% allowance. Auto layout sizes that column to its buttons
+    // and gives what is left to the text -- and the single table above is
+    // already what makes the rows line up, so the percentages were solving
+    // a problem that was fixed one line earlier.
 
     const groupRow = (k, n) =>
       '<tr><td colspan="6" style="padding:18px 10px 6px; border-bottom:none; ' +
@@ -1010,7 +1073,7 @@
         esc(heading(k)) +
         ' <span style="font-weight:400; color:#6b7680;">(' + n + ')</span></td></tr>';
 
-    body.innerHTML = '<table style="table-layout:fixed;">' + COLS +
+    body.innerHTML = '<table>' +
       '<tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th><th></th></tr>' +
       [...groups.keys()].sort().map(k => {
       const rows = groups.get(k).sort((a, b) =>
