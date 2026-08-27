@@ -975,16 +975,34 @@
     // ONE DEFINITION OF WHAT GROUP AN ACCOUNT BELONGS TO. The selector and
     // the grouping below both need it, and two copies of this rule would
     // eventually disagree about where a tenantless super admin goes.
-    // The \u0000 and \uffff prefixes sort the platform to the top and the
-    // unassigned to the bottom without a special case in the sort.
+    // PLAIN TEXT KEYS. These were '\u0000platform' and '\uffffunassigned',
+    // chosen so a plain sort would put the platform first and the unassigned
+    // last without a special case. That worked while they only ever lived in
+    // JavaScript -- but the tenant dropdown puts a key into an HTML attribute,
+    // and the parser replaces U+0000 with U+FFFD. The value that came back
+    // from the <select> was no longer the value written into it, so
+    // groupKeyFor(u) === chosen never matched and the platform group showed
+    // no accounts at all.
+    //
+    // A control character that round-trips today is a control character that
+    // might not tomorrow. The ordering is stated in the comparator instead,
+    // where it can be read.
+    const K_PLATFORM = 'grp:platform';
+    const K_UNASSIGNED = 'grp:unassigned';
+    const K_ALL = 'grp:all';
     function groupKeyFor(u){
-      return u.isSuperAdmin ? '\u0000platform'
-           : !u.tenantId    ? '\uffffunassigned'
+      return u.isSuperAdmin ? K_PLATFORM
+           : !u.tenantId    ? K_UNASSIGNED
            : u.tenantName || u.tenantId;
     }
-    const heading = k => k === '\u0000platform' ? 'StatChat platform'
-                       : k === '\uffffunassigned' ? 'No tenant assigned'
+    const heading = k => k === K_PLATFORM ? 'StatChat platform'
+                       : k === K_UNASSIGNED ? 'No tenant assigned'
                        : k;
+    // Platform first, unassigned last, everything else alphabetical.
+    const groupOrder = (a, b) => {
+      const rank = k => k === K_PLATFORM ? 0 : k === K_UNASSIGNED ? 2 : 1;
+      return rank(a) - rank(b) || a.localeCompare(b);
+    };
 
     // THE TOGGLE IS READ FIRST, because everything below depends on it --
     // including the dropdown. A first version built the options from every
@@ -1000,17 +1018,17 @@
     // is exactly the account most worth finding.
     const pick = document.getElementById('userTenantPick');
     if (pick){
-      const keys = [...new Set(visible.map(groupKeyFor))].sort();
+      const keys = [...new Set(visible.map(groupKeyFor))].sort(groupOrder);
       const current = pick.value;
       pick.innerHTML = '<option value="">Select a tenant\u2026</option>' +
-        '<option value="\u0001all">All tenants (' + visible.length + ')</option>' +
+        '<option value="' + K_ALL + '">All tenants (' + visible.length + ')</option>' +
         keys.map(k => '<option value="' + esc(k) + '">' + esc(heading(k)) +
           ' (' + visible.filter(u => groupKeyFor(u) === k).length + ')</option>').join('');
       // A tenant that has gone away between refreshes must not leave the
       // control showing a name that is no longer in the list.
       pick.value = [...pick.options].some(o => o.value === current) ? current : '';
     }
-    const chosen = pick ? pick.value : '\u0001all';
+    const chosen = pick ? pick.value : K_ALL;
     if (!chosen){
       body.innerHTML = '<p class="empty">Choose a tenant above to see its accounts.</p>';
       return;
@@ -1027,7 +1045,7 @@
     // With a tenant selected the count is that tenant's; on All tenants it is
     // everyone's, which is also the only place a wholly-hidden tenant's
     // accounts are still represented.
-    const inScope = chosen === '\u0001all'
+    const inScope = chosen === K_ALL
       ? allUsers
       : allUsers.filter(u => groupKeyFor(u) === chosen);
     const disabledCount = inScope.filter(u => u.disabled).length;
@@ -1037,7 +1055,7 @@
         ? 'Show disabled accounts (' + disabledCount + ')'
         : 'Show disabled accounts';
     }
-    const users = chosen === '\u0001all'
+    const users = chosen === K_ALL
       ? visible
       : visible.filter(u => groupKeyFor(u) === chosen);
     if (!users.length){
