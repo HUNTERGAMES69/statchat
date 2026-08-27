@@ -6191,10 +6191,32 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
       })();
       document.getElementById('guidedKickoffSave').addEventListener('click', () => {
-        if (!kickerNum) return;
+        // BOTH ANSWERS ARE REQUIRED, AND A REFUSAL HAS TO SAY SO.
+        // ----------------------------------------------------------------
+        // The kicker was already required, but `if (!kickerNum) return;`
+        // refused in silence -- the button did nothing and the scorer was
+        // left to guess. Direction was not required at all: the save simply
+        // skipped the setDirection play when none had been picked.
+        //
+        // Direction is not decoration. state.driveDir is derived from it and
+        // from nothing else, and it alternates by quarter off the one
+        // recorded answer -- so a kickoff saved without it leaves every
+        // later play with no direction to reason from, and re-recording it
+        // mid-game re-bases the alternation from THAT quarter rather than
+        // the first. It is cheapest to get right here, once, at the opening
+        // kickoff.
+        const missing = [];
+        if (!kickerNum) missing.push('the kicker');
+        if (!kickDir) missing.push('which way ' + TEAMS[guided.kickingTeam].name + ' is kicking');
+        if (missing.length){
+          showReviewMsg('Nothing has been saved \u2014 still needed: ' +
+            missing.join(' and ') + '.');
+          return;
+        }
         const text = nameInSpecialTeams(guided.kickingTeam, kickerNum) + ' kicks off';
         pushAndPersist({ id: nextId++, text, effect: {}, team: guided.kickingTeam, quarter: guided.quarter, roles: { kicker: { team: guided.kickingTeam, num: kickerNum, yards: 0 }, playType: 'kickoff' } });
-        if (kickDir){
+        {
+          // Unconditional now: kickDir cannot be null past the guard above.
           pushAndPersist({
             id: nextId++,
             // "kicking", matching the question that was asked. The
