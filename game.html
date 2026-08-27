@@ -7247,12 +7247,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // rows -- heading, sides, input -- and the tallest single thing on
     // the punt tree.
     //
-    // The heading keeps its full wording when it is the OPTIONAL variant,
-    // which carries a real instruction ("leave blank to set later") that
-    // a short label cannot replace. Only the required variant, whose text
-    // is a title rather than a direction, is shortened -- and it keeps
-    // the full sentence in a tooltip.
-    const longLabel = label || 'Starting spot for the ensuing drive (optional — leave blank to set later)';
+    // Only a label containing "required" is shortened to "Spot", keeping the
+    // full sentence in a tooltip: that text is a title rather than a
+    // direction, so it survives being cut.
+    // NOT OPTIONAL ANY MORE. This read "(optional -- leave blank to set
+    // later)" until 25 August 2026, when Review play began refusing a change
+    // of possession with no spot. A label promising something the app then
+    // refuses is worse than a blunt one: the scorer follows it and is
+    // blocked. Three trees take this default -- interception, fumble and
+    // field goal -- and the guard applies to all three.
+    const longLabel = label || 'Starting spot for the ensuing drive';
     const shortLabel = /required/i.test(longLabel) ? 'Spot' : longLabel;
     // A LABEL TOO LONG TO SIT INLINE GETS ITS OWN LINE instead of being
     // cut down. The guided kickoff's is "Ball spot after the return (sets
@@ -9178,33 +9182,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             defBlock('Recovered by (optional)', '_intfum') +
           '</div>' +
         '</div>' +
-        startingSpotFieldsHtml('pp_spot', null, def) +
-        // TAKEOVER SPOT CALCULATOR.
+        startingSpotFieldsHtml('pp_spot', null, def);
+        // TAKEOVER SPOT CALCULATOR: REMOVED, 25 August 2026.
         // ----------------------------------------------------------------
-        // The spot fields above are relative to the INTERCEPTING team --
-        // "own 12" means twelve yards from the goal line they are now
-        // defending. A scorer watching the play sees the defender go down
-        // on a yard line, on a side of the field, in the terms both teams
-        // are named by. Converting between those two under time pressure
-        // is exactly the arithmetic the punt calculator removed, and an
-        // interception is the play where possession has just flipped and
-        // the mental picture is least settled.
-        '<div id="pp_intspot_calc" style="margin-top:6px; margin-left:22px; padding-left:22px; ' +
-          'border-left:1px solid var(--sc-rule);">' +
-          fieldLabel('Or enter tackled on') +
-          '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
-            '<button type="button" class="ptoggle intSpotSide" data-side="off" ' +
-              'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
-              TEAMS[computeState().possession].name + '</button>' +
-            '<button type="button" class="ptoggle intSpotSide" data-side="def" ' +
-              'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
-              TEAMS[otherTeam(computeState().possession)].name + '</button>' +
-            '<input autocomplete="off" type="text" id="pp_intspot_yardline" placeholder="yard line" style="width:90px;">' +
-          '</span>' +
-          '<div id="pp_intspot_readout" style="font-size:14px; font-weight:600; color:#a3d93f; ' +
-            'background:#20272f; border-left:3px solid #1a7a4c; border-radius:4px; ' +
-            'padding:7px 10px; margin-top:10px;"></div>' +
-        '</div>';
+        // It existed to convert between two frames of reference. Its comment
+        // said the field above was relative to the INTERCEPTING team --
+        // "own 12" meaning twelve yards from the goal line they now defend --
+        // while a scorer sees the play in team names.
+        //
+        // That stopped being true. startingSpotFieldsHtml labels its own
+        // buttons with team names now: TEAMS[driveTeamKey].name + "'s side".
+        // So both controls asked the same question the same way, with the
+        // buttons in OPPOSITE ORDER and one carrying "'s side" -- worse than
+        // redundant, because it invites picking the wrong one out of habit.
+        //
+        // It solved a problem a later change to that helper had already
+        // solved, and its own comment kept describing the old world. Nothing
+        // load-bearing goes with it: the field above is what getReset()
+        // reads, and this only ever wrote into it.
     else if (type === 'fumble') html = offBlock('carrier','Who fumbled') +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="own"> Recovered by own team</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_fumrec" value="opp" checked> Recovered by opponent</label>' +
@@ -9790,9 +9785,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // refreshSpotCalcContext's own touchdown auto-fill just above --
         // the one rush/pass/sack already get right, since the offense
         // keeps driving the same direction it always was -- never reaches
-        // this panel at all: interceptions use their own separate spot
-        // calculator (wireIntSpotCalc, for the TAKEOVER spot, a different
-        // question) with no shared panel.__spotCalc, so pp_yards was
+        // this panel at all: interceptions have no shared panel.__spotCalc.
+        // (They once had their own wireIntSpotCalc for the TAKEOVER spot,
+        // removed 25 August 2026 as a duplicate of the field above it; it
+        // never touched this question either.) So pp_yards was
         // never touched, protected, or computed for this play at all. A
         // coach was left to work out a direction-reversed number by hand,
         // under time pressure, right after the single play in a game
@@ -10525,15 +10521,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           if (rw) rw.style.display = on ? 'none' : '';
           const sw = document.getElementById('pp_spot_wrap');
           if (sw) sw.style.display = on ? 'none' : '';
-          // The calculator goes with the field it fills. A touchback is a
-          // fixed spot -- their own 20 -- so there is nothing to work out,
-          // and leaving the calculator up would let a scorer type into a
-          // box whose answer is already decided.
-          const cw = document.getElementById('pp_intspot_calc');
-          if (cw){
-            cw.style.display = on ? 'none' : '';
-            cw.querySelectorAll('input, button').forEach(el => { el.disabled = on; });
-          }
+          // The takeover spot calculator used to be shown and hidden here
+          // beside the field it filled. Removed 25 August 2026 -- it asked
+          // the same question as the field above it -- so there is nothing
+          // left to toggle. The field itself is still handled by `sw` above.
           const btn = document.getElementById('pp_int_tb_toggle');
           if (btn){
             btn.textContent = (on ? '\u2713 ' : '') + 'Downed in the end zone — touchback';
@@ -10583,45 +10574,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // fields the scorer could fill by hand, so nothing downstream
         // needs to know it exists -- getReset() reads those fields either
         // way.
-        (function wireIntSpotCalc(){
-          const ylEl = document.getElementById('pp_intspot_yardline');
-          const readout = document.getElementById('pp_intspot_readout');
-          const spotYl = document.getElementById('pp_spot_yardline');
-          if (!ylEl || !readout || !spotYl) return;
-          const st = computeState();
-          const off = st.possession, def = otherTeam(off);
-          const sideBtns = [...panel.querySelectorAll('.intSpotSide')];
-          let side = null;
-          const paint = () => sideBtns.forEach(b => b.classList.toggle('picked', b.dataset.side === side));
-
-          function recompute(){
-            const raw = (ylEl.value || '').trim();
-            const yl = parseInt(raw, 10);
-            if (!side){ readout.textContent = 'Pick whose side of the field he was tackled on.'; return; }
-            if (!raw){ readout.textContent = 'Enter the yard line he was brought down on.'; return; }
-            if (!Number.isFinite(yl) || yl < 0 || yl > 50){
-              readout.textContent = 'Yard line must be 0\u201350.';
-              return;
-            }
-            // The spot fields are relative to the intercepting team, which
-            // is the DEFENSE on this play. Their own side is the side the
-            // offense has been attacking.
-            const takeoverOwn = (side === 'def');
-            const teamName = takeoverOwn ? TEAMS[def].name : TEAMS[off].name;
-            readout.textContent = 'tackled on ' + teamName + ' ' + yl +
-              '  \u2192  ' + TEAMS[def].name + ' take over on their ' +
-              (takeoverOwn ? 'own ' : 'opponent\u2019s ') + yl;
-            spotYl.value = String(yl);
-            spotYl.dataset.fromCalc = '1';
-            const want = takeoverOwn ? 'own' : 'opp';
-            const btn = panel.querySelector('.pp_spot_side[data-side="' + want + '"]');
-            if (btn && !btn.classList.contains('picked')) btn.click();
-          }
-
-          recompute();
-          sideBtns.forEach(b => b.addEventListener('click', () => { side = b.dataset.side; paint(); recompute(); }));
-          ylEl.addEventListener('input', recompute);
-        })();
       }
     }
     // The rush and pass panels only need a spot when their fumble is lost,
