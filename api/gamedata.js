@@ -95,13 +95,24 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const [gameRes, rosterRes, playsRes, teamRes] = await Promise.all([
+    const [gameRes, rosterRes, playsRes, teamRes, tenantRes] = await Promise.all([
       // SCOPED. `?id=` is caller-supplied, so without this a request could
         // name any school's game by id and be handed it.
         db.from('games').select('*').eq('id', resolvedId).eq('tenant_id', tenantId).limit(1),
       db.from('game_rosters').select('*').eq('game_id', resolvedId),
       db.from('plays').select('*').eq('game_id', resolvedId).order('sequence_number', { ascending: true }),
-      db.from('teams').select('primary_color, secondary_color, logo_url').eq('tenant_id', tenantId).limit(1)
+      db.from('teams').select('primary_color, secondary_color, logo_url').eq('tenant_id', tenantId).limit(1),
+      // WHO GETS THE SPONSOR BAR, ANSWERED HERE RATHER THAN IN THE URL.
+      // broadcast_stats.html carries a banner hardcoded to one school's
+      // sponsor. Defaulting it off and switching it on with something like
+      // ?sponsor=nettech would hide it, not restrict it -- anyone seeing the
+      // parameter could put that sponsor on their own broadcast.
+      //
+      // tenantId here came FROM THE OVERLAY KEY and was validated above. An
+      // overlay is a browser source in vMix with no session, so the key is
+      // the only identity it has -- which makes this the one place the
+      // question can be answered honestly.
+      db.from('tenants').select('sponsor_bar').eq('id', tenantId).limit(1)
     ]);
 
     const game = (gameRes.data || [])[0];
@@ -112,6 +123,10 @@ module.exports = async (req, res) => {
       roster: rosterRes.data || [],
       plays: playsRes.data || [],
       ourBranding: (teamRes.data || [])[0] || {},
+      // Explicit boolean, never undefined: the overlay treats anything but
+      // true as "no bar", and a missing column should read as off rather
+      // than as unknown.
+      sponsorBar: !!((tenantRes.data || [])[0] || {}).sponsor_bar,
       // So an overlay can tell how fresh this is, and grey itself out if
       // the scorer's device has stopped sending.
       served: new Date().toISOString(),
