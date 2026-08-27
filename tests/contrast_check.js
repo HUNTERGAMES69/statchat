@@ -715,6 +715,52 @@ console.log('\nPages with findings: ' + bad + ' of ' + files.length);
   }
 })();
 
+// ---- a text field must READ as a field ----------------------------------
+// These used a RAISED fill, lighter than the card -- what the light theme
+// did, and backwards here. At 1.10:1 off the card an input was LESS distinct
+// than a real button at 1.43:1, so an empty field read as a gap rather than
+// somewhere to type. On a dark screen a button is raised and a field is sunk.
+(function fieldsAreWells(){
+  const DARK = ['login','account','roster','customize','create_game','game'];
+  for (const name of DARK) {
+    const f = require('path').join(__dirname, '..', name + '.html');
+    if (!require('fs').existsSync(f)) continue;
+    const src = require('fs').readFileSync(f, 'utf8');
+
+    const rule = /input[^{\n]*\{[^}]*(?:background|background-color):\s*#([0-9a-fA-F]{6})[^}]*\}/.exec(src);
+    if (!rule) {
+      console.log('  FAIL ' + name + '.html: no text-field fill found — it is inheriting ' +
+                  'something, which is how the light raised fill survived the conversion');
+      bad++; continue;
+    }
+    const fill = '#' + rule[1];
+    const CARD = '#191f27';
+    // SUNK, not raised: the fill must be DARKER than the card it sits on.
+    const lumOf = c => { const h=c.replace('#','');
+      const p=[0,2,4].map(i=>{let x=parseInt(h.substr(i,2),16)/255;
+        return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4);});
+      return 0.2126*p[0]+0.7152*p[1]+0.0722*p[2]; };
+    if (lumOf(fill) >= lumOf(CARD)) {
+      console.log('  FAIL ' + name + '.html: the field fill (' + fill + ') is LIGHTER than ' +
+                  'the card — that is a weak button, not a field');
+      bad++;
+    }
+    if (!/box-shadow:\s*inset 0 1px 3px/.test(rule[0])) {
+      console.log('  FAIL ' + name + '.html: no inner shadow — a border alone draws a ' +
+                  'rectangle; the shadow is what reads as depth on an EMPTY field');
+      bad++;
+    }
+    // AUTOFILL HAS TO MATCH. WebKit paints its own fill that no background
+    // rule beats, so an autofilled field would snap back to looking raised
+    // while every other field on the form was a well.
+    if (/1000px var\(--(?:sc|v)-raise\) inset/.test(src)) {
+      console.log('  FAIL ' + name + '.html: the autofill override still paints the RAISED ' +
+                  'colour — a saved email would look unlike every other field');
+      bad++;
+    }
+  }
+})();
+
 // EXIT LAST. This line used to sit above the message-tint audit, so any
 // failure it found was counted after the exit code had already been decided
 // -- the audit could go red and the run still exit 0.
