@@ -11901,45 +11901,49 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // A POSSESSION CHANGE HAS TO CARRY A SPOT.
     // ------------------------------------------------------------------
     // A yard line typed with no side returned null from the spot getter,
-    // exactly like an empty field, and the save path treats null as "no
-    // spot needed". So a scorer could type 22, never say whose 22, and
-    // change possession with no field position recorded.
+    // exactly like an empty field, and the save path reads null as "no spot
+    // needed". So a scorer could type 22, never say whose 22, and change
+    // possession with no field position recorded.
     //
     // The counting stats survive that -- a rush for 8 is still 8. What does
     // not survive is every check that depends on knowing where the ball is:
     // validateGame skips its impossible-gain test when fieldPos is null,
-    // and the null propagates to every later play, so wrong numbers stop
-    // being caught for the rest of the drive. validateGame already counts
-    // these and reports at END OF GAME, which is the right concern raised
-    // at the wrong moment -- by then the drive is being rebuilt from
-    // memory instead of fixed in the ten seconds after the play.
+    // and the null propagates to every later play. validateGame already
+    // counts these and reports at END OF GAME -- the right concern at the
+    // wrong moment, when the drive is being rebuilt from memory.
     //
-    // Refused HERE rather than at save: Review play is where a scorer is
-    // already looking at the panel, and the field that needs attention is
-    // still in front of them.
+    // REPORTED THE SAME WAY A MISSING RUSHER IS. First version wrote into
+    // gameMsg, which is precisely what the comment on missingPlayer warns
+    // against: writing there grows the top of the document and shoves the
+    // panel out from under the scorer's thumb at the moment they are
+    // reading a refusal. showReviewMsg puts it beside Review play, and
+    // markRowGap marks the field itself.
     //
-    // Andy's call, 25 August 2026. A HIDDEN spot field is not a mistake --
-    // several live in wrappers the panel shows or hides by toggle -- so
-    // getReset.state() reports 'hidden' for those and they are skipped.
-    // A TOUCHDOWN HAS NO TAKEOVER SPOT, and the panel does not hide the
-    // field on one -- it only hides it for an onside kick or a kicking-team
-    // recovery. The save path already skips the reset when td is set
-    // (pending.reset = currentSpotGetter && !td), so blocking here would
-    // refuse a perfectly good kickoff return for a score. A false block
-    // mid-drive is worse than the gap being closed.
+    // A TOUCHDOWN IS EXEMPT. The panel does not hide the spot on a score --
+    // it only hides it for an onside kick or a kicking-team recovery -- and
+    // the save path already skips the reset when td is set, so blocking
+    // here would refuse a kickoff returned for a touchdown.
+    //
+    // A HIDDEN field is skipped too: several live in wrappers the panel
+    // toggles out of view, and those are not something a scorer missed.
     const tdChecked = !!(document.getElementById('pp_td') || {}).checked;
     if (!tdChecked && currentSpotGetter && typeof currentSpotGetter.state === 'function'){
-      const st = currentSpotGetter.state();
-      if (st === 'noSide' || st === 'noYardline' || st === 'empty'){
-        const why = st === 'noSide'
-          ? 'Pick which side of the field that yard line is on.'
-          : st === 'noYardline'
-            ? 'Enter the yard line for the spot.'
-            : 'Enter the spot where the ball was taken over \u2014 a side and a yard line.';
-        showMsg('gameMsg', why + ' Without it the play saves with no field ' +
-          'position, and every yardage check after it stops running.', 'error');
-        const el = document.getElementById(currentSpotGetter.prefix + '_yardline');
-        if (el && el.offsetParent){ el.scrollIntoView({ block: 'center' }); el.focus(); }
+      const spotState = currentSpotGetter.state();
+      if (spotState === 'noSide' || spotState === 'noYardline' || spotState === 'empty'){
+        const need = spotState === 'noSide'
+          ? 'which side of the field that yard line is on'
+          : spotState === 'noYardline'
+            ? 'the yard line for the spot'
+            : 'the spot where the ball was taken over — a side and a yard line';
+        showReviewMsg('Nothing has been saved — still needed: ' + need + '.');
+        const ylEl = document.getElementById(currentSpotGetter.prefix + '_yardline');
+        const row = ylEl && (ylEl.closest('.pick-row') || ylEl.parentElement);
+        if (row){
+          if (!row.id) row.id = 'rowgap_spot_' + currentSpotGetter.prefix;
+          markRowGap(row.id, 'Still needed: ' + need);
+        }
+        const cc = document.getElementById('confirmCard');
+        if (cc) cc.style.display = 'none';
         return;
       }
     }
