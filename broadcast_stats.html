@@ -1062,10 +1062,24 @@ function extractNameTag(rawName){
     document.getElementById('panel').style.display = 'block';
     const p = new URLSearchParams(window.location.search);
     document.body.classList.toggle('layout-portrait', portrait);
-    // ?sponsor=none drops the banner, for a game with no sponsor to name.
-    // top/bottom are gone: the position is settled and there is one bar.
-    document.body.classList.toggle('sponsor-none',
-      (p.get('sponsor') || '').toLowerCase() === 'none');
+    // THE SPONSOR BAR IS OFF UNTIL THE SERVER SAYS OTHERWISE.
+    // ------------------------------------------------------------------
+    // The banner is hardcoded to one school's sponsor -- a domain, a logo
+    // and a phone number -- and was shipping to every tenant. Another
+    // school's broadcast should not be carrying it.
+    //
+    // It used to be ON by default with ?sponsor=none to remove it. That is
+    // the wrong way round for a multi-tenant product, and the obvious
+    // inversion -- off by default, ?sponsor=nettech to show it -- would
+    // only HIDE it: anyone who saw the parameter could put that sponsor on
+    // their own overlay.
+    //
+    // So the decision is made server-side. api/gamedata.js resolves the
+    // tenant FROM THE OVERLAY KEY, which is the only identity a vMix
+    // browser source has, and returns sponsorBar. Applied in
+    // fetchAndRender when that answer arrives; until then the class stays
+    // on, so the bar cannot flash up on a tenant that should never see it.
+    document.body.classList.add('sponsor-none');
     document.body.classList.toggle('debug', p.get('debug') === '1');
   }
 
@@ -1116,6 +1130,11 @@ function extractNameTag(rawName){
     startingPossession = d.game.starting_possession || 'teamA';
     quarterLengthSec   = d.game.quarter_length_seconds || 720;
     buildTeams(d.game, d.roster || [], d.ourBranding || {});
+    // Only a literal true shows it. An older API that does not send the
+    // field, or a failed request, leaves the bar hidden -- which is the
+    // safe direction: a missing answer must not reveal another school's
+    // sponsor.
+    document.body.classList.toggle('sponsor-none', d.sponsorBar !== true);
     plays = (d.plays || []).map(p => ({
       id: p.id, seq: p.sequence_number, text: p.text,
       effect: p.effect || {}, roles: p.roles || null,
