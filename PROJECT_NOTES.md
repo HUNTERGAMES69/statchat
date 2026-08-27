@@ -3662,3 +3662,63 @@ rather than starting a boot sequence.
 Checked after the game loads, so a real error — wrong id, no access — still
 wins. A scorer told "use a laptop" for a game that does not exist has been
 sent to the wrong problem.
+
+
+## There is no way to create a platform account, on purpose (26 August 2026)
+
+Asked how one would be added if it were ever needed. The answer turned out
+to be that every existing route refuses to make one, and that is right:
+
+- `api/invite-user.js` requires a tenant. A super admin may choose WHICH
+  tenant, but not "none" -- `if (!targetTenantId)` returns 400.
+- `api/manage-users.js` has list, setRole, setPassword, sendReset,
+  resendInvite, delete and setDisabled. **No create.**
+
+A platform account has `tenant_id = null` and reads every customer's data.
+It should not be creatable from the same form that adds a coach, and the
+platform console has no audit trail yet -- it says so on the page -- so an
+action there that mints one would be the worst thing to add first.
+
+### But nothing recorded how the existing one was made
+
+No migration sets `is_super_admin`; `006_tenants.sql` adds the column with
+`default false` and nothing ever writes true. So the one platform account
+was granted by hand and the method lived only in somebody's memory.
+
+`sql/grant_platform_admin.sql` writes it down. Not a migration -- nothing
+runs it automatically and it does not register in `schema_migrations`,
+because this is a deliberate occasional act rather than a schema change.
+
+**Step 1 is not SQL.** `auth.users` carries hashed passwords, a matching
+row in `auth.identities`, and confirmation token state that has to agree
+with it. An account assembled by hand looks present and then fails at some
+later step -- a password reset that goes nowhere -- and the cause is a long
+way from the symptom. Use the Supabase dashboard or `auth.admin.createUser`,
+and let the `create_profile_for_new_user` trigger build the profile row.
+
+**Step 2 is SQL**, and sets three things: `is_super_admin = true` (what
+`is_super_admin()` reads, and every platform RLS policy is written against
+that function), `tenant_id = null`, and `role = 'admin'` -- which is not
+what grants platform access, but several pages check `role` for ordinary
+admin controls and a super admin left on 'view' hits odd corners.
+
+### Two details found by running it
+
+**`\set` does not work in the Supabase SQL editor.** It is psql only. A
+variable the editor ignores is worse than repetition: `:'target_email'`
+would be sent literally, the UPDATE would match nothing, and it would
+report success. The email is written out in each statement instead.
+
+**An UPDATE that matches nothing is not an error.** A typo in the email
+gives `UPDATE 0` and no complaint, which is why the script opens with a
+SELECT to run first and closes with one to confirm.
+
+Matched on email rather than a pasted uuid throughout: an email is
+checkable by eye and a uuid is not, and the wrong uuid here hands one
+customer's admin every other customer's data.
+
+### Who has it
+
+The confirm query at the foot of that script is the only record. Nothing
+logs a grant, so the list of accounts IS the list -- worth reading
+occasionally for that reason.

@@ -300,3 +300,20 @@ of what changed and what needs doing.
 - **A test asserting a thing EXISTS is not asserting it is USED.** Four
   separate audits passed on mutations that left the shape intact and
   removed the behavior.
+
+
+## Adding a platform account (noted 26 August 2026)
+
+There is no button for it, deliberately: `invite-user` requires a tenant and
+`manage-users` has no create action. See `sql/grant_platform_admin.sql`.
+
+Two steps. **Create the auth user in the Supabase dashboard** (Authentication
+-> Users -> Add user) -- not by inserting into `auth.users`, which carries
+password hashes and identity rows that have to stay consistent. Then run the
+UPDATE in that script to set `is_super_admin`, `tenant_id = null` and
+`role = 'admin'`.
+
+Edit the email in all three statements: `\set` does not work in the Supabase
+SQL editor, and a variable it ignores is sent literally, matching nothing
+while reporting success. Run the SELECT at the top first -- an UPDATE that
+matches no rows is not an error.

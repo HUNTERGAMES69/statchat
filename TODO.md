@@ -125,6 +125,25 @@ rediscovered from scratch.
 
 ---
 
+## 0c3. PLATFORM ACCOUNTS HAVE NO AUDIT TRAIL
+
+`sql/grant_platform_admin.sql` now documents how one is created and
+revoked, which closes the "nobody wrote it down" problem. What it does not
+close:
+
+- [ ] **Nothing logs a grant.** The list of accounts with
+  `is_super_admin = true` is the only record that any were ever made. An
+  account that reads every customer's data is exactly the one worth having
+  a trail for. Same gap the platform console already admits to for
+  disable/reset/temp-password.
+
+- [ ] **`role` and `is_super_admin` can disagree.** Platform access comes
+  from `is_super_admin`; several pages check `role` for ordinary admin
+  controls. A super admin left on 'view' half-works. The script sets both,
+  but nothing enforces the pairing.
+
+---
+
 ## 0d. UNFILTERED QUERIES THAT RLS USED TO NARROW — sweep needed
 
 Three found by accident on 24 Aug, all the same shape: a query safe only
