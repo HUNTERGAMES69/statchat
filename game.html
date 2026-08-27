@@ -5977,7 +5977,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
       document.getElementById('ot_review').addEventListener('click', () => {
         const reset = getReset();
-        if (!reset) return;
+        // OVERTIME REFUSED SILENTLY. It already declined an incomplete spot
+        // -- getReset returns null -- but said nothing, which is the same
+        // complaint that produced spotIsMissing: the button does nothing and
+        // the scorer cannot tell why. It cannot use spotIsMissing itself,
+        // because that reads currentSpotGetter and the overtime panel has
+        // its own local getter, so the message is stated here.
+        if (!reset){
+          const st = typeof getReset.state === 'function' ? getReset.state() : 'empty';
+          const need = st === 'noSide'
+            ? 'which side of the field that yard line is on'
+            : st === 'noYardline'
+              ? 'the yard line for the spot'
+              : 'the starting spot \u2014 a side and a yard line';
+          showReviewMsg('Nothing has been saved \u2014 still needed: ' + need + '.');
+          return;
+        }
         // otSeriesStart marks this as the START of a series, which is what
         // the round counter reads. A manual flip writes the same
         // forcePossession effect and must NOT be mistaken for one.
@@ -11898,55 +11913,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   }
 
   function buildAndReview(type, sel){
-    // A POSSESSION CHANGE HAS TO CARRY A SPOT.
-    // ------------------------------------------------------------------
-    // A yard line typed with no side returned null from the spot getter,
-    // exactly like an empty field, and the save path reads null as "no spot
-    // needed". So a scorer could type 22, never say whose 22, and change
-    // possession with no field position recorded.
-    //
-    // The counting stats survive that -- a rush for 8 is still 8. What does
-    // not survive is every check that depends on knowing where the ball is:
-    // validateGame skips its impossible-gain test when fieldPos is null,
-    // and the null propagates to every later play. validateGame already
-    // counts these and reports at END OF GAME -- the right concern at the
-    // wrong moment, when the drive is being rebuilt from memory.
-    //
-    // REPORTED THE SAME WAY A MISSING RUSHER IS. First version wrote into
-    // gameMsg, which is precisely what the comment on missingPlayer warns
-    // against: writing there grows the top of the document and shoves the
-    // panel out from under the scorer's thumb at the moment they are
-    // reading a refusal. showReviewMsg puts it beside Review play, and
-    // markRowGap marks the field itself.
-    //
-    // A TOUCHDOWN IS EXEMPT. The panel does not hide the spot on a score --
-    // it only hides it for an onside kick or a kicking-team recovery -- and
-    // the save path already skips the reset when td is set, so blocking
-    // here would refuse a kickoff returned for a touchdown.
-    //
-    // A HIDDEN field is skipped too: several live in wrappers the panel
-    // toggles out of view, and those are not something a scorer missed.
-    const tdChecked = !!(document.getElementById('pp_td') || {}).checked;
-    if (!tdChecked && currentSpotGetter && typeof currentSpotGetter.state === 'function'){
-      const spotState = currentSpotGetter.state();
-      if (spotState === 'noSide' || spotState === 'noYardline' || spotState === 'empty'){
-        const need = spotState === 'noSide'
-          ? 'which side of the field that yard line is on'
-          : spotState === 'noYardline'
-            ? 'the yard line for the spot'
-            : 'the spot where the ball was taken over — a side and a yard line';
-        showReviewMsg('Nothing has been saved — still needed: ' + need + '.');
-        const ylEl = document.getElementById(currentSpotGetter.prefix + '_yardline');
-        const row = ylEl && (ylEl.closest('.pick-row') || ylEl.parentElement);
-        if (row){
-          if (!row.id) row.id = 'rowgap_spot_' + currentSpotGetter.prefix;
-          markRowGap(row.id, 'Still needed: ' + need);
-        }
-        const cc = document.getElementById('confirmCard');
-        if (cc) cc.style.display = 'none';
-        return;
-      }
-    }
     // Shared by both fake paths: read the sub-panel and build the code.
     const fakeCode = (pre, isFg) => {
       const panelEl = document.getElementById('playPanel');
@@ -12623,7 +12589,60 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
   }
 
+  // A POSSESSION CHANGE HAS TO CARRY A SPOT.
+  // --------------------------------------------------------------------
+  // A yard line typed with no side returned null from the spot getter,
+  // exactly like an empty field, and the save path reads null as "no spot
+  // needed". So a scorer could type 22, never say whose 22, and change
+  // possession with no field position recorded.
+  //
+  // The counting stats survive that -- a rush for 8 is still 8. What does
+  // not survive is every check that depends on knowing where the ball is:
+  // validateGame skips its impossible-gain test when fieldPos is null and
+  // the null propagates to every later play.
+  //
+  // CALLED FROM showConfirm, NOT buildAndReview. The first version guarded
+  // buildAndReview, which is only the main play panel -- bad snap, QB
+  // kneel, penalty and drive-adjust all have their own Review buttons and
+  // went straight past it. Bad snap sets currentSpotGetter like everything
+  // else, so it was refusing nothing. showConfirm is the one point they all
+  // reach, so guarding it covers every panel including any added later.
+  //
+  // Overtime is the exception and needs none: its handler already refuses
+  // with `if (!reset) return;` before it gets anywhere near here.
+  //
+  // Reported the way a missing rusher is -- beside Review play, not in
+  // gameMsg, which grows the top of the document and shoves the panel out
+  // from under the scorer's thumb as they read the refusal.
+  function spotIsMissing(){
+    // A TOUCHDOWN HAS NO TAKEOVER SPOT. The panel does not hide the field
+    // on a score -- only for an onside kick or a kicking-team recovery --
+    // and the save path already skips the reset when td is set, so this
+    // would otherwise refuse a kickoff returned for a touchdown.
+    const tdChecked = !!(document.getElementById('pp_td') || {}).checked;
+    if (tdChecked) return false;
+    if (!currentSpotGetter || typeof currentSpotGetter.state !== 'function') return false;
+    const spotState = currentSpotGetter.state();
+    if (spotState !== 'noSide' && spotState !== 'noYardline' && spotState !== 'empty') return false;
+    const need = spotState === 'noSide'
+      ? 'which side of the field that yard line is on'
+      : spotState === 'noYardline'
+        ? 'the yard line for the spot'
+        : 'the spot where the ball was taken over \u2014 a side and a yard line';
+    showReviewMsg('Nothing has been saved \u2014 still needed: ' + need + '.');
+    const ylEl = document.getElementById(currentSpotGetter.prefix + '_yardline');
+    const row = ylEl && (ylEl.closest('.pick-row') || ylEl.parentElement);
+    if (row){
+      if (!row.id) row.id = 'rowgap_spot_' + currentSpotGetter.prefix;
+      markRowGap(row.id, 'Still needed: ' + need);
+    }
+    const cc = document.getElementById('confirmCard');
+    if (cc) cc.style.display = 'none';
+    return true;
+  }
+
   function showConfirm(){
+    if (spotIsMissing()) return;
     const val = document.getElementById('code').value;
     if (!val) return;
     const state = computeState();
