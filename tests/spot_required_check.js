@@ -75,23 +75,51 @@ else {
 chk(/const tdChecked = !!\(document\.getElementById\('pp_td'\)/.test(src),
     'a TOUCHDOWN is exempt — there is no takeover spot on a score, and the ' +
     'panel leaves the field visible, so this would otherwise refuse a good play');
-chk(/!tdChecked && currentSpotGetter/.test(src),
-    'and the exemption is checked BEFORE the state, not after');
+{
+  const fn = /function spotIsMissing\(\)\{[\s\S]*?\n  \}/.exec(src)[0];
+  const tdAt = fn.indexOf('tdChecked');
+  const stateAt = fn.indexOf('currentSpotGetter.state()');
+  chk(tdAt > -1 && stateAt > tdAt,
+      'the touchdown exemption is checked BEFORE the state, so a score never ' +
+      'even asks the question');
+}
 
 // ---- refused at review, not at save --------------------------------------
-const guardAt = src.indexOf('A POSSESSION CHANGE HAS TO CARRY A SPOT');
-const fnAt = src.indexOf('function buildAndReview');
-chk(guardAt > -1 && fnAt > -1 && guardAt > fnAt && guardAt - fnAt < 400,
-    'refused at Review play, where the scorer is already looking at the ' +
-    'panel and the field needing attention is still in front of them');
+// GUARDED AT THE CHOKE POINT, not at one panel. The first version guarded
+// buildAndReview, which is only the main play panel -- bad snap, QB kneel,
+// penalty and drive-adjust each have their own Review button and went
+// straight past it. Bad snap sets currentSpotGetter like everything else,
+// so it was refusing nothing.
+chk(/function showConfirm\(\)\{\s*\n\s*if \(spotIsMissing\(\)\) return;/.test(src),
+    'the guard runs in showConfirm, the one point every Review button reaches');
+chk((src.match(/function spotIsMissing/g) || []).length === 1,
+    'defined once, so no panel can drift onto a stale copy');
+{
+  // every review handler must reach it, directly or through buildAndReview
+  const L = src.split('\n');
+  const paths = ['drive_review','pen_review','badsnap_review','kneel_review','pp_review'];
+  const missed = paths.filter(id => {
+    const i = L.findIndex(l => l.includes("getElementById('" + id + "')") && /addEventListener/.test(l));
+    if (i < 0) return true;
+    const win = L.slice(i, i + 90).join('\n');
+    return !/showConfirm\(\)/.test(win) && !/buildAndReview\(/.test(win);
+  });
+  chk(missed.length === 0,
+      'and every Review button reaches it' + (missed.length ? ' — missed: ' + missed.join(', ') : ''));
+}
+// OVERTIME is the exception: it has its own local getter, so it cannot call
+// spotIsMissing. It already refused an incomplete spot -- but SILENTLY,
+// which is the same complaint that produced this whole guard.
+chk(/if \(!reset\)\{[\s\S]{0,400}showReviewMsg/.test(src),
+    'overtime states what is missing rather than refusing silently');
 // REPORTED THE SAME WAY A MISSING RUSHER IS. The first version wrote into
 // gameMsg -- which is exactly what the comment on missingPlayer warns
 // against: writing there grows the top of the document and shoves the panel
 // out from under the scorer's thumb at the moment they are reading a
 // refusal.
 {
-  const guard = /A POSSESSION CHANGE HAS TO CARRY A SPOT[\s\S]*?\n    \}\n/.exec(src)[0];
-  chk(/showReviewMsg\('Nothing has been saved — still needed: '/.test(guard),
+  const guard = /function spotIsMissing\(\)\{[\s\S]*?\n  \}/.exec(src)[0];
+  chk(guard.indexOf("showReviewMsg('Nothing has been saved") !== -1,
       'the refusal reads like the missing-rusher one and sits beside Review ' +
       'play, not at the top of the page');
   chk(/markRowGap\(/.test(guard),
@@ -109,17 +137,17 @@ chk(guardAt > -1 && fnAt > -1 && guardAt > fnAt && guardAt - fnAt < 400,
 // the placement. Replacing the guard's condition with `if (false)` left all
 // of them passing: the parts were all present and the behaviour was gone.
 {
-  const guard = /A POSSESSION CHANGE HAS TO CARRY A SPOT[\s\S]*?\n    \}\n/.exec(src);
+  const guard = /function spotIsMissing\(\)\{[\s\S]*?\n  \}/.exec(src);
   chk(!!guard, 'the guard block is present');
   if (guard) {
     const g = guard[0];
-    chk(/if \(spotState === 'noSide' \|\| spotState === 'noYardline' \|\| spotState === 'empty'\)/.test(g),
+    chk(/spotState !== 'noSide' && spotState !== 'noYardline' && spotState !== 'empty'/.test(g),
         'and its condition names the three refusable states — not a constant, ' +
         'and not a subset');
-    chk(/showReviewMsg\(/.test(g) && /return;/.test(g),
-        'it reports and RETURNS, so the play is not built');
+    chk(/showReviewMsg\(/.test(g) && /return true;/.test(g),
+        'it reports and returns TRUE, so showConfirm stops');
     const showAt = g.indexOf('showReviewMsg(');
-    const retAt = g.indexOf('return;', showAt);
+    const retAt = g.indexOf('return true;', showAt);
     chk(showAt > -1 && retAt > showAt,
         'in that order — a return before the message would refuse silently');
   }
