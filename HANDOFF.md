@@ -231,3 +231,72 @@ the file.** `gamemock.html` is a copy of `game.html` kept for exactly that.
 - **Read the log before explaining a failure.** Vercel Deployments,
   Supabase Auth Logs, the browser address bar. Four theories were offered
   ahead of their evidence on 23 Aug and two were simply wrong.
+
+---
+
+# WHERE TO PICK UP — end of 26 August 2026
+
+Reasoning for all of this is in `PROJECT_NOTES.md`; this is the short list
+of what changed and what needs doing.
+
+## Needs running at Supabase
+
+- [ ] **`sql/023_tenant_sponsor_bar.sql`** — adds `tenants.sponsor_bar`
+  (default false) and switches Neville on. Already run once; noted here so
+  a fresh environment gets it. A migration reporting **"no rows returned"
+  is success** — `ALTER`/`UPDATE`/`INSERT` return no rows, and mistaking
+  that for failure cost a round trip on 26 Aug.
+
+## What closed on 26 August
+
+- **Return yards.** Twelve typed boxes; three kept hidden as calculator
+  output with the answer shown below, nine removed as uncredited. Every
+  play code verified backward-compatible against saved history. `Or enter`
+  labels dropped where nothing is an alternative any more.
+- **Spot enforcement.** A change of possession is refused without a
+  complete spot, from `showConfirm()` so every Review button is covered.
+  Overtime states its own message. Hidden fields and touchdowns exempt.
+- **Sponsor bar** is per-tenant via the overlay key, not a URL parameter.
+- **Re-import roster** button in `create_game.html` edit mode, with a diff
+  before committing. Our team only; refuses once a game has plays.
+- **Pre-game controls.** Penalty and Timeout looked lit while disabled
+  (inline fills beat `:disabled`); Manual entry was never disabled at all.
+- **Guided kickoff** requires kicker and direction, and now says so — the
+  guided panel had no message slot, so refusals had been silent.
+- **Phone warning** on `game.html`: an overlay over a working app, not a
+  block.
+- **Text fields** recessed across six dark pages, including the autofill
+  override that would otherwise have repainted them.
+
+## Open, and worth knowing
+
+- **~26 test suites are red on harness gaps, not the app** — `maybeSingle`
+  unstubbed, `supabaseClient` out of scope in `RECOVER_STRANDED_PLAYS`.
+  Verified identical against the pre-session file. Several other suites are
+  merely slow: `whitelist_check` needs about 41 seconds and passes.
+- **Four Red Stick players carry `LUKE HENDERSON` as their position** — a
+  column misalignment in the source spreadsheet. Fix the file, not the rows.
+- **The demo game's roster snapshot predates the position upload.** Edit it
+  and use Re-import to fix the missing kicker.
+
+## Lessons worth carrying
+
+- **An id can be overloaded across panels without being overloaded within
+  one.** `pp_yards` means kick distance on a punt and the return on an
+  interception. Checking per panel unblocked two changes that had looked
+  dangerous for several steps.
+- **A default in a render loop is not a default.** `renderAll()` runs on
+  every poll, so anything it sets overrides the server on the next refresh.
+- **An inline fill defeats every disabled rule on the page.** Enumerate the
+  buttons; do not reason about which ones probably have one.
+- **Adding a guard and a message in one edit needs the message checked
+  separately.** `showReviewMsg` writes to an element `renderPlayPanel()`
+  builds, so every refusal raised from the guided flow went nowhere.
+- **Comment-anchored slices over-ran three times** on a file that builds
+  HTML from concatenated strings, and `node --check` cannot see the damage
+  because the result is still valid JavaScript. Count `<div>` against
+  `</div>` in the affected branch, or slice by line number with assertions
+  on the boundaries.
+- **A test asserting a thing EXISTS is not asserting it is USED.** Four
+  separate audits passed on mutations that left the shape intact and
+  removed the behavior.

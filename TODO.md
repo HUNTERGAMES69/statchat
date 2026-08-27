@@ -90,6 +90,41 @@ LOUDLY for the platform instead of rendering an arbitrary customer.
 ---
 
 
+## 0c2. FROM THE 26 AUGUST SESSION — two things left open
+
+Neither blocks anything. Both are recorded because a red test nobody
+expects to be red stops being read, and a bad row nobody wrote down gets
+rediscovered from scratch.
+
+- [ ] **~26 test suites fail on harness gaps, not on the app.** The mock
+  Supabase client does not stub `maybeSingle`, and `RECOVER_STRANDED_PLAYS`
+  references a `supabaseClient` that is not in scope. Verified against the
+  pre-session file: they fail identically, so this is not new. But a suite
+  that is expected to be red is a suite nobody reads, and the count is
+  large enough now to hide a real failure.
+
+- [ ] **Four Red Stick players have a person's name in the position
+  column.** `#38 Trevor Chavez`, `#39 Tristan Baker`, `#7 Brian Jimenez`
+  and `#8 Dominic Cruz` all carry `LUKE HENDERSON` as `primary_position` —
+  a column misalignment in the uploaded spreadsheet. That maps to no unit,
+  so all four go through the assignment flow on every game creation. Fix
+  the source file rather than the rows, or the next upload restores it.
+
+- [ ] **Play-panel kickoff direction is still optional.** Deliberate, for
+  now: a mid-game kickoff happens when direction is already established,
+  and `engine.js` notes that re-recording it mid-game re-bases the
+  alternation from that quarter. The panel highlights the derived answer as
+  a *suggestion* rather than pre-selecting it — worth checking whether that
+  highlight reads as tappable, since a scorer who ignores it writes null.
+
+- [ ] **The sponsor bar's content is still hardcoded.** Only its
+  *visibility* is per-tenant (`tenants.sponsor_bar`, migration 023). The
+  domain, image and phone number are baked into `broadcast_stats.html`.
+  Making it configurable is a real feature and nobody has asked for it;
+  recorded so the limit is known rather than rediscovered.
+
+---
+
 ## 0d. UNFILTERED QUERIES THAT RLS USED TO NARROW — sweep needed
 
 Three found by accident on 24 Aug, all the same shape: a query safe only

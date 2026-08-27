@@ -3413,3 +3413,252 @@ one of its eleven call sites went.
 **The one risk that is not technical:** dark suits a control room and not
 daylight. If a crew works in a bright room or points a camera at the
 screen, this is a tradeoff rather than an improvement.
+
+## Return yards: twelve boxes, and why only three survived (26 August 2026)
+
+Twelve places on the game page had a typed "Return yards (optional)" box.
+They fell into two families that looked identical on screen and were
+nothing alike underneath, and confusing the two cost most of a session.
+
+**Three were fed by a calculator.** Kickoff return, punt return, guided
+kickoff return. The scorer enters where the ball was fielded and where it
+ended; the calculator writes the difference into the box and disables it.
+So the box was never really an input there — it was the calculator's
+output channel *and* the element the save path read. Removing it would
+have deleted the answer.
+
+Those three keep the input, hidden, and show the number in a read-only
+block underneath the calculator that produced it. Nothing in the write or
+read chain changed; only visibility and position.
+
+**Nine were typed-only.** Both muffs, blocked punt, blocked FG, FG muff,
+the three fumble returns, and the interception. No calculator, and none
+possible: deriving a return needs two spots and each of those panels asks
+for one — the takeover spot, which is already the *end* of any return.
+Andy's call was that none of it is a credited stat anywhere StatChat
+tracks, so all nine inputs were removed outright.
+
+### The part that needed care: play codes are positional
+
+Every removal had to leave saved history parsing identically.
+
+- **Unconditional tokens** (`pm`, `km`) keep emitting. `yards()` returns
+  `''` for a missing element and each call site already appended `|| '0'`,
+  so the code keeps its exact shape and the parser's
+  `if (retyds && parseInt(retyds))` skips a zero.
+- **Conditional tokens** (`pb`, `fg b`, `fg m`, `f`, `x`) simply stop
+  appearing — which is what a blank box already produced, so the parser has
+  always handled it.
+- Dropping an unconditional token would have shifted `td` into the return
+  slot on any play without a touchdown. That is the failure mode worth
+  remembering: silent corruption of saved data, not an error.
+
+The fumble codes were the closest call. The return is followed by the
+attempt token (`a:r:8`), so with the return gone `rest[1]` becomes that
+token — except the parser splices `a:` out of `rest[]` before the fumble
+branch reads position 1. Verified by running the real stripping order, not
+by reading it.
+
+### The pp_yards caution was too broad
+
+Interception and fumble-to-opponent use the default id `pp_yards`, which on
+a punt or field goal panel means the KICK DISTANCE — and pointing a
+calculator at it once overwrote a blocked kick's 44 yards with a 60-yard
+return. That history made both look dangerous and held them back for
+several steps.
+
+Checked per panel, each used it exactly once, as the return. **The id is
+overloaded across panels, not within one.** That distinction is the whole
+answer, and it is worth applying before treating any shared id as radioactive.
+
+---
+
+## A spot is what makes a statistic checkable (26 August 2026)
+
+`wireStartingSpot`'s getter returned a bare `null` for three different
+situations — nothing entered, a yard line with no side, a side with no yard
+line — and the save path reads `null` as "no spot needed". So a scorer could
+type 22, never say whose 22, and change possession with no field position
+recorded.
+
+**The counting stats survive that.** A rush for 8 is still 8, because
+`statYds` comes off the play. What does not survive is every check that
+depends on knowing where the ball is: `validateGame` skips its
+impossible-gain test when `fieldPos` is null, and the null propagates to
+every later play. So the sharper statement is that the spot is not what
+records statistics — it is what makes them *checkable*. Wrong numbers stop
+being caught.
+
+`validateGame` already counted these and reported at END OF GAME. The right
+concern at the wrong moment: by then the drive is being rebuilt from memory
+instead of fixed in the ten seconds after the play.
+
+### Guarded at the choke point, not at one panel
+
+First version guarded `buildAndReview`, which is only the main play panel.
+Bad snap, QB kneel, penalty and drive-adjust each have their own Review
+button and went straight past it — and bad snap sets `currentSpotGetter`
+like everything else, so it was refusing nothing.
+
+It now runs in `showConfirm()`, which every one of those paths reaches.
+Overtime is the exception: it has its own local getter, and it already
+refused an incomplete spot but *silently*, which is the same complaint.
+
+Two exemptions, both necessary. A **hidden** spot field is skipped —
+several live in wrappers the panel toggles out of view. And a
+**touchdown** is exempt: the panel does not hide the spot on a score, and
+the save path already skips the reset when `td` is set, so without the
+exemption a kickoff returned for a touchdown would be refused.
+
+---
+
+## The sponsor bar: hiding is not restricting (26 August 2026)
+
+`broadcast_stats.html` carried a banner with one school's sponsor hardcoded
+into it — domain, logo, phone — and shipped it to every tenant.
+
+The obvious fix is to default it off and switch it on with
+`?sponsor=nettech`. That hides it; it does not restrict it. Anyone who saw
+the parameter could put that sponsor on their own broadcast.
+
+`api/gamedata.js` resolves the tenant FROM THE OVERLAY KEY — the only
+identity a vMix browser source has, since there is no session — so that is
+the one place the question can be answered honestly. Migration 023 adds
+`tenants.sponsor_bar`, defaulting false; the API returns it; the overlay
+obeys. A URL cannot override it.
+
+**It fails toward hidden.** An older API that does not send the field, or a
+failed request, leaves the bar off. A missing answer must not reveal
+another school's sponsor.
+
+### The bug that made all three look wrong
+
+The first version put `classList.add('sponsor-none')` inside `renderAll()`,
+which runs on **every poll**. Each cycle: the server said show, the toggle
+removed the class, `renderAll()` added it straight back. Database correct,
+API correct, overlay logic correct — and the wrong one ran last.
+
+**A default that lives in a render loop is not a default.** It now sits on
+the `<body>` tag, applied once and only ever removed.
+
+---
+
+## A game's roster is a snapshot, and nothing said when it drifted (26 August 2026)
+
+A kicker uploaded as `K` showed "Special" on the roster page and was absent
+from the kickoff picker. Four queries to find out why.
+
+`roster.html` derives its unit badge from `primary_position` **on every
+load**. `game.html` reads `game_rosters`, which is a copy taken when the
+game was created. So the roster page keeps showing the corrected answer
+while the game holds the old one, and the two can disagree indefinitely
+with nothing to indicate it.
+
+The snapshot is right in principle — a finished game must not change
+because somebody edited a roster afterwards. What was missing was any way
+to pull a correction *in*, or to see that a game had drifted.
+
+`create_game.html` now offers **Re-import roster from your team** in edit
+mode, and it shows a diff before committing:
+
+    Caleb Carter (#0)   offense -> defense
+    Bryce Ross (#1)     offense -> special
+    Jason Nguyen (#1)   offense -> defense
+
+Three constraints, each for a reason:
+
+- **It writes nothing itself.** Applying swaps what the form holds; Save
+  changes does the writing, through the same path every other edit uses.
+  One roster-writing path, not two that can diverge.
+- **Refused once a play exists** — counted from `plays`, not inferred from
+  the game's status, because a game can sit `in_progress` with nothing
+  entered and that case is safe. A failed count refuses too.
+- **Our team only.** There is no master table for an opponent roster; it
+  exists solely as a per-game upload, and re-uploading is already how you
+  change it.
+
+### A prediction that was wrong, and why
+
+I said a re-import would be defeated by `players.unit_override`, since
+`en.explicitUnit || posToUnit(en.position)` checks the override first. It
+is null on every player — that path had never run. **Reasoning from a code
+path without checking whether it had ever executed.** The button works
+exactly as proposed.
+
+---
+
+## Two ways a control can lie about being available (26 August 2026)
+
+Before kickoff, Penalty, Timeout and Manual entry all looked live. Two
+unrelated faults, same symptom.
+
+**Penalty and Timeout were already disabled.** They carried inline
+background colors, and an inline style beats a stylesheet rule —
+including `button:disabled` with `!important` on it. The click did nothing
+and the button looked ready. Moved to classes, which lose to `:disabled` on
+specificity.
+
+**Manual entry was never disabled at all.** Nothing had ever switched it
+off, so it was reachable before kickoff, at halftime and after a game was
+finalized. It writes a free-text play that carries no statistics and is
+flagged unresolved.
+
+This is the same trap as the disabled-button work earlier in the session,
+where the play-type buttons were checked for inline paints and the utility
+rail was not. **An inline fill defeats every disabled rule on the page**,
+and the only reliable check is to enumerate the buttons rather than reason
+about which ones "probably" have one.
+
+---
+
+## Enforced and silent is worse than either alone (26 August 2026)
+
+The guided kickoff let a scorer save without picking a direction, and
+refused a missing kicker with a bare `return` — the button did nothing and
+said nothing, which is indistinguishable from a broken button.
+
+Direction is not decoration: `engine.js` derives `state.driveDir` from
+`setDirection` and from nothing else, then alternates it by quarter off
+that single recorded answer. A kickoff saved without it leaves every later
+play with no direction to reason from.
+
+Both are now required, and the refusal names which is missing.
+
+**The message needed somewhere to land.** `showReviewMsg` wrote only to
+`#pp_review_msg`, which `renderPlayPanel()` builds — and the guided flow is
+a different panel that never calls it. So the helper hit `if (!el) return;`
+and every refusal raised from the guided flow vanished. A guard and a
+message added in the same edit, with no check that the message had a
+destination.
+
+The guided panel now has its own slot, and `showReviewMsg` resolves which
+to use **by visibility**, not existence: the guided slot survives in the DOM
+while its panel is hidden, so preferring it by presence alone would have
+sent play-panel refusals into an invisible element — the same silent
+failure, moved.
+
+---
+
+## Play entry is not a phone job — a warning, not a wall (26 August 2026)
+
+The play panel assumes roughly 760px and is worked under time pressure. On
+a phone the ladder wraps into a column and the panel falls below the fold,
+where a mis-tap is a wrong statistic.
+
+Detection is a **coarse pointer AND a smallest dimension of 500px or
+less** — never the user-agent, which is wrong about every device released
+after it is written. Not portrait-only, unlike the rotate prompt on the
+report pages: a phone turned sideways is still a phone. An iPad is 744px or
+more in its narrow dimension and passes; so does a narrow desktop window,
+because the pointer test is there alongside the width.
+
+**First version made it a view that replaced the app. That is a block, and
+blocking is the wrong call** — the panel on a phone is bad, not impossible,
+and a scorer who has only a phone in front of them mid-game has to be able
+to work. It is now an overlay over a fully built page: the app is
+constructed *before* the notice goes up, so dismissing reveals a live page
+rather than starting a boot sequence.
+
+Checked after the game loads, so a real error — wrong id, no access — still
+wins. A scorer told "use a laptop" for a game that does not exist has been
+sent to the wrong problem.
