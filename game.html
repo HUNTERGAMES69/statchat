@@ -237,6 +237,17 @@
     background:#2f3a47; color:#eef1f4; font-size:14px; font-weight:700; cursor:pointer; }
   .phoneBox a { display:block; margin-top:10px; font-size:13px; color:#8ec5f5; }
 
+  /* PENALTY AND TIMEOUT CARRY THEIR OWN COLOUR, AND IT HAS TO YIELD.
+     ------------------------------------------------------------------
+     These were inline styles, and an inline background beats a stylesheet
+     rule -- including the disabled rule below, !important and all. So
+     before kickoff both buttons sat fully lit while genuinely disabled:
+     the click did nothing and the button looked available.
+     As classes they lose to :disabled on specificity, which is the whole
+     point of them being classes. */
+  .utilAmber { background:#ffc72c; color:#0d1117; font-weight:700; border-color:#ffc72c; }
+  .utilTeal  { background:#0f6d8c; color:#fff; }
+
   button:disabled, button[disabled] {
     background:var(--sc-card, #191f27);
     color:#727e8c;
@@ -1311,13 +1322,13 @@
            frequently reached for here, and at half width they were the
            same size and shape as controls pressed once a quarter. -->
       <div class="row rail-wide">
-        <button id="penUtilBtn" style="background:#ffc72c; color:#0d1117; font-weight:700; border-color:#ffc72c;">Penalty</button>
+        <button id="penUtilBtn" class="utilAmber">Penalty</button>
       </div>
       <div class="row rail-wide">
         <!-- Its own color because it is its own kind of thing: a clock
              stoppage, not a play. Teal is unused elsewhere in the ladder --
              Penalty owns the yellow, Manual entry the brown. -->
-        <button id="timeoutUtilBtn" style="background:#0f6d8c; color:#fff;">Timeout</button>
+        <button id="timeoutUtilBtn" class="utilTeal">Timeout</button>
       </div>
       <div class="row">
         <button class="ptypeBtn" data-type="fumble">Fumble</button>
@@ -5332,6 +5343,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // over, at halftime, or mid-guided-flow.
     document.getElementById('flipBtn').disabled = disable;
     document.getElementById('timeoutUtilBtn').disabled = disable;
+    // MANUAL ENTRY WAS NEVER DISABLED AT ALL. Not an override problem like
+    // Penalty and Timeout -- nothing had ever switched it off, so it sat
+    // available before kickoff, at halftime and after the game was
+    // finalized. It writes a free-text play that contributes no statistics
+    // and is flagged unresolved, which is exactly the thing that should not
+    // be reachable when there is no game running to attach it to.
+    const manualBtnEl = document.getElementById('manualBtn');
+    if (manualBtnEl) manualBtnEl.disabled = disable;
     document.getElementById('kneelUtilBtn').disabled = disable;
     document.getElementById('badSnapUtilBtn').disabled = disable;
     // Applied last, after every other .disabled assignment above -- an
