@@ -986,20 +986,26 @@
                        : k === '\uffffunassigned' ? 'No tenant assigned'
                        : k;
 
+    // THE TOGGLE IS READ FIRST, because everything below depends on it --
+    // including the dropdown. A first version built the options from every
+    // account before the toggle was even consulted, so a tenant whose only
+    // account is disabled still got an entry, and picking it showed an empty
+    // list. Hiding a disabled account but keeping the tenant it belongs to is
+    // half a filter.
+    const showDisabled = !!(document.getElementById('showDisabledUsers') || {}).checked;
+    const visible = showDisabled ? allUsers : allUsers.filter(u => !u.disabled);
+
     // THE TENANT LIST COMES FROM THE ACCOUNTS, not the tenants table: a user
     // whose tenant row was deleted still needs somewhere to appear, and that
     // is exactly the account most worth finding.
     const pick = document.getElementById('userTenantPick');
     if (pick){
-      const keys = [...new Set(allUsers.map(u =>
-        u.isSuperAdmin ? '\u0000platform'
-      : !u.tenantId    ? '\uffffunassigned'
-      : u.tenantName || u.tenantId))].sort();
+      const keys = [...new Set(visible.map(groupKeyFor))].sort();
       const current = pick.value;
       pick.innerHTML = '<option value="">Select a tenant\u2026</option>' +
-        '<option value="\u0001all">All tenants (' + allUsers.length + ')</option>' +
+        '<option value="\u0001all">All tenants (' + visible.length + ')</option>' +
         keys.map(k => '<option value="' + esc(k) + '">' + esc(heading(k)) +
-          ' (' + allUsers.filter(u => groupKeyFor(u) === k).length + ')</option>').join('');
+          ' (' + visible.filter(u => groupKeyFor(u) === k).length + ')</option>').join('');
       // A tenant that has gone away between refreshes must not leave the
       // control showing a name that is no longer in the list.
       pick.value = [...pick.options].some(o => o.value === current) ? current : '';
@@ -1010,10 +1016,17 @@
       return;
     }
 
-    const showDisabled = !!(document.getElementById('showDisabledUsers') || {}).checked;
-    // Counted within the CHOSEN tenant, not across everything: a count that
-    // says 3 while you are looking at a tenant with none of them is worse
-    // than no count at all.
+
+    // THE COUNT COMES FROM allUsers ON PURPOSE, and it is the one thing here
+    // that must not use `visible`: it reports how many accounts are being
+    // HIDDEN, which cannot be answered from a set they have already been
+    // removed from.
+    //
+    // Scoped to the chosen tenant, though -- a label saying 3 while you are
+    // looking at a tenant with none of them is worse than no label at all.
+    // With a tenant selected the count is that tenant's; on All tenants it is
+    // everyone's, which is also the only place a wholly-hidden tenant's
+    // accounts are still represented.
     const inScope = chosen === '\u0001all'
       ? allUsers
       : allUsers.filter(u => groupKeyFor(u) === chosen);
@@ -1024,10 +1037,9 @@
         ? 'Show disabled accounts (' + disabledCount + ')'
         : 'Show disabled accounts';
     }
-    const scoped = chosen === '\u0001all'
-      ? allUsers
-      : allUsers.filter(u => groupKeyFor(u) === chosen);
-    const users = showDisabled ? scoped : scoped.filter(u => !u.disabled);
+    const users = chosen === '\u0001all'
+      ? visible
+      : visible.filter(u => groupKeyFor(u) === chosen);
     if (!users.length){
       body.innerHTML = '<p class="empty">' +
         (disabledCount
