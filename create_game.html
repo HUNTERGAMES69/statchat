@@ -254,6 +254,25 @@
       <h2>Your roster</h2>
       <p class="sub" style="margin-bottom:10px;">Pulled automatically from your Team Roster page.</p>
       <div id="ourRosterStatus"></div>
+      <!-- RE-IMPORT. A game's roster is a SNAPSHOT taken when it was set up.
+           That is deliberate -- a finished game must not change because
+           somebody edited a roster afterwards -- but it means a position
+           corrected since then never reaches the game, and the roster page
+           keeps showing the corrected version because it derives its badge
+           from the position every time it loads. The two can disagree
+           silently, which is exactly what happened to a kicker who was on
+           the roster as K and absent from the kickoff picker.
+           Hidden until edit mode: there is nothing to re-import into a game
+           that does not exist yet. -->
+      <div id="reimportWrap" style="display:none; margin-top:10px;">
+        <button type="button" id="reimportBtn" style="padding:9px 14px; border-radius:6px;
+          background:transparent; border:1px solid #6b7d8f; color:#c7d0da;
+          font-weight:700; font-size:13px;">Re-import roster from your team</button>
+        <div style="font-size:12.5px; color:#8d99a6; margin-top:6px;">Use this if
+          you have changed positions or added players since this game was created.
+          You will see what changes before anything is saved.</div>
+        <div id="reimportPreview" style="margin-top:10px;"></div>
+      </div>
       <div id="ourAssignments"></div>
       <div id="ourConflicts"></div>
 
@@ -819,7 +838,109 @@
 
   let ourTeamId = null;
   let editGameId = null;
+  // ---- RE-IMPORT THE OUR-TEAM ROSTER ------------------------------------
+  // A game's roster is a snapshot. That is right -- a finished game must not
+  // change because a roster was edited afterwards -- but there was no way to
+  // pull a correction INTO a game, and no way to see that the two had
+  // drifted. The roster page derives its unit badge from the position on
+  // every load, so it keeps showing the corrected answer while the game
+  // holds the old one, with nothing to indicate the disagreement.
+  //
+  // OUR TEAM ONLY. There is no master table for an opponent roster -- it
+  // exists solely as a per-game upload -- so there is nothing to re-import
+  // from, and re-uploading is already how you change it.
+  //
+  // NOTHING IS WRITTEN HERE. This swaps what is held in memory and re-draws;
+  // the existing Save changes button does the writing, through the same code
+  // path every other edit uses. One place that writes a roster, not two.
+  function unitsFromResolved(res){
+    const out = {};
+    Object.keys(res || {}).forEach(num => {
+      ['offense', 'defense', 'special'].forEach(u => {
+        (res[num][u] || []).forEach(en => {
+          const key = String(num).trim() + '|' + (en.name || '');
+          (out[key] = out[key] || []).push(u);
+        });
+      });
+    });
+    return out;
+  }
+
+  async function runReimport(){
+    const prev = document.getElementById('reimportPreview');
+    if (!ourFreshResolved){
+      prev.innerHTML = '<div style="color:#ff8fa3; font-size:13px;">The roster ' +
+        'has not finished loading yet.</div>';
+      return;
+    }
+
+    // REFUSED ONCE A PLAY EXISTS. A saved play credits a jersey number to a
+    // unit; moving that player afterwards would leave a statistic attached
+    // to a roster entry that no longer says the same thing. Checked against
+    // the database rather than the game's status, because a game can be left
+    // in_progress with nothing entered, and that case is safe.
+    const { count, error: cErr } = await supabaseClient
+      .from('plays').select('id', { count: 'exact', head: true }).eq('game_id', editGameId);
+    if (cErr){
+      prev.innerHTML = '<div style="color:#ff8fa3; font-size:13px;">Could not check ' +
+        'whether this game has plays yet: ' + cErr.message + '</div>';
+      return;
+    }
+    if (count > 0){
+      prev.innerHTML = '<div style="color:#ffc72c; font-size:13px; line-height:1.5;">' +
+        'This game already has ' + count + ' play' + (count === 1 ? '' : 's') +
+        ' recorded, so the roster is left alone. Changing a player\'s unit now ' +
+        'would leave a statistic credited against a roster entry that no longer ' +
+        'says the same thing.</div>';
+      return;
+    }
+
+    const before = unitsFromResolved(ourResolved);
+    const after = unitsFromResolved(ourFreshResolved);
+    const keys = [...new Set(Object.keys(before).concat(Object.keys(after)))].sort();
+    const changes = [];
+    keys.forEach(k => {
+      const b = (before[k] || []).slice().sort().join(', ') || 'not in this game';
+      const a = (after[k] || []).slice().sort().join(', ') || 'no longer on the roster';
+      if (b !== a) changes.push({ who: k.split('|')[1] + ' (#' + k.split('|')[0] + ')', b, a });
+    });
+
+    if (changes.length === 0){
+      prev.innerHTML = '<div style="color:#a3d93f; font-size:13px;">Nothing to ' +
+        'change &mdash; this game already matches your roster.</div>';
+      return;
+    }
+
+    prev.innerHTML =
+      '<div style="background:#141b23; border:1px solid #2b333d; border-radius:8px; padding:12px;">' +
+      reimportDiffHtml(changes) +
+      '<button type="button" id="reimportApply" style="margin-top:10px; padding:9px 14px; ' +
+        'border-radius:6px; background:#2f3a47; border:none; color:#eef1f4; font-weight:700; ' +
+        'font-size:13px;">Use the roster as it is now</button>' +
+      '<div style="font-size:12px; color:#8d99a6; margin-top:6px;">Still not saved &mdash; ' +
+        'press Save changes afterwards.</div>' +
+      '</div>';
+    document.getElementById('reimportApply').addEventListener('click', () => {
+      ourResolved = JSON.parse(JSON.stringify(ourFreshResolved));
+      prev.innerHTML = '<div style="color:#a3d93f; font-size:13px;">Roster updated in ' +
+        'this form. Press <strong>Save changes</strong> to keep it.</div>';
+    });
+  }
+
+  function reimportDiffHtml(changes){
+    return '<div style="font-size:13px; color:#c7d0da; margin-bottom:8px;"><strong>' +
+      changes.length + '</strong> change' + (changes.length === 1 ? '' : 's') +
+      ':</div>' +
+      changes.map(c =>
+        '<div style="font-size:13px; color:#c7d0da; padding:3px 0;">' +
+          c.who + ': <span style="color:#8d99a6;">' + c.b + '</span> &rarr; ' +
+          '<span style="color:#a3d93f;">' + c.a + '</span></div>').join('');
+  }
+
   let editGameStatus = null;
+  // Set while loading our roster in edit mode; read by the re-import button.
+  let ourFreshResolved = null;
+  let ourFreshEntries = null;
   let oppRosterTouched = false;
   let ourResolved = {}, ourConflictsList = [];
   let oppRosterSkipped = false;
@@ -1059,6 +1180,15 @@
       // chosen last time. Load whatever was actually saved for this game
       // and use it to override those defaults, so a coach's prior "quick
       // check" choices are still there instead of silently resetting.
+      // THE ROSTER AS IT IS TODAY, BEFORE THE SAVED SNAPSHOT IS MERGED IN.
+      // Everything below folds this game's stored units back over the top,
+      // which is right for editing -- a choice made when the game was set up
+      // should survive a re-open. But it also means a position corrected on
+      // the roster since then never reaches the game, and nothing says so.
+      // Kept here so "Re-import roster" has something to compare against and
+      // something to switch to.
+      ourFreshResolved = JSON.parse(JSON.stringify(resolved));
+      ourFreshEntries = entries;
       if (editGameId){
         const { data: savedOurRows } = await supabaseClient
           .from('game_rosters').select('jersey_number, unit, player_id, player_name').eq('game_id', editGameId).eq('team_side', 'teamA');
@@ -1085,6 +1215,17 @@
         (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>' +
         sharedNumbersHtml(sharedInfo);
       renderAssignmentUI('ourAssignments', 'our', needsAssignment, ourResolved);
+      if (editGameId){
+        document.getElementById('reimportWrap').style.display = '';
+        // Wired here rather than at load: the button is only ever revealed
+        // on this path, so it cannot be clicked before ourFreshResolved
+        // exists.
+        const rb = document.getElementById('reimportBtn');
+        if (rb && !rb.dataset.wired){
+          rb.dataset.wired = '1';
+          rb.addEventListener('click', runReimport);
+        }
+      }
       renderConflictUI('ourConflicts', 'our', conflicts, ourResolved);
       // A roster just became available, so any starter numbers already
       // typed can now be resolved to actual players. Seeding before
