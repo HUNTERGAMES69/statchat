@@ -80,11 +80,12 @@ chk(/Choose a tenant above to see its accounts/.test(src),
 // assertion above green.
 chk(/if \(!chosen\)\{[\s\S]{0,220}?return;\s*\n\s*\}/.test(src),
     'and the blank choice RETURNS, so no list is built behind the prompt');
-chk(/const users = chosen === '\\u0001all'\s*\n\s*\? visible\s*\n\s*: visible\.filter\(u => groupKeyFor\(u\) === chosen\);/.test(src),
+chk(/const users = chosen === K_ALL\s*\n\s*\? visible/.test(src),
     'and a chosen tenant narrows the VISIBLE accounts to it — reading ' +
     'allUsers there would put every account back on screen under a heading ' +
     'that says otherwise');
-chk(/<option value="\\u0001all">All tenants/.test(src),
+chk(src.indexOf('<option value="' + String.fromCharCode(39) +
+      ' + K_ALL + ' + String.fromCharCode(39) + '">All tenants') !== -1,
     'with an All tenants option for when the whole list is wanted');
 
 // AND IT RESPECTS THE TOGGLE. A first version built the options before the
@@ -100,7 +101,7 @@ chk(/const visible = showDisabled \? allUsers : allUsers\.filter\(u => !u\.disab
   chk(showAt > -1 && visAt > showAt && pickAt > visAt,
       'and the dropdown is built AFTER it, not before the toggle is read');
 }
-chk(/const keys = \[\.\.\.new Set\(visible\.map\(groupKeyFor\)\)\]\.sort\(\);/.test(src),
+chk(src.indexOf('new Set(visible.map(groupKeyFor))') !== -1,
     'the options come from the visible accounts, so a wholly-disabled tenant ' +
     'disappears from the DROPDOWN and not just from the list');
 chk(/visible\.filter\(u => groupKeyFor\(u\) === k\)\.length/.test(src),
@@ -109,7 +110,7 @@ chk(/visible\.filter\(u => groupKeyFor\(u\) === k\)\.length/.test(src),
 // THE HIDDEN COUNT IS THE EXCEPTION and must NOT use `visible`: it reports
 // how many accounts are being hidden, which cannot be answered from a set
 // they have already been removed from.
-chk(/const inScope = chosen === '\\u0001all'\s*\n\s*\? allUsers/.test(src),
+chk(/const inScope = chosen === K_ALL\s*\n\s*\? allUsers/.test(src),
     'the hidden count still reads allUsers, because you cannot count what has ' +
     'already been filtered out');
 
@@ -127,23 +128,46 @@ chk(/pick\.value = \[\.\.\.pick\.options\]\.some\(o => o\.value === current\) \?
 // tenantless super admin goes.
 chk((src.match(/function groupKeyFor/g) || []).length === 1,
     'group membership is decided in one place');
+
+// A GROUP KEY GOES INTO AN HTML ATTRIBUTE, so it has to survive being parsed
+// back out. The keys were '\u0000platform' and '\uffffunassigned', chosen so
+// a plain sort would order them without a special case. That held while they
+// only lived in JavaScript -- but the dropdown puts one in an attribute, and
+// the parser replaces U+0000 with U+FFFD. The value read back from the
+// <select> was not the value written into it, so the platform group matched
+// nothing and showed no accounts.
 {
-  const gk = /function groupKeyFor\(u\)\{[\s\S]*?\n    \}/.exec(src);
-  chk(!!gk, 'and it is a real function');
-  if (gk) {
-    const f = new Function(gk[0] + '; return groupKeyFor;')();
-    chk(f({ isSuperAdmin: true, tenantId: null }) === '\u0000platform',
-        'the platform account sorts to the top');
-    chk(f({ tenantId: null }) === '\uffffunassigned',
-        'and a tenantless user to the bottom, without a special case in the sort');
-    chk(f({ tenantId: 't1', tenantName: 'Neville' }) === 'Neville',
-        'and a normal account under its tenant');
+  const defs = /const K_PLATFORM[\s\S]*?const groupOrder = \(a, b\) => \{[\s\S]*?\n    \};/.exec(src);
+  chk(!!defs, 'the group keys and their order are declared together');
+  if (defs) {
+    const api = new Function(defs[0] +
+      '; return { groupKeyFor, groupOrder, heading, K_ALL, K_PLATFORM, K_UNASSIGNED };')();
+
+    for (const k of [api.K_PLATFORM, api.K_UNASSIGNED, api.K_ALL]) {
+      const round = new JSDOM('<select><option value="' + k + '"></option></select>')
+        .window.document.querySelector('option').value;
+      chk(round === k,
+          JSON.stringify(k) + ' survives an HTML attribute — a control ' +
+          'character here is read back as something else and matches nothing');
+    }
+    chk(!/[\u0000-\u001f]/.test(api.K_PLATFORM + api.K_UNASSIGNED + api.K_ALL),
+        'and none of them is a control character in the first place');
+
+    // The ordering the control characters used to buy has to be stated
+    // somewhere, and it is now in a comparator that can be read.
+    const keys = ['Red Stick', api.K_UNASSIGNED, 'Neville', api.K_PLATFORM].sort(api.groupOrder);
+    chk(keys[0] === api.K_PLATFORM,
+        'the platform account still sorts first');
+    chk(keys[keys.length - 1] === api.K_UNASSIGNED,
+        'and tenantless accounts last');
+    chk(keys[1] === 'Neville' && keys[2] === 'Red Stick',
+        'with tenants alphabetical between them');
   }
 }
 
 // The count has to describe what is on screen. A label saying 3 while you are
 // looking at a tenant with none of them is worse than no label at all.
-chk(/const inScope = chosen === '\\u0001all'/.test(src),
+chk(/const inScope = chosen === K_ALL/.test(src),
     'the disabled count is scoped to the chosen tenant, not the whole system');
 
 // ---- the empty case ------------------------------------------------------

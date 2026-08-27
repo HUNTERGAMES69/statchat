@@ -342,7 +342,7 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
     chk(!!pick, 'the tenant selector is present');
     chk([...pick.options].some(o => /All tenants/.test(o.textContent)),
         'and offers All tenants');
-    pick.value = '\u0001all';
+    pick.value = [...pick.options].find(o => /All tenants/.test(o.textContent)).value;
     pick.dispatchEvent(new b.w.Event('change'));
     await wait();
   }
