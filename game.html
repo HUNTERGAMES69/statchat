@@ -7754,14 +7754,45 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // it; from then on the box is theirs.
     const yl = document.getElementById(idPrefix + '_yardline');
     if (yl) yl.addEventListener('input', () => { delete yl.dataset.fromCalc; });
-    return function getReset(){
+    // WHY IT RETURNED NOTHING, not just that it did.
+    // ------------------------------------------------------------------
+    // This returned a bare null for three different situations -- nothing
+    // entered, a yard line with no side, a side with no yard line -- and
+    // the save path treated all three as "no spot needed". So a scorer
+    // could type 22, never say whose 22, and save a possession change with
+    // no field position at all.
+    //
+    // That does not lose the counting stats: a rush for 8 is still 8. What
+    // it loses is every check that depends on knowing where the ball is.
+    // validateGame skips its impossible-gain test when fieldPos is null,
+    // and the null propagates to every later play, so wrong numbers stop
+    // being caught for the rest of the drive.
+    //
+    // getReset.state() lets the caller tell the three apart and refuse the
+    // ones that are mistakes. The return value is unchanged, so nothing
+    // that already calls this needs to know.
+    function getReset(){
       const yardlineEl = document.getElementById(idPrefix + '_yardline');
       const yardline = yardlineEl ? yardlineEl.value.trim() : '';
       if (!side || !yardline) return null;
       const fieldPos = side === 'own' ? Math.abs(parseInt(yardline)) : (100 - parseInt(yardline));
       const distance = Math.min(10, 100 - fieldPos);
       return { down: 1, distance, fieldPos };
+    }
+    getReset.prefix = idPrefix;
+    getReset.state = function(){
+      const el = document.getElementById(idPrefix + '_yardline');
+      // VISIBILITY MATTERS. Several of these fields live in wrappers the
+      // panel hides depending on which toggles are set, and a hidden field
+      // is not something a scorer failed to fill in.
+      if (!el || !el.offsetParent) return 'hidden';
+      const yardline = el.value.trim();
+      if (!side && !yardline) return 'empty';
+      if (!side) return 'noSide';
+      if (!yardline) return 'noYardline';
+      return 'ok';
     };
+    return getReset;
   }
 
   // Clear should put the screen back where it was before the tree was
@@ -11824,6 +11855,51 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   }
 
   function buildAndReview(type, sel){
+    // A POSSESSION CHANGE HAS TO CARRY A SPOT.
+    // ------------------------------------------------------------------
+    // A yard line typed with no side returned null from the spot getter,
+    // exactly like an empty field, and the save path treats null as "no
+    // spot needed". So a scorer could type 22, never say whose 22, and
+    // change possession with no field position recorded.
+    //
+    // The counting stats survive that -- a rush for 8 is still 8. What does
+    // not survive is every check that depends on knowing where the ball is:
+    // validateGame skips its impossible-gain test when fieldPos is null,
+    // and the null propagates to every later play, so wrong numbers stop
+    // being caught for the rest of the drive. validateGame already counts
+    // these and reports at END OF GAME, which is the right concern raised
+    // at the wrong moment -- by then the drive is being rebuilt from
+    // memory instead of fixed in the ten seconds after the play.
+    //
+    // Refused HERE rather than at save: Review play is where a scorer is
+    // already looking at the panel, and the field that needs attention is
+    // still in front of them.
+    //
+    // Andy's call, 25 August 2026. A HIDDEN spot field is not a mistake --
+    // several live in wrappers the panel shows or hides by toggle -- so
+    // getReset.state() reports 'hidden' for those and they are skipped.
+    // A TOUCHDOWN HAS NO TAKEOVER SPOT, and the panel does not hide the
+    // field on one -- it only hides it for an onside kick or a kicking-team
+    // recovery. The save path already skips the reset when td is set
+    // (pending.reset = currentSpotGetter && !td), so blocking here would
+    // refuse a perfectly good kickoff return for a score. A false block
+    // mid-drive is worse than the gap being closed.
+    const tdChecked = !!(document.getElementById('pp_td') || {}).checked;
+    if (!tdChecked && currentSpotGetter && typeof currentSpotGetter.state === 'function'){
+      const st = currentSpotGetter.state();
+      if (st === 'noSide' || st === 'noYardline' || st === 'empty'){
+        const why = st === 'noSide'
+          ? 'Pick which side of the field that yard line is on.'
+          : st === 'noYardline'
+            ? 'Enter the yard line for the spot.'
+            : 'Enter the spot where the ball was taken over \u2014 a side and a yard line.';
+        showMsg('gameMsg', why + ' Without it the play saves with no field ' +
+          'position, and every yardage check after it stops running.', 'error');
+        const el = document.getElementById(currentSpotGetter.prefix + '_yardline');
+        if (el && el.offsetParent){ el.scrollIntoView({ block: 'center' }); el.focus(); }
+        return;
+      }
+    }
     // Shared by both fake paths: read the sub-panel and build the code.
     const fakeCode = (pre, isFg) => {
       const panelEl = document.getElementById('playPanel');
