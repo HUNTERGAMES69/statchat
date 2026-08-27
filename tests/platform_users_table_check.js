@@ -53,9 +53,8 @@ console.log('=== Platform user list ===\n');
 chk(!!doc.getElementById('showDisabledUsers'), 'a show-disabled toggle exists');
 chk(!doc.getElementById('showDisabledUsers').checked,
     'and is OFF by default — disabled accounts are the exception, not the view');
-chk(/showDisabled \? scoped : scoped\.filter\(u => !u\.disabled\)/.test(src),
-    'it filters the list rather than styling rows out, and within the chosen ' +
-    'tenant rather than across everything');
+chk(/const visible = showDisabled \? allUsers : allUsers\.filter\(u => !u\.disabled\);/.test(src),
+    'it filters the accounts rather than styling rows out');
 
 // HIDDEN, BUT COUNTED. Hiding something without saying how much is hidden is
 // how a list starts lying.
@@ -81,17 +80,44 @@ chk(/Choose a tenant above to see its accounts/.test(src),
 // assertion above green.
 chk(/if \(!chosen\)\{[\s\S]{0,220}?return;\s*\n\s*\}/.test(src),
     'and the blank choice RETURNS, so no list is built behind the prompt');
-chk(/const scoped = chosen === '\\u0001all'\s*\n\s*\? allUsers\s*\n\s*: allUsers\.filter\(u => groupKeyFor\(u\) === chosen\);/.test(src),
-    'and a chosen tenant narrows the list to it — anything else means every ' +
-    'account is still on screen under a heading that says otherwise');
+chk(/const users = chosen === '\\u0001all'\s*\n\s*\? visible\s*\n\s*: visible\.filter\(u => groupKeyFor\(u\) === chosen\);/.test(src),
+    'and a chosen tenant narrows the VISIBLE accounts to it — reading ' +
+    'allUsers there would put every account back on screen under a heading ' +
+    'that says otherwise');
 chk(/<option value="\\u0001all">All tenants/.test(src),
     'with an All tenants option for when the whole list is wanted');
+
+// AND IT RESPECTS THE TOGGLE. A first version built the options before the
+// toggle was even read, so a tenant whose only account is disabled still got
+// an entry and picking it showed an empty list. Hiding a disabled account
+// while keeping the tenant it belongs to is half a filter.
+chk(/const visible = showDisabled \? allUsers : allUsers\.filter\(u => !u\.disabled\);/.test(src),
+    'a visible set is computed before anything else uses it');
+{
+  const showAt = src.indexOf('const showDisabled =');
+  const visAt = src.indexOf('const visible =');
+  const pickAt = src.indexOf('pick.innerHTML');
+  chk(showAt > -1 && visAt > showAt && pickAt > visAt,
+      'and the dropdown is built AFTER it, not before the toggle is read');
+}
+chk(/const keys = \[\.\.\.new Set\(visible\.map\(groupKeyFor\)\)\]\.sort\(\);/.test(src),
+    'the options come from the visible accounts, so a wholly-disabled tenant ' +
+    'disappears from the DROPDOWN and not just from the list');
+chk(/visible\.filter\(u => groupKeyFor\(u\) === k\)\.length/.test(src),
+    'and each count matches what picking it would show');
+
+// THE HIDDEN COUNT IS THE EXCEPTION and must NOT use `visible`: it reports
+// how many accounts are being hidden, which cannot be answered from a set
+// they have already been removed from.
+chk(/const inScope = chosen === '\\u0001all'\s*\n\s*\? allUsers/.test(src),
+    'the hidden count still reads allUsers, because you cannot count what has ' +
+    'already been filtered out');
 
 // BUILT FROM THE ACCOUNTS, not the tenants table: a user whose tenant row was
 // deleted still needs somewhere to appear, and that is exactly the account
 // most worth finding.
-chk(/\[\.\.\.new Set\(allUsers\.map\(u =>/.test(src),
-    'the options come from the accounts themselves');
+chk(/new Set\(visible\.map\(groupKeyFor\)\)/.test(src),
+    'the options come from the accounts themselves, not the tenants table');
 chk(/pick\.value = \[\.\.\.pick\.options\]\.some\(o => o\.value === current\) \? current : ''/.test(src),
     'and a tenant that disappears between refreshes does not leave the ' +
     'control showing a name that is no longer in the list');
