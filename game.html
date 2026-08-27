@@ -6147,6 +6147,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           TEAMS[guided.kickingTeam].name + ' kicking?</p>' +
         '<button type="button" class="gk_dir_btn" data-dir="left">&#8592; left</button> ' +
         '<button type="button" class="gk_dir_btn" data-dir="right">right &#8594;</button>' +
+        // A MESSAGE SLOT OF ITS OWN. showReviewMsg wrote to #pp_review_msg,
+        // which renderPlayPanel builds -- and the guided flow never calls
+        // that. So the helper returned at `if (!el) return;` and the refusal
+        // went nowhere: enforced, and silent, which is the worst of both.
+        '<div id="guided_msg" class="review-msg" style="display:none;"></div>' +
         '<div class="row" style="margin-top:10px;"><button class="primary" id="guidedKickoffSave">Save kickoff</button>' +
         guidedBackBtn() + '</div>';
       let kickerNum = null;
@@ -7594,8 +7599,34 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // Say it where Review was pressed. The top-of-page copy stays as a
   // backstop for the reverse case -- somebody scrolled UP after pressing
   // -- but this is the one that will actually be read.
+  // WHICHEVER PANEL IS ON SCREEN.
+  // ----------------------------------------------------------------------
+  // This looked only for #pp_review_msg, which renderPlayPanel builds. The
+  // guided flow is a different panel and never calls it, so every refusal
+  // raised from there hit `if (!el) return;` and vanished -- the guard fired,
+  // the button did nothing, and nothing said why.
+  //
+  // Falling back rather than taking an argument: every existing caller stays
+  // as it is, and a panel added later gets the behaviour by naming its slot,
+  // not by remembering to pass something.
+  //
+  // VISIBLE, not merely present. The guided slot lives inside the guided
+  // panel's innerHTML and survives in the DOM while that panel is hidden --
+  // so preferring it by existence alone would send every PLAY PANEL refusal
+  // into an invisible element, swapping one silent failure for another.
+  // offsetParent is null for anything inside a display:none ancestor, which
+  // is exactly the question being asked.
+  function reviewMsgEl(){
+    const guided = document.getElementById('guided_msg');
+    if (guided && guided.offsetParent !== null) return guided;
+    const panel = document.getElementById('pp_review_msg');
+    if (panel && panel.offsetParent !== null) return panel;
+    // Neither on screen: fall back to whichever exists, so a caller in an
+    // unusual state still writes somewhere rather than nowhere.
+    return guided || panel;
+  }
   function showReviewMsg(text){
-    const el = document.getElementById('pp_review_msg');
+    const el = reviewMsgEl();
     if (!el) return;
     el.textContent = text;
     el.style.display = 'block';
@@ -7604,7 +7635,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // is the same unasked-for movement as the top-of-page copy.
   }
   function clearReviewMsg(){
-    const el = document.getElementById('pp_review_msg');
+    const el = reviewMsgEl();
     if (el){ el.textContent = ''; el.style.display = 'none'; }
   }
 
