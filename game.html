@@ -6215,8 +6215,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // touchdown, then where the ball ended up, and the clock last --
         // the clock is read off the scoreboard after the play is over.
         '<div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;">' +
-          '<div style="margin-bottom:6px;"><p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Return yards</p>' +
-            '<input autocomplete="off" type="text" id="gr_yards" style="width:80px;"></div>' +
+          // TYPED BOX HIDDEN, NOT REMOVED -- same as the kickoff and punt
+          // panels. It is still what the calculator writes into and still
+          // what the save path reads, so that chain is untouched; only its
+          // visibility changes and the number is shown below, under the
+          // calculator that produced it.
+          //
+          // THE WRAPPER STAYS. grReturnFields() hides this parent on a
+          // touchback and shows it again by setting display:''. Hiding the
+          // parent here would be undone the moment that ran, so the input
+          // carries its own display:none and the wrapper is left for the
+          // toggle to keep managing.
+          '<div style="margin-bottom:6px;">' +
+            '<input autocomplete="off" type="text" id="gr_yards" style="display:none;"></div>' +
           '<div style="margin-bottom:6px;">' +
             '<input autocomplete="off" type="checkbox" id="gr_touchback" style="display:none;">' +
             '<button type="button" id="gr_touchback_toggle" style="padding:8px 12px; border-radius:6px; border:2px solid var(--sc-rule-strong); background:#20272f; color:#b9c4d0; font-size:13px; font-weight:600; cursor:pointer;">Touchback</button>' +
@@ -6247,7 +6258,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // same IDs with a gr_ prefix, same behavior, adapted only for
         // guided.kickingTeam/guided.receivingTeam in place of off/def.
         '<div id="gr_kofielded_wrap" style="margin-top:10px;">' +
-          '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Or enter fielded at</p>' +
+          '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Fielded at</p>' +
           '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
             '<button type="button" class="ptoggle gr_kofieldedSide" data-side="own" ' +
               'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
@@ -6260,7 +6271,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '</div>' +
         '<div id="gr_koretto_wrap" style="margin-top:6px; margin-left:22px; ' +
           'padding-left:22px; border-left:1px solid var(--sc-rule);">' +
-          '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Or enter returned to</p>' +
+          '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Returned to</p>' +
           '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
             '<button type="button" class="ptoggle gr_koretSide" data-side="own" ' +
               'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
@@ -6273,6 +6284,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<div id="gr_koretto_readout" style="font-size:14px; font-weight:600; color:#a3d93f; ' +
             'background:#20272f; border-left:3px solid #1a7a4c; border-radius:4px; ' +
             'padding:7px 10px; margin-top:10px;"></div>' +
+            // THE ANSWER, UNDER THE THING THAT PRODUCED IT. The typed box
+            // above is hidden now, so this is where the number is read.
+            '<div id="gr_koret_result" style="display:flex; align-items:center; gap:10px; ' +
+              'margin-top:8px; background:#141b23; border:1px solid #2b333d; ' +
+              'border-left:3px solid #a3d93f; border-radius:6px; padding:9px 12px;">' +
+              '<span style="font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; ' +
+                'color:#8d99a6; font-weight:700;">Return yards</span>' +
+              '<span id="gr_koret_result_v" style="font-size:17px; font-weight:800; ' +
+                'color:#5f6b78;">\u2014</span>' +
+            '</div>' +
         '</div>' +
         // FUMBLED DURING THE RETURN -- ported alongside the calculator
         // above, same reasoning: the ordinary panel gained this the same
@@ -6385,6 +6406,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const readout = document.getElementById('gr_koretto_readout');
         const retyEl = document.getElementById('gr_yards');
         const sideBtns = [...wrap.querySelectorAll('.gr_koretSide')];
+
+        // THE VISIBLE RESULT. gr_yards is hidden now, so this is the only
+        // place the number is read. Fed from the same value the calculator
+        // writes into that input -- one source, two views.
+        // A negative return is real, not an error, so it gets a red spine.
+        const grResV = document.getElementById('gr_koret_result_v');
+        const grResBox = document.getElementById('gr_koret_result');
+        function setGrResult(n){
+          if (!grResV || !grResBox) return;
+          if (n === null || n === undefined || n === ''){
+            grResV.textContent = '\u2014';
+            grResV.style.color = '#5f6b78';
+            grResBox.style.borderLeftColor = '#2b333d';
+            return;
+          }
+          const v = Number(n);
+          grResV.textContent = (v >= 0 ? '+' : '') + v;
+          grResV.style.color = v < 0 ? '#ff8fa3' : '#eef1f4';
+          grResBox.style.borderLeftColor = v < 0 ? '#ff8fa3' : '#a3d93f';
+        }
         let side = 'opp';
         const paintSides = () => sideBtns.forEach(b => b.classList.toggle('picked', b.dataset.side === side));
         function releaseRetyds(){
@@ -6400,6 +6441,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const raw = (ylEl.value || '').trim();
           if (!raw || !side){
             readout.textContent = 'Leave blank if not returned.';
+            setGrResult(null);
             releaseRetyds();
             return;
           }
@@ -6408,6 +6450,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const returnToPos = side === 'own' ? n : (100 - n);
           const retYds = grKoFieldedPos - returnToPos;
           retyEl.value = String(retYds);
+          setGrResult(retYds);
           retyEl.disabled = true;
           retyEl.style.background = '#eef6f1'; retyEl.style.borderColor = '#1a7a4c'; retyEl.style.fontWeight = '700';
           const spotYl = document.getElementById('gr_spot_yardline');
