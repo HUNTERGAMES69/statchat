@@ -330,6 +330,23 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   chk(uf && uf.body && uf.body.action === 'list', 'with the list action');
   chk(uf && /^Bearer /.test(uf.auth || ''), 'and the session token, which the endpoint requires');
 
+  // NOTHING RENDERS UNTIL A TENANT IS CHOSEN, as of 26 Aug: every account
+  // across every customer at once is a list nobody reads, and the platform
+  // admin is almost always here about one of them. The assertions below are
+  // about grouping and row content, so they pick "All tenants" -- which is
+  // the state they were written against.
+  chk(/Choose a tenant above/.test(b.d.getElementById('usersBody').innerHTML),
+      'the list shows nothing until a tenant is picked, and says so');
+  {
+    const pick = b.d.getElementById('userTenantPick');
+    chk(!!pick, 'the tenant selector is present');
+    chk([...pick.options].some(o => /All tenants/.test(o.textContent)),
+        'and offers All tenants');
+    pick.value = '\u0001all';
+    pick.dispatchEvent(new b.w.Event('change'));
+    await wait();
+  }
+
   const usersHtml = b.d.getElementById('usersBody').innerHTML;
   chk(/Neville/.test(usersHtml) && /Riverside/.test(usersHtml),
       'users are GROUPED BY TENANT — a flat roll of every account is the merged view this ' +
