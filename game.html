@@ -9473,13 +9473,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '</div>' +
           '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Recovered by (optional)</p>' +
           '<input autocomplete="off" type="text" id="pp_muff_rec" placeholder="type #" style="width:100px;">' +
-          yardsBlock('Return yards after recovery (optional)', 'pp_muff_retyds') +
+          // RETURN YARDS AFTER A MUFF RECOVERY: REMOVED, 25 August 2026.
+          // Not a credited stat anywhere StatChat tracks -- Andy, and the
+          // same answer as the kickoff muff. It was a typed box with no
+          // calculator, and none was possible: deriving a return needs two
+          // spots and this panel asks for one, the takeover spot, which is
+          // already the END of any return.
+          //
+          // THE PLAY CODE IS POSITIONAL and its token is UNCONDITIONAL, so
+          // the token stays. yards() returns '' for a missing element and
+          // the call site appends || '0', so every code keeps its shape and
+          // plays saved before today parse identically. The parser reads it
+          // at rest[3] only to append "for N", which a 0 skips.
           '<div id="pp_muff_spot_wrap">' + startingSpotFieldsHtml('pp_muffspot', 'Spot where the kicking team took over (required)', off) + '</div>' +
         '</div>' +
         '<div id="pp_punt_blocked" style="display:none;">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_punt_blockrec" value="opp" checked> Recovered by opponent</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_punt_blockrec" value="own"> Recovered by own team</label>' +
-          '<div id="pp_punt_block_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_pb') + yardsBlock('Return yards (optional)', 'pp_blockretyds') + '</div>' +
+          // RETURN YARDS ON A BLOCKED PUNT: REMOVED for the same reason.
+          // Its token is CONDITIONAL -- (retyds ? ' ' + retyds : '') -- so it
+          // is already omitted today whenever the box is left blank, which is
+          // most of the time. The parser therefore already copes with a
+          // missing rest[1], and td is read from the LAST element rather than
+          // a fixed position, so nothing shifts.
+          '<div id="pp_punt_block_opp" style="margin-top:8px;">' + defBlock('Recovered by', '_pb') + '</div>' +
           '<div id="pp_punt_block_own" style="display:none; margin-top:10px;"><input autocomplete="off" type="checkbox" id="pp_punt_safety" style="display:none;">' +
           '<button type="button" id="pp_punt_safety_toggle" style="width:100%; padding:12px; border-radius:8px; border:2px solid var(--sc-rule-strong); background:#20272f; color:#b9c4d0; font-size:15px; font-weight:700; cursor:pointer;">In the end zone — safety</button></div>' +
         '</div>' +
