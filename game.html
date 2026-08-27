@@ -219,6 +219,24 @@
      two states, not how dark the text is. Live ink reads at 14.6:1 against
      the same card, so the two are still 3.6:1 apart.
      Andy's call, 25 August 2026. */
+  /* PHONE WARNING. Same shape as the rotate prompt on the report pages --
+     a dismissible overlay, not a wall. Fixed rather than absolute because
+     this sits over a page that scrolls, and the notice should not scroll
+     away from a scorer who has not read it yet. */
+  .phoneGate { display:none; }
+  .phoneGate.show { position:fixed; inset:0; z-index:500;
+    background:rgba(13,17,22,.86); display:flex; align-items:center;
+    justify-content:center; padding:24px 20px; }
+  .phoneBox { background:#191f27; border:1px solid #2b333d; border-radius:14px;
+    padding:22px 20px; max-width:320px; text-align:center;
+    box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  .phoneBox .glyph { font-size:32px; line-height:1; display:block; margin-bottom:10px; }
+  .phoneBox h4 { margin:0 0 8px; font-size:16px; color:#eef1f4; }
+  .phoneBox p { margin:0 0 14px; font-size:13.5px; color:#c7d0da; line-height:1.55; }
+  .phoneBox button { width:100%; padding:12px; border-radius:8px; border:none;
+    background:#2f3a47; color:#eef1f4; font-size:14px; font-weight:700; cursor:pointer; }
+  .phoneBox a { display:block; margin-top:10px; font-size:13px; color:#8ec5f5; }
+
   button:disabled, button[disabled] {
     background:var(--sc-card, #191f27);
     color:#727e8c;
@@ -1079,34 +1097,21 @@
     <a href="dashboard.html" style="text-decoration:none; padding:9px 16px; border-radius:6px; background:#1a1a2e; color:#fff; font-weight:600;">← Dashboard</a>
   </div>
 
-  <!-- GAME ENTRY IS NOT A PHONE JOB.
-       ------------------------------------------------------------------
-       The play panel is a ladder of buttons beside a card that assumes
-       roughly 760px of width, and a scorer works it under time pressure
-       with a live game in front of them. On a phone the ladder wraps into
-       a column, the panel goes below the fold, and a mis-tap is a wrong
-       statistic -- not an inconvenience.
-       A SEPARATE VIEW rather than an overlay: it takes the place of the
-       app instead of sitting on top of it, so there is nothing behind it
-       to poke at by accident. -->
-  <div id="phoneView" class="hidden card">
-    <h1>Use a laptop or tablet for this</h1>
-    <p class="sub">Entering plays needs the width of a laptop, an iPad or a
-      desktop. On a phone the buttons stack into a column and the play panel
-      falls below the fold, which is how a wrong number gets saved.</p>
-    <p class="sub">Everything else works here: the crew view, recaps and
-      reports are all built for a phone.</p>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
-      <a href="dashboard.html" style="text-decoration:none; padding:10px 16px;
-         border-radius:6px; background:#2f3a47; color:#eef1f4; font-weight:700;
-         font-size:13px;">&larr; Dashboard</a>
-      <button type="button" id="phoneAnyway" style="padding:10px 16px;
-        border-radius:6px; background:transparent; border:1px solid #6b7d8f;
-        color:#c7d0da; font-weight:700; font-size:13px;">Open it anyway</button>
+  <!-- PLAY ENTRY WANTS A WIDER SCREEN. A warning, not a wall: the panel on
+       a phone is bad, not impossible, and a scorer with only a phone in
+       front of them mid-game has to be able to work. -->
+  <div class="phoneGate" id="phoneGate">
+    <div class="phoneBox">
+      <span class="glyph">&#128187;</span>
+      <h4>Better on a laptop or iPad</h4>
+      <p>Play entry is built for a wider screen. On a phone the buttons stack
+        into a column and the play panel drops below the fold, which is how a
+        wrong number gets saved.</p>
+      <p style="font-size:12.5px; color:#8d99a6;">The crew view, recaps and
+        reports all work fine on a phone.</p>
+      <button type="button" id="phoneGateGo">Continue anyway</button>
+      <a href="dashboard.html">Back to dashboard</a>
     </div>
-    <p class="sub" style="margin-top:12px; font-size:12.5px;">If you are on a
-      tablet and seeing this, open it anyway &mdash; and tell Andy, because the
-      check is wrong.</p>
   </div>
 
   <div id="mainView" class="hidden">
@@ -1462,18 +1467,24 @@
   // the reason has not changed.
   var phoneOverride = false;
 
-  // Wired once, at parse time: the button is in the static markup, so it
-  // exists whether or not the notice is ever shown.
-  document.addEventListener('DOMContentLoaded', function(){
-    var b = document.getElementById('phoneAnyway');
+  // Shown once per page view. Dismissing it only hides the notice -- the
+  // app behind it was already built and running, so there is nothing to
+  // start up and nothing that can be half-initialised by a scorer who taps
+  // through quickly.
+  function maybeWarnPhone(){
+    if (!isPhone() || phoneOverride) return;
+    var g = document.getElementById('phoneGate');
+    if (!g) return;
+    g.classList.add('show');
+    var b = document.getElementById('phoneGateGo');
     if (b) b.addEventListener('click', function(){
       phoneOverride = true;
-      enterMainView();
+      g.classList.remove('show');
     });
-  });
+  }
 
   function showView(name){
-    ['loading','errorView','phoneView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
+    ['loading','errorView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
   }
   function showMsg(elId, text, type, opts){
     // `entry` marks a message that belongs to the open play panel rather
@@ -1721,23 +1732,20 @@
     gamePhase = game.game_phase || (plays.length === 0 ? 'notStarted' : 'firstHalf');
     if (currentGameStatus === 'final') gamePhase = 'ended';
     guided = (game.guided_state && game.guided_state.active) ? game.guided_state : { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
-    // A PHONE GETS THE NOTICE INSTEAD OF THE APP.
-    // ------------------------------------------------------------------
-    // Checked HERE, at the point the app would otherwise appear, rather
-    // than on load: the game still has to be fetched and any real error --
-    // wrong id, no access -- has to win over this. A scorer told "use a
-    // laptop" for a game that does not exist has been sent to the wrong
-    // problem.
-    //
-    // Dismissible on purpose. This is a judgement about screen width, and
-    // a false positive on some tablet nobody has tested would otherwise
-    // lock a scorer out mid-game -- which is far worse than a cramped
-    // panel. The escape hatch says so, and asks to be told.
-    if (isPhone() && !phoneOverride){
-      showView('phoneView');
-      return;
-    }
     enterMainView();
+    // A PHONE GETS A WARNING OVER A WORKING APP, NOT INSTEAD OF ONE.
+    // ------------------------------------------------------------------
+    // First version made this a view that replaced the app. That is a
+    // block, not a warning -- and blocking is the wrong call: the panel on
+    // a phone is bad, not impossible, and a scorer who has only a phone in
+    // front of them mid-game needs to be able to work.
+    //
+    // Raised AFTER enterMainView, so the app behind it is fully built and
+    // usable the moment the notice is dismissed. Raised here rather than on
+    // load so a real error -- wrong id, no access -- still wins; a scorer
+    // told "use a laptop" for a game that does not exist has been sent to
+    // the wrong problem.
+    maybeWarnPhone();
   }
 
   // THE FOUR LINES THAT OPEN THE APP, IN ONE PLACE. "Open it anyway" on the
