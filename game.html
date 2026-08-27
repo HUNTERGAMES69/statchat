@@ -9360,7 +9360,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_punt_normal" class="opt-block">' +
           '<button type="button" class="opt-toggle">+ Returned</button>' +
           '<div class="opt-body">' +
-          retBlock('Returned by') + '<div id="pp_ret_yds_wrap2">' + yardsBlockRet() + '</div>' +
+          // TYPED BOX HIDDEN, NOT REMOVED -- same as the kickoff tree. It is
+          // still what the calculator writes into and still what the save
+          // path reads, so that chain is untouched; only its visibility
+          // changes and the number is shown below, under the calculator
+          // that produced it.
+          //
+          // The hidden div opens and closes on THIS line, around the helper
+          // call alone. On the kickoff the wrapper turned out to contain the
+          // calculator sections too, and hiding it hid all of them.
+          retBlock('Returned by') +
+          '<div id="pp_ret_yds_wrap2" style="display:none;">' + yardsBlockRet() + '</div>' +
           // SPOT TO SPOT, not a third number to type.
           // ------------------------------------------------------------
           // Return yards and the takeover spot both fall out of two
@@ -9376,7 +9386,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
             // green bar ("Enter where it was fielded first.") is folded
             // into the label. It explained the field above it and cost a
             // row on every punt to prevent a mistake made occasionally.
-            fieldLabel('Or enter returned to \u2014 fielded spot first') +
+            fieldLabel('Returned to \u2014 fielded spot first') +
             '<span style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
               '<button type="button" class="ptoggle rettoSide" data-side="own" ' +
                 'style="padding:8px 10px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer;">' +
@@ -9390,6 +9400,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
               'background:#20272f; border-left:3px solid #1a7a4c; border-radius:4px; ' +
               'padding:7px 10px; margin-top:10px;"></div>' +
           '</div>' +
+            // THE ANSWER, UNDER THE THING THAT PRODUCED IT. The typed box is
+            // hidden now, so this is where the number is read.
+            '<div id="pp_ptret_result" style="display:flex; align-items:center; gap:10px; ' +
+              'margin-top:8px; background:#141b23; border:1px solid #2b333d; ' +
+              'border-left:3px solid #a3d93f; border-radius:6px; padding:9px 12px;">' +
+              '<span style="font-size:11.5px; letter-spacing:.09em; text-transform:uppercase; ' +
+                'color:#8d99a6; font-weight:700;">Return yards</span>' +
+              '<span id="pp_ptret_result_v" style="font-size:17px; font-weight:800; ' +
+                'color:#5f6b78;">\u2014</span>' +
+            '</div>' +
           // FUMBLED DURING THE RETURN -- a third, independent spot.
           // ------------------------------------------------------------
           // The return already ended (or didn't) at "returned to," above.
@@ -10101,6 +10121,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const readout = document.getElementById('pp_retto_readout');
       const retyEl = document.getElementById('pp_retyds');
       const sideBtns = [...wrap.querySelectorAll('.rettoSide')];
+
+      // THE VISIBLE RESULT. pp_retyds is hidden on this panel now, so this
+      // is the only place the number is read. Fed from the same value the
+      // calculator writes into that input -- one source, two views.
+      // A negative return is real, not an error, so it gets a red spine
+      // rather than looking like something went wrong.
+      const ptResV = document.getElementById('pp_ptret_result_v');
+      const ptResBox = document.getElementById('pp_ptret_result');
+      function setPtResult(n){
+        if (!ptResV || !ptResBox) return;
+        if (n === null || n === undefined || n === ''){
+          ptResV.textContent = '\u2014';
+          ptResV.style.color = '#5f6b78';
+          ptResBox.style.borderLeftColor = '#2b333d';
+          return;
+        }
+        const v = Number(n);
+        ptResV.textContent = (v >= 0 ? '+' : '') + v;
+        ptResV.style.color = v < 0 ? '#ff8fa3' : '#eef1f4';
+        ptResBox.style.borderLeftColor = v < 0 ? '#ff8fa3' : '#a3d93f';
+      }
       let side = null;
       const paintSides = () => sideBtns.forEach(b => b.classList.toggle('picked', b.dataset.side === side));
 
@@ -10138,6 +10179,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           // stand. Re-running it is what puts the takeover spot back on
           // the fielding spot if a return was entered and then cleared.
           readout.textContent = 'Leave blank if not returned.';
+          setPtResult(null);
           releaseRetyds();
           if (panel.__spotCalc) panel.__spotCalc.recompute();
           return;
@@ -10179,6 +10221,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
         readout.textContent = 'from ' + markerLabel(100 - fielded) + ' return to ' + markerLabel(100 - returnToPos) +
           '  =  ' + (retYds >= 0 ? '+' : '') + retYds + ' return yards';
+        setPtResult(retYds);
       }
 
       // Typing return yards directly clears this calculator, same
