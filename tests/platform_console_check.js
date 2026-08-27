@@ -336,8 +336,21 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
       'console exists to avoid');
   chk(/StatChat platform/.test(usersHtml),
       'the platform account is its own group, not filed under a customer');
-  chk(/No tenant assigned/.test(usersHtml),
-      'and a user with NO tenant is surfaced — invisible on every other screen, and ' +
+  // THE ORPHAN IN THIS FIXTURE IS DISABLED, and disabled accounts are hidden
+  // by default as of 26 Aug -- they are the minority and the least likely to
+  // need action, and grouped by tenant they push the live ones down. So this
+  // now checks BOTH halves: hidden when the toggle is off, surfaced when it
+  // is on. A no-tenant user that never appears at all would still be the
+  // fault this assertion was written for.
+  chk(!/No tenant assigned/.test(usersHtml),
+      'a DISABLED orphan is hidden by default, like every other disabled account');
+  b.d.getElementById('showDisabledUsers').checked = true;
+  b.d.getElementById('showDisabledUsers')
+     .dispatchEvent(new b.w.Event('change'));
+  await wait();
+  const withDisabled = b.d.getElementById('usersBody').innerHTML;
+  chk(/No tenant assigned/.test(withDisabled),
+      'and a user with NO tenant is surfaced once they are shown — invisible on every other screen, and ' +
       'usually somebody invited and never assigned');
   chk(/never/.test(usersHtml), 'a user who has never signed in says so');
   chk(/Invited/.test(usersHtml), 'an unconfirmed invite is marked');
@@ -453,7 +466,7 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // replacing `if (!viewingAs)` with `if (true)` left the declaration
   // standing and passed an assertion that only looked for the name.
   // Both shapes this has taken are accepted -- an && clause and a
-  // wrapping if -- because the behaviour is what matters, not which one.
+  // wrapping if -- because the behavior is what matters, not which one.
   chk(/get\('as'\)/.test(dash) && /(if\s*\(\s*!viewingAs|&&\s*!viewingAs)/.test(dash),
       'and has a named bypass (?as=) so viewing a school is not blocked later');
   chk(!/id="platformLink"/.test(dash),
