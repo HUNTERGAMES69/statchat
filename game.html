@@ -2054,6 +2054,13 @@ function prefillTouchbackClock(inputId){
   const last = absSecToClockStr(getLastClockAbsSec());
   if (!last) return;
   el.value = last.text;
+  // AND CLOSE THE PAD IF IT BEAT US TO IT.
+  // The guard in raiseClockPad stops the 60ms and 250ms retries, but this
+  // prefill is deferred on setTimeout(0) while the first raise is on
+  // requestAnimationFrame -- and which of those runs first is not something
+  // to rely on. If the pad is already up on this field, the value it was
+  // asking for has just arrived, so it has nothing left to do.
+  if (padEl && padEl.style.display !== 'none' && padTargetId === inputId) closePad();
   // Marked so the confirm step can tell a derived value from a typed one
   // -- the same distinction the spot calculator already draws.
   el.dataset.fromTouchback = '1';
@@ -5521,6 +5528,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
       // Already open on this field -- leave the entry alone.
       if (padEl && padEl.style.display !== 'none' && padTargetId === fieldId) return;
+      // ALREADY FILLED MEANS NOTHING TO TYPE.
+      // ----------------------------------------------------------------
+      // A touchback prefills the clock from the last value entered, and the
+      // pad was still coming up over an answer that was already correct --
+      // one extra dismissal on every touchback, which on a kickoff-heavy
+      // game is most of them.
+      //
+      // Guarded on the VALUE rather than on the touchback flag, because the
+      // rule is the same either way: this pad is for entering a number, and
+      // a field holding one does not need it. Tapping the field still opens
+      // it, so changing the value costs the tap it always did.
+      if (fld.value && fld.value.trim()) return;
       openPad(fld, fld, fld.dataset.pickerKind || 'clock');
     };
     // NOT called synchronously. Opening during the click that triggered
