@@ -168,6 +168,7 @@
   <div id="console" class="hidden">
     <div class="tabs">
       <button id="tabTenants" class="on">Tenants</button>
+      <button id="tabGames">Live games</button>
       <button id="tabUsers">Users</button>
       <button id="tabRecovery">Recovery tools</button>
     </div>
@@ -210,6 +211,34 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- LIVE GAMES. Added 27 August 2026, the week two tenants ran real
+         games on the same night. A super admin could already READ any
+         tenant's game -- games_select and plays_select both allow
+         is_super_admin() -- but there was no way to find one. When a scorer
+         rings at 8pm saying something looks wrong, the first question was
+         "what is the game id", which they have no way to answer.
+         READ ONLY. It links out to each game's crew view, which is the same
+         page their broadcast crew is watching. Nothing here changes a game:
+         opening the entry page for somebody else's live game is how two
+         people end up scoring one. -->
+    <div id="panelGames" class="card hidden">
+      <div style="display:flex; align-items:baseline; gap:12px;">
+        <h1 style="margin:0;">Live games</h1>
+      </div>
+      <p class="sub">Every game in progress right now, across all schools.
+        Each links to that game&rsquo;s crew view &mdash; the same page the
+        broadcast crew is watching. Read only.</p>
+      <div style="display:flex; align-items:center; gap:14px; margin-bottom:10px; flex-wrap:wrap;">
+        <button id="refreshGamesBtn" class="topAct" type="button">Refresh</button>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px;
+               color:var(--sc-ink-soft, #3a3a3a); white-space:nowrap; cursor:pointer;">
+          <input type="checkbox" id="showFinalGames" style="cursor:pointer;">
+          <span>Include games finished today</span>
+        </label>
+      </div>
+      <div id="gamesBody"><p class="empty">Loading&hellip;</p></div>
     </div>
 
     <div id="panelUsers" class="card hidden">
@@ -367,6 +396,7 @@
     document.getElementById('gate').classList.add('hidden');
     document.getElementById('console').classList.remove('hidden');
 
+    loadGames();
     loadTenants();
     loadRecovery();
     // KEPT for the calls that need it. api/manage-users and
@@ -453,7 +483,7 @@
   // GENERALISED FROM A BOOLEAN. It was `isTenants` and two toggles, which
   // is exactly the shape that stops working the moment a third tab exists
   // -- and adding one was the first thing asked for after it shipped.
-  const TABS = ['tenants', 'users', 'recovery'];   // order here is wiring; the DOM decides display order
+  const TABS = ['tenants', 'games', 'users', 'recovery'];   // order here is wiring; the DOM decides display order
   function selectTab(which){
     // AND A TAB SWITCH CLEARS IT TOO. A message describes something that
     // happened on the tab you were on; carrying it to a different one makes
@@ -520,19 +550,21 @@
     if (t) t.addEventListener('change', () => loadUsers(accessToken));
     const tp = document.getElementById('userTenantPick');
     if (tp) tp.addEventListener('change', () => loadUsers(accessToken));
+    const fg = document.getElementById('showFinalGames');
+    if (fg) fg.addEventListener('change', loadGames);
   }
 
-  ['Tenants', 'Users', 'Recovery'].forEach(which => {
+  ['Tenants', 'Games', 'Users', 'Recovery'].forEach(which => {
     const btn = document.getElementById('refresh' + which + 'Btn');
     if (!btn) return;
     btn.addEventListener('click', async () => {
-      const others = ['Tenants', 'Users', 'Recovery']
+      const others = ['Tenants', 'Games', 'Users', 'Recovery']
         .map(w => document.getElementById('refresh' + w + 'Btn')).filter(Boolean);
       others.forEach(b => { b.disabled = true; });
       btn.textContent = 'Refreshing\u2026';
       showMsg('', '');
       try {
-        await Promise.all([loadTenants(), loadUsers(accessToken), loadRecovery()]);
+        await Promise.all([loadTenants(), loadGames(), loadUsers(accessToken), loadRecovery()]);
       } catch (e) {
         showMsg('Could not refresh: ' + esc(e.message), 'error');
       }
@@ -949,6 +981,80 @@
       btn.disabled = false; btn.textContent = label;
     }
   });
+  // ---- LIVE GAMES ---------------------------------------------------------
+  // Read only, and read straight from the tables rather than through
+  // api/manage-users: games_select and plays_select both allow
+  // is_super_admin(), so the ordinary client already sees every tenant's
+  // games. No new endpoint, no new surface to secure.
+  async function loadGames(){
+    const body = document.getElementById('gamesBody');
+    if (!body) return;
+
+    const includeFinal = !!(document.getElementById('showFinalGames') || {}).checked;
+    // IN PROGRESS ONLY by default. `setup` games are the ones created weeks
+    // ahead and there are always several; showing them would bury the two
+    // that matter tonight.
+    const wanted = includeFinal ? ['in_progress', 'final'] : ['in_progress'];
+
+    const { data: games, error } = await supabaseClient
+      .from('games')
+      .select('id, tenant_id, designator, game_date, home_team_name, away_team_name, status, is_broadcast')
+      .in('status', wanted)
+      .order('game_date', { ascending: false })
+      .limit(60);
+    if (error){
+      body.innerHTML = '<p class="empty">Could not load games: ' + esc(error.message) + '</p>';
+      return;
+    }
+
+    let rows = games || [];
+    // A game finished last month is not "finished today". Filtered here
+    // rather than in the query because game_date is a date and the useful
+    // window is "today", not "this season".
+    if (includeFinal){
+      const today = new Date().toISOString().slice(0, 10);
+      rows = rows.filter(g => g.status === 'in_progress' || g.game_date === today);
+    }
+    if (!rows.length){
+      body.innerHTML = '<p class="empty">' +
+        (includeFinal ? 'No games in progress, and none finished today.'
+                      : 'No games in progress right now.') + '</p>';
+      return;
+    }
+
+    // Tenant names, so the list reads as schools rather than uuids.
+    const { data: tenants } = await supabaseClient.from('tenants').select('id, name');
+    const nameOf = {};
+    (tenants || []).forEach(t => { nameOf[t.id] = t.name; });
+
+    const groups = new Map();
+    rows.forEach(g => {
+      const k = nameOf[g.tenant_id] || 'Unknown school';
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(g);
+    });
+
+    body.innerHTML = '<table>' +
+      '<tr><th>Game</th><th>Date</th><th>Status</th><th></th></tr>' +
+      [...groups.keys()].sort().map(k => {
+        const list = groups.get(k);
+        return '<tr><td colspan="4" style="padding:18px 10px 6px; border-bottom:none; ' +
+                 'font-size:14px; font-weight:700; color:var(--sc-ink-soft, #3a3a3a);">' +
+                 esc(k) + ' <span style="font-weight:400; color:#6b7680;">(' +
+                 list.length + ')</span></td></tr>' +
+          list.map(g =>
+            '<tr>' +
+              '<td class="name">' + esc(g.away_team_name) + ' at ' + esc(g.home_team_name) +
+                ' <span style="color:#6b7680; font-weight:400;">' + esc(g.designator) + '</span></td>' +
+              '<td>' + esc(g.game_date || '') + '</td>' +
+              '<td>' + (g.status === 'in_progress' ? 'In progress' : 'Final') +
+                (g.is_broadcast ? ' <span class="pill live">on air</span>' : '') + '</td>' +
+              '<td class="right"><a class="topAct" target="_blank" rel="noopener" ' +
+                'href="view.html?id=' + encodeURIComponent(g.id) + '">Crew view &#8599;</a></td>' +
+            '</tr>').join('');
+      }).join('') + '</table>';
+  }
+
   async function loadUsers(accessToken){
     const body = document.getElementById('usersBody');
     let payload;
