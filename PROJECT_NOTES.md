@@ -3722,3 +3722,42 @@ customer's admin every other customer's data.
 The confirm query at the foot of that script is the only record. Nothing
 logs a grant, so the list of accounts IS the list -- worth reading
 occasionally for that reason.
+
+
+## Manual entry removed (26 August 2026)
+
+Never used once in a real game — Andy. It saved a free-text play flagged
+`unresolved`, carrying no statistics, no yardage and no down change, to be
+corrected afterwards. Its best case was a note to self; its worst was a play
+that looked entered and was not.
+
+**The button went; the `unresolved` column stayed.** That column is in the
+schema and read by seven files — three broadcast overlays, recap, stat
+package, view, and the demo seed function. Nothing creates one any more;
+anything that ever did still displays. A query confirmed no saved play
+carries the flag, so removing the column is possible later, but as a
+separate piece of work rather than folded into a UI change.
+
+**The space in the rail was kept deliberately.** Each `.rail-wide` button is
+full-width, so dropping one shortens the rail by a row and every button
+above it moves. A scorer's muscle memory is for where things ARE. The
+spacer is defined from the same flex basis, padding and font-size as a rail
+button rather than a guessed pixel height, so it measures identically; on a
+phone the rail wraps horizontally instead and the spacer is hidden, because
+there is no row to hold open.
+
+### What came out with it
+
+Three event handlers, `populateInsertOptions` (which filled the panel's
+Insert-after list and which nothing else called), three copies of a
+close-the-panel block, two `.lastresort` CSS rules, and the keypad
+classifier's free-text exception for `manualText`. Around 118 lines.
+
+### One process note
+
+An intermediate script printed "removed" for the panel and both handlers and
+then **wrote nothing** — an assertion failed after the print statements and
+before the file write. The log claimed success for work that had not
+happened. Caught on the next verification, but worth remembering: a print is
+not evidence of a write, and any script doing several edits should write
+after each rather than accumulating and writing once at the end.

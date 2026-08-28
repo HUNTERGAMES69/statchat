@@ -268,6 +268,10 @@ of what changed and what needs doing.
 - **Text fields** recessed across six dark pages, including the autofill
   override that would otherwise have repainted them.
 
+- **Manual entry removed entirely** — button, panel, handlers and its CSS
+  class. The `unresolved` column and its seven readers stay; nothing creates
+  one now. The rail keeps the row it occupied so no other button moves.
+
 ## Open, and worth knowing
 
 - **~26 test suites are red on harness gaps, not the app** — `maybeSingle`

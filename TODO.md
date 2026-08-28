@@ -276,10 +276,13 @@ The two items here look similar and are not. Reviewed Aug 7, 2026.
 ### Insert a genuinely missed play — REAL GAP, worth scoping
 
 - [ ] **There is currently no way to add a play that was never entered
-  and have it count.** Manual entry inserts `effect: {}` with
-  `unresolved: true` — a text note carrying no stats, no yardage and no
-  down change. Delete-and-re-enter cannot help, because there is nothing
-  to delete.
+  and have it count.** Delete-and-re-enter cannot help, because there is
+  nothing to delete.
+  This gap WIDENED on 26 August 2026. Manual entry used to offer a partial
+  answer — it inserted `effect: {}` with `unresolved: true`, a text note
+  carrying no stats, no yardage and no down change, so the play at least
+  appeared in the log. That button was removed as never-used, which is the
+  right call on its own terms but leaves nothing at all here.
   Mid-game the workaround is fine: enter the play now, then Adjust
   Down/Distance. Post-game there is no workaround at all — the yardage
   is simply lost from the box score.
