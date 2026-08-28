@@ -41,6 +41,34 @@ chk(/function compareBoxScores\(playsList, box\)\{/.test(engineSrc),
 // A checker nothing calls is a checker that never runs.
 chk(/const statIssues = compareBoxScores\(plays, computeBoxScore\(plays\)\);/.test(gameSrc),
     'validateGame runs it');
+
+// AT FINALIZE ONLY. Every other check in validateGame names something a
+// scorer can act on mid-game -- a wrong down, a missing spot. A stat-line
+// disagreement is not that: it says two counts differ and cannot say which
+// is right, so there is nothing to do about it during a drive. A warning
+// with no action attached is noise at the moment noise costs most.
+chk(/if \(forFinal\) try \{\s*\n\s*const statIssues = compareBoxScores/.test(gameSrc),
+    'and ONLY when finalizing — the live panel keeps the checks that have a fix');
+{
+  // run the gate rather than trusting the shape of it
+  const i = gameSrc.indexOf('if (forFinal) try {');
+  const body = gameSrc.slice(i, gameSrc.indexOf('return issues;', i));
+  const run = (forFinal, found) => {
+    const issues = [];
+    new Function('forFinal', 'issues', 'plays', 'compareBoxScores', 'computeBoxScore', body)(
+      forFinal, issues, [], () => found, () => ({}));
+    return issues;
+  };
+  chk(run(false, ['a', 'b', 'c']).length === 0,
+      'mid-game it stays silent even with disagreements to report');
+  chk(run(true, ['a', 'b', 'c']).length === 3,
+      'at finalize it reports them');
+  chk(run(true, []).length === 0, 'and says nothing when there is nothing');
+  const many = run(true, Array.from({ length: 14 }, (_, n) => 'd' + n));
+  chk(many.length === 9 && /and 6 more/.test(many[many.length - 1]),
+      'capping at eight with a count of the rest, so one systematic fault ' +
+      'cannot bury the other checks');
+}
 chk(/statIssues\.slice\(0, 8\)/.test(gameSrc),
     'and caps the report — one systematic fault would otherwise repeat per ' +
     'player and bury everything else');
