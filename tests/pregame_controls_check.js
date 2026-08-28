@@ -28,8 +28,11 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
 console.log('=== Pre-game controls ===\n');
 
 // ---- the phase flag reaches every utility control ------------------------
+// manualBtn was in this list until 26 August 2026, when Manual entry was
+// removed entirely -- never used once in a real game. It is the one control
+// here that no longer needs switching off because it no longer exists.
 const UTILS = ['penUtilBtn', 'timeoutUtilBtn', 'badSnapUtilBtn', 'kneelUtilBtn',
-               'driveUtilBtn', 'setClockUtilBtn', 'manualBtn'];
+               'driveUtilBtn', 'setClockUtilBtn'];
 for (const id of UTILS) {
   // MATCHED ON ONE LINE. A window spanning several lines matched the const
   // declaration and a later assignment together, so deleting the assignment
@@ -39,6 +42,15 @@ for (const id of UTILS) {
   const viaVar = new RegExp("\\b" + id + "El\\.disabled = disable\\b").test(src);
   chk(direct || viaVar, id + ' is switched off by the phase flag');
 }
+
+// MANUAL ENTRY IS GONE, and should not come back by accident. It saved a
+// free-text play flagged `unresolved` that carried no statistics and had to
+// be corrected later -- best case a note to self, worst case a play that
+// looked entered and was not.
+chk(!/manualBtn|manualPanel|saveManual|cancelManual/.test(src),
+    'no trace of Manual entry remains in game.html');
+chk(!/lastresort/.test(src),
+    'and its brown styling went with it — no other control ever used it');
 
 chk(/const disable = [^;]*gamePhase === 'notStarted'/.test(src),
     "and that flag includes notStarted, so nothing is reachable before kickoff");
