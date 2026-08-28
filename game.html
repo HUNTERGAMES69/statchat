@@ -96,7 +96,6 @@
     color:var(--v-paper); border:1px solid var(--sc-rule-strong); }
   button.ptoggle, button.secondary{ background:#20272f;
     color:#c7d0da; border-color:var(--sc-rule-strong); }
-  button.lastresort{ background:#8a3a12; color:#fff; border-color:#c26a3a; }
   /* The picked play decides what gets logged, so it stays unmistakable --
      but still without !important, or the runtime states cannot override it. */
   button.picked, button.suggested{ background:var(--sc-amber);
@@ -187,15 +186,6 @@
                    border-color:var(--sc-green, #1a7a4c); }
   button.secondary { background:#20272f; color:#b9c4d0; border:1px solid var(--sc-rule-strong); }
   button.danger { background:#20272f; color:var(--sc-red, #a32d2d); border:1px solid var(--sc-red, #a32d2d); }
-  /* Deliberately unlike anything else on the page. Manual entry writes a
-     text note that is flagged unresolved and contributes no stats, no
-     yardage and no down change -- it is the escape hatch for a play the
-     app cannot model, not a shortcut. It read as an ordinary secondary
-     button, which made it look like a peer of the real entry paths. */
-  /* No border and default weight, so it matches its neighbours exactly.
-     The 2px border and heavier type made it visibly larger than every
-     other utility button -- the color alone is enough to mark it out. */
-  button.lastresort { background:#8a3a12; color:#fff; }
   /* DISABLED MEANS RECEDED, NOT FADED.
      ------------------------------------------------------------------
      This was `opacity:0.5`, carried over from the light theme where it
@@ -357,6 +347,13 @@
   #typeRail .row > button { flex:1 1 calc(50% - 2px); padding:7px 5px; font-size:12.5px; }
   #typeRail .rail-scrimmage > button { flex:1 1 100%; padding:11px 5px; font-size:15px; font-weight:700; }
   #typeRail .rail-wide > button { flex:1 1 100%; padding:7px 5px; font-size:12.5px; }
+  /* Holds the row the Manual entry button used to occupy. Same flex basis,
+     padding and font-size as a rail button so it measures identically rather
+     than to a guessed pixel height. Invisible rather than a styled
+     placeholder -- nothing there should look clickable. */
+  #typeRail .rail-wide > .manualGap { flex:1 1 100%; padding:7px 5px;
+    font-size:12.5px; line-height:normal; visibility:hidden; }
+  #typeRail .rail-wide > .manualGap::before { content:'\00a0'; }
   /* Selected state. A separate class from .picked, which the trees
      already use for their own toggles -- reusing it would have made a
      rail selection and an in-panel toggle indistinguishable to the
@@ -372,7 +369,7 @@
                                  border-color:var(--sc-green); box-shadow:none;
                                  font-weight:800; }
   #entryStage { flex:1 1 auto; min-width:0; }
-  #entryStage #playPanel, #entryStage #manualPanel, #entryStage #utilPanel { margin-top:0; }
+  #entryStage #playPanel, #entryStage #utilPanel { margin-top:0; }
   #entryStage #confirmCard { position:sticky; bottom:12px; box-shadow:0 -2px 10px rgba(0,0,0,0.10); }
   /* The yards row and its calculator: one line, never wrapped. In the
      full-width layout these sat side by side and only wrapped on a
@@ -1069,8 +1066,9 @@
     #entryLayout { display:block; }
     #typeRail { position:static; }
     #typeRail .row > button, #typeRail .rail-scrimmage > button, #typeRail .rail-wide > button { flex:0 1 auto; padding:8px 14px; font-size:14px; }
+    #typeRail .rail-wide > .manualGap { display:none; }
     #entryStage { margin-top:10px !important; }
-    #entryStage #playPanel, #entryStage #manualPanel, #entryStage #utilPanel { margin-top:10px; }
+    #entryStage #playPanel, #entryStage #utilPanel { margin-top:10px; }
     #entryStage #confirmCard { position:static; box-shadow:none; }
   }
   .logline { font-size:14px; padding:6px 0; border-bottom:1px solid var(--sc-rule); }
@@ -1338,7 +1336,19 @@
         <button id="driveUtilBtn">Adjust Down/Distance</button>
         <button id="flipBtn">Flip possession</button>
         <button id="setClockUtilBtn" title="Opens the clock for the possession now in progress. Only use this at the START of a possession.">Set clock</button>
-        <button id="manualBtn" class="lastresort" title="Free text only — the play is flagged unresolved and contributes no stats, no yardage and no down change">⚠ Manual entry</button>
+        <!-- MANUAL ENTRY: REMOVED, 26 August 2026. Never used once in a real
+             game -- Andy. It saved a free-text play flagged `unresolved`,
+             which contributed no statistics and had to be corrected later,
+             so its best case was a note to self and its worst was a play
+             that looked entered and was not.
+             THE SPACE IS KEPT ON PURPOSE. Each .rail-wide button is
+             full-width, so dropping one shortens the rail by a row and the
+             entry area beside it reflows. A scorer's muscle memory is for
+             where things ARE, and every button above this one would move.
+             The `unresolved` COLUMN and everything that renders it stay: it
+             is in the schema and read by seven files. Nothing creates one
+             any more; anything that ever did still displays. -->
+        <div class="manualGap" aria-hidden="true"></div>
       </div>
         </div>
 
@@ -1352,12 +1362,14 @@
       </div>
       <div id="playPanel" style="display:none;"></div>
 
-      <div id="manualPanel" style="display:none; background:#20272f; border-radius:8px; padding:12px 14px; margin-top:10px;">
-        <p class="hint" style="margin:0 0 6px;">Manual entry (flags as unresolved for later review)</p>
-        <label>Insert after<select id="insertAfter" style="width:100%; margin-bottom:8px;"></select></label>
-        <input autocomplete="off" type="text" id="manualText" placeholder="Describe the play" style="width:100%; margin-bottom:8px;">
-        <div class="row"><button class="primary" id="saveManual">Save</button><button class="secondary" id="cancelManual">Cancel</button></div>
-      </div>
+        <!-- The manual entry panel lived here until 26 August 2026, removed
+             with its button. It saved a free-text play flagged `unresolved`
+             that carried no statistics and had to be corrected later, so its
+             best case was a note to self and its worst was a play that looked
+             entered and was not. Never used once in a real game -- Andy.
+             The `unresolved` COLUMN stays: it is in the schema and seven
+             files render it. Nothing creates one now; anything that ever did
+             still displays. -->
 
       <div id="confirmCard" style="display:none;">
         <div style="font-size:14px; color:#8d99a6; margin-bottom:4px;">Parsed as</div>
@@ -5356,8 +5368,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // finalized. It writes a free-text play that contributes no statistics
     // and is flagged unresolved, which is exactly the thing that should not
     // be reachable when there is no game running to attach it to.
-    const manualBtnEl = document.getElementById('manualBtn');
-    if (manualBtnEl) manualBtnEl.disabled = disable;
+    // Manual entry was disabled here alongside the others until it was
+    // removed on 26 August 2026. Nothing to switch off any more.
     document.getElementById('kneelUtilBtn').disabled = disable;
     document.getElementById('badSnapUtilBtn').disabled = disable;
     // Applied last, after every other .disabled assignment above -- an
@@ -7026,14 +7038,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       collapsePlayPanel();
       return;
     }
-    // Manual entry is part of the same either/or even though it is not a
-    // .ptypeBtn -- opening a tree has to shut it.
-    const mp = document.getElementById('manualPanel');
-    if (mp && mp.style.display !== 'none'){
-      mp.style.display = 'none';
-      const mt = document.getElementById('manualText');
-      if (mt) mt.value = '';
-    }
     currentLadderType = t;
     renderPlayPanel(t);
   }));
@@ -8056,7 +8060,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const n = document.getElementById(id);
       return !!n && n.style.display !== 'none' && n.innerHTML.trim() !== '';
     };
-    const busy = isOpen('playPanel') || isOpen('confirmCard') || isOpen('manualPanel') ||
+    const busy = isOpen('playPanel') || isOpen('confirmCard') ||
                  isOpen('clockPromptCard') || isOpen('guidedPanel');
     el.style.display = busy ? 'none' : 'flex';
   }
@@ -8073,7 +8077,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // change whether a panel counts as open, so the observer is cheap.
   (function watchStage(){
     if (typeof MutationObserver === 'undefined') return;
-    ['playPanel', 'confirmCard', 'manualPanel'].forEach(id => {
+    ['playPanel', 'confirmCard'].forEach(id => {
       const n = document.getElementById(id);
       if (!n) return;
       new MutationObserver(() => { try { syncStageEmpty(); } catch (e) {} })
@@ -8108,16 +8112,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.querySelectorAll('.row-gap').forEach(el => el.classList.remove('row-gap'));
     const cc = document.getElementById('confirmCard');
     if (cc) cc.style.display = 'none';
-    // The manual panel too. Clear closed every tree but left this one
-    // open -- it is a separate element, so it survived a control whose
-    // whole promise is "put the stage back". Found because the empty-stage
-    // placeholder stayed hidden behind it after Clear.
-    const mp = document.getElementById('manualPanel');
-    if (mp && mp.style.display !== 'none'){
-      mp.style.display = 'none';
-      const mt = document.getElementById('manualText');
-      if (mt) mt.value = '';
-    }
     const code = document.getElementById('code');
     if (code) code.value = '';
     pending = null;
@@ -8624,11 +8618,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // Two digits, so 0-99 covers every roster the app has imported.
     // FREE TEXT -- the only two exceptions, and both are exceptions
     // because a numeric pad cannot express what belongs in them.
-    // `manualText` describes a play in words; `code` is the hidden
-    // staging field the review step reads. On a touch device a classified
-    // field also becomes readOnly, so misclassifying either would make it
-    // impossible to fill rather than merely awkward.
-    if (id === 'manualText' || id === 'code') return null;
+    // `code` is the hidden staging field the review step reads. On a touch
+    // device a classified field also becomes readOnly, so misclassifying it
+    // would make it impossible to fill rather than merely awkward.
+    // (`manualText` was the other exception until 26 August 2026.)
+    if (id === 'code') return null;
     if (/yardline/i.test(id)) return 'pos';
     if (/(yards|yds)$/i.test(id) || /(yards|yds)_/i.test(id) || /retyds/i.test(id)) return 'yards';
     // EVERYTHING ELSE IS A JERSEY NUMBER, by default rather than by
@@ -14260,12 +14254,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     showClockPrompt({ mode: 'transition', outgoingTeam, incomingTeam }, () => { document.getElementById('code').focus(); });
   });
 
-  function populateInsertOptions(){
-    const sel = document.getElementById('insertAfter');
-    sel.innerHTML = '<option value="start">— beginning of log —</option>' +
-      plays.map(p => '<option value="' + p.id + '">after: ' + p.text.slice(0, 60) + '</option>').join('');
-    sel.value = plays.length ? plays[plays.length - 1].id : 'start';
-  }
 
   // Manual entry opens and closes its own panel without going through
   // renderPlayPanel or renderAll, so it has to say so itself.
@@ -14295,12 +14283,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         collapsePlayPanel();
         return;
       }
-      const mp = document.getElementById('manualPanel');
-      if (mp && mp.style.display !== 'none'){
-        mp.style.display = 'none';
-        const mt = document.getElementById('manualText');
-        if (mt) mt.value = '';
-      }
       // Set SYNCHRONOUSLY. A deferred set raced with programmatic clicks
       // -- setDrive() clicks driveUtilBtn to open its own panel, and the
       // deferred assignment landed after a later, unrelated click, so the
@@ -14311,66 +14293,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }, true);
   });
 
-  document.getElementById('manualBtn').addEventListener('click', () => {
-    const mp = document.getElementById('manualPanel');
-    // Pressing it again closes it, matching every other ladder button.
-    if (mp.style.display !== 'none'){
-      mp.style.display = 'none';
-      const mt = document.getElementById('manualText');
-      if (mt) mt.value = '';
-      syncStageEmpty();
-      return;
-    }
-    // And opening it shuts whatever tree is up: one panel at a time.
-    collapsePlayPanel();
-    populateInsertOptions();
-    mp.style.display = 'block';
-    syncStageEmpty();
-  });
-  document.getElementById('cancelManual').addEventListener('click', () => {
-    document.getElementById('manualPanel').style.display = 'none';
-    document.getElementById('manualText').value = '';
-    syncStageEmpty();
-  });
-  document.getElementById('saveManual').addEventListener('click', async () => {
-    const text = document.getElementById('manualText').value;
-    if (!text) return;
-    const afterVal = document.getElementById('insertAfter').value;
-    const entry = { id: nextId++, text, unresolved: true, effect: {} };
-
-    // Manual entry can land anywhere in the log, not just the end, so it
-    // needs its own fractional sequence number between whatever it's
-    // being inserted between -- this is exactly what the NUMERIC (not
-    // integer) sequence_number column exists to support.
-    let insertIdx, seq;
-    if (afterVal === 'start'){
-      insertIdx = 0;
-      const firstSeq = plays.length ? (plays[0]._seq || 1) : 1;
-      seq = firstSeq > 1 ? firstSeq - 0.5 : firstSeq / 2;
-    } else {
-      const idx = plays.findIndex(p => p.id === parseInt(afterVal));
-      insertIdx = idx + 1;
-      const beforeSeq = plays[idx] ? (plays[idx]._seq || nextSequenceNumber - 1) : nextSequenceNumber - 1;
-      const afterSeq = plays[idx + 1] ? plays[idx + 1]._seq : null;
-      seq = afterSeq ? (beforeSeq + afterSeq) / 2 : null;
-    }
-    entry._seq = seq;
-    plays.splice(insertIdx, 0, entry);
-    renderAll();
-    document.getElementById('manualPanel').style.display = 'none';
-    document.getElementById('manualText').value = '';
-
-    if (seq === null){
-      // Inserting at the very end -- just use the normal next sequence.
-      persistPlay(entry);
-    } else {
-      const { error } = await supabaseClient.from('plays').insert({
-        game_id: currentGameId, quarter: computeState().quarter, sequence_number: seq,
-        team_side: null, text: entry.text, effect: {}, roles: null, unresolved: true
-      });
-      if (error) showMsg('gameMsg', 'Saved here, but failed to sync to the server: ' + error.message, 'error');
-    }
-  });
 
 </script>
 <!-- Fixed bottom-right so it is reachable without scrolling, whatever
