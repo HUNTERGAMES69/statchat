@@ -415,7 +415,12 @@
   // rules below are the part that must not be rewritten from memory.
   async function uploadImage(file, teamId, kind){
     const ext = file.name.split('.').pop();
-    const path = teamId + '/' + kind + '.' + ext;
+    // UNIQUE PER UPLOAD, same reason as the opponent logo in
+    // create_game.html: a fixed path means a replaced image keeps the same
+    // URL, so nothing downstream can tell it changed and every browser
+    // serves its cached copy. cacheControl:60 below softened that to a
+    // one-minute stale window; a new path removes it entirely.
+    const path = teamId + '/' + kind + '-' + Date.now() + '.' + ext;
     const { error: uploadError } = await supabaseClient.storage
       .from('team-logos').upload(path, file, {
         upsert: true,
