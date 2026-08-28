@@ -2476,8 +2476,31 @@ function parseInput(raw, state){
     // record before, so it fell to Adjust Down/Distance after the fact,
     // same as 'fd' did before it existed.
     const lossOfDown = tokens.slice(2).some(t => /^ld$/i.test(t));
-    const newFieldPos = state.fieldPos !== null ? Math.max(0, Math.min(100, state.fieldPos + fieldDelta)) : null;
-    let newDown = state.down, newDistance = state.distance !== null ? (state.distance - fieldDelta) : null;
+    // ENFORCED FROM THE SPOT OF THE FOUL, when one was given.
+    // ------------------------------------------------------------------
+    // Everything else marks off from where the ball is -- the previous spot
+    // -- which is right for most fouls. Under "all but one" the basic spot
+    // for a running play is the END of the run, and a foul behind that is
+    // enforced from where it happened: a back runs 8 from the 30, holding
+    // at the 34, ten off the 34 puts the ball on the 24. Net six, not ten.
+    //
+    // Stored as an absolute 0-100 from the offense's goal line, the same
+    // scale state.fieldPos uses, so nothing here has to know whose side it
+    // was. Ignored when there is no field position to work from at all.
+    const spotTok = tokens.slice(2).find(t => /^sp:\d+$/i.test(t));
+    const foulSpot = spotTok ? parseInt(spotTok.slice(3), 10) : null;
+    const enforceFrom = (foulSpot !== null && state.fieldPos !== null)
+      ? foulSpot : state.fieldPos;
+    const newFieldPos = enforceFrom !== null
+      ? Math.max(0, Math.min(100, enforceFrom + fieldDelta)) : null;
+    // DISTANCE FOLLOWS THE BALL, not the penalty yardage. Normally those
+    // agree, because the ball moves by exactly fieldDelta. With a foul spot
+    // it does not: the base moved too, so the marker has to be measured
+    // against where the ball actually ended up.
+    const netMove = (newFieldPos !== null && state.fieldPos !== null)
+      ? newFieldPos - state.fieldPos : fieldDelta;
+    let newDown = state.down,
+        newDistance = state.distance !== null ? (state.distance - netMove) : null;
     if (noDownChange){
       newDistance = state.distance;
       // Still cap for goal-to-go: the marker can never sit in the end zone.
@@ -2527,6 +2550,7 @@ function parseInput(raw, state){
         (fieldDelta === 0 ? '0 yards'
           : (fieldDelta > 0 ? '+' : '') + fieldDelta +
             (Math.abs(fieldDelta) === 1 ? ' yard' : ' yards')) +
+        (foulSpot !== null ? ' from the spot of the foul' : '') +
         (noDownChange ? ' (no down change)' : '') +
         (autoFirstDown ? ' (automatic first down)' : '') + downDistanceText,
       effect: Object.assign({ penaltyTeam: team, penaltyYds: yds, fieldDelta },
@@ -13770,6 +13794,51 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<input autocomplete="off" type="checkbox" id="pen_first_down" style="display:none;">' +
         '<button type="button" id="pen_first_down_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Automatic first down</button>' +
       '</div>' +
+      // ENFORCE FROM THE SPOT OF THE FOUL.
+      // ------------------------------------------------------------------
+      // Every penalty here marks off from where the ball currently is --
+      // the previous spot -- which is right for most fouls and wrong for a
+      // foul during a run. Under "all but one" the basic spot for a running
+      // play is the END of the run, and a foul behind that basic spot is
+      // enforced from the spot of the foul.
+      //
+      // Worked example, Andy's: a back runs 8 from the 30 and holding is
+      // called at the 34. The basic spot is the 38, the foul is behind it,
+      // so 10 yards come off the 34 and the ball goes to the 24 -- net six,
+      // not ten. Reproducing that by hand meant Adjust Down/Distance first,
+      // which writes a play into the log saying the down was adjusted. The
+      // record then reads as a correction rather than a penalty.
+      //
+      // NO VALIDATION ON THE YARD LINE. The spot is often DOWNFIELD of the
+      // line of scrimmage, as it is in that example, so refusing a spot
+      // ahead of the ball would reject the ordinary case. The app cannot
+      // know where the runner ended; the scorer is watching and it is not.
+      //
+      // BEHIND A TOGGLE rather than always shown: it belongs with Dead Ball
+      // and the rest, costs a tap on the rare occasion it is needed, and
+      // nothing the rest of the time. Not keyed off the penalty TYPE, which
+      // is optional -- choosing nothing would have hidden the row exactly
+      // when it was wanted.
+      '<div style="margin-top:8px;">' +
+        '<input autocomplete="off" type="checkbox" id="pen_spot" style="display:none;">' +
+        '<button type="button" id="pen_spot_toggle" class="ptoggle" ' +
+          'title="Mark the penalty off from where the foul happened rather than ' +
+          'from the previous spot" ' +
+          'style="padding:8px 12px; border-radius:6px; font-size:13.5px; ' +
+          'font-weight:600; cursor:pointer; white-space:nowrap;">' +
+          'Enforce from spot of foul</button>' +
+        '<div id="pen_spot_fields" style="display:none; margin-top:8px;">' +
+          '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Spot of the foul</p>' +
+          '<div class="row">' +
+            '<button type="button" class="penSpotSide" data-side="own">' +
+              TEAMS[computeState().possession].name + '\u2019s side</button> ' +
+            '<button type="button" class="penSpotSide" data-side="opp">' +
+              TEAMS[otherTeam(computeState().possession)].name + '\u2019s side</button> ' +
+            '<input autocomplete="off" type="text" id="pen_spot_yardline" ' +
+              'placeholder="yard line" style="width:96px;">' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
       '<div style="margin-top:8px;"><input autocomplete="off" type="checkbox" id="pen_lod" style="display:none;"><button type="button" id="pen_lod_toggle" class="ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Loss of down</button></div>' +
       '<div class="row" style="margin-top:12px;"><button class="primary" id="pen_review">Review</button><button class="secondary" id="pen_clear">Clear</button></div>';
     if (panel.scrollIntoView) try { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
@@ -13799,6 +13868,40 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         ['pen_no_down', 'pen_first_down', 'pen_lod'].filter(x => x !== id).forEach(x => setToggle(x, false));
       });
     });
+    // THE SPOT TOGGLE IS NOT PART OF THE MUTUALLY EXCLUSIVE GROUP ABOVE.
+    // It conflicts with Dead Ball and nothing else: a dead-ball foul happens
+    // after the play is over, so there is no spot-of-foul enforcement to do.
+    // But defensive holding is commonly BOTH spot-enforced and an automatic
+    // first down, and an illegal forward pass is spot-enforced and carries
+    // loss of down -- so folding it into that group would refuse ordinary
+    // combinations.
+    let penSpotSide = null;
+    (function wirePenSpot(){
+      const t = document.getElementById('pen_spot_toggle');
+      const fields = document.getElementById('pen_spot_fields');
+      if (!t || !fields) return;
+      t.addEventListener('click', () => {
+        const on = !document.getElementById('pen_spot').checked;
+        setToggle('pen_spot', on);
+        fields.style.display = on ? '' : 'none';
+        if (on) setToggle('pen_no_down', false);
+      });
+      // and the other direction, so the two cannot both end up set
+      const dead = document.getElementById('pen_no_down_toggle');
+      if (dead) dead.addEventListener('click', () => {
+        if (!document.getElementById('pen_no_down').checked) return;
+        setToggle('pen_spot', false);
+        fields.style.display = 'none';
+      });
+      [...document.querySelectorAll('.penSpotSide')].forEach(b => {
+        b.addEventListener('click', () => {
+          penSpotSide = b.dataset.side;
+          document.querySelectorAll('.penSpotSide')
+            .forEach(x => x.classList.toggle('picked', x === b));
+        });
+      });
+    })();
+
     const ydsEl = document.getElementById('pen_yds');
     // A hand-edit means this is no longer "the suggestion" -- release the
     // tint the moment the coach types, same convention used everywhere
@@ -13895,8 +13998,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const firstDown = document.getElementById('pen_first_down').checked;
       const lossOfDown = document.getElementById('pen_lod').checked;
       const penType = (document.getElementById('pen_type') || {}).value || '';
+
+      // SPOT OF THE FOUL, as an absolute field position rather than a
+      // yard line. The token stores 0-100 measured from the offense's goal
+      // line -- the same scale state.fieldPos uses -- so the parser does not
+      // have to know whose side it was, and a play saved today still reads
+      // correctly if the sides are ever relabelled.
+      let spotTok = '';
+      if (document.getElementById('pen_spot').checked){
+        const yl = parseInt((document.getElementById('pen_spot_yardline') || {}).value, 10);
+        if (!penSpotSide || isNaN(yl)){
+          showReviewMsg('Nothing has been saved \u2014 still needed: which side of ' +
+            'the field the foul happened on, and the yard line.');
+          return;
+        }
+        const abs = penSpotSide === 'own' ? Math.abs(yl) : (100 - yl);
+        spotTok = ' sp:' + abs;
+      }
+
       const code = (penTeam === 'off' ? 'po' : 'pd') + ' ' + yds +
-        (penType ? ' f:' + penType : '') +
+        (penType ? ' f:' + penType : '') + spotTok +
         (noDown ? ' nd' : '') + (firstDown ? ' fd' : '') + (lossOfDown ? ' ld' : '');
       document.getElementById('code').value = code;
       showConfirm();
