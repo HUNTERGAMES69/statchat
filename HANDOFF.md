@@ -292,6 +292,11 @@ of what changed and what needs doing.
   every school's broadcast game; the index has been per-tenant since 010 and
   the function was never updated to match.
 
+- **TOP accuracy depends on WHEN the clock is read on a kickoff.** The change
+  of possession is the catch, not the tackle. A late reading charges the whole
+  return to the kicking team and moves TOP by twice the return time. Nothing
+  can detect it -- documented in help.html section 7 and tips.html.
+
 ## Open, and worth knowing
 
 - **The `maybeSingle` gap is FIXED** (26 Aug) and cleared several suites.

@@ -4029,3 +4029,47 @@ The first version of `broadcast_scope_check` flagged **its own migration** as
 an offender, because 024 quotes the old unscoped statement in a comment
 explaining what it fixes. Comments are stripped before the scan now. A file
 that documents a bug will match a search for that bug.
+
+
+## Who possesses a kickoff, and what it costs TOP (26 August 2026)
+
+Nobody possesses a kickoff in flight. A free kick is a loose ball: the
+kicking team has given it up and the receiving team has not gained it. That
+ambiguity does not matter for time of possession, because the clock is not
+running either -- on a free kick it starts when the receiving team legally
+touches the ball, so the flight consumes no time and there is none to
+allocate.
+
+**engine.js already matches this by construction.** A change of possession is
+a single instant:
+
+    if (ce.type === 'transition'){
+      possessionTime[outgoingTeam] += absSec - pendingClockStart[outgoingTeam];
+      pendingClockStart[incomingTeam] = ce.absSec;
+    }
+
+One clock reading ends one possession and starts the other. No gap, nothing
+unallocated. Nothing to change.
+
+### The part that IS a problem, and it is not code
+
+The return runs on the clock, and every second of it belongs to the
+receiving team. StatChat gives that time to whichever team the entered clock
+value implies -- so the accuracy of TOP rests entirely on WHEN the scorer
+reads the clock.
+
+The box asks for the clock at the change of possession. On a kickoff that
+change is the **catch**, not the tackle. A scorer who looks up once the
+return is over reads a later number, and the whole return is charged to the
+kicking team: a fifteen-second return moves TOP by thirty seconds against
+the true figure, because it is subtracted from one side and added to the
+other.
+
+**Nothing can warn about this.** A late reading and an accurate one are the
+same number to the app. It is a habit, so it belongs in the documentation
+rather than in a guard -- added to help.html section 7, with a pointer from
+the Kickoff section where a scorer will actually be looking, and to
+tips.html.
+
+This is the shape of fault worth watching for elsewhere: the app is correct,
+the entry is plausible, and the number is wrong.
