@@ -4872,6 +4872,63 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }, 400);
   }
 
+  // BRANDING CAN CHANGE WHILE A GAME IS OPEN.
+  // ---------------------------------------------------------------------
+  // Added 27 August 2026: an opponent logo uploaded during a live game did
+  // not appear here. This page built TEAMS once at load and never looked
+  // again -- there was no refresh of any kind, for either team.
+  //
+  // Our own branding is on `teams`; the opponent's is on the GAME row,
+  // because an opponent has no tenant of their own. Both are read.
+  //
+  // Six minutes, and only when the tab is visible: a scorer is not watching
+  // for a logo change, so this exists to catch up rather than to be prompt,
+  // and a query per minute all game for something that changes once is
+  // waste. Switching away and back forces it.
+  let lastBrandLogoA = undefined, lastBrandLogoB = undefined;
+  async function refreshBrandingHere(){
+    if (!currentGameId || !TEAMS.teamA || !TEAMS.teamB) return;
+    try {
+      const { data: gd } = await supabaseClient
+        .from('games')
+        .select('tenant_id, opponent_logo_url, opponent_primary_color, opponent_secondary_color')
+        .eq('id', currentGameId).limit(1);
+      const g = (gd && gd[0]) || {};
+      if (!g.tenant_id) return;
+
+      const { data: td } = await supabaseClient
+        .from('teams').select('primary_color, secondary_color, logo_url')
+        .eq('tenant_id', g.tenant_id).limit(1);
+      const b = (td && td[0]) || {};
+
+      const nextA = b.logo_url || null;
+      const nextB = g.opponent_logo_url || null;
+      // First pass just records what is there, so a page that loaded with
+      // the current logos does not re-render itself for no reason.
+      if (lastBrandLogoA === undefined){
+        lastBrandLogoA = TEAMS.teamA.logo || null;
+        lastBrandLogoB = TEAMS.teamB.logo || null;
+      }
+      const changed = nextA !== lastBrandLogoA || nextB !== lastBrandLogoB ||
+        TEAMS.teamA.bg !== (b.primary_color || '#2b3440') ||
+        TEAMS.teamB.bg !== (g.opponent_primary_color || '#6e7885');
+      if (!changed) return;
+
+      TEAMS.teamA.logo = nextA;
+      TEAMS.teamA.bg = b.primary_color || '#2b3440';
+      TEAMS.teamA.text = b.secondary_color || '#ffffff';
+      TEAMS.teamB.logo = nextB;
+      TEAMS.teamB.bg = g.opponent_primary_color || '#6e7885';
+      TEAMS.teamB.text = g.opponent_secondary_color || '#ffffff';
+      lastBrandLogoA = nextA; lastBrandLogoB = nextB;
+      renderAll();
+    } catch (e) { /* offline -- the next pass will try again */ }
+  }
+  setInterval(() => { if (!document.hidden) refreshBrandingHere(); }, 360000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshBrandingHere();
+  });
+
   function renderAll(){
     // The right rail. renderLiveBox is cheap -- one computeBoxScore over
     // the log, the same call the box score itself makes. scheduleValidation
