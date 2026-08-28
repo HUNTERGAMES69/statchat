@@ -284,6 +284,14 @@ of what changed and what needs doing.
   same two states the drive cards already hide on, reading the same `phase`.
 - **The clock keypad no longer opens over a touchback prefill.**
 
+- **Penalties can be enforced from the spot of the foul.** A toggle beside
+  Dead Ball, with a side and yard line. The play is still nullified -- enter
+  the penalty INSTEAD of the play, not as well as it. On a kickoff, enter the
+  kickoff first with its ending spot where the penalty will be enforced from.
+- **`sql/024`: the on-air clear is scoped to one tenant.** It was clearing
+  every school's broadcast game; the index has been per-tenant since 010 and
+  the function was never updated to match.
+
 ## Open, and worth knowing
 
 - **The `maybeSingle` gap is FIXED** (26 Aug) and cleared several suites.

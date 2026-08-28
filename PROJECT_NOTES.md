@@ -3921,3 +3921,111 @@ passed before. That was the measurement: an 8-second timeout counts every
 slow suite as a failure, and several legitimately need 25 to 45 seconds.
 At a realistic timeout the stub is a clear gain. **A test count is only
 meaningful alongside the timeout it was taken at.**
+
+
+## Penalties enforced from the spot of the foul (26 August 2026)
+
+Every penalty marked off from where the ball currently was -- the previous
+spot -- which is right for most fouls and wrong for a foul during a run.
+
+Under "all but one" the basic spot for a running play is the END of the run,
+and a foul behind that basic spot is enforced from where it happened. Andy's
+example: a back runs 8 from the 30, holding at the 34. The basic spot is the
+38, the foul is behind it, so ten yards come off the 34 and the ball goes to
+the 24 -- net six, not ten.
+
+Reproducing that meant Adjust Down/Distance and then a penalty, which writes
+a play into the log saying the down was adjusted. The record read as a
+correction rather than a penalty.
+
+### What the spot does NOT do
+
+It does not give the offense partial credit. **On an accepted penalty the
+play is nullified in full** -- no attempt, no yards, not even up to the foul.
+The spot governs where the ball is marked off from, and nothing else. That
+distinction is easy to run together and worth stating plainly, because
+crediting four yards on a wiped-out run would look entirely plausible in a
+stat line.
+
+### Design decisions
+
+**Behind a toggle**, beside Dead Ball rather than always shown -- a false
+start never needs it. **Not keyed off the penalty type**, which is optional:
+choosing nothing would have hidden the row exactly when it was wanted.
+
+**It excludes Dead Ball and nothing else.** A dead-ball foul happens after
+the play is over, so there is no spot to enforce from. But defensive holding
+is routinely both spot-enforced AND an automatic first down, and an illegal
+forward pass is spot-enforced and carries loss of down, so folding it into
+the existing mutually-exclusive group would have refused ordinary
+combinations.
+
+**No validation on the yard line.** The spot is often DOWNFIELD of the line
+of scrimmage, as it is in that example. An earlier suggestion to refuse a
+spot ahead of the ball would have rejected the ordinary case; it came from
+picturing a foul behind the line, which is only one of the shapes.
+
+### The bug that shipped in between
+
+The first version fixed the parser's TEXT and left the effect carrying the
+raw penalty yardage. `engine.js` does `state.fieldPos += e.fieldDelta`, so
+the log read "1st & 15" while the header read "1st & 20 at the 50" -- the
+sentence and the state disagreeing about the same play, which is worse than
+either being wrong on its own.
+
+`fieldDelta` now carries the NET move. `penaltyYds` still carries the
+penalty's own yardage, because it feeds `state.penalties[team].yds` and a
+holding call is ten penalty yards however far the ball actually moved.
+
+**A parser that returns both a description and an effect has two outputs, and
+fixing one is not fixing the play.**
+
+### On a kickoff
+
+Enter the kickoff first with its ending spot set to wherever the penalty will
+be enforced from, then add the penalty -- Andy's call. During the GUIDED
+kickoff the utility rail is disabled by `guided.active`, so that sequence has
+to finish before a foul can be entered.
+
+---
+
+## The broadcast clear reached past its tenant (26 August 2026)
+
+`set_broadcast_game` clears the on-air flag before setting it, so only one
+game is ever live. That clear had no tenant filter:
+
+    update games set is_broadcast = false
+     where is_broadcast and id <> p_game_id;
+
+Every game, every school. It was written when the constraint WAS global --
+migration 010 replaced `one_broadcast_game` with
+`one_broadcast_game_per_tenant` and updated the INDEX without revisiting the
+function that exists to satisfy it.
+
+SECURITY DEFINER, so RLS does not narrow it. Demonstrated against a real
+Postgres before the fix: Neville putting its second game on air took Red
+Stick off. On a Friday night that is another school's overlay going blank
+mid-game with nothing in their own tenant to explain it.
+
+Migration 024 reads the owning tenant first and limits the clear to it, and
+raises on an unknown game id rather than clearing the world and setting
+nothing.
+
+### The behavior, verified in both directions
+
+- Red Stick live, Neville goes on air -> both live
+- Neville live, Red Stick goes on air -> both live
+- Neville switches to its second game -> only that game live, Red Stick
+  untouched
+
+Two mechanisms, and both are worth having. The unique index makes the bad
+state impossible even from raw SQL; the function does clear-then-set in one
+transaction so switching games is a single action rather than an error
+followed by a manual fix.
+
+### A note on the test
+
+The first version of `broadcast_scope_check` flagged **its own migration** as
+an offender, because 024 quotes the old unscoped statement in a comment
+explaining what it fixes. Comments are stripped before the scan now. A file
+that documents a bug will match a search for that bug.

@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Without this every page load logs a 404 for /favicon.ico.
+     Harmless, but a red console error should MEAN something. -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-title" content="StatChat">
+<title>StatChat — How to use it</title>
+<style>
+  /* THE SAME DASHBOARD BUTTON AS customize.html AND roster.html.
+     Those two render a bordered button; this page had a plain green text
+     link, so the way back looked different depending on which page you
+     were on. One control, one appearance. */
+  .backlink { text-decoration:none; padding:8px 14px; border-radius:6px;
+              border:1px solid var(--sc-rule-strong); color:var(--sc-ink); font-size:13px; font-weight:600;
+              display:inline-block; }
+
+  /* THE STATCHAT MARK, identical on every page reachable from the
+     dashboard. Same element, same size, same place: beside the page's own
+     heading. Uniformity is the point -- a mark that moves or resizes
+     between screens reads as decoration rather than as the product. */
+  .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
+  /* Dark-on-light artwork needs a plate on a #191f27 card. Undone in the
+     print block above, where the page is white again. */
+  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block;
+                  background:#fff; padding:2px; box-sizing:border-box; }
+
+  /* DARK, 25 August 2026. Recipe in DARK_THEME_PLAN.md.
+     Every --sc-* this page reads is defined, including the ones only
+     written as var(--x, #fallback) -- an undefined token silently becomes
+     the fallback, and every fallback here was chosen for white. */
+  :root{ color-scheme:dark; }
+  :root{
+    --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+    --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+    --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+    --sc-navy:#2f3a47;   /* A BUTTON FILL. Never text. */
+    --sc-green:#a3d93f;  --sc-green-tint:rgba(124,181,24,.14);
+    --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
+    --sc-amber:#ffc72c;  --sc-amber-text:#ffc72c;
+    --sc-amber-tint:rgba(255,199,44,.13);
+    --sc-blue:#5aa9f0;   --sc-link:#7cb518;
+    --sc-accent:#a3d93f; /* the heading/link green, see below */
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); color:var(--sc-ink); }
+  .wrap { max-width:820px; margin:0 auto; }
+  .card { background:var(--sc-card); border:1px solid var(--sc-rule); color:var(--sc-ink); border-radius:12px; padding:22px 24px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:26px; margin:0 0 4px; }
+  h2 { font-size:20px; margin:26px 0 8px; padding-bottom:5px; border-bottom:2px solid var(--sc-green, #1a7a4c); }
+  h2:first-of-type { margin-top:0; }
+  /* #1a4d2e is a deep forest green -- 1.7:1 on this card. It is the
+     accent for headings, table heads and the contents list, so all four
+     move together to the light green. */
+  h3 { font-size:16px; margin:18px 0 6px; color:var(--sc-accent); }
+  p, li { line-height:1.55; font-size:15px; }
+  ol, ul { padding-left:22px; }
+  li { margin-bottom:5px; }
+  code { background:var(--sc-raise); color:var(--sc-ink); border:1px solid var(--sc-rule); border-radius:4px; padding:1px 5px; font-size:13px; font-family:ui-monospace, Menlo, Consolas, monospace; }
+  /* These are pictures of the app's buttons, so they follow the same rule
+     the real ones do: a fill for the affordance and a border for the edge.
+     Without the border they would be flat shapes here while every actual
+     button on every other page has one. */
+  .btn { display:inline-block; background:var(--sc-navy, #1a1a2e); color:var(--sc-ink); border:1px solid var(--sc-rule-strong); border-radius:6px; padding:2px 9px; font-size:13px; font-weight:600; }
+  .btn.gold { background:var(--sc-amber); color:#0d1117; border-color:#ffd964; }
+  .btn.green { background:rgba(124,181,24,.20); color:var(--sc-green); border-color:#6f9f22; }
+  .btn.red { background:rgba(176,0,32,.20); color:var(--sc-red); border-color:#c8455c; }
+  .note { background:rgba(124,181,24,.09); border-left:3px solid var(--sc-green); border-radius:4px; padding:10px 12px; margin:12px 0; font-size:14px; }
+  .warn { background:rgba(255,199,44,.10); border-left:3px solid var(--sc-amber); border-radius:4px; padding:10px 12px; margin:12px 0; font-size:14px; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:14px; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--sc-rule-strong, var(--sc-rule)); vertical-align:top; }
+  th { color:var(--sc-accent); font-size:13px; }
+  .toc { columns:2; column-gap:28px; font-size:14px; }
+  .toc a { color:var(--sc-accent); text-decoration:none; display:block; padding:3px 0; }
+  .toc a:hover { text-decoration:underline; }
+  .back { display:inline-block; margin-bottom:12px; color:var(--sc-accent); text-decoration:none; font-weight:600; font-size:14px; }
+  /* .backlink, not .back: the class changed and this rule is the only
+     thing keeping the button off a printed page. */
+  /* PAPER IS WHITE, and this page is meant to be printed and handed to a
+     crew. Everything the dark theme did has to be undone here or a reader
+     gets charcoal panels and a printer gets emptied.
+     The tokens are re-pointed rather than each rule being restated, which
+     is the whole reason the conversion went through tokens. */
+  @media print {
+    :root{ color-scheme:light;
+      --sc-page:#fff; --sc-card:#fff; --sc-raise:#f4f6f8;
+      --sc-ink:#1a1a1a; --sc-ink-soft:#3a3a3a; --sc-ink-muted:#5a5a5a;
+      --sc-rule:#dddddd; --sc-rule-strong:#bbbbbb;
+      --sc-accent:#1a4d2e; --sc-navy:#1a1a2e; }
+    body { background:#fff !important; color:#1a1a1a !important; }
+    .card { background:#fff !important; color:#1a1a1a !important;
+            border:1px solid var(--sc-rule-strong) !important; box-shadow:none; }
+    h1, h2, h3 { color:#1a1a1a !important; }
+    h3, th, .toc a { color:#1a4d2e !important; }
+    code { background:#eef1f4 !important; color:#1a1a1a !important; }
+    /* The button pictures print as outlines: a solid dark fill on paper is
+       a waste of toner and reads worse than an outline does. */
+    .btn { background:#fff !important; color:#1a1a1a !important;
+           border:1px solid #999 !important; }
+    .btn.gold { background:#ffc72c !important; color:#1a1a2e !important; }
+    .btn.green, .btn.red { background:#fff !important; color:#1a1a1a !important; }
+    .note { background:#eef6f1 !important; }
+    .warn { background:#fff4d6 !important; }
+    .scMark > img { background:none !important; padding:0 !important; }
+    .backlink { display:none; }
+  }
+
+  /* SCREENSHOTS. Bounded rather than full-bleed: a shot of a 1400px window
+     shown at full width on paper is unreadable, and shown small on screen is
+     pointless. A max-width plus a border keeps it looking like a picture OF
+     the app rather than part of this page.
+     break-inside:avoid because a screenshot split across a page boundary in
+     the PDF is worse than a page with white space at the foot of it. */
+  figure.shot { margin:16px 0; break-inside:avoid; page-break-inside:avoid; }
+  figure.shot img { display:block; width:100%; max-width:760px;
+    border:1px solid var(--sc-rule-strong, #bbb); border-radius:8px; }
+  figure.shot figcaption { font-size:13px; color:var(--sc-ink-muted, #5a5a5a);
+    margin-top:7px; max-width:760px; line-height:1.5; }
+  /* A missing shot must be obvious while this is being assembled, not a
+     silent gap that ships. */
+  figure.shot img[src^="tips/"]:not([data-ok]) { min-height:40px; }
+</style>
+</head>
+<body>
+<!-- NO LINKS OUT. Same reasoning as help.html: this page is public, and a
+     "Dashboard" link on a public page invites a stranger to click it and
+     meet a login screen. Every link INTO it opens a new tab. -->
+<div class="wrap">
+  <div class="card">
+    <div class="scMark" style="padding-bottom:10px;">
+      <img src="logo.png" alt="StatChat">
+      <h1>Tips for your first game</h1>
+    </div>
+    <p style="color:var(--sc-ink-muted); margin-top:2px;">Read this once before
+      you score a live game. It covers the handful of things that trip up a new
+      scorer &mdash; not everything the app does, which is in the
+      <strong>full guide</strong>.</p>
+
+    <div class="toc" style="margin-top:14px;">
+      <a href="#practice">1. Practice first, on a game that does not count</a>
+      <a href="#setup">2. Before kickoff</a>
+      <a href="#flow">3. The rhythm of a play</a>
+      <a href="#refusals">4. When the app says no</a>
+      <a href="#flags">5. Flags</a>
+      <a href="#optional">6. What is optional, and what it costs</a>
+      <a href="#nfhs">7. Five things that are not NFL rules</a>
+      <a href="#crew">8. Your crew</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="practice">1. Practice first, on a game that does not count</h2>
+    <p><strong>Do this before anything else.</strong> Twenty minutes here is
+      worth more than any amount of reading, including this page.</p>
+    <ol>
+      <li>Create a game called <em>Demo</em></li>
+      <li>Tick <strong>This is a preseason game</strong> &mdash; it keeps
+        everything out of your season totals</li>
+      <li>Upload any roster for the opponent; whose does not matter</li>
+      <li>Log plays, deliberately varied &mdash; rushes, a sack, a punt, a
+        fumble, an interception, a field goal</li>
+      <li>Use <strong>Reset game</strong> from the dashboard game menu to clear
+        it and start again</li>
+    </ol>
+    <div class="tip"><strong>The best practice there is:</strong> find one of
+      your school's games from last year on YouTube and enter the stats while
+      you watch. That is exactly how this app was tested during development.
+      Nothing else prepares you as well, because nothing else moves at the
+      speed a real game moves.</div>
+
+    <!-- SHOT 1 -->
+    <figure class="shot">
+      <img src="tips/01-getting-started.png" alt="The dashboard with the Getting started card">
+      <figcaption>The <strong>Getting started</strong> card tracks the four
+        things a new tenant needs and disappears once they are done.</figcaption>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h2 id="setup">2. Before kickoff</h2>
+    <p>Three things, in this order. The Getting started card on your dashboard
+      follows the same order.</p>
+    <table>
+      <tr><th>Step</th><th>What matters</th></tr>
+      <tr><td><strong>Customize</strong></td>
+          <td>Logo and colors. Your primary is picked up automatically; white
+            is almost always the right secondary, because it is the one that
+            stays readable on every background an overlay lands on.</td></tr>
+      <tr><td><strong>Roster</strong></td>
+          <td>Three columns: number, name, position. A header row is fine.
+            Nothing else in the sheet &mdash; no blank rows, no totals.</td></tr>
+      <tr><td><strong>New game</strong></td>
+          <td>Have the opponent's roster to hand <em>before</em> you start.
+            You will be asked for it partway through.</td></tr>
+    </table>
+    <div class="tip"><strong>Positions decide who appears where.</strong>
+      Quarterbacks show in the passer list, backs and receivers in the carrier
+      list, kickers in the kickoff picker. A player with no position, or a
+      position the app does not recognize, will not appear in any of them
+      &mdash; which is the single most common reason a scorer cannot find
+      somebody mid-play.</div>
+
+    <!-- SHOT 3 -->
+    <figure class="shot">
+      <img src="tips/03-roster.png" alt="A roster after upload, with unit badges">
+      <figcaption>Each player picks up a unit badge from their position.
+        Check these after an upload &mdash; a misaligned spreadsheet column
+        shows up here as a wrong badge.</figcaption>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h2 id="flow">3. The rhythm of a play</h2>
+    <p>Every play is the same four questions, and after a quarter or so your
+      hands stop needing to think about them.</p>
+    <table>
+      <tr><th></th><th>Question</th><th>Where</th></tr>
+      <tr><td><strong>1</strong></td><td>What kind of play?</td><td>The ladder down the left</td></tr>
+      <tr><td><strong>2</strong></td><td>Who?</td><td>The picker at the top of the panel</td></tr>
+      <tr><td><strong>3</strong></td><td>How far?</td><td>The yards box, or the calculator</td></tr>
+      <tr><td><strong>4</strong></td><td>What happened after?</td><td>Touchdown, fumble, spot</td></tr>
+    </table>
+    <p>Then <strong>Review play</strong>, read the sentence it produces, and
+      <strong>Save</strong>. Reading the sentence is the habit worth
+      building: it is written in plain English precisely so that a wrong
+      entry looks wrong.</p>
+
+    <!-- SHOT 9 -->
+    <figure class="shot">
+      <img src="tips/09-rush.png" alt="A rush being entered">
+      <figcaption>A rush: play type, carrier, yards. Three taps and a number.</figcaption>
+    </figure>
+
+    <!-- SHOT 11 -->
+    <figure class="shot">
+      <img src="tips/11-confirm.png" alt="The confirm card after Review play">
+      <figcaption>Read this sentence before saving. It is the cheapest error
+        check in the app.</figcaption>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h2 id="refusals">4. When the app says no</h2>
+    <p>Two moments make a new scorer think something is broken. Neither is.</p>
+
+    <h3>The spot, at a change of possession</h3>
+    <p>Whenever the ball changes hands you must give <strong>a side of the
+      field and a yard line</strong>. Review play refuses without both and
+      says which is missing.</p>
+    <p>This one is worth understanding rather than just obeying. The spot is
+      not really a statistic &mdash; it is what every later yardage check
+      depends on. Without it the app has no idea where the ball is, so it
+      stops being able to tell you that a 40-yard gain from the opponent's 12
+      is impossible. <strong>A missing spot does not lose a number; it stops
+      wrong numbers being caught.</strong></p>
+
+    <!-- SHOT 10 -->
+    <figure class="shot">
+      <img src="tips/10-spot-missing.png" alt="The still-needed message on an incomplete spot">
+      <figcaption>Typing 22 without saying <em>whose</em> 22 is the common
+        version of this. The message names the missing half.</figcaption>
+    </figure>
+
+    <h3>The kickoff, at the start of a half</h3>
+    <p>The guided kickoff needs a kicker <em>and</em> a direction. The
+      direction is the only thing that tells the app which way each team is
+      going, and it alternates by quarter from that one answer.</p>
+
+    <!-- SHOT 6 -->
+    <figure class="shot">
+      <img src="tips/06-kickoff-refused.png" alt="The guided kickoff refusing without a direction">
+      <figcaption>Picked a kicker but not a direction. The message says so
+        rather than the button quietly doing nothing.</figcaption>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h2 id="flags">5. Flags</h2>
+    <p>Two things about penalties catch people out, and neither is obvious
+      from the panel.</p>
+
+    <h3>The play does not count</h3>
+    <p>On an accepted penalty the play is wiped out entirely. A back who ran
+      eight yards before holding was called gets <strong>no attempt and no
+      yards</strong> &mdash; not eight, and not the four he had made when the
+      foul happened. The down replays.</p>
+    <div class="tip">So enter the <strong>penalty instead of the play</strong>,
+      not as well as it. Entering both leaves a rusher credited with yardage
+      he did not gain, and that number looks perfectly reasonable in a stat
+      line, which is what makes it worth being careful about.</div>
+
+    <h3>Where the yards come off</h3>
+    <p>Most fouls are marked off from where the ball started. A foul
+      <em>during</em> a play often is not &mdash; it comes off the spot where
+      the foul happened.</p>
+    <p>Tick <span class="btn">Enforce from spot of foul</span> and give a side
+      and a yard line. A back runs 8 from your 30, holding at the 34: the ten
+      yards come off the <em>34</em>, so the ball ends on the 24. A net six,
+      not ten. Leave the toggle off and it marks off from the 30 and puts the
+      ball on the 20, which is not where the officials will spot it.</p>
+    <div class="tip"><strong>On a kickoff</strong>, enter the kickoff first
+      with its ending spot set to wherever the penalty will be enforced from,
+      then add the penalty.</div>
+  </div>
+
+  <div class="card">
+    <h2 id="optional">6. What is optional, and what it costs</h2>
+    <p>Some fields say <em>optional</em> and mean it. Knowing which is which
+      is what lets you keep up during a fast drive.</p>
+    <table>
+      <tr><th>Field</th><th>Skip it and&hellip;</th></tr>
+      <tr><td>The clock</td>
+          <td>Nothing is blocked. That possession is simply not counted toward
+            time of possession. Enter it at each change and TOP works;
+            skip it and TOP is incomplete rather than wrong.</td></tr>
+      <tr><td>The returner</td>
+          <td>The return still counts for the team. Only the individual
+            credit is lost.</td></tr>
+      <tr><td>Tackled by</td>
+          <td>The play is unaffected. Only that tackler's count is missed.</td></tr>
+      <tr><td>The spot</td>
+          <td>Not optional. See above.</td></tr>
+    </table>
+    <div class="tip"><strong>When you fall behind, skip the optional fields
+      and keep the plays.</strong> A game with every play and some missing
+      tacklers is a good game. A game missing three plays is not, and no
+      amount of detail elsewhere repairs it.</div>
+  </div>
+
+  <div class="card">
+    <h2 id="nfhs">7. Five things that are not NFL rules</h2>
+    <p>StatChat follows <strong>NFHS</strong>, which matches NCAA on the
+      points below and differs from the NFL. If you have watched a lot of
+      professional football these will feel wrong at first, and they are
+      not.</p>
+    <ul>
+      <li><strong>Sack yardage is charged to team rushing</strong>, not to the
+        quarterback's passing.</li>
+      <li><strong>A quarterback kneel is a team rush</strong>, not an
+        individual one.</li>
+      <li><strong>A bad snap is a team rush</strong> as well.</li>
+      <li><strong>The defense cannot score on a try.</strong> A blocked PAT
+        returned the length of the field is worth nothing.</li>
+      <li><strong>A missed field goal reaching the end zone is a
+        touchback</strong>, and the ball comes out to the 20.</li>
+    </ul>
+    <div class="tip">The app already applies all five. You do not have to
+      remember them while scoring &mdash; they are here so that the numbers
+      make sense when somebody compares them against a professional
+      broadcast and asks why they differ.</div>
+  </div>
+
+  <div class="card">
+    <h2 id="crew">8. Your crew</h2>
+    <p>Two things worth showing your broadcast people before the first game,
+      because both save you being interrupted mid-drive.</p>
+    <p><strong>Crew view</strong> is a live read-only page. Anyone with the
+      link can watch the score, the current drive and the leaders update as
+      you enter plays, on any device. It is built for a phone.</p>
+    <p><strong>Broadcast setup</strong> holds every overlay and data feed
+      &mdash; XML for a scoreboard, HTML pages for vMix browser inputs. Hand
+      those links to whoever runs the switcher and they can build their
+      graphics before game day.</p>
+
+    <!-- SHOT 12 -->
+    <figure class="shot">
+      <img src="tips/12-crew-view.png" alt="Crew view mid-game">
+      <figcaption>Crew view, mid-game. Nobody needs to ask you the score.</figcaption>
+    </figure>
+
+    <div class="tip"><strong>Play entry itself wants a laptop or an iPad.</strong>
+      Open a game on a phone and you will get a notice saying so. You can
+      continue anyway, but the buttons stack into a column and the play panel
+      drops below the fold, which is how a wrong number gets saved. Crew view,
+      recaps and reports are all fine on a phone.</div>
+  </div>
+
+  <div class="card">
+    <p style="margin:0; text-align:center; color:var(--sc-ink-muted);">
+      The full guide, covering everything this page skips, is at
+      <strong>statchat.co/help.html</strong>
+    </p>
+  </div>
+</div>
+</body>
+</html>
