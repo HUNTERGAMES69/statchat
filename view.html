@@ -605,6 +605,23 @@ h2{ color:var(--v-mute) !important; }
   // stays untouched, since that's already good contrast.
 
 
+  // TWO TEAMS THAT LOOK ALIKE.
+  // ---------------------------------------------------------------------
+  // Pulled out of buildTeams on 27 August 2026 so the mid-game refresh can
+  // run it too. Assigning three colour fields is not enough on its own:
+  // if the opponent's primary sits close to ours their spine and banner
+  // become unreadable, so one of them has to move.
+  function separateTeamColors(oppPrimary, oppSecondary){
+    if (colorDistance(TEAMS.teamA.bg, TEAMS.teamB.bg) >= 60) return;
+    if (colorDistance(TEAMS.teamA.bg, oppSecondary) >= 60){
+      TEAMS.teamB.bg = oppSecondary;
+      TEAMS.teamB.text = oppPrimary;
+    } else {
+      TEAMS.teamB.bg = luminance(TEAMS.teamA.bg) > 0.5 ? '#3a3a3a' : '#c8c8c8';
+      TEAMS.teamB.text = luminance(TEAMS.teamB.bg) > 0.55 ? '#1a1a1a' : '#ffffff';
+    }
+  }
+
   function buildTeams(game, rosterRows, ourBranding){
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
     const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
@@ -620,15 +637,7 @@ h2{ color:var(--v-mute) !important; }
     // since our identity should stay put -- first try swapping to their
     // own secondary color, since that's still genuinely their color, and
     // only fall back to a neutral tone if even that's too close.
-    if (colorDistance(TEAMS.teamA.bg, TEAMS.teamB.bg) < 60){
-      if (colorDistance(TEAMS.teamA.bg, oppSecondary) >= 60){
-        TEAMS.teamB.bg = oppSecondary;
-        TEAMS.teamB.text = oppPrimary;
-      } else {
-        TEAMS.teamB.bg = luminance(TEAMS.teamA.bg) > 0.5 ? '#3a3a3a' : '#c8c8c8';
-        TEAMS.teamB.text = luminance(TEAMS.teamB.bg) > 0.55 ? '#1a1a1a' : '#ffffff';
-      }
-    }
+    separateTeamColors(oppPrimary, oppSecondary);
     rosterRows.forEach(r => {
       const team = TEAMS[r.team_side];
       if (!team) return;
@@ -3003,6 +3012,10 @@ function extractNameTag(rawName){
     // Ten minutes, and on waking the tab, is far more often than a logo
     // actually changes.
     let lastBrandingCheck = Date.now();
+    // The opponent's colours as STORED, before the contrast step may have
+    // swapped them. Needed so the poll can tell a real change from its own
+    // earlier adjustment, which would otherwise re-render every minute.
+    let lastOppPrimary = null, lastOppSecondary = null;
     async function refreshBranding(force){
       if (!force && Date.now() - lastBrandingCheck < 600000) return;
       lastBrandingCheck = Date.now();
@@ -3013,15 +3026,45 @@ function extractNameTag(rawName){
           .from('teams').select('primary_color, secondary_color, logo_url')
           .eq('tenant_id', currentGameTenantId).limit(1);
         const b = (data && data[0]) || {};
-        if (!TEAMS.teamA) return;
-        // Only repaint when something actually differs -- a re-render on
-        // every check would fight the drive tiles for no reason.
-        const changed = TEAMS.teamA.logo !== (b.logo_url || null) ||
-                        TEAMS.teamA.bg !== (b.primary_color || '#2b3440');
+        if (!TEAMS.teamA || !TEAMS.teamB) return;
+
+        // THE OPPONENT TOO, from the GAME row. This only refreshed
+        // TEAMS.teamA -- our own school, off the `teams` table -- so an
+        // opponent logo uploaded mid-game never reached the crew view.
+        // Their branding lives on the game, not on a team, because an
+        // opponent has no tenant of their own.
+        const { data: gd } = await supabaseClient
+          .from('games')
+          .select('opponent_logo_url, opponent_primary_color, opponent_secondary_color')
+          .eq('id', currentGameId).limit(1);
+        const g = (gd && gd[0]) || {};
+        const oppPrimary = g.opponent_primary_color || '#6e7885';
+        const oppSecondary = g.opponent_secondary_color || '#ffffff';
+
+        // COMPARED AGAINST THE RAW VALUES, not against TEAMS.teamB.bg --
+        // the contrast step below may have moved that away from the primary
+        // on purpose, and comparing to the moved value would report a change
+        // on every poll and re-render the page a minute at a time.
+        const changed =
+          TEAMS.teamA.logo !== (b.logo_url || null) ||
+          TEAMS.teamA.bg !== (b.primary_color || '#2b3440') ||
+          TEAMS.teamB.logo !== (g.opponent_logo_url || null) ||
+          lastOppPrimary !== oppPrimary || lastOppSecondary !== oppSecondary;
         if (!changed) return;
+
         TEAMS.teamA.logo = b.logo_url || null;
         TEAMS.teamA.bg = b.primary_color || '#2b3440';
         TEAMS.teamA.text = b.secondary_color || '#ffffff';
+        TEAMS.teamB.logo = g.opponent_logo_url || null;
+        TEAMS.teamB.bg = oppPrimary;
+        TEAMS.teamB.text = oppSecondary;
+        lastOppPrimary = oppPrimary; lastOppSecondary = oppSecondary;
+
+        // RE-RUN THE SEPARATION. Either side moving can make the two teams
+        // look alike, and the old code did not re-run it even for our own
+        // colour -- so changing our primary mid-game to something near the
+        // opponent's left both spines the same.
+        separateTeamColors(oppPrimary, oppSecondary);
         renderAll();
       } catch (e) { /* offline -- the next wake will try again */ }
     }
