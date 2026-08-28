@@ -84,14 +84,24 @@
   .play-clause { display:block; padding-left:0.9em; }
     .drive-card.drive-previous { margin-top:30px; padding-top:14px; padding-bottom:16px; border-top:1px solid var(--sc-rule); }
   .team-summary-row { display:flex; gap:28px; flex:1; min-height:0; }
-  .team-summary-col { flex:1; display:flex; flex-direction:column; min-width:0; }
+  /* min-height:0 as well as min-width:0. A flex child defaults to a minimum
+   of its CONTENT size in the flex direction, so this column refused to be
+   shorter than the eight tiles inside it and pushed the fourth row out of
+   the quad, which has overflow-y:hidden. The tiles were being rendered and
+   then clipped -- Penalties and 3rd Down were simply below the cut. */
+.team-summary-col { flex:1; display:flex; flex-direction:column;
+                    min-width:0; min-height:0; }
   .team-summary-header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:8px; font-weight:800; font-size:20px; margin-bottom:10px; }
   /* Small enough not to compete with the team name, large enough to read
      from the back of a room. */
   .poss-ball { font-size:18px; line-height:1; margin-left:-2px; }
   .team-summary-logo { height:36px; width:36px; object-fit:contain; border-radius:6px; background:rgba(255,255,255,0.85); flex-shrink:0; }
   .stat-tile-grid { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr 1fr; gap:8px; flex:1; min-height:0; }
-  .stat-tile { background:#f5f7fa; border-radius:8px; padding:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+  /* min-height:0 for the same reason one level down: a grid item defaults to
+   min-height:auto, so a 1fr row cannot shrink below the text inside it and
+   four rows stay four rows' worth of content however little space there is.
+   With this, the rows compress and all eight tiles stay on screen. */
+.stat-tile { min-height:0; background:#f5f7fa; border-radius:8px; padding:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
   .stat-tile-value { font-size:34px; font-weight:500; color:var(--sc-navy, #1a1a2e); line-height:1.1; }
   /* The halftime figure. Option A: same line, smaller, muted -- it is a
      reference for the number beside it, not a number in its own right.
@@ -359,11 +369,24 @@ h2{ color:var(--v-mute) !important; }
    moved things. Future mockups should BE a themed copy of the real page,
    which is then approved and promoted verbatim. */
 
-/* B raised the tile value from A's 40px to 46px -- 15% larger, so it
-   reads further across a room. This page's own size is 34px, so the same
+/* B raised the tile value from A's 40px to 46px -- 15% larger, so it reads
+   further across a room. This page's own size is 34px, so the same
    proportion gives 39px. Not 46: that was measured against a mockup tile,
-   and these are eight to a column rather than three in a row. */
-.stat-tile-value{ font-size:39px !important; }
+   and these are eight to a column rather than three in a row.
+   ------------------------------------------------------------------------
+   BUT A FIXED 39px COST THE FOURTH ROW. Eight tiles in four rows need about
+   24px more at 39px than at 34px, and .quad is half the viewport with
+   overflow-y:hidden -- so Penalties and 3rd Down were rendered and then
+   clipped below the cut. Reported from a real screen, 26 August 2026.
+   Releasing the auto minimums on .team-summary-col and .stat-tile lets the
+   rows compress, and once they can, a fixed number just spills out of its
+   own tile instead: one overflow traded for another.
+   So the value scales with the space. 39px is now the CEILING, reached on a
+   tall display, and 26px the floor -- below that it stops reading across a
+   room, which was the whole point of enlarging it. On a 1080p monitor this
+   lands near 33px, still comfortably above the 34px it started at once the
+   tile padding is accounted for. */
+.stat-tile-value{ font-size:clamp(26px, 3.1vh, 39px) !important; }
 
 /* B's live chip is transparent with a colored border -- the tint I used
    instead made the current drive a green wash, which is the block a crew
