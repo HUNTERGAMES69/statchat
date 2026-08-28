@@ -810,6 +810,49 @@ console.log('\nPages with findings: ' + bad + ' of ' + files.length);
   }
 })();
 
+// ---- field goals and extra points are separate rows ---------------------
+// They shared one five-column line -- FG Att, FG Made, Long, XP Att, XP
+// Made -- so a kicker who only took extra points still occupied all five
+// with three em-dashes in them, and the widest header set a column width
+// nothing in the row needed. On a narrow tile that is what pushed the
+// special-teams table past its border.
+//
+// There is vertical room in that tile and there was never horizontal room.
+(function kickingSplit(){
+  const src = require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'view.html'), 'utf8');
+
+  if (/\['FG Att','FG Made','Long','XP Att','XP Made'\]/.test(src)) {
+    console.log('  FAIL view.html: field goals and extra points share a five-column ' +
+                'row again — a PAT-only kicker fills three of them with dashes');
+    bad++;
+  }
+  for (const want of ["\\['FG Att','FG Made','Long'\\]", "\\['XP Att','XP Made'\\]"]) {
+    if (!new RegExp(want).test(src)) {
+      console.log('  FAIL view.html: expected a table headed ' +
+                  want.replace(/\\\\/g, '') + ' and did not find one');
+      bad++;
+    }
+  }
+
+  // A PAT-ONLY KICKER MUST NOT APPEAR IN THE FG TABLE AT ALL. Guarding on
+  // `d.fgAtt || d.patAtt` for both was the original fault; each row now
+  // guards on its own stat.
+  if (!/if \(d\.fgAtt\)\{/.test(src) || !/if \(d\.patAtt\)\{/.test(src)) {
+    console.log('  FAIL view.html: the two rows do not guard independently, so a ' +
+                'kicker with only one kind of kick still appears in both');
+    bad++;
+  }
+
+  // and the row budget has to count both, or the tile overflows the way it
+  // did before
+  if (!/Math\.min\(stFieldGoals\.length, 5\) \+ Math\.min\(stPats\.length, 5\)/.test(src)) {
+    console.log('  FAIL view.html: the row-count budget does not include both ' +
+                'kicking tables');
+    bad++;
+  }
+})();
+
 // EXIT LAST. This line used to sit above the message-tint audit, so any
 // failure it found was counted after the exit code had already been decided
 // -- the audit could go red and the run still exit 0.
