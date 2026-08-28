@@ -172,9 +172,18 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // A renamed panel with a stale array entry throws on click rather than
   // failing visibly, and only on the tab nobody opened during testing.
   const tabLabels = [...b.d.querySelectorAll('.tabs button')].map(x => x.textContent.trim());
-  chk(tabLabels.join(' | ') === 'Tenants | Live games | Users | Recovery tools',
-      'tabs read Tenants, Live games, Users, Recovery tools in that order ' +
+  chk(tabLabels.join(' | ') === 'Tenants | Users | Live games | Recovery tools',
+      'tabs read Tenants, Users, Live games, Recovery tools in that order ' +
       '(got: ' + tabLabels.join(' | ') + ')');
+
+  // BUTTONS AND PANELS IN THE SAME ORDER. Only one panel shows at a time, so
+  // a mismatch is invisible on screen -- but it drives tab-key order, and it
+  // is a trap for whoever edits this next.
+  const btnOrder = [...b.d.querySelectorAll('.tabs button')].map(x => x.id.replace('tab', ''));
+  const panOrder = [...b.d.querySelectorAll('[id^=panel]')].map(x => x.id.replace('panel', ''));
+  chk(btnOrder.join() === panOrder.join(),
+      'and the panels are in the same order as the buttons (' +
+      btnOrder.join('|') + ' vs ' + panOrder.join('|') + ')');
   const tabsArr = (code.match(/const TABS = \[([^\]]*)\]/) || [])[1] || '';
   ['tenants','users','recovery'].forEach(t => {
     chk(tabsArr.includes("'" + t + "'"), 'TABS includes ' + t);

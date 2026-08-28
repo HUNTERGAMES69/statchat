@@ -23,13 +23,16 @@ console.log('=== Platform: live games ===\n');
 // ---- it exists and is wired ----------------------------------------------
 chk(!!doc.getElementById('tabGames') && !!doc.getElementById('panelGames'),
     'the tab and its panel exist');
-chk(/const TABS = \['tenants', 'games', 'users', 'recovery'\];/.test(src),
+// ORDER-INDEPENDENT. Pinning the exact array meant a reorder failed here
+// for no reason -- what matters is that games is wired, not where it sits.
+chk(/const TABS = \[[^\]]*'games'[^\]]*\];/.test(src),
     'and games is in TABS, which drives the switching');
 chk(/loadGames\(\);\s*\n\s*loadTenants\(\);/.test(src),
     'it loads on sign-in rather than only when the tab is opened');
 chk(/loadTenants\(\), loadGames\(\)/.test(src),
     'and Refresh reloads it with everything else');
-chk(/\['Tenants', 'Games', 'Users', 'Recovery'\]/.test(src),
+chk(/forEach\(which => \{/.test(src) &&
+    /\['Tenants',[^\]]*'Games'[^\]]*\]\.forEach/.test(src),
     'the refresh buttons loop includes it, so its own button works');
 
 // ---- READ ONLY. This is the constraint that matters ----------------------
