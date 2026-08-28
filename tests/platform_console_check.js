@@ -74,8 +74,9 @@ function boot(profileRow, opts) {
         if (op === 'is' && val === null) out = out.filter(r => r[col] != null);
         return api;
       },
-      order(){ return Promise.resolve({ data: project(out, cols), error: null }); },
-      limit(){ return Promise.resolve({ data: project(out, cols), error: null }); },
+      in(col, vals){ out = out.filter(r => vals.indexOf(r[col]) !== -1); return api; },
+      order(){ return api; },
+      limit(){ return api; },
       then(res){ return Promise.resolve({ data: project(out, cols), error: null }).then(res); }
     };
     return api;
@@ -171,8 +172,9 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // A renamed panel with a stale array entry throws on click rather than
   // failing visibly, and only on the tab nobody opened during testing.
   const tabLabels = [...b.d.querySelectorAll('.tabs button')].map(x => x.textContent.trim());
-  chk(tabLabels.join(' | ') === 'Tenants | Users | Recovery tools',
-      'tabs read Tenants, Users, Recovery tools in that order (got: ' + tabLabels.join(' | ') + ')');
+  chk(tabLabels.join(' | ') === 'Tenants | Live games | Users | Recovery tools',
+      'tabs read Tenants, Live games, Users, Recovery tools in that order ' +
+      '(got: ' + tabLabels.join(' | ') + ')');
   const tabsArr = (code.match(/const TABS = \[([^\]]*)\]/) || [])[1] || '';
   ['tenants','users','recovery'].forEach(t => {
     chk(tabsArr.includes("'" + t + "'"), 'TABS includes ' + t);

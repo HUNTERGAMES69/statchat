@@ -23,7 +23,9 @@ console.log('=== Platform user list ===\n');
 
 // ---- one table, so the columns can line up -------------------------------
 {
-  const render = /body\.innerHTML = '<table>'[\s\S]*?\}\)\.join\(''\) \+ '<\/table>';/.exec(src);
+  const usersFn = /async function loadUsers\(accessToken\)\{[\s\S]*?\n  \}/.exec(src);
+  const render = usersFn &&
+    /body\.innerHTML = '<table>'[\s\S]*?\}\)\.join\(''\) \+ '<\/table>';/.exec(usersFn[0]);
   chk(!!render, 'the list renders as ONE table');
   if (render) {
     const t = render[0];
