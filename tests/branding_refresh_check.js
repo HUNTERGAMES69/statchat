@@ -101,5 +101,64 @@ chk(/let lastOppPrimary = null, lastOppSecondary = null;/.test(view),
   }
 }
 
+// ---- THE GAME PAGE HAD NO REFRESH AT ALL -------------------------------
+// Reported alongside the crew view. view.html at least polled its own
+// branding; game.html built TEAMS once at load and never looked again, for
+// either team. So a scorer who uploaded an opponent logo mid-game saw it on
+// no screen they were looking at.
+{
+  const game = fs.readFileSync(path.join(__dirname, '..', 'game.html'), 'utf8');
+
+  chk(/async function refreshBrandingHere\(\)\{/.test(game),
+      'game.html refreshes branding at all');
+  chk(/\.from\('games'\)[\s\S]{0,160}opponent_logo_url/.test(game),
+      'reading the opponent from the game row');
+  chk(/\.from\('teams'\)\.select\('primary_color, secondary_color, logo_url'\)/.test(game),
+      'and our own from the teams table');
+  chk(/setInterval\(\(\) => \{ if \(!document\.hidden\) refreshBrandingHere\(\); \}, 360000\);/.test(game),
+      'on a timer, and only while the tab is visible — a scorer is not ' +
+      'watching for a logo change, so this catches up rather than being prompt');
+  chk(/visibilitychange[\s\S]{0,120}refreshBrandingHere\(\)/.test(game),
+      'and immediately on returning to the tab, which is the fast path');
+
+  chk(/TEAMS\.teamB\.logo = nextB;/.test(game),
+      'and the opponent logo is actually ASSIGNED — detecting the change and ' +
+      'then not applying it fails silently, with the poll firing forever');
+  chk(/TEAMS\.teamA\.logo = nextA;/.test(game), 'as is ours');
+  {
+    const fn = /async function refreshBrandingHere\(\)\{[\s\S]*?\n  \}/.exec(game);
+    chk(fn && /renderAll\(\);/.test(fn[0]),
+        'and renderAll is called, or the new values sit in TEAMS unpainted');
+  }
+
+  // A FALSE POSITIVE HERE IS WORSE THAN ON THE CREW VIEW: renderAll() redraws
+  // the play panel, and doing that under a scorer mid-entry is its own bug.
+  const m = /      const nextA = b\.logo_url \|\| null;[\s\S]*?if \(!changed\) return;/.exec(game);
+  chk(!!m, 'the change check is a single block');
+  if (m) {
+    const body = m[0].replace('if (!changed) return;', 'return changed;');
+    const run = (b, g, lA, lB) => new Function(
+      'TEAMS', 'b', 'g', 'lastBrandLogoA', 'lastBrandLogoB', body
+    )({ teamA: { logo: 'a.png', bg: '#1a4d9e' }, teamB: { logo: 'old.png', bg: '#c8102e' } },
+      b, g, lA, lB);
+    const B = { logo_url: 'a.png', primary_color: '#1a4d9e', secondary_color: '#fff' };
+    const G = o => Object.assign({ opponent_logo_url: 'old.png',
+      opponent_primary_color: '#c8102e' }, o || {});
+
+    chk(run(B, G(), undefined, undefined) === false,
+        'the first pass records what is there rather than re-rendering — a ' +
+        'page that loaded with the current logos must not redraw itself');
+    chk(run(B, G(), 'a.png', 'old.png') === false,
+        'and steady state is quiet, or the play panel redraws under the ' +
+        'scorer every few minutes');
+    chk(run(B, G({ opponent_logo_url: 'new.png' }), 'a.png', 'old.png') === true,
+        'a new opponent logo is caught — the reported fault');
+    chk(run(Object.assign({}, B, { logo_url: 'b.png' }), G(), 'a.png', 'old.png') === true,
+        'and our own');
+    chk(run(B, G({ opponent_primary_color: '#0b6e3a' }), 'a.png', 'old.png') === true,
+        'and a colour change either side');
+  }
+}
+
 console.log(fails ? '\n' + fails + ' FAILURES' : '\nALL PASS');
 process.exitCode = fails ? 1 : 0;
