@@ -133,7 +133,20 @@ async function run() {
     for (const f of files.slice(1)) {
       const a = JSON.stringify(boxScores[ref]), b = JSON.stringify(boxScores[f]);
       if (a !== b) {
-        failures.push({ area: 'engine agreement',
+        // WHAT differs, not just that something does. A bare "these disagree"
+      // on two JSON blobs is a finding nobody can act on.
+      if (a !== b){
+        try {
+          const A = JSON.parse(a), B = JSON.parse(b);
+          const keys = [...new Set(Object.keys(A).concat(Object.keys(B)))];
+          keys.forEach(k => {
+            const x = JSON.stringify(A[k]), y = JSON.stringify(B[k]);
+            if (x !== y) console.log('    [diff] ' + k + '\n      ' + ref + ': ' + String(x).slice(0,150) +
+                                     '\n      ' + f + ': ' + String(y).slice(0,150));
+          });
+        } catch(e){}
+      }
+      failures.push({ area: 'engine agreement',
           detail: f + ' produced a different box score than ' + ref });
       }
     }

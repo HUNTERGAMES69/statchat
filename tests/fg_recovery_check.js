@@ -53,15 +53,28 @@ async function run() {
   // --- 2. Muffed hold, no name, WITH return yards -- the exact
   // positional bug this session found and fixed
   {
+    // DRIVEN THROUGH THE PARSER, NOT THE PANEL -- deliberately, and this is
+    // the only kind of test that should be.
+    //
+    // The return-yards input was removed from this panel on 25 August 2026:
+    // it is not a credited stat and had no calculator. So there is no longer
+    // a UI path that produces this code, and a UI-driven test cannot exist.
+    //
+    // The PARSER guarantee still has to hold. Codes written before today are
+    // in the database and must keep reading correctly -- and the positional
+    // misparse this test was written for is exactly the kind of thing that
+    // rots unnoticed once nothing in the UI exercises it any more.
     const h = await bootGamePage();
     setDrive(h, { down: 3, distance: 2, side: 'opp', yardline: 40 });
-    h.evalIn("renderPlayPanel('fg')");
-    click(h.window, h.document.querySelector('.pp_kicker_pick'));
-    click(h.window, h.document.getElementById('pp_fg_muffhold_toggle'));
-    typeInto(h.window, h.document.getElementById('pp_fgmuffretyds'), '8');
-    click(h.window, h.document.getElementById('pp_review'));
-    const code = h.document.getElementById('code').value;
-    const pending = JSON.parse(h.evalIn('JSON.stringify(pending)'));
+    // THE '?' IS NOT DECORATION. The emit is
+    //   kicker + 'fg m' + (creditTok ? ' '+creditTok : '') + (ret ? ' '+ret : '')
+    // with creditTok = sel.credit || (retyds ? '?' : ''), so a return with no
+    // named recoverer emits '?' to HOLD THE POSITION. Writing this code
+    // without it -- which I did first -- reproduces the exact misparse the
+    // test was written for: the return is read as the recoverer.
+    const code = '7fg m ? 8';
+    const pending = JSON.parse(h.evalIn(
+      'JSON.stringify(parseInput(' + JSON.stringify(code) + ', computeState()))'));
     if (!/returned 8/.test((pending || {}).text || '')) {
       fail('muffhold-positional', 'return yards with no name should still say "returned 8" -- got ' +
         JSON.stringify(pending && pending.text) + ' (code was "' + code + '")');
@@ -76,14 +89,13 @@ async function run() {
   // --- 3. Blocked, no name, WITH return yards -- the SAME positional
   // bug, but in the branch that had already shipped
   {
+    // PARSER-DRIVEN for the same reason as the case above: the input this
+    // used to type into was removed 25 August 2026, so no UI path produces
+    // this code any more -- but saved plays still contain it.
     const h = await bootGamePage();
     setDrive(h, { down: 3, distance: 2, side: 'opp', yardline: 40 });
-    h.evalIn("renderPlayPanel('fg')");
-    click(h.window, h.document.querySelector('.pp_kicker_pick'));
-    click(h.window, h.document.getElementById('pp_fg_blocked_cb_toggle'));
-    typeInto(h.window, h.document.getElementById('pp_blockretyds'), '15');
-    click(h.window, h.document.getElementById('pp_review'));
-    const pending = JSON.parse(h.evalIn('JSON.stringify(pending)'));
+    const pending = JSON.parse(h.evalIn(
+      'JSON.stringify(parseInput("7fg b ? 15", computeState()))'));
     if (!/returned 15/.test((pending || {}).text || '')) {
       fail('blocked-positional', 'return yards with no name should still say "returned 15" -- got ' +
         JSON.stringify(pending && pending.text));

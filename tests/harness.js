@@ -125,10 +125,32 @@ function makeMockSupabase(db) {
       // cannot express that, since SQL's NULL = false is itself NULL,
       // not true, and would wrongly exclude every game saved before the
       // column existed. Nothing calls .or() before this, so adding it
-      // cannot change any existing test's behaviour.
+      // cannot change any existing test's behavior.
       or(filterStr) { this._orFilter = filterStr; return this; },
       order() { return this; },
+      // .range(from, to) -- PostgREST pagination. Added because view.html and
+      // the report pages now page through their season-wide fetches: one
+      // query capped at 1000 rows was silently truncating a season, losing
+      // the END of every game. Without this the fake client throws
+      // "q.range is not a function" and the whole tile fails.
+      //
+      // Honours the window rather than ignoring it, so a test can still
+      // exercise the paging loop if it wants to.
+      range(from, to) { this._range = [from, to]; return this; },
       limit() { return this; },
+      // maybeSingle / single. Missing until 26 August 2026, which is why a
+      // large block of suites failed with "maybeSingle is not a function"
+      // and had been failing long enough that a red suite stopped being
+      // read. Not an app fault -- the app calls a real Supabase method the
+      // mock did not implement.
+      //
+      // Resolved through the SAME then() as everything else rather than
+      // short-circuiting, so filters, ranges and the recorded-write
+      // behaviour all still apply; it only reshapes the result. maybeSingle
+      // returns null for an empty set; single errors, which is the
+      // difference the app relies on.
+      maybeSingle() { this._single = 'maybe'; return this; },
+      single() { this._single = 'one'; return this; },
       then(resolve, reject) {
         if (this._insertError) {
           const messages = {
@@ -234,7 +256,18 @@ function makeMockSupabase(db) {
             // adding anything a single-game test could actually need.
             if (db.games) {
               Object.keys(this._filters || {}).forEach(col => {
-                data = data.filter(row => String(row[col]) === String(this._filters[col]));
+                const want = this._filters[col];
+                // .in() RECORDS { __in: [...] } AND NOTHING READ IT, so an
+                // IN filter matched no rows at all -- the season aggregate
+                // came back empty and five assertions failed with no clue
+                // why. view.html fetches every prior game's plays with one
+                // .in('game_id', ids) now, so this path is load-bearing.
+                if (want && typeof want === 'object' && Array.isArray(want.__in)){
+                  const set = want.__in.map(String);
+                  data = data.filter(row => set.includes(String(row[col])));
+                  return;
+                }
+                data = data.filter(row => String(row[col]) === String(want));
               });
             }
             // Real OR-filter evaluation, not a no-op -- see .or() above
@@ -281,13 +314,49 @@ function makeMockSupabase(db) {
             // the mock lie to any code that inserts and then re-reads --
             // which is exactly what offline-recovery logic does.
             if (db.games) {
-              const gid = this._filters.game_id;
-              const entry = db.games.find(g => String(g.game.id) === String(gid));
-              data = entry ? entry.plays.slice().sort((a, b) => (a.sequence_number || 0) - (b.sequence_number || 0)) : [];
+              // ONE GAME OR SEVERAL. view.html now fetches every prior
+              // game's plays in a single .in('game_id', ids), so this has to
+              // handle a set as well as a single id -- reading _filters.game_id
+              // as a plain value silently matched no game at all, and the
+              // season aggregate came back empty.
+              const want = this._filters.game_id;
+              const ids = (want && typeof want === 'object' && Array.isArray(want.__in))
+                ? want.__in.map(String)
+                : [String(want)];
+              // game_id is STAMPED ON, because the fixtures group plays under
+              // their game rather than repeating the id on every row -- and
+              // the page groups the combined result by that field.
+              data = db.games
+                .filter(g => ids.includes(String(g.game.id)))
+                .flatMap(g => (g.plays || []).map(p =>
+                  Object.assign({ game_id: g.game.id }, p)))
+                .sort((a, b) => (a.sequence_number || 0) - (b.sequence_number || 0));
             } else data = db.existingPlays.concat(db.plays);
           }
         }
-        return Promise.resolve({ data: narrow(data), error: null }).then(resolve, reject);
+        // APPLY THE RANGE WINDOW, if one was set. The pager asks for
+        // [0,999], then [1000,1999], and stops when a page comes back short
+        // -- so returning the full set every time would loop forever.
+        let out = narrow(data);
+        if (this._range && Array.isArray(out)){
+          out = out.slice(this._range[0], this._range[1] + 1);
+        }
+        // maybeSingle / single reshape the SAME result rather than taking
+        // their own path, so filters, ranges and column narrowing above all
+        // still apply. The difference between them is the empty case, and
+        // that difference is what callers rely on: maybeSingle gives null,
+        // single gives an error.
+        if (this._single){
+          const first = Array.isArray(out) ? (out.length ? out[0] : null) : out;
+          if (first === null && this._single === 'one'){
+            return Promise.resolve({
+              data: null,
+              error: { message: 'JSON object requested, multiple (or no) rows returned' }
+            }).then(resolve, reject);
+          }
+          return Promise.resolve({ data: first, error: null }).then(resolve, reject);
+        }
+        return Promise.resolve({ data: out, error: null }).then(resolve, reject);
       }
     };
     return b;
@@ -481,7 +550,7 @@ async function bootPage(file, opts = {}) {
 
   // Inline statchat.css in place of its <link>, for the same reason and
   // in the same way. Without it the shared tokens are simply absent, and
-  // every converted page renders with no colour at all in the harness.
+  // every converted page renders with no color at all in the harness.
   //
   // AND RESOLVE var() BY HAND. Inlining alone is not enough: jsdom's CSS
   // engine does not implement custom properties. It returns the literal

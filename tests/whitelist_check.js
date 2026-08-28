@@ -377,7 +377,10 @@ async function run() {
         .find(b => /Intercepted/.test(b.textContent)));
       typeInto(win, doc.getElementById('pp_passer_manual'), '7');
       typeInto(win, doc.getElementById('pp_credit_manual'), '55');
-      typeInto(win, doc.getElementById('pp_yards'), '30');
+      // pp_yards on the INT panel was the RETURN, removed 25 August 2026 --
+      // not a credited stat. It was incidental here: what this case checks
+      // is that an interception RETURNED FOR A TOUCHDOWN gates to the try,
+      // and the touchdown toggle below is what establishes that.
       click(win, doc.getElementById('pp_td_toggle'));
       click(win, doc.getElementById('pp_review'));
       click(win, doc.getElementById('saveBtn'));

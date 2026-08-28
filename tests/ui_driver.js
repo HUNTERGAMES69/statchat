@@ -42,7 +42,7 @@ function typeInto(win, el, value) {
 // had one player per number, so the first matching button was always
 // the right one -- opts.name is optional and every existing call site
 // is unaffected, since without it this defaults to that exact prior
-// behaviour.
+// behavior.
 function pickPlayer(win, doc, role, num, opts = {}) {
   const panel = doc.getElementById('playPanel');
   const suffix = opts.suffix || '';
@@ -192,7 +192,7 @@ function enterPlay(h, spec) {
       radio(win, doc, 'pp_rush_fumrec', spec.fumrec || 'opp');
       if ((spec.fumrec || 'opp') === 'opp') {
         P('credit', spec.credit, { suffix: '_rushfum' });
-        if (spec.retyds !== undefined) typeInto(win, q(doc, 'pp_rushfum_retyds'), spec.retyds);
+        // rush fumble: return yards removed from the panel; spec value ignored.
         if (spec.fumTd) toggle(win, doc, 'pp_rushfum_td_toggle');
         // The takeover spot is a SEPARATE field from retyds -- entering
         // return yards alone leaves fieldPos null, which an earlier
@@ -225,7 +225,7 @@ function enterPlay(h, spec) {
         radio(win, doc, 'pp_pass_fumrec', spec.fumrec || 'opp');
         if ((spec.fumrec || 'opp') === 'opp') {
           P('credit', spec.credit, { suffix: '_passfum' });
-          if (spec.retyds !== undefined) typeInto(win, q(doc, 'pp_passfum_retyds'), spec.retyds);
+          // pass fumble: return yards removed from the panel; spec value ignored.
           if (spec.fumTd) toggle(win, doc, 'pp_passfum_td_toggle');
           if (spec.fumSpot && !spec.fumTd) setStartingSpot(win, doc, 'pp_passfum_spot', spec.fumSpot.side, spec.fumSpot.yardline);
         } else if (spec.safety) toggle(win, doc, 'pp_passfum_safety_toggle');
@@ -242,7 +242,7 @@ function enterPlay(h, spec) {
       radio(win, doc, 'pp_sack_fumrec', spec.fumrec || 'opp');
       if ((spec.fumrec || 'opp') === 'opp') {
         P('credit', spec.credit, { suffix: '_sackfum' });
-        if (spec.retyds !== undefined) typeInto(win, q(doc, 'pp_sackfum_retyds'), spec.retyds);
+        // sack fumble: return yards removed from the panel; spec value ignored.
         if (spec.fumTd) toggle(win, doc, 'pp_sackfum_td_toggle');
         if (spec.fumSpot && !spec.fumTd) setStartingSpot(win, doc, 'pp_sackfum_spot', spec.fumSpot.side, spec.fumSpot.yardline);
       } else if (spec.safety) toggle(win, doc, 'pp_sackfum_safety_toggle');
@@ -263,7 +263,11 @@ function enterPlay(h, spec) {
     if (spec.intTouchback) {
       click(win, q(doc, 'pp_int_tb_toggle'));
     } else {
-      if (spec.yards !== undefined) typeInto(win, q(doc, 'pp_yards'), spec.yards);
+      // INT/FUMBLE: `yards` on these panels WAS the return, entered into the
+      // shared pp_yards box. That input was removed 25 August 2026 -- per
+      // panel it was used exactly once, as the return, and the return is
+      // not a credited stat. The property is accepted and ignored rather
+      // than throwing, so existing specs still run.
       if (spec.td) toggle(win, doc, 'pp_td_toggle');
       if (spec.spot) setStartingSpot(win, doc, 'pp_spot', spec.spot.side, spec.spot.yardline);
     }
@@ -272,7 +276,11 @@ function enterPlay(h, spec) {
     radio(win, doc, 'pp_fumrec', spec.fumrec || 'opp');
     if ((spec.fumrec || 'opp') === 'opp') {
       P('credit', spec.credit);
-      if (spec.yards !== undefined) typeInto(win, q(doc, 'pp_yards'), spec.yards);
+      // INT/FUMBLE: `yards` on these panels WAS the return, entered into the
+      // shared pp_yards box. That input was removed 25 August 2026 -- per
+      // panel it was used exactly once, as the return, and the return is
+      // not a credited stat. The property is accepted and ignored rather
+      // than throwing, so existing specs still run.
       if (spec.td) toggle(win, doc, 'pp_td_toggle');
     } else if (spec.safety) toggle(win, doc, 'pp_fum_safety_toggle');
     if (spec.spot) setStartingSpot(win, doc, 'pp_spot', spec.spot.side, spec.spot.yardline);
@@ -295,7 +303,7 @@ function enterPlay(h, spec) {
       toggle(win, doc, 'pp_ko_muffed_toggle');
       radio(win, doc, 'pp_ko_muffrec', spec.muffrec || 'k');
       if (spec.muffrecoverer !== undefined) typeInto(win, q(doc, 'pp_ko_muff_rec'), spec.muffrecoverer);
-      if (spec.muffretyds !== undefined) typeInto(win, q(doc, 'pp_ko_muff_retyds'), spec.muffretyds);
+      // kickoff muff: return yards removed from the panel; spec value ignored.
       if (spec.td) toggle(win, doc, 'pp_td_toggle');
       // The takeover spot here is the KICKING team's own frame, only
       // shown/required when they are the recoverer -- matching the
@@ -332,7 +340,7 @@ function enterPlay(h, spec) {
       radio(win, doc, 'pp_punt_blockrec', spec.blockrec || 'opp');
       if ((spec.blockrec || 'opp') === 'opp') {
         P('credit', spec.credit, { suffix: '_pb' });
-        if (spec.retyds !== undefined) typeInto(win, q(doc, 'pp_blockretyds'), spec.retyds);
+        // blocked punt: return yards removed from the panel; spec value ignored.
         if (spec.td) toggle(win, doc, 'pp_td_toggle');
       } else if (spec.safety) toggle(win, doc, 'pp_punt_safety_toggle');
     } else if (spec.muffed) {
@@ -347,7 +355,7 @@ function enterPlay(h, spec) {
       if (spec.safety) {
         click(win, q(doc, 'pp_muff_safety_toggle'));
       } else if (spec.muffretyds !== undefined) {
-        typeInto(win, q(doc, 'pp_muff_retyds'), spec.muffretyds);
+        // punt muff: return yards removed from the panel; spec value ignored.
       }
     } else {
       if (spec.yards !== undefined) typeInto(win, q(doc, 'pp_yards'), spec.yards);
@@ -362,7 +370,7 @@ function enterPlay(h, spec) {
     if (spec.blocked) {
       toggle(win, doc, 'pp_fg_blocked_cb_toggle');
       P('credit', spec.credit, { suffix: '_fgb' });
-      if (spec.retyds !== undefined) typeInto(win, q(doc, 'pp_blockretyds'), spec.retyds);
+      // blocked FG: return yards removed from the panel; spec value ignored.
       if (spec.td) toggle(win, doc, 'pp_td_toggle');
     } else {
       radio(win, doc, 'pp_fgres', spec.result || 'g');
@@ -455,7 +463,7 @@ function finish(h, spec) {
 /**
  * Establish down/distance/field position using the real "New drive /
  * correct down" utility -- the same widget a coach uses.
- * side: 'own' picks the button labelled "<current offense>'s side".
+ * side: 'own' picks the button labeled "<current offense>'s side".
  */
 function setDrive(h, { down = 1, distance = 10, side = 'own', yardline = 25 }) {
   const { window: win, document: doc } = h;

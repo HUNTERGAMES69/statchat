@@ -95,23 +95,32 @@ async function run() {
     const p = doc.getElementById('playPanel');
     click(win, p.querySelector('.pp_punter_pick[data-num="15"]'));
     click(win, doc.getElementById('pp_blocked_toggle'));
-    typeInto(win, doc.getElementById('pp_blockretyds'), '8');
+    // The return-yards box went from this panel on 25 August 2026 -- not a
+    // credited stat. It was incidental here anyway: what this case is for is
+    // that a blocked punt SAVES WITH NO RECOVERER NAMED, which it still
+    // does. The 'returned 8' expectation goes with the input that produced
+    // it; the positional parse it also happened to cover is now asserted
+    // directly in fg_recovery_check, against the code rather than the panel.
     fillSpot(35);
-  }, ['punt BLOCKED', 'returned 8']);
+  }, ['punt BLOCKED']);
 
   // --- turnovers ------------------------------------------------------
   attempt('interception, no interceptor', () => {
     passSwitch('Intercepted');
     typeInto(win, doc.getElementById('pp_passer_manual'), '7');
-    typeInto(win, doc.getElementById('pp_yards'), '15');
-  }, ['intercepted', 'returned 15']);
+    // pp_yards on the INT panel was the return, removed 25 August 2026. The
+    // case is about an interception saving with NO INTERCEPTOR NAMED, which
+    // it still does.
+  }, ['intercepted']);
 
   attempt('standalone fumble, no recoverer', () => {
     open('fumble');
     typeInto(win, doc.getElementById('pp_carrier_manual'), '22');
     const r = doc.querySelector('input[name=pp_fumrec][value=opp]');
     r.checked = true; click(win, r);
-    typeInto(win, doc.getElementById('pp_yards'), '10');
+    // Same: pp_yards on the fumble panel was the return, and is gone. The
+    // assertion that matters -- "recovered by the defense" with nobody
+    // named -- is untouched.
   }, ['fumble', 'recovered by the defense']);
 
   attempt('rush + fumble lost, no recoverer', () => {
@@ -272,7 +281,7 @@ async function run() {
       .find(b => /Returned/.test(b.textContent));
     // NOTE: since 22 Aug this matches the OUTER return group rather than a
     // returner-only block -- the whole group now collapses as one. The
-    // assertion still holds: something labelled "Returned" collapses, is
+    // assertion still holds: something labeled "Returned" collapses, is
     // closed by default, and opens on a tap.
     const rbBody = rb && rb.querySelector('.opt-body');
     const rbToggle = rb && rb.querySelector('.opt-toggle');
