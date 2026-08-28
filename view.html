@@ -2417,6 +2417,20 @@ function extractNameTag(rawName){
 
   function renderTeamSummary(){
     const box = computeBoxScore(plays);
+    // BETWEEN HALVES, AND AFTER THE FINAL WHISTLE, the football and the
+    // timeout counter both describe a situation that does not exist. Nobody
+    // has the ball. Timeouts reset for the second half, so TOL=1 at the
+    // interval is not stale -- it is wrong -- and at full time it describes
+    // a game that cannot use them.
+    //
+    // THE SAME TWO STATES THE DRIVE CARDS USE, and read from the same
+    // `phase` rather than derived again: a first version added its own
+    // atHalftime() helper, a third copy of
+    // `halftimeIdx !== -1 && !secondHalfStarted`, which is exactly the kind
+    // of thing that drifts until two halves of one screen disagree about
+    // when halftime is. renderAll sets phase at the top of the same pass
+    // that calls this, so it is always current.
+    const notLive = phase === 'HALFTIME' || phase === 'FINAL';
 
     // THE GAME AS IT STOOD AT HALFTIME.
     // ---------------------------------------------------------------------
@@ -2537,7 +2551,8 @@ function extractNameTag(rawName){
         // the one without the ball, so the header width does not jump
         // every time possession changes.
         '<span class="poss-ball" style="visibility:' +
-          (liveState.possession === teamKey && liveState.down ? 'visible' : 'hidden') +
+          (!notLive && liveState.possession === teamKey && liveState.down
+            ? 'visible' : 'hidden') +
           ';" title="has the ball">\uD83C\uDFC8</span>' +
         // Right-justified via margin-left:auto so it sits hard against
         // the end of the colored bar regardless of how long the team
@@ -2554,8 +2569,13 @@ function extractNameTag(rawName){
         // 0:00 -- which says "they never had the ball" rather than "nobody
         // recorded it". Absent is honest; zero is a claim.
         '<span style="margin-left:auto; display:flex; flex-direction:column; align-items:flex-end; line-height:1.15;">' +
-          '<span style="font-size:16px; font-weight:700; letter-spacing:0.02em;">TOL=' +
-            computeState(plays).timeouts[teamKey] + '</span>' +
+          // REMOVED at halftime, not hidden. The football keeps its space
+          // because the header width would otherwise jump as possession
+          // changes; this has no such problem, and leaving an empty line
+          // above the time of possession just looks like a missing number.
+          (notLive ? '' :
+            '<span style="font-size:16px; font-weight:700; letter-spacing:0.02em;">TOL=' +
+              computeState(plays).timeouts[teamKey] + '</span>') +
           (topSec > 0
             // Same font size and weight as TOL above it, so the two lines
             // are the same height. It was 13px against 16px, which on a
