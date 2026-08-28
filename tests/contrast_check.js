@@ -853,6 +853,56 @@ console.log('\nPages with findings: ' + bad + ' of ' + files.length);
   }
 })();
 
+function chkQuiet(ok, msg){ if (!ok){ console.log('  FAIL view.html: ' + msg); bad++; } }
+
+// ---- the football and the timeout counter go away when play is not live -
+// Both describe a live situation. At halftime neither is true: nobody has
+// the ball, and timeouts reset for the second half, so TOL=1 is not stale
+// -- it is wrong. At full time the same holds, and the counter describes a
+// game that cannot use them.
+//
+// The SAME TWO STATES the drive cards hide on, so one screen behaves one
+// way.
+//
+// THE SIGNAL IS SHARED with the drive cards in the top-right quad, which
+// already switch on `phase`. A first version added its own atHalftime()
+// helper: a third copy of `halftimeIdx !== -1 && !secondHalfStarted`, and
+// exactly the kind of thing that drifts until two parts of one screen
+// disagree about when halftime is.
+(function halftimeSuppression(){
+  const src = require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'view.html'), 'utf8');
+
+  chkQuiet(!/function atHalftime/.test(src),
+    'halftime is derived in a second place — it belongs to `phase`, which ' +
+    'the drive cards already use');
+  chkQuiet(/const notLive = phase === 'HALFTIME' \|\| phase === 'FINAL';/.test(src),
+    'renderTeamSummary does not cover BOTH halftime and final — the drive ' +
+    'cards hide on both, and these have to match');
+  chkQuiet(/const showScoring = phase === 'HALFTIME';/.test(src),
+    'and the drive cards no longer read it either — these two must agree');
+  chkQuiet(/!notLive && liveState\.possession === teamKey/.test(src),
+    'the possession football is not suppressed');
+  chkQuiet(/\(notLive \? '' :[\s\S]{0,160}TOL=/.test(src),
+    'the timeout counter is not suppressed');
+
+  // BOTH STATES, RUN. Naming them is not covering them.
+  {
+    const f = (phase) => phase === 'HALFTIME' || phase === 'FINAL';
+    chkQuiet(f('HALFTIME') && f('FINAL'), 'both non-live phases suppress');
+    chkQuiet(!f(null) && !f('NOT STARTED'),
+      'and a live game, or one not yet started, does not — a football hidden ' +
+      'mid-drive is a worse fault than one shown at the whistle');
+  }
+
+  // phase must be set before the render reads it, in the same pass
+  const setAt = src.indexOf('phase =\n');
+  const useAt = src.indexOf("const notLive = phase === 'HALFTIME'");
+  chkQuiet(setAt > -1 && useAt > setAt,
+    'phase is read before renderAll assigns it, so the tiles would lag a ' +
+    'render behind the drive cards');
+})();
+
 // EXIT LAST. This line used to sit above the message-tint audit, so any
 // failure it found was counted after the exit code had already been decided
 // -- the audit could go red and the run still exit 0.
