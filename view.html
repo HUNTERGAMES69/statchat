@@ -1105,21 +1105,32 @@ function extractNameTag(rawName){
         const d = s.specialTeams[n];
         return d.fgAtt || d.patAtt || d.punts || d.kickoffs;
       });
-      const stKicking = [], stPunting = [], stKickoffs = [];
+      const stFieldGoals = [], stPats = [], stPunting = [], stKickoffs = [];
       stNums.forEach(n => {
         const d = s.specialTeams[n];
         const name = n;
-        if (d.fgAtt || d.patAtt){
-          // A dash, not a zero, for a category the kicker never attempted.
-          // "0 for 0" reads as a failure; on a PAT-only kicker it looked
-          // like he had missed field goals he was never asked to take.
-          // Long is also dashed on an 0-for-N day -- a missed 45 is not
-          // a "long" of 45, and nor is it a long of 0.
-          const fg = d.fgAtt
-            ? [d.fgAtt, d.fgMade || 0, d.fgMade ? (d.fgLong || 0) : '—']
-            : ['—', '—', '—'];
-          const xp = d.patAtt ? [d.patAtt, d.patMade || 0] : ['—', '—'];
-          stKicking.push({ yds: d.fgLong || 0, name, values: fg.concat(xp) });
+        // FIELD GOALS AND EXTRA POINTS GET THEIR OWN ROWS.
+        // ----------------------------------------------------------------
+        // These shared one five-column line -- FG Att, FG Made, Long, XP
+        // Att, XP Made -- so a kicker who only took extra points still
+        // occupied all five with three em-dashes in them, and the widest
+        // header ("FG Made") set a column width nothing in the row needed.
+        // On a narrow tile that is what pushed the table past its border.
+        //
+        // Split, each row carries three columns of numbers that are all
+        // present. There is vertical room in this tile and there was never
+        // horizontal room, so trading one for the other is the whole fix.
+        if (d.fgAtt){
+          stFieldGoals.push({
+            yds: d.fgLong || 0, name,
+            values: [d.fgAtt, d.fgMade || 0, d.fgMade ? (d.fgLong || 0) : '\u2014']
+          });
+        }
+        if (d.patAtt){
+          // Sorted by attempts rather than yards: an extra point has no
+          // distance, so the yardage sort every other section uses would
+          // order these arbitrarily.
+          stPats.push({ yds: d.patAtt, name, values: [d.patAtt, d.patMade || 0] });
         }
         if (d.kickoffs){
           const tbPct = Math.round(100 * (d.touchbacks || 0) / d.kickoffs);
@@ -1133,9 +1144,11 @@ function extractNameTag(rawName){
           stPunting.push({ yds: d.puntYds||0, name, values: [d.punts||0, avg, d.puntLong||0] });
         }
       });
-      stKicking.sort((a, b) => b.yds - a.yds);
+      stFieldGoals.sort((a, b) => b.yds - a.yds);
+      stPats.sort((a, b) => b.yds - a.yds);
       stPunting.sort((a, b) => b.yds - a.yds);
-      const stTotalEntries = stKicking.length + stPunting.length + stKickoffs.length;
+      const stTotalEntries = stFieldGoals.length + stPats.length +
+                             stPunting.length + stKickoffs.length;
       if (stTotalEntries){
         // Three separate tables share this tile, and concatenated flush
         // they read as one run-on block: a header row lands directly
@@ -1144,7 +1157,8 @@ function extractNameTag(rawName){
         // between sections makes each one legible on its own.
         const stSections = [];
         const pushIfRows = (hdrs, rows) => { if (rows.length) stSections.push(table(hdrs, rows)); };
-        pushIfRows(['FG Att','FG Made','Long','XP Att','XP Made'], stKicking.slice(0, MAX_ROWS).filter(rowHasValue));
+        pushIfRows(['FG Att','FG Made','Long'], stFieldGoals.slice(0, MAX_ROWS).filter(rowHasValue));
+        pushIfRows(['XP Att','XP Made'], stPats.slice(0, MAX_ROWS).filter(rowHasValue));
         pushIfRows(['Punts','Avg','Long'], stPunting.slice(0, MAX_ROWS).filter(rowHasValue));
         // Kickoffs: just the count and how many stayed in the end zone.
         // Individual kickoff distance is not reported anywhere and the
@@ -1232,7 +1246,7 @@ function extractNameTag(rawName){
       if (!rushNums.length && !passNums.length && !recNums.length && !stTotalEntries && !defNums.length){
         passHtml += '<p class="hint">No stats yet for ' + team.name + '.</p>';
       }
-      const totalRows = passNums.length + rushNums.length + recNums.length + Math.min(stKicking.length, 5) + Math.min(stPunting.length, 5) + (defNums.length ? 1 : 0);
+      const totalRows = passNums.length + rushNums.length + recNums.length + Math.min(stFieldGoals.length, 5) + Math.min(stPats.length, 5) + Math.min(stPunting.length, 5) + (defNums.length ? 1 : 0);
       // Left: the passing game top to bottom, then rushing.
       // Right: defense, then special teams.
       leftHtml = passHtml + recHtml + rushHtml;
