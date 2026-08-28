@@ -2389,17 +2389,30 @@ const PENALTIES = {
 // Options for one side, grouped, in the order the groups are declared
 // above rather than alphabetically -- a scorer looks for "false start"
 // among the pre-snap fouls, not under F.
+// ONE ALPHABETICAL LIST, not four groups.
+// ---------------------------------------------------------------------
+// This returned groups -- Before the snap, During the play, Kicking plays,
+// Personal foul / conduct -- and each was sorted alphabetically inside
+// itself. So finding a penalty meant deciding which group it belonged to
+// FIRST, and then looking. Under time pressure that is two decisions where
+// there should be one, and the first is a judgement call: is a chop block
+// a foul during the play or a personal foul?
+//
+// Flat, the answer is always in the same place. 27 options per side, and a
+// native select jumps to the first letter as you type.
+//
+// `group` stays in PENALTIES. Nothing reads it now, but it describes when
+// a foul happens and that is worth keeping for anything that wants to sort
+// or filter by it later.
 function penaltyOptionsFor(side){
-  const groups = [];
+  const items = [];
   for (const slug of Object.keys(PENALTIES)){
     const p = PENALTIES[slug];
     if (p.side !== 'both' && p.side !== side) continue;
-    let g = groups.find(x => x.label === p.group);
-    if (!g){ g = { label: p.group, items: [] }; groups.push(g); }
-    g.items.push({ slug, name: p.name });
+    items.push({ slug, name: p.name });
   }
-  groups.forEach(g => g.items.sort((a, b) => a.name.localeCompare(b.name)));
-  return groups;
+  items.sort((a, b) => a.name.localeCompare(b.name));
+  return items;
 }
 
 function parseInput(raw, state){
@@ -13982,10 +13995,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // dropdown looks answered.
       const sel = document.getElementById('pen_type');
       sel.innerHTML = '<option value="">— not specified —</option>' +
-        penaltyOptionsFor(penTeam).map(g =>
-          '<optgroup label="' + g.label + '">' +
-          g.items.map(i => '<option value="' + i.slug + '">' + i.name + '</option>').join('') +
-          '</optgroup>').join('');
+        penaltyOptionsFor(penTeam)
+          .map(i => '<option value="' + i.slug + '">' + i.name + '</option>').join('');
       sel.value = '';
       document.getElementById('pen_type_wrap').style.display = 'block';
     }));
