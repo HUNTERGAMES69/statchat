@@ -1663,11 +1663,30 @@
     }
   });
 
+  // A NEW LOGO NEEDS A NEW URL.
+  // ----------------------------------------------------------------------
+  // This wrote to a fixed path -- opponent/<gameId>/logo.<ext> -- with
+  // upsert, so replacing the image left the stored URL byte-for-byte
+  // identical. Nothing downstream could tell anything had happened: the
+  // games row was unchanged, so a page comparing it found no change, and a
+  // page that DID re-render asked for the same URL and got the browser's
+  // cached copy. Reported from a live game on 27 August 2026, where a
+  // replaced opponent logo appeared on no screen at all.
+  //
+  // A cache-busting query string would fix the browser and not the CDN,
+  // and would leave a stale row for anything reading the URL later. A new
+  // path each time fixes both: the row changes, so change detection works,
+  // and nothing has ever seen the new address.
+  //
+  // The old object is left behind. Storage is cheap, deleting is a second
+  // call that can fail on its own, and an orphan is harmless -- whereas
+  // deleting before the row is updated would break the logo if the update
+  // then failed.
   async function uploadOppLogo(file, gameId){
-    const ext = file.name.split('.').pop();
-    const path = 'opponent/' + gameId + '/logo.' + ext;
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    const path = 'opponent/' + gameId + '/logo-' + Date.now() + '.' + ext;
     const { error: uploadError } = await supabaseClient.storage
-      .from('team-logos').upload(path, file, { upsert: true });
+      .from('team-logos').upload(path, file, { upsert: true, cacheControl: '3600' });
     if (uploadError) throw uploadError;
     const { data } = supabaseClient.storage.from('team-logos').getPublicUrl(path);
     return data.publicUrl;
