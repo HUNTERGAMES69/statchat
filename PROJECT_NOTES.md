@@ -3761,3 +3761,163 @@ before the file write. The log claimed success for work that had not
 happened. Caught on the next verification, but worth remembering: a print is
 not evidence of a write, and any script doing several edits should write
 after each rather than accumulating and writing once at the end.
+
+## The crew view's fourth tile row, and why it vanished (26 August 2026)
+
+Eight team-stat tiles sit in a four-row grid inside a `.quad` that is half
+the viewport with `overflow-y:hidden`. Penalties and 3rd Down stopped
+appearing when the page went dark.
+
+They were never lost. They were **built, rendered, and clipped** — the array
+at the top of `renderTeamSummary` still had all eight, and the fourth row was
+simply below the cut.
+
+The cause was the dark conversion raising the tile value from 34px to 39px
+so it reads across a room. Eight tiles in four rows need roughly 24px more
+at that size than at the old one. The comment recorded the reasoning for the
+size and nobody checked what it cost the column.
+
+It only bit on desktop: below 767px a separate `.quad` rule sets
+`overflow-y:visible`.
+
+### Why the rows would not compress
+
+Two auto minimums, one level apart:
+
+- `.team-summary-col` is a **flex child**, and a flex child's default minimum
+  in the flex direction is its CONTENT size.
+- `.stat-tile` is a **grid item**, and a grid item defaults to
+  `min-height:auto` — so a `1fr` row cannot shrink below the text inside it.
+
+Four rows therefore stayed four rows' worth of content however little space
+there was, and the surplus went over the edge of a container that hides its
+overflow. Both now carry `min-height:0`.
+
+### And then the number would have spilled instead
+
+Once rows can compress, a fixed 39px value simply overflows its own tile:
+one overflow traded for another. The value is now
+`clamp(26px, 3.1vh, 39px)` — 39px remains the ceiling on a tall display,
+26px the floor below which it stops reading across a room, which was the
+entire point of enlarging it.
+
+**jsdom does not lay out**, so none of this can be verified in the harness.
+What the audit can assert is that nothing has re-imposed the floor, that the
+value is not fixed again, and that both tiles are still built.
+
+---
+
+## Field goals and extra points split (26 August 2026)
+
+The special-teams tile spilled past its border. One five-column row —
+FG Att, FG Made, Long, XP Att, XP Made — served both kinds of kick, guarded
+by a single `if (d.fgAtt || d.patAtt)`.
+
+**One condition produced both halves of the row.** A kicker who only took
+extra points still occupied all five columns with three em-dashes in them,
+and `FG Made`, the widest header, set a column width nothing in that row
+needed.
+
+Now two tables, each guarding on its own stat. The widest numeric block
+drops from about 290px to 167px — 42% narrower — at the cost of one extra
+header and row, which the tile has room for.
+
+Two details that are easy to miss:
+
+- **PATs sort by attempts, not yards.** An extra point has no distance, so
+  the yardage sort every other section uses would order them arbitrarily.
+- **The row-count budget counts both tables.** Missing that would let the
+  tile overflow again for a different reason.
+
+---
+
+## Not-live states on the crew view (26 August 2026)
+
+The possession football and the timeouts-left counter both describe a live
+situation. At halftime neither is true: nobody has the ball, and timeouts
+reset for the second half, so `TOL=1` at the interval is not stale — it is
+wrong. At full time the counter describes a game that cannot use them.
+
+Both are now suppressed when `phase` is `HALFTIME` or `FINAL`, which is
+**the same pair the drive cards in the top-right quad already hide on**.
+
+### The correction worth recording
+
+A first version added its own `atHalftime()` helper — a third copy of
+`halftimeIdx !== -1 && !secondHalfStarted`. Andy pointed out that the drive
+cards already behave this way, and they do: `phase === 'HALFTIME'` resolves
+to exactly that expression. The helper was removed and both now read the
+shared `phase`, which `renderAll` sets at the top of the same pass.
+
+**Two parts of one screen deriving the same rule separately is how they end
+up disagreeing about when halftime is.** The audit asserts both read
+`phase`, and that the ordering holds.
+
+The flag is called `notLive` rather than `halftime`, because it no longer
+means halftime and a variable that lies about its scope is how the next
+change goes wrong.
+
+### The difference between the two elements
+
+The football is **hidden** and keeps its space — it already used
+`visibility:hidden` so the header width does not jump as possession changes.
+The counter is **removed**, because it has no width problem and an empty
+line above time of possession reads as a missing number.
+
+---
+
+## The keypad does not open over an answer (26 August 2026)
+
+A touchback prefills the clock from the last value entered, and the numeric
+pad still came up over it — one extra dismissal on every touchback, which on
+a kickoff-heavy game is most of them.
+
+**Two halves, because the timing is a race.** `prefillTouchbackClock` is
+deferred on `setTimeout(0)`; `raiseClockPad` fires on
+`requestAnimationFrame` and retries at 60ms and 250ms. Which of the first
+two wins is not something to rely on. So the raise refuses a field that
+already holds a value, AND the prefill closes a pad that beat it there.
+
+**Guarded on the value, not on the touchback flag.** `prefillTouchbackClock`
+does set `dataset.fromTouchback`, so keying off it was available. The rule is
+the same however the value arrived — this pad exists to enter a number, and
+a field holding one does not need it — and a flag would need setting at
+every future prefill site to keep working.
+
+The other three callers were checked: the mid-drive clock prompt clears its
+field, the confirm card clears on every play, and Set clock builds its input
+with no value. Only the touchback leaves a value behind.
+
+---
+
+## The test harness had a hole, and it was hiding a finding (26 August 2026)
+
+The mock Supabase client never implemented `maybeSingle`, so a large block of
+suites died before asserting anything. Added: resolved through the same
+`then()` as every other query, so filters, ranges and column narrowing still
+apply. Only the empty case differs between the two forms — `maybeSingle`
+returns null, `single` errors, and that difference is what callers rely on.
+
+One stub cleared several suites outright.
+
+**What it exposed underneath is the point.** `cross_surface` reports the
+season report and the crew view disagreeing. They do NOT disagree on
+numbers: `att 2, yds 13, long 8` is identical on both sides. They disagree
+on LABELS — the crew view shows `N Runningback`, the season report shows
+`#22`. Most likely the fixture's roster shape, but it has to be confirmed
+against a live report, because "the report shows numbers where the view
+shows names" would be a real complaint.
+
+The assertion now prints WHICH keys differ, which is what made it
+diagnosable at all.
+
+**A suite expected to be red is a suite nobody reads**, and there were
+enough of them to hide a real failure. That is no longer hypothetical.
+
+### A measurement error worth remembering
+
+I briefly reported the stub making things worse — 18 pass where 30 had
+passed before. That was the measurement: an 8-second timeout counts every
+slow suite as a failure, and several legitimately need 25 to 45 seconds.
+At a realistic timeout the stub is a clear gain. **A test count is only
+meaningful alongside the timeout it was taken at.**

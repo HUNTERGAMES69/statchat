@@ -144,6 +144,90 @@ close:
 
 ---
 
+## 0c4. TWO COMMERCIAL GAPS, FOUND 26 AUGUST 2026
+
+- [ ] **"Lapsed \u2014 read only" is a label, not a state.** `platform.html`
+  line 615 tells the operator a lapsed tenant is read only. Nothing enforces
+  it: not RLS, not the API, not the app. `api/_tenant.js` reads
+  `subscription` and returns it, and no caller checks the value. A school
+  that stops paying keeps full write access indefinitely while the console
+  says otherwise.
+  A console that lies to its own operator is worse than one that says
+  nothing, and this is the gap that matters before a second paying seat.
+  Decide the shape first: read-only means the app loads, reports open and
+  exports work, but no play saves and no game is created \u2014 which is a
+  different thing from disabled, and kinder.
+
+- [ ] **There is no whole-account export.** `season_report.html` and
+  `stat_package.html` export per game and per season; `recap.html` exports
+  nothing. There is no "give me everything this school has".
+  Needed for three separate reasons and none of them is a feature request:
+  a school that leaves and wants its data, a recovery position if a tenant
+  is deleted by mistake, and the answer to a customer asking what happens
+  to their statistics if StatChat stops existing. That last question will
+  be asked during a sales conversation.
+
+---
+
+## 0c5. THE TEST SUITE, AFTER 26 AUGUST
+
+The mock Supabase client did not implement `maybeSingle`, so a large block
+of suites died before asserting anything. Added on 26 August, resolved
+through the same `then()` as every other query so filters, ranges and column
+narrowing still apply -- it only reshapes the result, and only the empty case
+differs between `maybeSingle` (null) and `single` (error).
+
+That one stub cleared several suites outright. What it exposed underneath:
+
+- [ ] **`cross_surface` reports the season report and the crew view
+  disagreeing.** They do NOT disagree on numbers -- `att 2, yds 13, long 8`
+  is identical on both sides. They disagree on LABELS: the crew view shows
+  `N Runningback`, the season report shows `#22`.
+  Both pages call `buildTeams` with roster rows, and the fixture hands the
+  season report 24 of them, so this is most likely the fixture's roster
+  SHAPE rather than an app fault -- but it has to be confirmed against a
+  live report before being dismissed, because "the report shows numbers
+  where the view shows names" would be a real complaint if true.
+  The assertion now prints WHICH keys differ, which is what made this
+  diagnosable at all.
+
+- [ ] **`broadcast_flag_check` (3) and `preseason_exclusion_check` (1) now
+  fail on real assertions** rather than crashing. They got far enough to
+  test something, which is progress; neither has been read yet.
+
+- [ ] **`supabaseClient is not defined` in `RECOVER_STRANDED_PLAYS`** and a
+  small number of others -- a separate harness gap from the one above.
+
+**The point of all this:** a suite expected to be red is a suite nobody
+reads, and there were enough of them to hide a real failure. That is no
+longer hypothetical -- `cross_surface` had something to say and nobody could
+hear it.
+
+---
+
+## 0c6. TWO THINGS TO LOOK AT ON A REAL SCREEN
+
+Neither is verifiable in the harness -- jsdom does not lay out -- and both
+are changes made on 26 August whose whole point is visual.
+
+- [ ] **The crew view's tile column, at a couple of window heights.** The
+  tile value now scales with `clamp(26px, 3.1vh, 39px)` and the rows
+  compress rather than clip. Confirm all eight tiles are visible on a
+  laptop AND on a large display, and that 26px still reads from across a
+  room -- if it does not, the floor is the number to raise, not the ceiling.
+
+- [ ] **The special-teams tile with a full stat line.** Field goals and PATs
+  are separate rows now, which costs about 46px of height to save 42% of
+  width. A game with several kickers and a long punt line is the case that
+  was overflowing.
+
+- [ ] **The crew view at FINAL.** The football and timeout counter are gone
+  there as well as at halftime, and final is the screen a coach
+  photographs. The scoring summary also takes the top-right quad, so the
+  page shape is different from halftime.
+
+---
+
 ## 0d. UNFILTERED QUERIES THAT RLS USED TO NARROW — sweep needed
 
 Three found by accident on 24 Aug, all the same shape: a query safe only
@@ -671,8 +755,13 @@ built. This section is the whole design so it can be picked up cold.
 vMix needs COMPUTED state — score, down, distance, possession — not raw
 play rows. That computation is ~666 lines (`computeState`,
 `computeBoxScore`, `findDriveStarts`, `countPossessions` and friends),
-currently duplicated inline across **five** HTML files. Nothing outside a
-browser page can produce a feed today.
+was duplicated inline across **five** HTML files. Nothing outside a browser
+page could produce a feed.
+
+**DONE, 12-13 August 2026.** All eight pages now load a single `engine.js`
+and none of them defines those functions locally -- verified again on
+26 August because this section still read as though the work were pending
+and briefly convinced both Andy and Claude that it was.
 
 So the feed forces the fix that has been outstanding all along, and pays
 for it twice.
@@ -974,8 +1063,9 @@ Argued through on Aug 10 and agreed. The deciding evidence:
   missed** — the `newPossession` check did not reach `view.html`, which
   is why a drive tile failed to split, and cost a debugging round trip.
   That was a calm day with a full suite. In-season it is worse.
-- **70% of view.html is engine** (1,003 of 1,431 script lines); ~4,000
-  duplicated lines across five files.
+- **70% of view.html WAS engine** (1,003 of 1,431 script lines); ~4,000
+  duplicated lines across five files. This is the argument that was made at
+  the time, kept for the reasoning; the extraction happened.
 - **The vMix feed needs a server-side engine anyway.** Without this we
   generate a SEVENTH copy. The choice is one copy or seven.
 

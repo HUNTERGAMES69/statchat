@@ -272,9 +272,28 @@ of what changed and what needs doing.
   class. The `unresolved` column and its seven readers stay; nothing creates
   one now. The rail keeps the row it occupied so no other button moves.
 
+- **Crew view: the fourth tile row is back.** Penalties and 3rd Down were
+  being rendered and clipped -- the dark conversion raised the tile value
+  from 34px to 39px and nobody checked the column. Two `min-height:0`
+  releases let the rows compress; the value is now
+  `clamp(26px, 3.1vh, 39px)` so it cannot spill instead.
+- **Crew view: field goals and PATs are separate rows.** They shared one
+  five-column line guarded by a single condition, so a PAT-only kicker
+  filled three columns with dashes. 42% narrower.
+- **Crew view: the football and TOL disappear at halftime and final**, the
+  same two states the drive cards already hide on, reading the same `phase`.
+- **The clock keypad no longer opens over a touchback prefill.**
+
 ## Open, and worth knowing
 
-- **~26 test suites are red on harness gaps, not the app** — `maybeSingle`
+- **The `maybeSingle` gap is FIXED** (26 Aug) and cleared several suites.
+  What it uncovered: `cross_surface` says the season report and crew view
+  disagree -- on LABELS, not numbers (`#22` vs `N Runningback`). Probably
+  fixture shape; confirm against a live report before dismissing.
+  **Measure the suite at a 45-second timeout**, not less: several legitimately
+  need 25-45s, and a short timeout reports them as failures and makes any
+  fix look like a regression.
+- **Remaining red suites are harness gaps, not the app** — `maybeSingle`
   unstubbed, `supabaseClient` out of scope in `RECOVER_STRANDED_PLAYS`.
   Verified identical against the pre-session file. Several other suites are
   merely slow: `whitelist_check` needs about 41 seconds and passes.
