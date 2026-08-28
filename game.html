@@ -5919,6 +5919,39 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       }
     });
 
+
+    // THE STAT LINE AGAINST THE LOG.
+    // ------------------------------------------------------------------
+    // Everything above re-derives STATE -- down, distance, quarter -- and
+    // catches a play whose sentence disagrees with what the log implies.
+    // None of it looked at the box score, so a fault in computeBoxScore
+    // produced a wrong stat line from a correct log and nothing said so.
+    //
+    // compareBoxScores counts the same plays a second time, straight off
+    // `roles`, and reports where the two disagree. It cannot catch a rule
+    // both get wrong the same way; it catches a credit going to the wrong
+    // bucket, a double count, a dropped path, or a statistic written under
+    // two different keys -- which is not hypothetical. Mapping these rules
+    // to write it is how the cmp/comp fault was found.
+    //
+    // Capped, because a single systematic fault would otherwise report once
+    // per player and bury everything else in the list.
+    try {
+      const statIssues = compareBoxScores(plays, computeBoxScore(plays));
+      statIssues.slice(0, 8).forEach(m => issues.push('Statistics: ' + m));
+      if (statIssues.length > 8){
+        issues.push('Statistics: and ' + (statIssues.length - 8) +
+          ' more disagreement' + (statIssues.length - 8 === 1 ? '' : 's') +
+          ' between the play log and the stat line.');
+      }
+    } catch (err) {
+      // A CHECK THAT THROWS MUST NOT BLOCK FINALIZING. It exists to warn
+      // about the numbers, and a game with good numbers should not be
+      // unfinishable because the warning itself broke.
+      issues.push('Statistics: the cross-check could not run (' +
+        (err && err.message ? err.message : 'unknown error') + ').');
+    }
+
     return issues;
   }
 

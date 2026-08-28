@@ -1502,3 +1502,196 @@ if (typeof module !== 'undefined' && module.exports) {
     buildContext
   };
 }
+
+// AN INDEPENDENT COUNT OF THE BOX SCORE.
+// ===========================================================================
+// validateGame re-derives STATE from the log -- down, distance, quarter --
+// and catches a play whose sentence disagrees with what the log implies. It
+// never touched the box score, so a fault in computeBoxScore produced a
+// wrong stat line from a correct log and nothing on the page said so.
+//
+// This counts the same plays a SECOND time and compares. Deliberately not
+// by calling computeBoxScore's helpers: sharing them would share their
+// mistakes and agree for the wrong reason. Everything here is read straight
+// off `roles` and `effect`.
+//
+// It cannot catch a rule both implementations get wrong the same way. It
+// catches the other kind -- a credit that goes to the wrong bucket, a
+// double count, a dropped path, a key written under two names. That last
+// one is not hypothetical: mapping these rules to write this function is
+// how the cmp/comp fault was found.
+//
+// Returns a list of human-readable disagreements, empty when they agree.
+function auditBoxScore(playsList){
+  const mine = { teamA: {}, teamB: {} };
+  const put = (team, cat, who, field, n) => {
+    if (!team || !who) return;
+    const t = mine[team] || (mine[team] = {});
+    const c = t[cat] || (t[cat] = {});
+    const w = c[who] || (c[who] = {});
+    w[field] = (w[field] || 0) + n;
+  };
+  const high = (team, cat, who, field, n) => {
+    if (!team || !who) return;
+    const t = mine[team] || (mine[team] = {});
+    const c = t[cat] || (t[cat] = {});
+    const w = c[who] || (c[who] = {});
+    w[field] = Math.max(w[field] || 0, n);
+  };
+  // BUCKET NAMING IS SHARED ON PURPOSE. The engine keys by the role's name
+  // when it has one and otherwise resolves the jersey number against the
+  // roster, and a different rule here would report every player as a
+  // disagreement rather than reporting any real fault.
+  //
+  // Sharing this is safe in a way sharing the COUNTING would not be: a
+  // wrong bucket name makes both sides wrong identically and hides
+  // nothing, because the audit is about whether a statistic was credited
+  // correctly, not about what the row is called.
+  const UNIT = { rushing: null, passing: null, receiving: null,
+                 defense: 'defense', specialTeams: 'special' };
+  const resolve = (cat, p) => (typeof playerName === 'function'
+    ? playerName(p.team, p.num, UNIT[cat] || undefined) : '#' + p.num);
+  const key = (cat, p, useName) =>
+    (useName !== false && p.name) ? p.name : resolve(cat, p);
+  // Every specialTeams bucket in the engine passes only a jersey number and
+  // lets the roster resolve it -- except the returner, which passes a name.
+  const stKey = (p) => key('specialTeams', p, false);
+
+  (playsList || []).forEach(p => {
+    const r = p.roles, e = p.effect || {};
+    if (!r || !r.playType) return;
+    const t = r.playType;
+
+    // --- rushing. A fumble on a running play is still a carry.
+    if (r.carrier && (t === 'rush' || (t === 'fumble' && r.attempt === 'rush'))){
+      const k = key('rushing', r.carrier), y = r.carrier.yards || 0;
+      put(r.carrier.team, 'rushing', k, 'att', 1);
+      put(r.carrier.team, 'rushing', k, 'yds', y);
+      high(r.carrier.team, 'rushing', k, 'long', y);
+      if (e.td) put(r.carrier.team, 'rushing', k, 'td', 1);
+    }
+    // --- the fumble itself, charged wherever the carrier is bucketed
+    if (r.carrier && t === 'fumble' && r.attempt !== 'sack'){
+      put(r.carrier.team, r.attempt === 'pass' ? 'receiving' : 'rushing',
+          key(r.attempt === 'pass' ? 'receiving' : 'rushing', r.carrier), 'fum', 1);
+    }
+
+    // --- passing. A completion that ends in a fumble still throws.
+    if (r.passer && (t === 'pass' || (t === 'fumble' && r.attempt === 'pass'))){
+      const k = key('passing', r.passer), y = r.passer.yards || 0;
+      put(r.passer.team, 'passing', k, 'att', 1);
+      put(r.passer.team, 'passing', k, 'comp', 1);
+      put(r.passer.team, 'passing', k, 'yds', y);
+      high(r.passer.team, 'passing', k, 'long', y);
+      if (e.td) put(r.passer.team, 'passing', k, 'td', 1);
+    }
+    if (r.passer && t === 'incomplete') put(r.passer.team, 'passing', key('passing', r.passer), 'att', 1);
+    if (r.passer && t === 'int'){
+      put(r.passer.team, 'passing', key('passing', r.passer), 'att', 1);
+      put(r.passer.team, 'passing', key('passing', r.passer), 'intThrown', 1);
+    }
+    // A sack is charged to TEAM rushing, not to the quarterback's passing --
+    // NFHS, and the difference from NFL convention that catches people out.
+    // The panel sends a POSITIVE loss, so the engine negates it.
+    if (r.passer && (t === 'sack' || (t === 'fumble' && r.attempt === 'sack'))){
+      put(r.passer.team, 'passing', key('passing', r.passer), 'sacked', 1);
+      put(r.passer.team, 'rushing', 'TEAM', 'att', 1);
+      put(r.passer.team, 'rushing', 'TEAM', 'yds', -(r.passer.yards || 0));
+    }
+
+    // --- receiving. rec only on a catch; tgt on a catch, an incompletion
+    // or an interception.
+    if (r.receiver && (t === 'pass' || (t === 'fumble' && r.attempt === 'pass'))){
+      const k = key('receiving', r.receiver), y = r.receiver.yards || 0;
+      put(r.receiver.team, 'receiving', k, 'rec', 1);
+      put(r.receiver.team, 'receiving', k, 'tgt', 1);
+      put(r.receiver.team, 'receiving', k, 'yds', y);
+      high(r.receiver.team, 'receiving', k, 'long', y);
+      if (e.td) put(r.receiver.team, 'receiving', k, 'td', 1);
+    }
+    if (r.receiver && (t === 'incomplete' || t === 'int'))
+      put(r.receiver.team, 'receiving', key('receiving', r.receiver), 'tgt', 1);
+
+    // --- defense
+    if (r.defense && ['rush','pass','sack','fumble','kickoff','punt'].indexOf(t) !== -1){
+      const k = key('defense', r.defense);
+      put(r.defense.team, 'defense', k, 'tackles', 1);
+      const lost = (r.carrier && (r.carrier.yards || 0) < 0) || t === 'sack';
+      if (lost) put(r.defense.team, 'defense', k, 'tfl', 1);
+      if (t === 'sack') put(r.defense.team, 'defense', k, 'sacks', 1);
+    }
+    if (r.defense && t === 'int') put(r.defense.team, 'defense', key('defense', r.defense), 'int', 1);
+
+    // --- special teams
+    if (r.kicker && t === 'kickoff'){
+      put(r.kicker.team, 'specialTeams', stKey(r.kicker), 'kickoffs', 1);
+      if (r.kicker.touchback) put(r.kicker.team, 'specialTeams', stKey(r.kicker), 'touchbacks', 1);
+    }
+    if (r.kicker && t === 'fg'){
+      const k = stKey(r.kicker);
+      put(r.kicker.team, 'specialTeams', k, 'fgAtt', 1);
+      if (r.kicker.result === 'g'){
+        put(r.kicker.team, 'specialTeams', k, 'fgMade', 1);
+        high(r.kicker.team, 'specialTeams', k, 'fgLong', r.kicker.yards || 0);
+      }
+      if (r.kicker.result === 'b') put(r.kicker.team, 'specialTeams', k, 'fgBlocked', 1);
+    }
+    if (r.kicker && t === 'pat'){
+      const k = stKey(r.kicker);
+      put(r.kicker.team, 'specialTeams', k, 'patAtt', 1);
+      if (r.kicker.result === 'g') put(r.kicker.team, 'specialTeams', k, 'patMade', 1);
+      if (r.kicker.result === 'b') put(r.kicker.team, 'specialTeams', k, 'patBlocked', 1);
+    }
+    if (r.punter && t === 'punt'){
+      const k = stKey(r.punter);
+      put(r.punter.team, 'specialTeams', k, 'punts', 1);
+      if (r.punter.blocked){
+        put(r.punter.team, 'specialTeams', k, 'blocked', 1);
+      } else {
+        put(r.punter.team, 'specialTeams', k, 'puntYds', r.punter.yards || 0);
+        put(r.punter.team, 'specialTeams', k, 'puntsWithYards', 1);
+        high(r.punter.team, 'specialTeams', k, 'puntLong', r.punter.yards || 0);
+      }
+    }
+    if (r.returner){
+      const k = key('specialTeams', r.returner);
+      const pre = r.returner.kind === 'punt' ? 'puntRet' : 'kickRet';
+      const y = r.returner.yards || 0;
+      put(r.returner.team, 'specialTeams', k, pre, 1);
+      put(r.returner.team, 'specialTeams', k, pre + 'Yds', y);
+      high(r.returner.team, 'specialTeams', k, pre + 'Long', y);
+      if (e.score && e.score.team === r.returner.team && e.score.points === 6)
+        put(r.returner.team, 'specialTeams', k, pre + 'Td', 1);
+    }
+  });
+  return mine;
+}
+
+// COMPARE THE TWO COUNTS.
+// Reports in plain language, because this surfaces to a scorer finalizing a
+// game, not to a developer reading a diff.
+function compareBoxScores(playsList, box){
+  const mine = auditBoxScore(playsList);
+  const out = [];
+  const CATS = ['rushing', 'passing', 'receiving', 'defense', 'specialTeams'];
+  ['teamA', 'teamB'].forEach(team => {
+    const label = (typeof TEAMS !== 'undefined' && TEAMS[team] && TEAMS[team].name) || team;
+    CATS.forEach(cat => {
+      const a = (mine[team] || {})[cat] || {};
+      const b = ((box || {})[team] || {})[cat] || {};
+      const who = [...new Set(Object.keys(a).concat(Object.keys(b)))];
+      who.forEach(w => {
+        const x = a[w] || {}, y = b[w] || {};
+        const fields = [...new Set(Object.keys(x).concat(Object.keys(y)))];
+        fields.forEach(f => {
+          const mv = x[f] || 0, bv = y[f] || 0;
+          if (mv !== bv){
+            out.push(label + ' ' + w + ' ' + cat + ' ' + f +
+                     ': the log says ' + mv + ', the stat line says ' + bv);
+          }
+        });
+      });
+    });
+  });
+  return out;
+}
