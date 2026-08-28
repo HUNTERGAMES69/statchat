@@ -962,7 +962,13 @@ function computeBoxScore(playsList){
     // lost with the separate pass play that used to carry it.
     if (type === 'fumble' && r.attempt === 'pass' && r.passer){
       const ps = bucket(r.passer.team, 'passing', r.passer.num, r.passer.name);
-      if (ps){ ps.att = (ps.att||0) + 1; ps.cmp = (ps.cmp||0) + 1;
+      // `comp`, not `cmp`. This wrote cmp until 26 August 2026 while the
+      // ordinary completion path a few lines up wrote comp -- same
+      // passing bucket, two keys. Every report reads .comp and nothing
+      // reads .cmp, so a completion that ended in a fumble was filed
+      // under a name no page looks at: the throw counted as an attempt
+      // and the completion simply vanished from the line.
+      if (ps){ ps.att = (ps.att||0) + 1; ps.comp = (ps.comp||0) + 1;
         ps.yds = (ps.yds||0) + (r.passer.yards||0); ps.long = Math.max(ps.long||0, r.passer.yards||0); }
       if (r.receiver){
         const rs = bucket(r.receiver.team, 'receiving', r.receiver.num, r.receiver.name);
