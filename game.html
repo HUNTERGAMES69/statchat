@@ -2553,7 +2553,22 @@ function parseInput(raw, state){
         (foulSpot !== null ? ' from the spot of the foul' : '') +
         (noDownChange ? ' (no down change)' : '') +
         (autoFirstDown ? ' (automatic first down)' : '') + downDistanceText,
-      effect: Object.assign({ penaltyTeam: team, penaltyYds: yds, fieldDelta },
+      // fieldDelta CARRIES THE NET MOVE, not the penalty yardage.
+      // ------------------------------------------------------------------
+      // engine.js does `state.fieldPos += e.fieldDelta`, so this is how far
+      // the BALL travels. Normally that equals the penalty yardage. With a
+      // foul spot it does not: the base moved too, and 10 yards off the
+      // opponent's 35 is a six-yard net when the ball was on their 40.
+      //
+      // A first version left the raw fieldDelta here and fixed only the
+      // TEXT, so the log read "1st & 15" while the header read "1st & 20 at
+      // the 50" -- the sentence and the state disagreeing on the same play,
+      // which is worse than either being wrong alone.
+      //
+      // penaltyYds stays the penalty's OWN yardage: it feeds
+      // state.penalties[team].yds, and a holding call is ten penalty yards
+      // however far the ball happened to move.
+      effect: Object.assign({ penaltyTeam: team, penaltyYds: yds, fieldDelta: netMove },
         // Stored as well as written into the text, so a penalty breakdown
         // by type is possible later without re-parsing prose.
         penName ? { penaltyName: penName } : {},
