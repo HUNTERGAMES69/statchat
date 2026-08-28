@@ -761,6 +761,55 @@ console.log('\nPages with findings: ' + bad + ' of ' + files.length);
   }
 })();
 
+// ---- the crew view's fourth tile row must survive -----------------------
+// Eight tiles in four rows sit in a .quad that is half the viewport with
+// overflow-y:hidden. When the page went dark the tile value was raised from
+// 34px to 39px for readability across a room -- about 24px more than the
+// column had -- and Penalties and 3rd Down were rendered and then clipped
+// below the cut. Nobody checked the column when the type was enlarged.
+//
+// jsdom does not lay out, so this cannot assert the row is VISIBLE. What it
+// can assert is that nothing has re-imposed the floor that caused it.
+(function fourthTileRow(){
+  const src = require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'view.html'), 'utf8');
+  const css = [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m => m[1]).join('\n');
+
+  for (const sel of ['.team-summary-col', '.stat-tile']) {
+    const m = new RegExp('\\' + sel + '\\s*\\{([^}]*)\\}').exec(css);
+    if (!m) { console.log('  FAIL view.html: no rule for ' + sel); bad++; continue; }
+    if (!/min-height:\s*0/.test(m[1])) {
+      console.log('  FAIL view.html: ' + sel + ' has no min-height:0 — a flex child ' +
+                  'and a grid item both default to a minimum of their CONTENT ' +
+                  'size, so the rows cannot compress and the fourth is pushed ' +
+                  'out of a container that hides its overflow');
+      bad++;
+    }
+  }
+
+  // A FIXED VALUE SIZE JUST MOVES THE OVERFLOW. Once the rows can compress,
+  // a number that cannot compress with them spills out of its own tile.
+  const v = /\.stat-tile-value\{\s*font-size:([^;]+)/.exec(css);
+  if (!v) {
+    console.log('  FAIL view.html: no tile value size found'); bad++;
+  } else if (!/clamp\(/.test(v[1])) {
+    console.log('  FAIL view.html: the tile value is a fixed ' + v[1].trim() +
+                ' — it has to scale with the tile, or the row that was being ' +
+                'clipped is replaced by a number overflowing its own box');
+    bad++;
+  }
+
+  // and all eight tiles must still be built
+  const t = /const tiles = \[([\s\S]*?)\n      \];/.exec(src);
+  const labels = t ? [...t[1].matchAll(/'([A-Za-z0-9 ]+)'\]/g)].map(x => x[1]) : [];
+  for (const want of ['Penalties', '3rd Down']) {
+    if (!labels.includes(want)) {
+      console.log('  FAIL view.html: the ' + want + ' tile is no longer built');
+      bad++;
+    }
+  }
+})();
+
 // EXIT LAST. This line used to sit above the message-tint audit, so any
 // failure it found was counted after the exit code had already been decided
 // -- the audit could go red and the run still exit 0.
