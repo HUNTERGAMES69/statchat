@@ -5936,7 +5936,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     //
     // Capped, because a single systematic fault would otherwise report once
     // per player and bury everything else in the list.
-    try {
+    // AT FINALIZE ONLY, not in the live panel.
+    // ------------------------------------------------------------------
+    // Everything else in this function names something a scorer can act on
+    // mid-game: a wrong down, a missing spot, an unsaved play. A stat-line
+    // disagreement is not that. It says two counts of the same log differ
+    // and cannot say which is right, so there is nothing to do about it
+    // during a drive -- and a warning with no action attached is noise at
+    // the exact moment noise costs the most.
+    //
+    // It belongs at the whistle, where there is time to look. The live
+    // panel keeps the checks that have a fix.
+    if (forFinal) try {
       const statIssues = compareBoxScores(plays, computeBoxScore(plays));
       statIssues.slice(0, 8).forEach(m => issues.push('Statistics: ' + m));
       if (statIssues.length > 8){
