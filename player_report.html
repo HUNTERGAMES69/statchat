@@ -171,8 +171,25 @@
     body { background:#fff; }
     .wrap { max-width:none; padding:0 24px; }
     .no-print { display:none !important; }
-    .card { box-shadow:none; border:1px solid #ddd; page-break-inside:avoid;
-            break-inside:avoid; }
+    /* A CARD MAY BREAK; THE THINGS INSIDE IT MAY NOT.
+       ------------------------------------------------------------------
+       This kept the whole card together, which is right for a short one
+       and impossible for a long one. A receiver's section measured 991px
+       against roughly 958px of printable height -- just over -- so the
+       browser could not place it and pushed it to a page of its own,
+       leaving the first page holding almost nothing. Reported as "the
+       first page is blank"; passers and rushers were unaffected only
+       because their sections happen to come in shorter.
+       Reproduced exactly at 991px: three pages with avoid, two without.
+
+       Breaking a section across two pages is fine -- it is a table of
+       games. What must not break is a single ROW, the totals strip or the
+       splits grid, so the rule moves down to those. */
+    .card { box-shadow:none; border:1px solid #ddd; }
+    .totals, .splits, .sec-head, thead, tr {
+      page-break-inside:avoid; break-inside:avoid; }
+    /* A heading with nothing under it is worse than a slightly short page. */
+    .sec-head, thead { page-break-after:avoid; break-after:avoid; }
     .sec-eyebrow { display:block; }
     .team-band, .card, tbody tr {
       -webkit-print-color-adjust: exact; print-color-adjust: exact; }
