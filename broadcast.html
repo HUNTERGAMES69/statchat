@@ -45,20 +45,6 @@
          align-items:stretch;
          border-radius:8px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,0.55);
          font-weight:800; }
-  /* EACH SIDE IS A THREE-PART GRID: score | identity | spacer, mirrored.
-     ------------------------------------------------------------------
-     This was a plain flex row -- poss, logo, name, score, in that order --
-     which gave three faults at once. Columns sized to their own content, so
-     a long name made one half wider than the other. The score sat straight
-     after the name, which on the LEFT half put it against the centre line
-     rather than at the outer edge. And the away side is now fixed on the
-     left, home on the right, matching every scoreboard convention.
-
-     The spacer is the SAME WIDTH as the score column. Without it the
-     identity block would centre in whatever space was left and sit slightly
-     off; with it, logo-and-name centres truly between the score and the
-     middle. --sc-ptsw keeps the two in step, so changing the score width
-     cannot break the centring. */
   /* EACH SIDE IS THREE PARTS: score | identity | spacer, mirrored.
      ------------------------------------------------------------------
      This was a plain flex row -- poss, logo, name, score, in that order --
@@ -78,7 +64,6 @@
      block would centre in whatever space was left and sit slightly off;
      with it, logo-and-name centres truly between the score and the middle.
      One variable drives both, so they cannot drift apart. */
-  #bug { --sc-ptsw:78px; }
   /* Shown only once painted. The grid lives on this class rather than on
      #bug so that clearing the inline display cannot resurrect a bar with no
      data in it. */
@@ -96,7 +81,19 @@
      50px right of where it belongs. */
   .side { display:flex; align-items:center; box-sizing:border-box;
           min-width:0; }
-  .pts  { flex:0 0 var(--sc-ptsw); font-size:44px;
+  /* THE SCORE SIZES TO ITS DIGITS, with a two-digit floor.
+     ------------------------------------------------------------------
+     This was a fixed 78px track. A single "0" is about 23px, so 55px of
+     empty track sat between the glyph and the identity -- and the eye
+     reads that as part of the gap. The identity was centred between the
+     score TRACK and the centre line, which is not what anyone sees; it
+     looks centred between the GLYPH and the centre line, and was not.
+     Worse on the away side, where a long name leaves no slack to hide it.
+
+     min-width of 2ch with tabular figures means 0 through 99 all occupy
+     the same width, so the identity does not shift when a team goes from
+     9 to 10. Past 99 the track grows, which is the right trade. */
+  .pts  { flex:0 0 auto; min-width:2ch; font-size:44px;
           font-variant-numeric:tabular-nums; }
   .ident{ flex:1 1 auto; display:flex; align-items:center; gap:14px;
           justify-content:center; min-width:0; padding:0 20px;
@@ -135,6 +132,24 @@
   body.layout-bug #situation { display:none; }   /* ?layout=bug  */
   body.layout-bug #bug.is-live { grid-template-columns:1fr 1fr; }
   body.debug { background:#123 !important; }     /* ?debug=1     */
+
+  /* ?debug=1 ALSO DRAWS THE GEOMETRY. Added because "it looks off" and
+     "it measures 0px" kept disagreeing, and there was no way to compare
+     what the overlay actually did on the production machine against what
+     it did here. Now the answer is on screen where the graphic is.
+       magenta  the centre of each column's identity region -- from the
+                score's inner edge to the centre line
+       cyan     the centre of the visible logo-and-name block
+     If the two coincide, the identity is centred. If they do not, the gap
+     between them is the error, in pixels, and can be read off. */
+  body.debug .side { position:relative; }
+  body.debug .side::before,
+  body.debug .ident::after { content:''; position:absolute; top:0; bottom:0;
+    width:2px; z-index:5; pointer-events:none; }
+  body.debug .side::before { display:none; }
+  body.debug .ident { position:relative; }
+  body.debug .ident::after { left:50%; background:cyan; }
+  body.debug .side { outline:1px dashed rgba(255,255,255,.35); outline-offset:-1px; }
 </style>
 </head>
 <body>
