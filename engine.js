@@ -1574,9 +1574,13 @@ function auditBoxScore(playsList){
       if (e.td) put(r.carrier.team, 'rushing', k, 'td', 1);
     }
     // --- the fumble itself, charged wherever the carrier is bucketed
-    if (r.carrier && t === 'fumble' && r.attempt !== 'sack'){
-      put(r.carrier.team, r.attempt === 'pass' ? 'receiving' : 'rushing',
-          key(r.attempt === 'pass' ? 'receiving' : 'rushing', r.carrier), 'fum', 1);
+    // A SACK FUMBLE IS STILL A FUMBLE, charged to the quarterback in the
+    // rushing bucket. This excluded attempt === 'sack' and was simply wrong:
+    // the engine has no such exclusion. No fixture had a sack fumble with a
+    // carrier until the fumble sweep of 27 August 2026.
+    if (r.carrier && t === 'fumble'){
+      const cat = r.attempt === 'pass' ? 'receiving' : 'rushing';
+      put(r.carrier.team, cat, key(cat, r.carrier), 'fum', 1);
     }
 
     // --- passing. A completion that ends in a fumble still throws.
@@ -1612,8 +1616,17 @@ function auditBoxScore(playsList){
       high(r.receiver.team, 'receiving', k, 'long', y);
       if (e.td) put(r.receiver.team, 'receiving', k, 'td', 1);
     }
-    if (r.receiver && (t === 'incomplete' || t === 'int'))
-      put(r.receiver.team, 'receiving', key('receiving', r.receiver), 'tgt', 1);
+    // A TARGET IS RECORDED EVEN WITH NO NAMED RECEIVER. The engine buckets
+    // it under 'Unknown' on the passing team, so the attempt is not lost
+    // just because nobody wrote down who it was thrown to. This credited it
+    // only when a receiver was named.
+    if (t === 'incomplete' || t === 'int'){
+      const team = (r.receiver && r.receiver.team) || (r.passer && r.passer.team);
+      if (team){
+        put(team, 'receiving',
+            r.receiver ? key('receiving', r.receiver) : 'Unknown', 'tgt', 1);
+      }
+    }
 
     // --- defense
     if (r.defense && ['rush','pass','sack'].indexOf(t) !== -1){
@@ -1629,6 +1642,45 @@ function auditBoxScore(playsList){
     // real bad snap recovered by the defense supplied it.
     if (r.defense && t === 'int') put(r.defense.team, 'defense', key('defense', r.defense), 'int', 1);
     if (r.defense && t === 'fumble') put(r.defense.team, 'defense', key('defense', r.defense), 'fumRec', 1);
+
+    // THE TEAM ROW. Naming the interceptor, sacker or recoverer is optional,
+    // and these used to be keyed entirely off that name -- so a sack with
+    // nobody credited recorded no sack anywhere. The engine credits a TEAM
+    // bucket on the opposing side whenever the event happened, named or not.
+    // This counted nothing of the kind, so every unnamed one disagreed.
+    // A SACK FUMBLE IS ALSO A SACK. The engine credits a TEAM sack whenever
+    // a fumble carries attempt === 'sack', unconditionally -- separate from
+    // the fallback below and not suppressed by a named defender, because the
+    // sack and the recovery are two different events. This counted the
+    // recovery and lost the sack.
+    if (t === 'fumble' && r.attempt === 'sack' && r.carrier && r.carrier.team){
+      const other = r.carrier.team === 'teamA' ? 'teamB' : 'teamA';
+      put(other, 'defense', key('defense', { team: other, num: 'TEAM' }), 'sacks', 1);
+    }
+
+    // A FALLBACK, NOT AN ADDITION. The engine writes this as `} else if`,
+    // hanging off the named-defender branch above: the TEAM row exists so an
+    // unnamed sack or interception is recorded SOMEWHERE, not so every one
+    // is counted twice. Reading it as a plain `if` produced a phantom second
+    // credit on every named play.
+    if (!r.defense && (t === 'int' || t === 'sack' || (t === 'fumble' && r.lost))){
+      // THE VICTIM IS THE CARRIER ON A FUMBLE, the passer otherwise. On a
+      // pass fumble both exist, so picking the wrong one would credit the
+      // wrong side whenever they differ.
+      const victim = (t === 'fumble') ? (r.carrier && r.carrier.team)
+                                      : (r.passer && r.passer.team);
+      if (victim){
+        const other = victim === 'teamA' ? 'teamB' : 'teamA';
+        // KEYED THROUGH THE SAME NAME RESOLUTION as any other bucket. The
+        // engine passes num 'TEAM' with no name, so the row is called
+        // whatever playerName makes of it -- hardcoding the string 'TEAM'
+        // here produced a phantom second row that disagreed with every game.
+        const k = key('defense', { team: other, num: 'TEAM' });
+        if (t === 'int')    put(other, 'defense', k, 'int', 1);
+        if (t === 'sack')   put(other, 'defense', k, 'sacks', 1);
+        if (t === 'fumble') put(other, 'defense', k, 'fumRec', 1);
+      }
+    }
 
     // --- special teams
     if (r.kicker && t === 'kickoff'){
