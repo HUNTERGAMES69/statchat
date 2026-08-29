@@ -42,7 +42,7 @@
      the bar had not already allowed for was simply cut off.
      `display:none` until painted, so grid only applies once shown. */
   #bug { position:absolute; left:60px; bottom:60px; display:none;
-         grid-template-columns:1fr auto 1fr; align-items:stretch;
+         align-items:stretch;
          border-radius:8px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,0.55);
          font-weight:800; }
   /* EACH SIDE IS A THREE-PART GRID: score | identity | spacer, mirrored.
@@ -79,6 +79,10 @@
      with it, logo-and-name centres truly between the score and the middle.
      One variable drives both, so they cannot drift apart. */
   #bug { --sc-ptsw:78px; }
+  /* Shown only once painted. The grid lives on this class rather than on
+     #bug so that clearing the inline display cannot resurrect a bar with no
+     data in it. */
+  #bug.is-live { display:grid; grid-template-columns:1fr auto 1fr; }
   .side { display:flex; align-items:center; padding:14px 22px;
           box-sizing:border-box; min-width:0; }
   .pts  { flex:0 0 var(--sc-ptsw); font-size:44px;
@@ -105,7 +109,7 @@
   .dim { opacity:0.6; font-weight:600; font-size:24px; }
 
   body.layout-bug #situation { display:none; }   /* ?layout=bug  */
-  body.layout-bug #bug { grid-template-columns:1fr 1fr; }
+  body.layout-bug #bug.is-live { grid-template-columns:1fr 1fr; }
   body.debug { background:#123 !important; }     /* ?debug=1     */
 </style>
 </head>
@@ -781,7 +785,13 @@ function extractNameTag(rawName){
 
   function renderAll(){
     const state = computeState(plays);
-    document.getElementById('bug').style.display = 'flex';
+    // '' RATHER THAN A DISPLAY MODE. #bug is display:none until painted;
+    // clearing the inline value hands it back to the stylesheet, which is
+    // where the grid lives. This said 'flex' and silently discarded the
+    // grid -- the two sides went back to sizing on their own content and
+    // the columns came out unequal on air.
+    document.getElementById('bug').style.display = '';
+    document.getElementById('bug').classList.add('is-live');
 
     const sideHtml = (teamKey) => {
       const t = TEAMS[teamKey];
