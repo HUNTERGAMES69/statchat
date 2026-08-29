@@ -11234,8 +11234,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // of kick comes up. The cost of sharing is a wrong name on a real play.
     const KICK_DEFAULTS = {
       kickoff: { role: 'kicker', from: ['kickoff'],      label: 'Last player to kick off' },
-      fg:      { role: 'kicker', from: ['fg', 'pat'],    label: 'Last placekicker' },
-      pat:     { role: 'kicker', from: ['fg', 'pat'],    label: 'Last placekicker' },
+      // EACH TREE REMEMBERS ITS OWN MAN. These both drew from ['fg','pat'],
+      // so the last field goal kicker was suggested -- and preselected -- on
+      // the next PAT, and the other way round.
+      //
+      // This is a SECOND mechanism, separate from the ordering in
+      // specialTeamsEligible. Scoping that one alone left this one still
+      // pooling the two, which is what a live test found: the field goal
+      // kicker came up preselected on the first PAT attempt.
+      //
+      // In high school the placekicker and the PAT kicker are frequently
+      // different boys. With no prior kick in this tree there is simply no
+      // suggestion, which is the right answer -- a wrong suggestion is worse
+      // than none, because it invites a tap.
+      fg:      { role: 'kicker', from: ['fg'],           label: 'Last field goal kicker' },
+      pat:     { role: 'kicker', from: ['pat'],          label: 'Last PAT kicker' },
       punt:    { role: 'punter', from: ['punt'],         label: 'Last punter' }
     };
     const kickDef = KICK_DEFAULTS[type];
