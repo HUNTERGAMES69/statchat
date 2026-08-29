@@ -1,3 +1,7 @@
+<!-- Copyright 2026 StatChat. All rights reserved. Unauthorized copying,
+     modification or distribution of this software or its documentation
+     is prohibited. -->
+
 # StatChat — outstanding work
 
 Open items only. Completed work lives in `PROJECT_NOTES.md` (architecture

@@ -32,7 +32,7 @@ the live file rather than trusting the mock:
   rewired so the bulk preview could be navigated. Dashboard, Broadcast
   setup and Help would have 404'd, and an expired session would have
   redirected to `/login_mock.html` and stranded a scorer mid-game.
-* A normalised comparison ignoring colours and comments showed the two
+* A normalized comparison ignoring colors and comments showed the two
   files differing by exactly the four intended edits and nothing else.
 ## The decision to make before any of it
 
@@ -65,11 +65,11 @@ either whole.
 
 ## What makes this bigger than it looks
 
-`view.html` was 21 changed lines. It was also the page whose colours were
+`view.html` was 21 changed lines. It was also the page whose colors were
 most concentrated. The survey across every page:
 
 ```
-page                     links statchat.css   light-bg rules   dark inline colours
+page                     links statchat.css   light-bg rules   dark inline colors
 game.html                      yes                 57                 23
 game_legacy.html               NO                  51                 21
 stat_package.html              yes                  9                  2
@@ -88,7 +88,7 @@ Two numbers matter:
 **Light background rules** are the easy half. They are in stylesheets and a
 token flip reaches them.
 
-**Dark inline colours are the hard half**, and they are the reason
+**Dark inline colors are the hard half**, and they are the reason
 `view.html` took two passes. `color:#111` written inline cannot be reached
 by any stylesheet rule, at any specificity. Eleven of them were found on
 `view.html`; **`game.html` has 23 and `game_legacy.html` 21.**
@@ -115,7 +115,7 @@ got. Twenty blocks, each duplicating the last, each needing maintenance.
 This is the same fault as the branding columns copied onto `tenants` in
 migration 006 — *a duplicated definition is a bug with a delay on it.*
 
-**The durable one:** convert each page's hardcoded colours to the existing
+**The durable one:** convert each page's hardcoded colors to the existing
 tokens, then flip the tokens once in `statchat.css`. Same total work,
 spread across the same pages, but it ends with one place to change and a
 light/dark toggle becomes possible almost for free.
@@ -143,9 +143,9 @@ Each step is independently shippable and independently revertable.
 
 2. Write `tests/contrast_check.js`. This is the tool that makes the rest
    safe. For every page it should:
-   - compute the WCAG ratio of each text colour against the surface behind
+   - compute the WCAG ratio of each text color against the surface behind
      it, and fail below 3:1 for large text, 4.5:1 for body;
-   - list every **inline** colour, because those are invisible to a token
+   - list every **inline** color, because those are invisible to a token
      flip and are the ones that bite;
    - be runnable per page, so a conversion can be checked as it is done.
 
@@ -156,7 +156,7 @@ Each step is independently shippable and independently revertable.
 
 `login.html`, `broadcast_setup.html`.
 
-Low traffic, no printing, no tenant colour to negotiate.
+Low traffic, no printing, no tenant color to negotiate.
 
 (`platform.html` was originally first on this list, as a console the
 customer never sees and therefore a free rehearsal. It has since been
@@ -178,7 +178,7 @@ gets answered for real, so ship it to one tenant first if that is possible.
 
 **Decided 25 August after seeing the mocks.** `recap.html`,
 `stat_package.html`, `season_report.html` and `player_report.html` keep
-their original colours.
+their original colors.
 
 They are documents, not screens. They are printed, emailed to local media
 and read on paper, and a dark screen version of a thing whose real form is
@@ -199,13 +199,13 @@ because a dark screen theme will otherwise send charcoal to a printer. This
 is the step most likely to produce a wasted ream, so test by printing to
 PDF, not by looking at the screen.
 
-Chart.js colours in `season_report.html` and `player_report.html` are set
-in JavaScript, not CSS. They are the same problem as inline colours and
+Chart.js colors in `season_report.html` and `player_report.html` are set
+in JavaScript, not CSS. They are the same problem as inline colors and
 need the same treatment.
 
 ### Step 4 — the game page (2–3 days on its own)
 
-`game.html`. **57 light rules and 23 inline colours, and it is the page a
+`game.html`. **57 light rules and 23 inline colors, and it is the page a
 scorer uses live.**
 
 It also has the header machinery documented in `PROJECT_NOTES.md` — a rule
@@ -222,7 +222,7 @@ Do this last, when the pattern is settled and boring.
 these are transparent overlays keyed over live video. They have no
 background by design and must not acquire one. Leave them alone.
 
-**`game_legacy.html`** — 51 light rules, 21 inline colours, and it does not
+**`game_legacy.html`** — 51 light rules, 21 inline colors, and it does not
 even link `statchat.css`. Decide whether it is still reachable before
 spending a day on it; if it is dead, delete it instead.
 
@@ -265,19 +265,19 @@ page, and `login.html`'s STATCHAT wordmark at 1.43:1 against the card.
 **Before re-pointing any token, grep for what reads it.**
 
 **Buttons need a border, not a lighter fill.** No fill reaches the 3:1 WCAG
-floor for a non-text boundary against `#191f27` without going light grey —
+floor for a non-text boundary against `#191f27` without going light gray —
 `#2f3a47` is 1.43:1. So: fill `var(--sc-navy)` for the affordance, `1px
 solid var(--sc-rule-strong)` for the edge, which is 3.91:1. `border:none`
 works on white and nowhere else.
 
-**Disabled is a colour, not an opacity.** `opacity:0.6` on dark dims toward
-the background rather than toward grey, so a disabled button becomes hard to
+**Disabled is a color, not an opacity.** `opacity:0.6` on dark dims toward
+the background rather than toward gray, so a disabled button becomes hard to
 find. Use `background:#1b2129; color:#5f6b78; border-color:#333f4b;
 opacity:1`. That is 3.05:1 — deliberately below body AA, because it must
 read as unavailable while staying findable.
 
 **Inputs are recessed.** `background:var(--sc-raise)` (darker than the
-card) with `border:1px solid var(--sc-rule-strong)`. A card-coloured input
+card) with `border:1px solid var(--sc-rule-strong)`. A card-colored input
 with a hairline looks painted on.
 
 **`color-scheme:dark` is mandatory.** Without it the browser paints its own
@@ -307,11 +307,11 @@ img. The mark is not being redrawn for a theme.
 **The wordmark is the brightest thing on the card** — `#fff`, 16.58:1. It
 is the brand; it should not be dimmer than the body text.
 
-**Tenant colour is an accent, never a fill.** It comes from the database
+**Tenant color is an accent, never a fill.** It comes from the database
 and a school may pick something pale. Filled, it is a bright hole in a dark
 screen and any `safeTextColor()` logic then flips the label, so two teams
 end up with different contrast. A 5px spine on a `#171d25` bar works for
-every colour.
+every color.
 
 ### The four faults that survive a "converted" page
 
@@ -322,7 +322,7 @@ Check these explicitly; none is visible in a stylesheet read.
 `var(--sc-blue, #1565c0)` and `--sc-blue` was never defined on that page,
 so it rendered as a link blue chosen for white — 2.89:1 on a dark menu.
 Five more of these existed across two pages. An undefined token does not
-fail loudly; it quietly becomes the colour somebody wrote for the old
+fail loudly; it quietly becomes the color somebody wrote for the old
 design. `tests/contrast_check.js` now resolves fallbacks and flags them.
 
 **2. THE `background:` SHORTHAND RESETS `background-image`. THIS HAS NOW
@@ -347,7 +347,7 @@ existing one leaves the original in place, still winning.
 
 **4. PANELS BUILT IN JAVASCRIPT ARE NOT IN THE STYLESHEET.** The row menu
 and the account menu were both `background:#fff` inside a template string.
-Their *items* had been recoloured, so light labels sat on white and looked
+Their *items* had been recolored, so light labels sat on white and looked
 washed out while dark ones looked fine. Two menus, one bug, found one at a
 time because the first fix was aimed at the symptom.
 
@@ -375,7 +375,7 @@ stylesheet, never from the select's inline style.
 `input { padding:8px; background:...; border:... }` is the right treatment
 for a text field and wrong for every other control. On create_game.html it
 gave each radio in the conflict-resolution box 8px of padding, a dark fill
-and a grey border — so they rendered as dark blobs **with no visible
+and a gray border — so they rendered as dark blobs **with no visible
 selected state**, on a control whose only job is showing which option is
 chosen.
 
@@ -387,7 +387,7 @@ input[type="radio"], input[type="checkbox"] {
   accent-color:var(--sc-green); width:16px; height:16px; }
 ```
 
-`accent-color` is the one property that recolours a native checkbox
+`accent-color` is the one property that recolors a native checkbox
 without replacing it.
 
 ### A control inside its label needs its own top margin
@@ -442,7 +442,7 @@ flex-wrap:wrap; gap:12px; margin-bottom:18px;
 
 `dashboard.html` and `platform.html` use `.topbar` instead and keep their
 own gaps for stated reasons — the dashboard's 26px row gap separates the
-tools from the tenant name. The check asserts their behaviour, not their
+tools from the tenant name. The check asserts their behavior, not their
 numbers.
 
 Reported on the account page and it applies to every one. That row holds
@@ -466,7 +466,7 @@ invisible on the desktop where the conversion is done.
 
 `help.html` prints. Its `@media print` block re-points the tokens back to
 light values, which is the whole reason the conversion goes through tokens
-rather than hardcoded colours.
+rather than hardcoded colors.
 
 Three things that block broke, all in the checker rather than the page:
 
@@ -478,7 +478,7 @@ Three things that block broke, all in the checker rather than the page:
   print block restates `.note { background:#eef6f1 !important }`, which
   made the screen rule look overridden — so a genuinely light note panel
   became exempt.
-* **Light colours inside the print block are correct.** Exempt them or a
+* **Light colors inside the print block are correct.** Exempt them or a
   page that prints properly can never pass.
 
 Also: the `.btn` spans in the help text are PICTURES of the app's buttons.
@@ -495,7 +495,7 @@ outright on help.html at 60k. Rewritten as a single parse: 90+ seconds to
 2.
 
 **Absence needs a positive assertion.** Removing the logo plate leaves no
-light colour behind, so a check that hunts light colours cannot see the
+light color behind, so a check that hunts light colors cannot see the
 mark disappear. Converted pages showing `.scMark` are now required to
 plate it.
 
@@ -525,7 +525,7 @@ use is a second source of truth).
 Not "it looks fine":
 
 1. `node tests/contrast_check.js <page>` passes — it resolves the tokens
-   and reports every colour against the card.
+   and reports every color against the card.
 2. No hardcoded light background survives. **Find them by luminance, not
    by listing names** — an enumerated list missed 7 on `game.html` and 23
    across the other mocks.
@@ -534,7 +534,7 @@ Not "it looks fine":
    broken — and **narrow the window until the header wraps**, which is the
    fault that does not show at desktop width.
 5. If the page prints, print it to PDF.
-6. If it shows tenant colour, view it with a pale primary — gold or
+6. If it shows tenant color, view it with a pale primary — gold or
    silver, not Neville's.
 
 ### What is NOT converted
@@ -560,44 +560,44 @@ The three broadcast overlays are transparent by design.
 
 ## The five traps, all found the hard way on view.html
 
-**1. Inline colours cannot be reached from a stylesheet.** Not at any
+**1. Inline colors cannot be reached from a stylesheet.** Not at any
 specificity, not with `!important`. `color:#111` in a template string has
 to be edited in the template. Grep each page for
 `color:#[0-4]` before starting and fix those first.
 
-**2. Tenant colour must become an accent, never a fill.** Team colours come
+**2. Tenant color must become an accent, never a fill.** Team colors come
 from the database and a school may pick something pale. On `view.html` the
 team bar was filled with it inline, and `safeTextColor` then flipped the
 label to near-black — so the two teams' headers had different contrast. A
 5px spine on a dark bar solves it everywhere and is the pattern to reuse.
 
-**3. Greys chosen against white are invisible on charcoal.** `#5b6068` is a
-comfortable label colour on white and 2.6:1 on `#191f27`. There were four
-distinct such greys on `view.html`. The audit tool catches these; the eye
+**3. Grays chosen against white are invisible on charcoal.** `#5b6068` is a
+comfortable label color on white and 2.6:1 on `#191f27`. There were four
+distinct such grays on `view.html`. The audit tool catches these; the eye
 does not.
 
 **4. Print blocks must reassert light.** Five pages print. A dark theme
 without a print reset sends charcoal panels to a printer.
 
 **5. Find light panels by LUMINANCE, not by listing them.** Converting the
-mocks, an enumerated list of light colours missed seven on `game.html` and
+mocks, an enumerated list of light colors missed seven on `game.html` and
 twenty-three across the rest — `#e9edf3`, `#eaf5ea`, `#fffaf0`, and so on.
-Colours that mean "a pale notice panel" are not a set anybody can recall.
+Colors that mean "a pale notice panel" are not a set anybody can recall.
 Compute the luminance of every background and convert anything above 0.5,
 with an explicit keep-list for the deliberate highlights (`#ffc72c`).
 
 **6. Never point a token at a value without checking what USES it.**
-`--sc-navy` looks like an ink colour. In `game.html` it is
+`--sc-navy` looks like an ink color. In `game.html` it is
 `button { background:var(--sc-navy) }` — the fill for the entire play-entry
 ladder. Pointed at `#0f141a` it landed 1.00:1 against the page and every
 button vanished.
 
 **7. Buttons on dark need a BORDER, not a lighter fill.** No fill reaches
 the 3:1 WCAG floor for a non-text boundary against a dark card without
-going light grey: `#2f3a47` on `#191f27` is 1.43:1. The fill carries the
+going light gray: `#2f3a47` on `#191f27` is 1.43:1. The fill carries the
 affordance; a 1px `#6b7d8f` border carries the edge at 3.91:1. And
 `opacity:0.5` for disabled is close to invisible on dark — give it a floor
-colour instead, or a greyed-out "Redo last" cannot be found.
+color instead, or a grayed-out "Redo last" cannot be found.
 
 **8. Append, do not replace.** On `view.html` the theme was appended after
 the existing CSS so every size, position and scaling rule survived
@@ -613,7 +613,7 @@ Not "it looks fine". Four checks, all cheap:
 1. `tests/contrast_check.js` passes for that page.
 2. No `color:#[0-4]…` remains outside comments.
 3. For a printing page: printed to PDF and read on paper.
-4. For a page with tenant colour: viewed with a **pale** primary — gold or
+4. For a page with tenant color: viewed with a **pale** primary — gold or
    silver — not just Neville's.
 
 ---

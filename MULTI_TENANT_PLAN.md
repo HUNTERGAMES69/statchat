@@ -128,7 +128,7 @@ the tenant column probably belongs on `teams` rather than replacing it.
 ### The decision, 24 August 2026: branding belongs to the SCHOOL
 
 Andy: **tenant = school**, applied to this question. A school has one
-crest and one set of colours across every sport it fields, so branding is
+crest and one set of colors across every sport it fields, so branding is
 school property, not team property.
 
 Today's `teams` table splits in two:
@@ -280,7 +280,7 @@ keystone; nothing else can be scoped until it exists.
 not reachable from a school by joining; the tenant has to be stored on
 `games` directly. The same is true of `teams` and `profiles`.
 
-### Denormalise, do not join
+### Denormalize, do not join
 
 `plays` and `game_rosters` can reach a tenant through `games`, and
 `players` through `teams`. **They should still carry their own
@@ -295,7 +295,7 @@ is paid on every play entered during a live game.
 
 The duplicate must then be defended: a `check` constraint or a trigger
 asserting that a play's `tenant_id` matches its game's. Otherwise the
-denormalised column is a second source of truth with no referee, which
+denormalized column is a second source of truth with no referee, which
 is the fault already recorded for `teams.icon_url` and the two team
 images.
 
@@ -639,16 +639,16 @@ uploaded over any app page. Two things it settled:
     PLATFORM, logged as the platform. If the difference is not obvious on
     screen it survives only in the code, which is where distinctions go
     to die.
-  * **A tenant record needs**: name, full name, logo, two colours, feed
+  * **A tenant record needs**: name, full name, logo, two colors, feed
     key, subscription state, renewal date. A team needs: tenant, sport,
     current season year.
 
 ### Creating a school asks for as little as possible
 
-Andy, 24 Aug: **no colours on the create form.** The platform creates the
+Andy, 24 Aug: **no colors on the create form.** The platform creates the
 account; the school decides how it looks. `customize.html` already owns
 exactly that set of fields — team name, full name, current season, logo,
-primary and secondary colour — and it belongs to the tenant's own admin.
+primary and secondary color — and it belongs to the tenant's own admin.
 
 The create form takes the two NAMES only, because an invite has to say
 what it is an invite to, plus the first team and the admin's email. Those
@@ -688,7 +688,7 @@ Andy asked for a guarantee that a tenant admin cannot delete their own
 account. `api/manage-users.js` already enforces it server-side, in three
 places: `delete`, `setDisabled` and `setRole` each refuse when
 `userId === callerId`. The comment there gives the right reason — "the
-button being greyed out stops a mis-tap, not someone calling the API
+button being grayed out stops a mis-tap, not someone calling the API
 directly."
 
 They also produce a stronger guarantee by accident: **a school can never
@@ -763,32 +763,32 @@ an error is not a control.
 
 ### The open question this creates, and it is not a detail
 
-A school created with no colours has none at first login — and
+A school created with no colors has none at first login — and
 `game.html` currently falls back to `'#1a1a2e'` and `'#8B0000'`. **Those
-are Neville's colours, hardcoded.** A new customer would open the app
+are Neville's colors, hardcoded.** A new customer would open the app
 wearing another school's branding, which is worse than wearing none.
 
 This is the same item already recorded in TODO.md under the tokenization
 work: *"the team-branding fallbacks are a TENANT default question."* Two
 candidate answers:
 
-**DECIDED 24 Aug: both.** Neutral greys as the fallback, AND the tenant
+**DECIDED 24 Aug: both.** Neutral grays as the fallback, AND the tenant
 admin's first login lands on Customize with the two names filled in.
 
 **DONE 24 Aug: the neutrals are in.** Thirty fallbacks across thirteen
 files — including both copies of `engine.js` — replaced:
 
     our team    '#1a1a2e'  navy      ->  '#2b3440'  slate
-    opponent    '#8B0000'  dark red  ->  '#6e7885'  grey
+    opponent    '#8B0000'  dark red  ->  '#6e7885'  gray
 
 Two neutrals rather than one, so home and away stay distinguishable when
-neither school has set a colour, separated by lightness rather than hue
+neither school has set a color, separated by lightness rather than hue
 so nothing reads as a team identity. Both carry white text, which is what
 the `secondary_color` fallback supplies.
 
-**Done NOW precisely because it changes nothing.** Neville has colours
+**Done NOW precisely because it changes nothing.** Neville has colors
 set, so every one of these `||` branches is dead code today. Landing it
-during the tenancy migration would have meant no way to tell a colour
+during the tenancy migration would have meant no way to tell a color
 problem caused by the neutrals from one caused by the tenant work.
 
 Only `primary_color ||` and `secondary_color ||` expressions were
@@ -797,10 +797,10 @@ and chart palettes. Every file verified as reversible — putting the old
 values back reproduces the original byte for byte.
 
 Both rather than either, and Andy's reason is the right one: landing on
-Customize handles the ordinary case, and the greys protect the case where
+Customize handles the ordinary case, and the grays protect the case where
 somebody skips it. A default that is only correct if a screen gets
-visited is not a default. The greys must also replace the hardcoded
-`'#1a1a2e'` and `'#8B0000'` in `game.html`, which are Neville's colours
+visited is not a default. The grays must also replace the hardcoded
+`'#1a1a2e'` and `'#8B0000'` in `game.html`, which are Neville's colors
 and would otherwise dress a new customer in another school's branding.
 
 ## Step 2 in plain English, and what it risks
@@ -812,7 +812,7 @@ Written out before any SQL, at Andy's request, 24 Aug.
 **Step 2 — the columns.** One migration, one deployment.
 
   * Create `tenants`, holding what a SCHOOL is: name, full name, logo,
-    primary and secondary colour.
+    primary and secondary color.
   * Insert one row, copied from the existing `teams` row. That is Neville.
   * Add a NULLABLE `tenant_id` to teams, games, players, plays,
     game_rosters and profiles.
@@ -828,7 +828,7 @@ Written out before any SQL, at Andy's request, 24 Aug.
 `create_profile_for_new_user` inserts a profile the instant an auth user
 is created, long before any app code knows which school they belong to.
 Make that column NOT NULL and **signup breaks completely**. A null tenant
-sees nothing until an admin assigns one, which is the correct behaviour
+sees nothing until an admin assigns one, which is the correct behavior
 anyway — but it has to be a decision rather than an oversight, because
 the failure appears at a new customer's first login, not in testing.
 
@@ -898,7 +898,7 @@ weight:
   2. **It fixes the offline queue**, which was the sharpest risk on the
      list above. Plays sitting in localStorage from before the migration
      carry no tenant_id, and patching the insert sites would not have
-     helped them — those rows are already serialised. A column default
+     helped them — those rows are already serialized. A column default
      fills them at insert time, so a surviving queue replays cleanly.
   3. Eleven fewer edits, four of them in `game.html`.
 
@@ -1047,7 +1047,7 @@ inside a service-key endpoint, where it is worse than in the app: RLS
 would have scoped it there and nothing does here. With two schools it
 matches a row in EACH, and an unordered `limit(1)` returns whichever
 Postgres feels like — the overlay would have worn the wrong school's
-colours with no error anywhere.
+colors with no error anywhere.
 
 `og.js` and `share.js` needed no change: a share token identifies one
 game, and a game belongs to one tenant.
@@ -1165,7 +1165,7 @@ platform changing a tenant's people with nothing recording it, and that
 waits for the audit trail.
 
 **A SECOND TENANT NOW EXISTS IN PRODUCTION**, created through the app,
-defaulting to the neutral greys because it has no colours yet. That is
+defaulting to the neutral grays because it has no colors yet. That is
 the proof the whole plan was building toward — and it changes the status
 of everything below from theoretical to live.
 
@@ -1193,7 +1193,7 @@ with a second tenant it meant "every team on the platform" — and
 recap.html, which anonymous viewers open, then took whichever row came
 first.
 
-**A public recap could already be wearing the wrong school's colours.**
+**A public recap could already be wearing the wrong school's colors.**
 Demonstrated in scratch: under the old policy an anonymous reader saw all
 three tenants' teams; under 015, exactly the one with a published game.
 
@@ -1207,7 +1207,7 @@ quietly stopped being true.
 **015** rewrote the anon branding policy on `teams`. It used
 `is_our_team = true`, which meant "the only team" when it was written and
 "every team on the platform" once there were two — so a public recap could
-show another school's colours. Demonstrated in scratch before the fix:
+show another school's colors. Demonstrated in scratch before the fix:
 three tenants' teams visible to an anonymous reader.
 
 **016** made deleting a tenant a SOFT delete. `tenants` cascades to five
@@ -1230,7 +1230,7 @@ one a reader used until they disagree.
 **is_our_team is gone from every read.** Twelve files, not the ten a first
 grep found: two queries spanned two lines. `api/og.js` read it with the
 service key, so a shared recap's link-preview card — the image iMessage and
-Slack show — could be painted in another school's colour.
+Slack show — could be painted in another school's color.
 
 ### The order now
 

@@ -1,3 +1,6 @@
+// Copyright 2026 StatChat. All rights reserved.
+// Unauthorized copying, modification or distribution of this software
+// or its documentation is prohibited.
 // TEAM TAB ICON -- REMOVED 22 August 2026.
 // ---------------------------------------------------------------------
 // This used to read teams.icon_url and override the favicon, the iPhone

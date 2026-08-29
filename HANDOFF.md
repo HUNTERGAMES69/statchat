@@ -1,3 +1,7 @@
+<!-- Copyright 2026 StatChat. All rights reserved. Unauthorized copying,
+     modification or distribution of this software or its documentation
+     is prohibited. -->
+
 # StatChat — session handoff
 ### Last updated 23 August 2026. Start with "WHERE TO PICK UP" at the foot of this file.
 
