@@ -132,7 +132,11 @@
     .games-head { align-items:center; }
     .games-head > div:first-child { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
     .games-head h1 { margin-right:2px; }
-    #newGameLink { display:block !important; text-align:center; }
+    /* :not(.hidden) MATTERS. This is display:block !important so the button
+       goes full width on a phone, and .hidden is only display:none -- so on
+       a narrow screen this rule won it and a view-only user saw a New game
+       button they had no permission to use. */
+    #newGameLink:not(.hidden) { display:block !important; text-align:center; }
   }
   /* A <select> ON DARK NEEDS appearance:none.
      Setting `background` alone is not enough: the browser paints the
@@ -365,6 +369,13 @@
   #appSplash img { width:96px; height:96px; object-fit:contain; margin-bottom:16px; border-radius:16px; }
   #appSplash .splashTitle { font-size:20px; font-weight:600; letter-spacing:0.5px; }
   #appSplash.hidden { opacity:0; pointer-events:none; }
+  /* The copyright line. Muted, small, and given its own top margin rather
+     than a bottom one, so adding it cannot push anything or change the
+     scroll height of a page that previously ended flush. */
+  .sc-copyright { margin:26px 0 0; padding:0 2px 4px; font-size:12px;
+    line-height:1.5; color:var(--sc-ink-muted, #8d99a6); opacity:.75;
+    text-align:center; max-width:760px; margin-left:auto; margin-right:auto; }
+  @media print { .sc-copyright { color:#666 !important; opacity:1; } }
 </style>
 </head>
 <body>
@@ -1021,6 +1032,13 @@
   function renderGettingStarted(state){
     const card = document.getElementById('gettingStarted');
     if (!card) return;
+    // ADMINS ONLY. Every step on this card is an action a view-only user
+    // cannot take -- customize the team, add a roster, create a game, turn
+    // on two-factor. Showing it to them offered four buttons that all lead
+    // to a page they are bounced off, and the New game button in particular
+    // read as a permission they do not have. `state.isAdmin` used only to
+    // decide whether to append the 2FA step.
+    if (!state.isAdmin){ card.style.display = 'none'; return; }
     const steps = [
       { done: state.customized,
         title: 'Set your team name and colors',
@@ -1518,5 +1536,16 @@
     loadDashboard();
   }
 </script>
+
+  <!-- COPYRIGHT. One line, at the very foot of the page, outside every card
+       so it cannot affect the spacing of anything above it. font-size 12,
+       muted, and no margin-bottom -- it should read as a colophon rather
+       than as content.
+       Deliberately NOT on the three transparent broadcast overlays: those
+       go to air, and a notice burnt into a live graphic is worse than no
+       notice at all. -->
+  <p class="sc-copyright">&copy; 2026 StatChat. All rights reserved.
+    Unauthorized copying, modification or distribution of this software or
+    its documentation is prohibited.</p>
 </body>
 </html>
