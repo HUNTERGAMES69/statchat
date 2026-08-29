@@ -81,20 +81,22 @@
      50px right of where it belongs. */
   .side { display:flex; align-items:center; box-sizing:border-box;
           min-width:0; }
-  /* THE SCORE BOX FITS THE DIGITS EXACTLY. No minimum.
+  /* TWO DIGITS ARE ALWAYS RESERVED, and the digits sit against the INNER
+     edge of that box.
      ------------------------------------------------------------------
-     Twice now this has been a fixed width -- 78px, then a 2ch floor of
-     48px -- and both times the leftover space inside the box sat between
-     the glyph and the identity. A single "0" is about 23px, so a 48px box
-     still left 25px of nothing, and the gap a viewer sees was 45px on one
-     side against 20px on the other. Measuring from the box said 20/20 and
-     was measuring the wrong edge.
-     Shrink-to-fit means "the distance from the score" is the distance from
-     the digits, which is the only distance anyone can see. The cost is that
-     a team going from 9 to 10 widens its box by one digit and nudges the
-     identity; tabular figures keep that to exactly one digit width, and it
-     happens on a scoring play when the graphic is changing anyway. */
-  .pts  { flex:0 0 auto; font-size:44px;
+     Three versions of this were wrong in two different ways. A fixed 78px
+     box, then a 2ch box, both left the spare space BETWEEN the glyph and
+     the identity -- so a single "0" pushed the identity off centre by the
+     width of the missing digit. Shrink-to-fit cured that but made the
+     column grow when a score crossed into two digits, sliding the identity
+     25px mid-game.
+     Reserving two digits and aligning them inward gives both: the glyph's
+     inner edge never moves, so the identity never moves and the column
+     never changes for any score from 0 to 99. A single-digit score simply
+     sits a little further in from the outer edge, which is static and
+     unnoticeable, rather than moving something on a scoring play. Past 99
+     the box grows -- rare enough to accept. */
+  .pts  { flex:0 0 auto; min-width:2ch; font-size:44px;
           font-variant-numeric:tabular-nums; }
   /* --sc-gap IS THE ONE KNOB. It is the clearance on either side of the
      identity: from the score's digits on the outside, and from the centre
@@ -116,10 +118,10 @@
      exactly. */
   #sideAway { padding:14px 0 14px 22px; }
   #sideHome { padding:14px 22px 14px 0; }
-  #sideAway .pts { text-align:left;  order:1; }
+  #sideAway .pts { text-align:right; order:1; }
   #sideAway .ident { order:2; }
   #sideHome .ident { order:1; }
-  #sideHome .pts { text-align:right; order:2; }
+  #sideHome .pts { text-align:left;  order:2; }
   /* THE POSSESSION FOOTBALL IS GONE from this overlay -- not wanted on air.
      It was hidden with visibility:hidden for the team without the ball,
      which STILL OCCUPIES SPACE: the invisible glyph and its gap sat inside
