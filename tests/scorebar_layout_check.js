@@ -37,6 +37,19 @@ console.log('=== Broadcast score bar ===\n');
 chk(/grid-template-columns:1fr auto 1fr/.test(src),
     'the bar is a grid with two 1fr team tracks — equal by definition, and ' +
     'never narrower than their content');
+// AND NOTHING OVERRIDES IT INLINE. renderAll set style.display = 'flex' to
+// reveal the bar, which silently discarded the grid: the sides went back to
+// sizing on their own content and the columns came out unequal on air. A
+// test that only read the CSS could not see it -- reported from a real
+// overlay after the grid was already in place.
+chk(!/style\.display = 'flex'/.test(src),
+    'renderAll sets no inline display — an inline style beats the ' +
+    'stylesheet, and naming a mode there fights the grid');
+chk(/document\.getElementById\('bug'\)\.style\.display = '';/.test(src),
+    'it clears the inline value instead, handing the bar back to the CSS');
+chk(/classList\.add\('is-live'\)/.test(src),
+    'and adds is-live, so clearing the display cannot reveal an empty bar');
+
 chk(!/equaliseSides/.test(src),
     'and no script equalises them: #bug clips its overflow, so a width set ' +
     'from script beyond what the bar allowed was simply cut off');
@@ -44,24 +57,29 @@ chk(!/equaliseSides/.test(src),
 // SCORE-ONLY DROPS THE MIDDLE TRACK. With #situation display:none the grid
 // has two items for three tracks, and home lands in the `auto` one. Caught
 // in Chromium: away 501, home 398.
-chk(/body\.layout-bug #bug \{ grid-template-columns:1fr 1fr; \}/.test(src),
+chk(/body\.layout-bug #bug\.is-live \{ grid-template-columns:1fr 1fr; \}/.test(src),
     'score-only mode re-declares two tracks — hiding the situation panel ' +
     'otherwise leaves home in the auto track and narrower than away');
 
 // ---- scores outboard, identity centred -----------------------------------
 chk(/#sideAway \.pts \{ text-align:left;  order:1; \}/.test(src),
     'the away score is first and left-aligned — the outer edge on that side');
-chk(/#sideHome \.pts \{ text-align:right; order:3; \}/.test(src),
-    'and the home score is last and right-aligned');
-chk(/#sideAway \.sgap \{ order:3; \}/.test(src) && /#sideHome \.sgap \{ order:1; \}/.test(src),
-    'a spacer sits opposite each score');
-chk(/\.sgap \{ flex:0 0 var\(--sc-ptsw\); \}/.test(src) &&
-    /\.pts  \{ flex:0 0 var\(--sc-ptsw\)/.test(src),
-    'and it is the SAME width as the score, from one variable — otherwise ' +
-    'the identity block centres in the leftover space and sits slightly off');
-chk(/\.ident\{ flex:1 0 auto; display:flex;[\s\S]{0,80}justify-content:center; \}/.test(src),
-    'logo and name are one element, centred, and do not shrink below their ' +
-    'content');
+chk(/#sideHome \.pts \{ text-align:right; order:2; \}/.test(src) &&
+    /#sideHome \.ident \{ order:1; \}/.test(src),
+    'and the home score is last and right-aligned, with the identity before it');
+chk(!/sgap/.test(src),
+    'no spacer opposite the score — mirroring the score centres the identity ' +
+    'in the WHOLE column, and the requirement is between the score and the ' +
+    'CENTRE LINE. The spacer version measured 50px off in Chromium');
+chk(/#sideAway \{ padding:14px 0 14px 22px; \}/.test(src) &&
+    /#sideHome \{ padding:14px 22px 14px 0; \}/.test(src),
+    'horizontal padding on the OUTER edge only — anything between the centre ' +
+    'line and the identity track shifts the centre by half of itself');
+chk(/\.ident\{[\s\S]{0,160}padding:0 20px;/.test(src),
+    'and clearance lives INSIDE the identity, symmetric, so a long name ' +
+    'cannot touch the divider without moving the centre');
+chk(/\.ident\{ flex:1 1 auto; display:flex;[\s\S]{0,60}justify-content:center;/.test(src),
+    'logo and name are one element, centred as a block');
 
 // MIRRORED BY ORDER, not by emitting different markup. One builder for both
 // sides means they cannot drift apart.
@@ -69,13 +87,60 @@ chk(/\.ident\{ flex:1 0 auto; display:flex;[\s\S]{0,80}justify-content:center; \
   const fn = /const sideHtml = \(teamKey\) => \{[\s\S]*?\n    \};/.exec(src);
   chk(!!fn, 'sideHtml is a single builder');
   if (fn) {
-    chk(/class="ident"/.test(fn[0]) && /class="sgap"/.test(fn[0]),
-        'emitting score, identity and spacer in one fixed order for both sides');
+    chk(/class="ident"/.test(fn[0]) && !/class="sgap"/.test(fn[0]),
+        'emitting score and identity in one fixed order for both sides, with ' +
+        'no spacer — the mirroring is done by CSS order');
     chk((fn[0].match(/class="pts"/g) || []).length === 1,
         'with the score written once — a second branch for the home side is ' +
         'how two layouts start disagreeing');
   }
 }
+
+// ---- the score sizes to its digits ---------------------------------------
+// The score track was a fixed 78px. A single "0" is about 23px, so 55px of
+// empty track sat between the glyph and the identity -- and a viewer reads
+// that as part of the gap. The identity was centred between the score TRACK
+// and the centre line, which is not what anyone sees.
+//
+// Worse on the away side, where a long name leaves no slack to hide it. That
+// is why home looked right and away did not, with both measuring 0px off.
+chk(/\.pts  \{ flex:0 0 auto; font-size:44px;/.test(src) && !/min-width:2ch/.test(src),
+    'the score box fits its digits EXACTLY, with no minimum — twice this was ' +
+    'a fixed width, and both times the leftover space inside the box sat ' +
+    'between the glyph and the identity');
+chk(/font-variant-numeric:tabular-nums/.test(src),
+    'with tabular figures, so 0 through 99 occupy the same width and the ' +
+    'identity does not shift when a team goes from 9 to 10');
+chk(!/--sc-ptsw/.test(src),
+    'and the old fixed-width variable is gone, with nothing still reading it');
+
+// ---- no possession football -----------------------------------------------
+// Not wanted on air, and it was actively breaking the centring. It was drawn
+// for both teams and hidden with visibility:hidden for the one without the
+// ball -- which STILL OCCUPIES SPACE. The invisible glyph and its 14px gap
+// sat inside the identity block, so the visible logo and name were pushed
+// off centre while every measurement of the BLOCK read as correct.
+//
+// That is why the home side looked right and the away side did not: the
+// shift is the same on both, but on one it runs toward the score and on the
+// other toward the divider.
+chk(!/class="poss"/.test(src),
+    'the football is not emitted -- hiding a thing is not removing it, and ' +
+    'on a centred layout the difference is measurable');
+chk(!/\.poss \{/.test(src),
+    'and its rule is gone with it');
+chk(!/const has = state\.possession === teamKey/.test(src),
+    'along with the flag that fed it');
+
+// ---- the situation panel is centred --------------------------------------
+// It is a flex row of two spans with a 22px gap. On the score bug the
+// down-and-distance is empty -- but an empty span is still a flex item, so
+// the gap applied and Q1 sat 11px right of centre.
+chk(/#situation \{[\s\S]{0,220}justify-content:center;/.test(src),
+    'the situation panel centres its contents');
+chk(/#situation > span:empty \{ display:none; \}/.test(src),
+    'and an empty child is removed from flow, taking its gap with it — ' +
+    'otherwise Q1 sits half a gap off centre on the score bug');
 
 // ---- home on the right ---------------------------------------------------
 // teamA is OUR team. Which column it lands in now depends on the fixture.
