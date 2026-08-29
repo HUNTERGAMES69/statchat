@@ -1,3 +1,6 @@
+// Copyright 2026 StatChat. All rights reserved.
+// Unauthorized copying, modification or distribution of this software
+// or its documentation is prohibited.
 // StatChat game engine
 // ====================
 // THE single copy. Until 10 August 2026 this code was duplicated inline
@@ -1613,14 +1616,19 @@ function auditBoxScore(playsList){
       put(r.receiver.team, 'receiving', key('receiving', r.receiver), 'tgt', 1);
 
     // --- defense
-    if (r.defense && ['rush','pass','sack','fumble','kickoff','punt'].indexOf(t) !== -1){
+    if (r.defense && ['rush','pass','sack'].indexOf(t) !== -1){
       const k = key('defense', r.defense);
       put(r.defense.team, 'defense', k, 'tackles', 1);
       const lost = (r.carrier && (r.carrier.yards || 0) < 0) || t === 'sack';
       if (lost) put(r.defense.team, 'defense', k, 'tfl', 1);
       if (t === 'sack') put(r.defense.team, 'defense', k, 'sacks', 1);
     }
+    // int, sacks and fumRec all come off ONE defensive branch in the engine.
+    // This counted only interceptions, so a defender who recovered a fumble
+    // was a disagreement waiting for a fixture that put one there -- and a
+    // real bad snap recovered by the defense supplied it.
     if (r.defense && t === 'int') put(r.defense.team, 'defense', key('defense', r.defense), 'int', 1);
+    if (r.defense && t === 'fumble') put(r.defense.team, 'defense', key('defense', r.defense), 'fumRec', 1);
 
     // --- special teams
     if (r.kicker && t === 'kickoff'){

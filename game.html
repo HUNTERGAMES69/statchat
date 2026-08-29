@@ -14374,11 +14374,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         (bsDefTd ? ' td' : '') + (bsSafety ? ' sf' : '');
       showConfirm();
       if (pending){
+        // A BAD SNAP IS A FUMBLE, whoever ends up with the ball.
+        // ----------------------------------------------------------------
+        // This wrote playType 'rush', so nothing downstream ever saw a
+        // fumble: no fumble charged to the team, no recovery credited to
+        // the defense, and countTurnovers -- which wants playType 'fumble'
+        // -- did not count a lost one. A bad snap recovered by the other
+        // team showed up as a rush for a loss and a possession change,
+        // with the turnover missing from the tile and the report.
+        //
+        // 'fumble' with attempt:'rush' keeps the yardage where NFHS puts
+        // it: the rushing branch credits TEAM either way, so the team rush
+        // is unchanged. What it adds is the fumble itself.
         pending.roles = pending.roles || {
           carrier: { team: computeState().possession, num: 'TEAM', yards: pending.effect.statYds },
-          playType: 'rush'
+          playType: 'fumble',
+          attempt: 'rush'
         };
         if (byDef){
+          // `lost` is what countTurnovers reads. Only set when the other
+          // team comes up with it; a snap the offense falls on is a fumble
+          // but not a turnover.
+          pending.roles.lost = true;
           if (rec) pending.roles.defense = { team: otherTeam(computeState().possession), num: rec };
           // The save-time re-parse explicitly carries `reset` across, so
           // attaching it here is the supported route for a panel that
