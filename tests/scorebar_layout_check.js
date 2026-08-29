@@ -75,9 +75,12 @@ chk(/#sideAway \{ padding:14px 0 14px 22px; \}/.test(src) &&
     /#sideHome \{ padding:14px 22px 14px 0; \}/.test(src),
     'horizontal padding on the OUTER edge only — anything between the centre ' +
     'line and the identity track shifts the centre by half of itself');
-chk(/\.ident\{[\s\S]{0,160}padding:0 20px;/.test(src),
-    'and clearance lives INSIDE the identity, symmetric, so a long name ' +
-    'cannot touch the divider without moving the centre');
+chk(/\.ident\{[\s\S]{0,180}padding:0 var\(--sc-gap\);/.test(src),
+    'and clearance lives INSIDE the identity, symmetric, so widening it ' +
+    'cannot move the identity off centre');
+chk(/#bug \{ --sc-gap:\d+px; \}/.test(src),
+    'driven by one variable — the bar is widened by turning this number and ' +
+    'nothing else');
 chk(/\.ident\{ flex:1 1 auto; display:flex;[\s\S]{0,60}justify-content:center;/.test(src),
     'logo and name are one element, centred as a block');
 
