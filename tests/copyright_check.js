@@ -53,11 +53,18 @@ pages.forEach(f => {
 // ---- it must not disturb the page ----------------------------------------
 // The brief was "everywhere possible, but it should not interfere with any
 // layout, spacing, or usability".
-// view.html is EXCLUDED here on purpose: its body centres with flex, so its
-// notice is absolutely positioned and follows different rules. That case is
-// asserted separately below.
-['login.html', 'dashboard.html', 'game.html', 'help.html',
- 'customize.html', 'platform.html'].forEach(f => {
+// PAGES WHOSE BODY CENTRES WITH FLEX ARE EXCLUDED, and derived rather than
+// listed: view.html was excluded by name and login.html was not, so the
+// standard rule was checked against a page that is deliberately different.
+// Those pages have their own block below.
+['login.html', 'view.html', 'dashboard.html', 'game.html', 'help.html',
+ 'customize.html', 'platform.html']
+  .filter(f => {
+    const src = fs.readFileSync(path.join(root, f), 'utf8');
+    const bodyRule = (src.match(/body\s*\{[^}]*\}/g) || []).join(' ');
+    return !(/display:\s*flex/.test(bodyRule) && /justify-content:\s*center/.test(bodyRule));
+  })
+  .forEach(f => {
   const s = fs.readFileSync(path.join(root, f), 'utf8');
   const d = new JSDOM(s).window.document;
   const el = d.querySelector('p.sc-copyright');
@@ -93,16 +100,44 @@ pages.forEach(f => {
 // crew view slid left off the edge of the screen. Reported from a live page.
 //
 // Any page whose body centres with flex needs the notice out of the flow.
-['view.html', 'broadcast_stats.html', 'game.html', 'dashboard.html',
- 'platform.html', 'recap.html'].forEach(f => {
+fs.readdirSync(root)
+  .filter(f => f.endsWith('.html') && !/_?mock/.test(f))
+  .forEach(f => {
+    const src = fs.readFileSync(path.join(root, f), 'utf8');
+    if (!/class="sc-copyright"/.test(src)) return;
+    const bodyRule = (src.match(/body\s*\{[^}]*\}/g) || []).join(' ');
+    const centres = /display:\s*flex/.test(bodyRule) &&
+                    /justify-content:\s*center/.test(bodyRule);
+    if (!centres) return;
+    const rule = /\.sc-copyright \{[^}]*\}/.exec(src);
+    chk(!!rule && /position:absolute/.test(rule[0]),
+        f + ': its body centres with flex, so the notice must be out of the ' +
+        'flow — in it, it becomes a second flex item and sits BESIDE the ' +
+        'content instead of under it');
+  });
+
+// ---- THE CREW VIEW USES THE SHORT FORM ----------------------------------
+// The full sentence ran 605px along the foot of the screen and sat directly
+// over quadBR, the bottom-right stats panel -- where a long special-teams or
+// defensive table reaches on a busy night. This page goes to air, so the
+// notice gives way to the numbers: 67px instead of 605.
+{
+  const v = fs.readFileSync(path.join(root, 'view.html'), 'utf8');
+  chk(/<p class="sc-copyright">&copy; 2026 StatChat<\/p>/.test(v),
+      'view.html carries the short form only');
+  chk(!/Unauthorized copying[\s\S]{0,120}<\/p>/.test(v.slice(v.indexOf('sc-copyright">'))),
+      'and not the full sentence, which would overlay a stat tile');
+  chk(/white-space:nowrap/.test(/\.sc-copyright \{[^}]*\}/.exec(v)[0]),
+      'kept on one line, so it cannot wrap up into the panel above it');
+}
+
+// EVERY OTHER PAGE KEEPS THE FULL WORDING. Nothing sits underneath there,
+// and the short form on a printed report says less than it should.
+['help.html', 'dashboard.html', 'game.html', 'platform.html'].forEach(f => {
   const src = fs.readFileSync(path.join(root, f), 'utf8');
   if (!/class="sc-copyright"/.test(src)) return;
-  const bodyFlex = /body\s*\{[^}]*display:\s*flex[^}]*justify-content:\s*center[^}]*\}/.test(src);
-  if (!bodyFlex) return;
-  const rule = /\.sc-copyright \{[^}]*\}/.exec(src);
-  chk(!!rule && /position:absolute/.test(rule[0]),
-      f + ': its body centres with flex, so the notice is positioned out of ' +
-      'the flow — in it, the page slides sideways by half the notice');
+  chk(/Unauthorized copying/.test(src),
+      f + ': keeps the full wording');
 });
 
 // ---- and no undefined colour tokens --------------------------------------
