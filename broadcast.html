@@ -114,7 +114,12 @@
   #sideAway .ident { order:2; }
   #sideHome .ident { order:1; }
   #sideHome .pts { text-align:right; order:2; }
-  .poss { font-size:26px; }
+  /* THE POSSESSION FOOTBALL IS GONE from this overlay -- not wanted on air.
+     It was hidden with visibility:hidden for the team without the ball,
+     which STILL OCCUPIES SPACE: the invisible glyph and its gap sat inside
+     the identity block and pushed the visible logo and name off centre.
+     Hiding a thing is not removing it, and on a centred layout the
+     difference is measurable. */
   /* CENTRED, and an empty child must not push it off centre.
      ------------------------------------------------------------------
      This is a flex row of two spans with a 22px gap. On the score bug the
@@ -814,14 +819,12 @@ function extractNameTag(rawName){
 
     const sideHtml = (teamKey) => {
       const t = TEAMS[teamKey];
-      const has = state.possession === teamKey && state.down;
       // THE IDENTITY IS ONE ELEMENT. Football, logo and name travel
       // together and centre as a block; the score and the spacer are its
       // siblings in the grid. Previously all four were loose flex children,
       // which is why the score could not be pinned to the outer edge.
       return '<span class="pts">' + (state.scores[teamKey] || 0) + '</span>' +
              '<span class="ident">' +
-               '<span class="poss" style="visibility:' + (has ? 'visible' : 'hidden') + ';">\uD83C\uDFC8</span>' +
                (t.logo ? '<img src="' + t.logo + '" alt="">' : '') +
                '<span class="name">' + t.name + '</span>' +
              '</span>';
