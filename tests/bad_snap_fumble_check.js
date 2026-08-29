@@ -29,10 +29,37 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
 
 console.log('=== Bad snap records a fumble ===\n');
 
-// ---- what the tree writes ------------------------------------------------
+// ---- THE PARSER IS THE SOURCE, not the click handler --------------------
+// The first fix changed only the click handler, which builds roles as
+// `pending.roles = pending.roles || {...}`. By then showConfirm() has run
+// parseInput, which RETURNS roles for a bad snap -- so the handler's object
+// was never used and the fix changed nothing. Reported from a live test
+// after it was deployed.
+//
+// Checking the handler alone is what let it through: the assertion was true
+// and the code it described was dead.
+{
+  const parserRoles = game.match(
+    /roles: \{ carrier: \{ team: off, num: 'TEAM', yards: netYards \}[\s\S]{0,220}?\} \};/g) || [];
+  chk(parserRoles.length >= 3,
+      'the parser builds roles for the bad snap outcomes (found ' +
+      parserRoles.length + ')');
+  chk(parserRoles.every(r => /playType: 'fumble'/.test(r)),
+      "and every one of them says playType 'fumble' — not the bare 'rush' " +
+      'they all used to');
+  chk(parserRoles.every(r => /attempt: 'rush'/.test(r)),
+      "with attempt 'rush', which keeps the yardage on TEAM rushing where " +
+      'NFHS puts a bad snap');
+  chk(parserRoles.filter(r => /lost: true/.test(r)).length === 3,
+      'and the three where the other team ends up with it are marked lost');
+  chk(parserRoles.filter(r => /defense: bsRec && bsRec !== '\?'/.test(r)).length === 2,
+      'the recoverer is credited when named, and left to the TEAM row when ' +
+      'the scorer wrote "?"');
+}
+
 chk(/playType: 'fumble',\s*\n\s*attempt: 'rush'/.test(game),
-    "the bad snap writes playType 'fumble' with attempt 'rush' — not the " +
-    "bare 'rush' it used to");
+    "the click handler agrees, for the branch the parser leaves to it — " +
+    "the bad snap the offence recovers itself");
 chk(/pending\.roles\.lost = true;/.test(game),
     'and sets `lost` when the other team recovers, which is what ' +
     'countTurnovers reads');
