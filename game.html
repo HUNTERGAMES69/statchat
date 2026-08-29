@@ -2778,7 +2778,10 @@ function parseInput(raw, state){
               ', fumble — recovered by ' + recName + ' — TOUCHDOWN',
             effect: { score: { team: def, points: 6 }, endsDrive: true },
             flipEligible: false, team: off, quarter: state.quarter,
-            roles: { carrier: { team: off, num: 'TEAM', yards: netYards }, playType: 'rush' } };
+            roles: { carrier: { team: off, num: 'TEAM', yards: netYards },
+                   playType: 'fumble', attempt: 'rush', lost: true,
+                   defense: bsRec && bsRec !== '?'
+                     ? { team: def, num: bsRec } : undefined } };
         }
         // "fumble" said out loud. Reported directly, 22 Aug 2026: the log
         // read "bad snap for no gain, recovered by Neville" -- which
@@ -2800,7 +2803,10 @@ function parseInput(raw, state){
           // of handing the ball straight to the recovering team.
           effect: { fieldDelta: netYards, flip: true, flipApplied: true, flipTo: def },
           flipEligible: false, team: off, quarter: state.quarter,
-          roles: { carrier: { team: off, num: 'TEAM', yards: netYards }, playType: 'rush' } };
+          roles: { carrier: { team: off, num: 'TEAM', yards: netYards },
+                   playType: 'fumble', attempt: 'rush', lost: true,
+                   defense: bsRec && bsRec !== '?'
+                     ? { team: def, num: bsRec } : undefined } };
       }
       if (bsSafety){
         // Recovered by the offense in their own end zone: two points to
@@ -2809,7 +2815,8 @@ function parseInput(raw, state){
             ', recovered in the end zone — SAFETY',
           effect: { score: { team: def, points: 2 }, endsDrive: true },
           flipEligible: false, team: off, quarter: state.quarter,
-          roles: { carrier: { team: off, num: 'TEAM', yards: netYards }, playType: 'rush' } };
+          roles: { carrier: { team: off, num: 'TEAM', yards: netYards },
+                   playType: 'fumble', attempt: 'rush', lost: true } };
       }
       text = TEAMS[off].name + ' — bad snap, team rush ' + gainPhrase(netYards);
     }
