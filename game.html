@@ -1089,6 +1089,13 @@
     .card { padding:24px; }
     button { padding:9px 16px; font-size:14px; }
   }
+  /* The copyright line. Muted, small, and given its own top margin rather
+     than a bottom one, so adding it cannot push anything or change the
+     scroll height of a page that previously ended flush. */
+  .sc-copyright { margin:26px 0 0; padding:0 2px 4px; font-size:12px;
+    line-height:1.5; color:var(--sc-ink-muted, #8d99a6); opacity:.75;
+    text-align:center; max-width:760px; margin-left:auto; margin-right:auto; }
+  @media print { .sc-copyright { color:#666 !important; opacity:1; } }
 </style>
 </head>
 <body>
@@ -9003,8 +9010,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         return inner.replace('<div class="pick-row">',
           '<div class="pick-row"><span class="pick-label">' + label + '</span>');
       }
-      return '<div class="opt-block">' +
-        '<button type="button" class="opt-toggle">+ ' + label.replace(/\s*\(optional\)\s*/i, '') + '</button>' +
+      // OPEN ON RENDER for the one a scorer reaches for on nearly every
+      // play. Tackled by was collapsed on every tree, which cost a click
+      // before the picker was even visible -- on a play that already needs
+      // a carrier and a yardage, that click is the difference between
+      // keeping up with the game and falling behind it.
+      // The others stay collapsed: a recovery or a block is the exception,
+      // and opening them all would push Review play off a laptop screen.
+      const openOnRender = /^tackled by/i.test(label);
+      const clean = label.replace(/\s*\(optional\)\s*/i, '');
+      return '<div class="opt-block' + (openOnRender ? ' open' : '') + '">' +
+        '<button type="button" class="opt-toggle">' +
+          (openOnRender ? '\u2212 ' : '+ ') + clean + '</button>' +
         '<div class="opt-body">' + inner + '</div>' +
       '</div>';
     }
@@ -12260,7 +12277,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       //    it behind a collapsed button.
       panel.querySelectorAll('.opt-block').forEach(block => {
         const btn = block.querySelector('.opt-toggle');
-        const label = btn ? btn.textContent.replace(/^\+\s*/, '') : '';
+        const label = btn ? btn.textContent.replace(/^[+\u2212]\s*/, '') : '';
         // A PICKED PLAYER, not any picked button. The test used to match
         // button.picked anywhere in the block, and the kickoff return
         // group contains a spot calculator whose side button is
@@ -14565,5 +14582,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
      title="How to use StatChat">HELP!</a>
   <a id="launchViewLink" href="#" target="_blank">CREW VIEW &#8599;</a>
 </div>
+
+  <!-- COPYRIGHT. One line, at the very foot of the page, outside every card
+       so it cannot affect the spacing of anything above it. font-size 12,
+       muted, and no margin-bottom -- it should read as a colophon rather
+       than as content.
+       Deliberately NOT on the three transparent broadcast overlays: those
+       go to air, and a notice burnt into a live graphic is worse than no
+       notice at all. -->
+  <p class="sc-copyright">&copy; 2026 StatChat. All rights reserved.
+    Unauthorized copying, modification or distribution of this software or
+    its documentation is prohibited.</p>
 </body>
 </html>
