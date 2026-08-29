@@ -1952,9 +1952,23 @@ function isAdminMarker(p){
 // three units. Two units listing the same name is one player who plays
 // both ways; two DIFFERENT names is a genuine shared number, and the
 // coach has to say which one they mean.
-function playerCandidates(teamKey, num){
+// PREFERRED UNIT FIRST.
+// ---------------------------------------------------------------------
+// This walked offense, defense, special in that fixed order regardless of
+// which picker was asking. `resolved` above already respects the picker's
+// own order, so the headline name was right -- but the ALTERNATIVES were
+// listed offence-first, so on a number shared between an offensive and a
+// defensive player the tackled-by box offered the offensive one first.
+//
+// Two-way players are the ordinary case in high school football, so this is
+// not a rare shape: it is most of a small roster.
+function playerCandidates(teamKey, num, preferredUnit){
   const t = TEAMS[teamKey] || {};
-  const buckets = [['offense', t.rosterOffense], ['defense', t.rosterDefense], ['special', t.rosterSpecialTeams]];
+  let buckets = [['offense', t.rosterOffense], ['defense', t.rosterDefense], ['special', t.rosterSpecialTeams]];
+  if (preferredUnit){
+    buckets = buckets.filter(b => b[0] === preferredUnit)
+                     .concat(buckets.filter(b => b[0] !== preferredUnit));
+  }
   const seen = {}, out = [];
   buckets.forEach(([unit, roster]) => {
     const n = roster && roster[num];
@@ -1969,7 +1983,15 @@ function playerCandidates(teamKey, num){
   //
   // Two #7 running backs is the ordinary case this app was built for, so
   // the ambiguous maps are consulted too.
-  [['offense', t.ambiguousOffense], ['defense', t.ambiguousDefense], ['special', t.ambiguousSpecialTeams]]
+  // Same reordering for the ambiguous maps, or the preference would hold for
+  // players on a roster and not for the ones this app discovers mid-game.
+  let ambBuckets = [['offense', t.ambiguousOffense], ['defense', t.ambiguousDefense],
+                    ['special', t.ambiguousSpecialTeams]];
+  if (preferredUnit){
+    ambBuckets = ambBuckets.filter(b => b[0] === preferredUnit)
+                           .concat(ambBuckets.filter(b => b[0] !== preferredUnit));
+  }
+  ambBuckets
     .forEach(([unit, amb]) => {
       const entries = amb && amb[num];
       if (!entries) return;
@@ -2396,6 +2418,44 @@ const PENALTIES = {
 // Options for one side, grouped, in the order the groups are declared
 // above rather than alphabetically -- a scorer looks for "false start"
 // among the pre-snap fouls, not under F.
+// THE FOUR MOST-CALLED FOULS, as a row of buttons.
+// ---------------------------------------------------------------------
+// The dropdown holds 41 options a side. Four of them account for most of
+// what is actually called on a Friday, and reaching them meant opening a
+// select and scanning. A row of buttons under the team choice is one tap.
+//
+// SIDE-SPECIFIC, and not a mirror of each other. These are the fouls a
+// scorer reaches for most, which differ by side rather than being the same
+// four seen from two directions:
+//
+//   offense   false start, illegal motion, delay of game, holding
+//   defense   offside, encroachment, pass interference, roughing the passer
+//
+// Offside and pass interference were on the offensive row in the first cut
+// and came off: an offensive team can technically be offside on a free
+// kick, and offensive pass interference exists, but neither is what anyone
+// is reaching for in a hurry. Holding came off the defensive row for the
+// same reason -- defensive holding is called, but far less often than the
+// four above it.
+//
+// Pass interference is two separate entries in the catalogue, offensive_pi
+// and defensive_pi. Only the defensive one is here; showing an entry to the
+// wrong side would log the wrong foul.
+//
+// The dropdown still holds everything. This is a shortcut past it, not a
+// replacement for it, and the slugs are read from PENALTIES so a change to
+// the catalogue cannot leave this row pointing at something that no longer
+// exists.
+const QUICK_PENALTIES = {
+  off: ['false_start', 'illegal_motion', 'delay_of_game', 'holding'],
+  def: ['offside', 'encroachment', 'defensive_pi', 'roughing_passer']
+};
+function quickPenaltiesFor(side){
+  return (QUICK_PENALTIES[side] || [])
+    .filter(slug => PENALTIES[slug])
+    .map(slug => ({ slug, name: PENALTIES[slug].name, yards: PENALTIES[slug].yards }));
+}
+
 // ONE ALPHABETICAL LIST, not four groups.
 // ---------------------------------------------------------------------
 // This returned groups -- Before the snap, During the play, Kicking plays,
@@ -3841,10 +3901,22 @@ function offenseEligible(team, role){
 // Most recent play index at which a player filled any of these roles.
 // Every picker sorts by this: the player who just did the thing is far
 // more likely to do it again than whoever has the biggest season total.
-function lastUsedByRole(team, roleKeys){
+// `playTypes`, when given, limits recency to plays of those types.
+// ---------------------------------------------------------------------
+// Every kicking role was pooled: one recency map built from every `kicker`
+// and `punter` on the team, feeding all four kicking pickers. So a kickoff
+// specialist floated to the top of the field goal picker, and the last
+// field goal kicker to the top of the PAT picker.
+//
+// In high school these are frequently three different boys -- a placekicker,
+// a kickoff man with the stronger leg, and a punter. Pooling them means the
+// suggestion is wrong more often than right, and a wrong suggestion is worse
+// than none because it invites a tap.
+function lastUsedByRole(team, roleKeys, playTypes){
   const out = {};
   plays.forEach((p, i) => {
     const r = p.roles; if (!r) return;
+    if (playTypes && playTypes.indexOf(r.playType) === -1) return;
     roleKeys.forEach(k => {
       if (r[k] && r[k].team === team && r[k].num) out[r[k].num] = i;
     });
@@ -3888,6 +3960,20 @@ function statsByIdentity(team, roleKey){
   return out;
 }
 // Recency first, then whatever the caller's own tiebreak is.
+// JERSEY ORDER. Numbers are stored as strings, so a plain sort puts 10
+// before 2. Compared as integers, with the string as the tiebreak so that
+// "0" and "00" -- two different players, and both legal -- keep a stable
+// order rather than swapping about between renders.
+function byJersey(a, b){
+  const na = a.num !== undefined ? a.num : a;
+  const nb = b.num !== undefined ? b.num : b;
+  const ia = parseInt(na, 10), ib = parseInt(nb, 10);
+  if (isNaN(ia) && isNaN(ib)) return String(na).localeCompare(String(nb));
+  if (isNaN(ia)) return 1;
+  if (isNaN(ib)) return -1;
+  if (ia !== ib) return ia - ib;
+  return String(na).length - String(nb).length;
+}
 function byRecency(recency, tiebreak){
   return (a, b) => {
     const ra = recency[a.num !== undefined ? a.num : a], rb = recency[b.num !== undefined ? b.num : b];
@@ -3916,18 +4002,39 @@ function defenseEligible(team){
       ambiguousList.push({ num, name: nm + ' ?', resolvedName: nm });
     });
   });
-  const defRecency = lastUsedByRole(team, ['defense']);
+  // NUMERIC ORDER, not recency.
+  // ---------------------------------------------------------------------
+  // This sorted by who was credited most recently, then by how often. That
+  // is the right rule for the offensive pickers, where a scorer is choosing
+  // among a handful of players he is watching and the last carrier is
+  // usually a good guess.
+  //
+  // Defense is a different job. The list grows as tacklers are discovered,
+  // so by the third quarter it is twenty-odd numbers deep, and the scorer is
+  // not guessing -- he has a number from the spotter and needs to FIND it.
+  // A recency order means the same number is in a different place every
+  // play, so finding it is a scan of the whole list every time. Numeric
+  // order means it is where numbers are, and the eye goes straight there.
+  //
+  // Discovery is unchanged: a player still appears only once he has been
+  // credited. It is only where he appears that changes.
   const discoveredList = discovered[team].slice()
-    .sort(byRecency(defRecency, (a, b) => (stats[team].credits[b]||0) - (stats[team].credits[a]||0)))
+    .sort(byJersey)
     .filter(num => !ambiguous[num])
     // rosterUnassigned fallback, same reasoning as offenseEligible above:
     // a player with no assigned unit is not in rosterDefense at all, and
     // this line's own bare '' fallback showed a blank button rather than
     // his real name once he could actually be discovered here.
     .map(num => ({ num, name: TEAMS[team].rosterDefense[num] || rosterName(team, num, ['defense', 'special', 'offense']) || '' }));
-  return ambiguousList.concat(discoveredList);
+  // MERGED, not prepended. Shared numbers used to be listed first, which
+  // made sense when the rest was in recency order and had no order to break.
+  // Against a numeric list a #55 sitting above a #2 is exactly the thing
+  // that made the old picker hard to scan. Sorted in with everything else,
+  // the two entries for a shared number land together at that number, which
+  // is where the scorer is already looking.
+  return ambiguousList.concat(discoveredList).sort(byJersey);
 }
-function specialTeamsEligible(team){
+function specialTeamsEligible(team, playType){
   const roster = TEAMS[team].rosterSpecialTeams || {};
   const ambiguous = TEAMS[team].ambiguousSpecialTeams || {};
   // Only once that number has actually kicked or punted. Otherwise a
@@ -3962,7 +4069,12 @@ function specialTeamsEligible(team){
   });
   const nums = Object.keys(roster);
   Object.keys(kicked).forEach(n => { if (nums.indexOf(n) === -1) nums.push(n); });
-  const stRecency = lastUsedByRole(team, ['kicker', 'punter']);
+  // SCOPED TO THIS TREE. Discovery is unchanged above -- a boy who has only
+  // punted is still offered for a field goal, because he might take one.
+  // Only the ORDER narrows, so the man suggested first is the one who last
+  // did THIS job.
+  const stRecency = lastUsedByRole(team, ['kicker', 'punter'],
+                                   playType ? [playType] : null);
   const resolvedList = nums
     .sort(byRecency(stRecency, (a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0)))
     .filter(num => !ambiguous[num])
@@ -4051,7 +4163,7 @@ function shortPickerName(name){
   if (SUFFIX.test(last) && parts.length >= 3) last = parts[parts.length - 2] + ' ' + last;
   return last + mark;
 }
-function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
+function pickerHtml(list, groupClass, statLabelFn, emptyMsg, stackLayout){
   if (list.length === 0) return '<span style="font-size:13px; color:var(--sc-ink-muted);">' + (emptyMsg || 'no one credited yet — type a number below') + '</span>';
   // THE NUMBER IS WHAT A SCORER SCANS FOR, so it is what the button
   // leads with.
@@ -4070,8 +4182,47 @@ function pickerHtml(list, groupClass, statLabelFn, emptyMsg){
   //
   // No '#' sigil. Every button had one, so it distinguished nothing and
   // cost a character in exactly the column being read.
+  // STACKED, for the defensive list only.
+  // ---------------------------------------------------------------------
+  // Number over name instead of beside it. The defensive picker grows as
+  // tacklers are discovered -- twenty-odd by the third quarter -- and at
+  // the side-by-side size that is four rows deep and pushes Review play off
+  // the screen. Stacked it is three, and the number reads larger relative
+  // to the name, which is what a scorer is searching for.
+  //
+  // 72px, not narrower. At 62px the padding eats into the name box and
+  // Robicheaux clips; measured against 28 Louisiana surnames, 72 is the
+  // width where none of them do. A truncated name is worse than no name,
+  // because it still looks like a check and is not one.
+  //
+  // Only the credit pickers. The offensive lists are five or six players
+  // deep and have no height problem to solve.
+  // AN EXPLICIT ARGUMENT, not a guess from the class name. This tested
+  // /^pp_credit_pick/, which looked like "the defensive picker" and was not:
+  // the same class is used by a returner picker and by a recovery credit
+  // that renders special teams when the kicking team came up with the ball.
+  // So a change asked for on one picker quietly landed on three.
+  //
+  // The class says how a button is styled and wired. It does not say what
+  // is in the list, and only the caller knows that.
+  const stacked = !!stackLayout;
+
   return list.map(p => {
     const label = statLabelFn && statLabelFn(p.num, p);
+    if (stacked){
+      return '<button type="button" class="' + groupClass + '" data-num="' + p.num + '"' +
+        (p.name ? ' title="' + String(p.name).replace(/"/g,'') + '"' : '') +
+        (p.resolvedName ? ' data-resolved="' + p.resolvedName.replace(/"/g,'') + '"' : '') +
+        (p.unit ? ' data-unit="' + p.unit + '"' : '') +
+        ' style="margin:0 4px 4px 0; padding:5px 9px; display:inline-flex; ' +
+          'flex-direction:column; align-items:center; line-height:1.12; min-width:72px;">' +
+        '<b style="font-size:17px; font-weight:600; font-variant-numeric:tabular-nums; ' +
+          'letter-spacing:0.01em;">' + p.num + '</b>' +
+        '<span style="font-size:12px; opacity:0.74; max-width:72px; overflow:hidden; ' +
+          'text-overflow:ellipsis; white-space:nowrap;">' + shortPickerName(p.name) + '</span>' +
+        (label ? '<span style="font-size:10px; opacity:0.6;">' + label + '</span>' : '') +
+        '</button>';
+    }
     return '<button type="button" class="' + groupClass + '" data-num="' + p.num + '"' +
       // Full name on hover: the button shows only the surname now, and a
       // roster with two Robinsons has to stay distinguishable somewhere.
@@ -4257,7 +4408,11 @@ function attachNameConfirm(inputId, getTeam, getOrder, onResolve){
       }
       return;
     }
-    const others = playerCandidates(teamKey, num).filter(c => c.name !== resolved);
+    // order[0] is the unit this picker is for -- 'defense' for tackled-by,
+    // 'offense' for a ball carrier. The caller already had it; it simply was
+    // not being passed on.
+    const others = playerCandidates(teamKey, num, order && order[0])
+                     .filter(c => c.name !== resolved);
     // Shared number: pin the default too. Accepting it without tapping is
     // still a choice, and leaving it unrecorded is what made the saved
     // play depend on roster load order.
@@ -6322,7 +6477,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       return;
     }
     if (guided.step === 'kickoff'){
-      const kickerList = specialTeamsEligible(guided.kickingTeam);
+      const kickerList = specialTeamsEligible(guided.kickingTeam, 'kickoff');
       content.innerHTML =
         '<div style="font-size:16px; margin-bottom:8px;">' + TEAMS[guided.kickingTeam].name + ' kicks off.</div>' +
         '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Kicker</p>' +
@@ -8892,7 +9047,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     const { stats } = computePlayerStats();
     function offBlock(role, label){
-      const list = (role === 'kicker' || role === 'punter') ? specialTeamsEligible(off) : offenseEligible(off, role);
+      const list = (role === 'kicker' || role === 'punter') ? specialTeamsEligible(off, type) : offenseEligible(off, role);
       // Labeled per PLAYER where we know who it was. The number-keyed
       // totals credit a shared number's whole yardage to both entries, so
       // two #7s both read "(6 yds)" off one 6-yard carry -- twelve yards
@@ -8996,7 +9151,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const list = defenseEligible(def);
       const inner = '<div class="pick-row">' +
           '<div id="pp_credit_grid' + suffix + '" class="grid-inline-manual">' +
-            pickerHtml(list, 'pp_credit_pick' + suffix) +
+            pickerHtml(list, 'pp_credit_pick' + suffix, null, null, true) +
             '<input autocomplete="off" type="text" id="pp_credit_manual' + suffix + '" placeholder="type #">' +
           '</div>' +
         '</div>';
@@ -11897,7 +12052,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           const grid = document.getElementById('pp_credit_grid' + suffix);
           if (!grid) return;
           const list = kicking ? specialTeamsEligible(off) : defenseEligible(def);
-          grid.innerHTML = pickerHtml(list, 'pp_credit_pick' + suffix);
+          grid.innerHTML = pickerHtml(list, 'pp_credit_pick' + suffix, null, null, !kicking);
           // The buttons are rebuilt, so their click handlers went with
           // them. wirePickerButtons is the same call the panel makes for
           // every credit grid at build time -- reusing it means the
@@ -13905,6 +14060,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // "Roughing the passer" as an offensive foul. It sits above the
       // yards box so the panel reads in the order the call is made: who,
       // what, how far.
+      '<div id="pen_quick" style="margin-top:10px; display:none;"></div>' +
       '<div id="pen_type_wrap" style="margin-top:10px; display:none;">' +
         '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Penalty (optional)</p>' +
         '<select id="pen_type" style="min-width:260px; padding:8px; font-size:15px; border-radius:6px; border:1px solid var(--sc-rule-strong);"></select>' +
@@ -14073,9 +14229,48 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           .map(i => '<option value="' + i.slug + '">' + i.name + '</option>').join('');
       sel.value = '';
       document.getElementById('pen_type_wrap').style.display = 'block';
+
+      // THE QUICK ROW, above the dropdown.
+      // ------------------------------------------------------------------
+      // Rebuilt every time a team is chosen, because the four differ by
+      // side and because switching team mid-entry must not leave a button
+      // that sets a foul the other side cannot commit.
+      const quickWrap = document.getElementById('pen_quick');
+      if (quickWrap){
+        quickWrap.innerHTML = quickPenaltiesFor(penTeam).map(q =>
+          '<button type="button" class="penQuickBtn" data-slug="' + q.slug + '" ' +
+            'style="margin:0 6px 6px 0; padding:6px 11px; display:inline-flex; ' +
+            'align-items:baseline; gap:7px;">' +
+            '<span style="font-size:13.5px; font-weight:600;">' + q.name + '</span>' +
+            '<span style="font-size:11px; opacity:0.6;">' + q.yards + '</span>' +
+          '</button>').join('');
+        quickWrap.style.display = 'block';
+        quickWrap.querySelectorAll('.penQuickBtn').forEach(qb => {
+          qb.addEventListener('click', () => {
+            // DRIVE THE SELECT, do not bypass it. Everything downstream --
+            // the yardage, the automatic first down, the spot-of-foul
+            // toggle -- hangs off the select's change event. Setting the
+            // value and firing that keeps one path through the panel
+            // instead of a second one that has to be kept in step.
+            sel.value = qb.dataset.slug;
+            // The change handler highlights whichever quick button matches
+            // the new value, so there is nothing to set here.
+            sel.dispatchEvent(new Event('change'));
+          });
+        });
+      }
     }));
     document.getElementById('pen_type').addEventListener('change', () => {
       const slug = document.getElementById('pen_type').value;
+      // KEEP THE QUICK ROW IN STEP. Picking from the dropdown has to clear
+      // any quick button, or two things look chosen and only one of them is.
+      // Done here rather than in the dropdown's own handler so it covers the
+      // quick buttons too, which fire this same event -- the one that
+      // matches re-highlights itself immediately afterwards.
+      const qw = document.getElementById('pen_quick');
+      if (qw) qw.querySelectorAll('.penQuickBtn').forEach(x => {
+        x.classList.toggle('picked', !!slug && x.dataset.slug === slug);
+      });
       const p = slug ? PENALTIES[slug] : null;
       // RE-DERIVED FROM SCRATCH on every change, matching the side
       // dropdown's own "rebuild, don't patch" rule above -- a coach who

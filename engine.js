@@ -1109,6 +1109,34 @@ function computeBoxScore(playsList){
     // The recovery itself is untouched: fumRec is credited whether or not
     // anyone is named, including to a TEAM bucket.
     const TACKLE_TYPES = ['rush', 'pass', 'sack'];
+
+    // AN UNATTRIBUTED TACKLE FOR LOSS STILL COUNTS FOR THE TEAM.
+    // ------------------------------------------------------------------
+    // TFL was credited only inside the named-defender branch below, so a
+    // loss with nobody written down vanished from the box score entirely.
+    // The crew view and the broadcast overlay each computed their own team
+    // TFL straight from the plays and counted it, so the number on air was
+    // right and the one in the stat package was low -- with two named
+    // losses and one unnamed, 3 against 1.
+    //
+    // Naming the tackler is optional by design; a team TFL is a fact about
+    // the play, not about whether anyone wrote down who made it.
+    //
+    // UNATTRIBUTED ONLY, mirroring int, sacks and fumble recoveries in the
+    // branch below: the TEAM row holds what no player claimed, so the
+    // column sums to the team total. Adding every loss here instead would
+    // double-count the named ones.
+    if (!r.defense && TACKLE_TYPES.includes(type) &&
+        typeof e.statYds === 'number' && e.statYds < 0){
+      const victim = (type === 'sack') ? (r.passer && r.passer.team)
+                                       : ((r.carrier && r.carrier.team) ||
+                                          (r.passer && r.passer.team));
+      if (victim){
+        const s = bucket(otherTeam(victim), 'defense', 'TEAM');
+        if (s) s.tfl = (s.tfl||0) + 1;
+      }
+    }
+
     if (r.defense && TACKLE_TYPES.includes(type)){
       const s = bucket(r.defense.team, 'defense', r.defense.num, r.defense.name);
       if (s){
@@ -1648,6 +1676,21 @@ function auditBoxScore(playsList){
     // nobody credited recorded no sack anywhere. The engine credits a TEAM
     // bucket on the opposing side whenever the event happened, named or not.
     // This counted nothing of the kind, so every unnamed one disagreed.
+    // AN UNATTRIBUTED TACKLE FOR LOSS goes to the TEAM row, mirroring
+    // int, sacks and fumble recoveries. Counted here as well so the two
+    // implementations stay in step -- this is exactly the kind of team-row
+    // rule the auditor was missing five of when the fumble sweep ran.
+    if (!r.defense && ['rush','pass','sack'].indexOf(t) !== -1 &&
+        typeof e.statYds === 'number' && e.statYds < 0){
+      const victim = (t === 'sack') ? (r.passer && r.passer.team)
+                                    : ((r.carrier && r.carrier.team) ||
+                                       (r.passer && r.passer.team));
+      if (victim){
+        const other = victim === 'teamA' ? 'teamB' : 'teamA';
+        put(other, 'defense', key('defense', { team: other, num: 'TEAM' }), 'tfl', 1);
+      }
+    }
+
     // A SACK FUMBLE IS ALSO A SACK. The engine credits a TEAM sack whenever
     // a fumble carries attempt === 'sack', unconditionally -- separate from
     // the fallback below and not suppressed by a named defender, because the

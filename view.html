@@ -393,6 +393,13 @@ h2{ color:var(--v-mute) !important; }
    looks at most and the least in need of decoration. */
 .drive-current{ background:transparent !important;
                 border-left:4px solid var(--v-brand) !important; }
+  /* The copyright line. Muted, small, and given its own top margin rather
+     than a bottom one, so adding it cannot push anything or change the
+     scroll height of a page that previously ended flush. */
+  .sc-copyright { margin:26px 0 0; padding:0 2px 4px; font-size:12px;
+    line-height:1.5; color:#8d99a6; opacity:.75;
+    text-align:center; max-width:760px; margin-left:auto; margin-right:auto; }
+  @media print { .sc-copyright { color:#666 !important; opacity:1; } }
 </style>
 </head>
 <body>
@@ -1198,31 +1205,22 @@ function extractNameTag(rawName){
       // for its numbers at all. Every existing caller passes nothing
       // here and falls through to the unchanged, original behavior.
       const opp = otherTeam(teamKey);
-      const defTotals = (overrideDefensePlays || plays).reduce((acc, p) => {
-        const r = p.roles; if (!r) return acc;
-        const e = p.effect || {};
-        // A fumble that ended a SACK is still a sack -- reported
-        // directly, 20 Aug 2026, from a game where this exact team
-        // total dropped one. This accumulator predates that report and
-        // never carried the exception engine.js's own sack credit
-        // already had, since it counts straight from the play log
-        // rather than through computeBoxScore.
-        if ((r.playType === 'sack' || (r.playType === 'fumble' && r.attempt === 'sack')) && r.passer && r.passer.team === opp) acc.sacks++;
-        if (r.playType === 'int' && r.passer && r.passer.team === opp) acc.int++;
-        if (r.playType === 'fumble' && r.carrier && r.carrier.team === opp && (r.lost || r.defense)) acc.fumRec++;
-        // Tackles for loss, counted from the PLAY rather than from a named
-        // tackler. Naming the tackler is optional and often skipped at
-        // speed, so requiring one would undercount a team stat that the
-        // play log already knows for certain: a scrimmage snap by the
-        // other team that lost yardage was a tackle for loss, whoever
-        // made it. Sacks are included -- NFHS and NCAA both treat a sack
-        // as a tackle behind the line -- and shown alongside the sack
-        // count so the two can be read separately.
-        const TFL_TYPES = ['rush', 'pass', 'sack'];
-        const byOpp = (r.carrier && r.carrier.team === opp) ||
-                      (r.passer && r.passer.team === opp);
-        if (byOpp && TFL_TYPES.indexOf(r.playType) !== -1 &&
-            typeof e.statYds === 'number' && e.statYds < 0) acc.tfl++;
+      // READ FROM THE BOX SCORE, do not recompute.
+      // ----------------------------------------------------------------
+      // This reduced the plays itself. Three of the four agreed with
+      // computeBoxScore by coincidence -- int, sacks and fumble recoveries
+      // all have a TEAM-row fallback in the engine, so the totals matched.
+      // TFL had none, so an unattributed loss counted here and vanished
+      // from the stat package: 3 on air against 1 in the report.
+      // The engine now credits an unattributed TFL to the team as well, so
+      // there is one rule, and this reads it rather than keeping a second
+      // copy that has to be kept in step.
+      const defRows = ((computeBoxScore(overrideDefensePlays || plays) || {})[teamKey] || {}).defense || {};
+      const defTotals = Object.values(defRows).reduce((acc, v) => {
+        acc.int    += v.int    || 0;
+        acc.fumRec += v.fumRec || 0;
+        acc.sacks  += v.sacks  || 0;
+        acc.tfl    += v.tfl    || 0;
         return acc;
       }, { int: 0, fumRec: 0, sacks: 0, tfl: 0 });
       const hasDef = defTotals.int || defTotals.fumRec || defTotals.sacks || defTotals.tfl;
@@ -3083,5 +3081,16 @@ function extractNameTag(rawName){
     });
   }
 </script>
+
+  <!-- COPYRIGHT. One line, at the very foot of the page, outside every card
+       so it cannot affect the spacing of anything above it. font-size 12,
+       muted, and no margin-bottom -- it should read as a colophon rather
+       than as content.
+       Deliberately NOT on the three transparent broadcast overlays: those
+       go to air, and a notice burnt into a live graphic is worse than no
+       notice at all. -->
+  <p class="sc-copyright">&copy; 2026 StatChat. All rights reserved.
+    Unauthorized copying, modification or distribution of this software or
+    its documentation is prohibited.</p>
 </body>
 </html>
