@@ -373,8 +373,18 @@ async function run() {
     typeInto(win, doc.getElementById('pp_spot_yardline'), '32');
     click(win, doc.getElementById('pp_review'));
     await new Promise(r => setTimeout(r, 300));
-    if (cc().value) {
-      fail('touchback:returned', 'a returned kickoff should not prefill the clock, got ' + JSON.stringify(cc().value));
+    // REVERSED 30 Aug 2026. This asserted that only a TOUCHBACK prefills.
+    // Andy's call, from LIVE_GAME_FEEDBACK item 4: every kickoff
+    // prefills, because the clock is stopped before all of them -- it
+    // stops on the score, does not run during the try, and restarts only
+    // when the receiving team touches the ball. So the clock at the catch
+    // IS the clock at the previous stoppage, touchback or not.
+    //
+    // The check now runs the other way: a returned kickoff MUST arrive
+    // prefilled, and the value must be a real clock rather than an empty
+    // box or a zero.
+    if (!/^\d+:[0-5]\d$/.test(cc().value || '')) {
+      fail('kickoff:prefill', 'a returned kickoff should arrive prefilled, got ' + JSON.stringify(cc().value));
     }
     h.close();
   }

@@ -4,7 +4,7 @@
 // was still opening over it -- one extra dismissal on every touchback, which
 // on a kickoff-heavy game is most of them.
 //
-// TWO HALVES, because the timing is a race. prefillTouchbackClock is
+// TWO HALVES, because the timing is a race. prefillKickoffClock is
 // deferred on setTimeout(0); raiseClockPad fires on requestAnimationFrame
 // and retries at 60ms and 250ms. Which of the first two wins is not
 // something to rely on, so the raise refuses a field that already has a
@@ -45,14 +45,23 @@ chk(!/fromTouchback[\s\S]{0,80}return;/.test(src),
 
 // ---- half two: the prefill closes a pad that won the race -----------------
 {
-  const fn = /function prefillTouchbackClock\(inputId\)\{[\s\S]*?\n\}/.exec(src);
-  chk(!!fn, 'prefillTouchbackClock is present');
+  // RENAMED 30 Aug 2026: prefillTouchbackClock -> prefillKickoffClock.
+  // It now runs on every kickoff rather than only a touchback, which is
+  // what its own reasoning always implied -- the clock is stopped before
+  // any kickoff, so the value is derivable in every case and the
+  // touchback was simply the one noticed first.
+  const fn = /function prefillKickoffClock\(inputId\)\{[\s\S]*?\n\}/.exec(src);
+  chk(!!fn, 'prefillKickoffClock is present');
   if (fn) {
     chk(/padEl && padEl\.style\.display !== 'none' && padTargetId === inputId\) closePad\(\)/.test(fn[0]),
         'and closes the pad if it is already up on this field — the raise is ' +
         'on requestAnimationFrame and this is on setTimeout(0), so either can ' +
         'run first');
-    const setAt = fn[0].indexOf('el.value = last.text');
+    // `el.value = val` since the rename -- the source is now a helper
+    // that picks the quarter-scoped stoppage rather than reading
+    // `last.text` inline. The ORDERING is what this asserts, and that is
+    // unchanged: set the value, then close a pad that is now redundant.
+    const setAt = fn[0].indexOf('el.value = val');
     const closeAt = fn[0].indexOf('closePad()');
     chk(setAt > -1 && closeAt > setAt,
         'after the value is set, so there is something for the pad to be ' +
@@ -61,8 +70,9 @@ chk(!/fromTouchback[\s\S]{0,80}return;/.test(src),
 }
 
 // ---- the three callers must still get their pad ---------------------------
-// Only the touchback prefill leaves a value behind. If any other caller
-// arrived pre-filled, this guard would suppress a pad that IS wanted.
+// Only a KICKOFF prefill leaves a value behind (every kickoff since
+// 30 Aug 2026, not only a touchback). If any other caller arrived
+// pre-filled, this guard would suppress a pad that IS wanted.
 chk(/const cpi = document\.getElementById\('clockPromptInput'\);\s*\n\s*cpi\.value = '';/.test(src),
     'the mid-drive clock prompt clears its field first, so it still opens');
 chk(/if \(needsClock\) document\.getElementById\('confirmClockInput'\)\.value = '';/.test(src),
