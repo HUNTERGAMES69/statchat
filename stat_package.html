@@ -222,18 +222,48 @@
                      page-break-inside:avoid; break-inside:avoid; }
     .print-endmark img { width:38px; height:38px; border-radius:7px; }
 
-    /* Page one of the stat package runs about half full: a header, a
-       quarter line and seven scores. These spend the space rather than
-       save it, the same way the recap does. */
-    .header { margin-bottom:34px; }
-    table.quarter-table { margin-bottom:34px; }
-    .quarter-table th, .quarter-table td { padding:11px 10px; }
-    .scoring-summary { margin-top:40px !important; }
-    .scoring-summary table th, .scoring-summary table td { padding:15px 9px; }
+    /* ===== FLOW, THEN FILL ========================================
+       Reported 30 Aug from Friday's printed package: too much white
+       space. Measured on the printed artefact -- the share of each
+       sheet's rows carrying any ink at all:
+
+         page 1  45%   header, quarter line, nine scores
+         page 2  39%   the two team summary blocks
+         page 3  58%   the player tables
+
+       Less than half the paper. The margins below were spending space
+       and the sheets still ended empty, which is the same fault the
+       recap had.
+
+       BUT THE BIGGER PROBLEM WAS THE FLOW, not the spacing. Rendered at
+       a slightly larger scale, the nine-score summary no longer fit
+       beside the header, and because a .section refuses to break it
+       jumped WHOLE to the next sheet -- leaving page one with a header
+       and a quarter line on it, 16% inked. Andy's print happened to land
+       on the right side of that; a twelve-score game would not have.
+       A layout whose page-one fill depends on the scoring summary
+       happening to fit is not a layout, it is a coincidence.
+
+       So the scoring summary may now break BETWEEN ROWS. A list of
+       scores is the one table here where that is safe: each row is a
+       complete fact, and there is no totals line for a row to be
+       separated from. Everything else keeps its no-break rule. */
+    .header { margin-bottom:20px; }
+    table.quarter-table { margin-bottom:18px; }
+    .quarter-table th, .quarter-table td { padding:12px 10px; font-size:14.5px; }
+    .scoring-summary { margin-top:22px !important; }
+    .scoring-summary table th, .scoring-summary table td { padding:13px 9px; font-size:14px; }
     .scoring-summary .ss-score { line-height:1.5; }
-    /* Between the two team summary blocks, which were butted together. */
-    .team-block { margin-bottom:26px; padding:18px 20px; }
-    .team-block .metric-group { padding-top:14px; margin-top:14px; }
+    .scoring-summary .ss-clock { font-size:12.5px; }
+    .team-block { margin-bottom:20px; padding:18px 20px; }
+    .team-block .metric-group { padding-top:13px; margin-top:13px; }
+    /* The unit label beside each figure was 11px -- the smallest type on
+       the sheet, and the part that says what the number IS. "338" means
+       nothing without "Total yds" next to it. */
+    .metric-group-row .metric-item .metric-val { font-size:22px; }
+    .metric-group-row .metric-item .metric-label { font-size:12.5px; }
+    .metric-group-label { font-size:20px; }
+    .team-block-header { font-size:16.5px; }
 
     /* BACKGROUNDS MUST BE TOLD TO PRINT.
        Browsers drop background colours from printed output by default --
@@ -252,13 +282,19 @@
        still under AA -- #9aa3b2 is 2.5:1, which on paper is a rumour. */
     .sec-eyebrow { display:block; color:#5a6472 !important;
                    font-size:11.5px; letter-spacing:0.12em; }
-    .sec-title { font-size:17px; }
-    .team-band { padding:7px 11px; }
+    .sec-title { font-size:20px; }
+    .team-band { padding:8px 12px; font-size:13.5px; }
+    table.player-table { font-size:13.5px; }
+    table.player-table th, table.player-table td { padding:8px 7px; }
+    table.player-table th { font-size:12px; letter-spacing:0.01em; }
 
     body { background:#fff; }
     .wrap { max-width:none; padding:0 20px; }
     .no-print { display:none !important; }
     .team-block { page-break-inside:avoid; break-inside:avoid; }
+    /* The pair stays together: they are the same six groups for each
+       side and the only reason to read them is to compare. */
+    .team-block-pair { page-break-inside:avoid; break-inside:avoid; }
     .page-break { page-break-before:always; break-before:always; }
     /* A SECTION IS NEVER SPLIT ACROSS PAGES.
        Two rules, because a section is two elements: the heading and the
@@ -292,7 +328,19 @@
        Break between rows, never inside one, and repeat the header:
        display:table-header-group is what makes a thead repeat, and
        without it page two is numbers with no labels. */
-    .scoring-summary, .scoring-summary table.stat-table {
+    /* SPECIFICITY, NOT SOURCE ORDER. This opt-out was written as
+       `.scoring-summary`, and `.stat-group { page-break-inside:avoid }`
+       sits three lines BELOW it matching the same element -- the markup
+       is `<div class="stat-group scoring-summary">`. Equal specificity,
+       later wins, so the opt-out never once took effect and the summary
+       has always been unbreakable.
+       Found 30 Aug 2026 while chasing why a nine-score page one rendered
+       16% inked: the block could not fit beside the header, could not
+       break, and so jumped whole to the next sheet. The comment above
+       described behaviour the stylesheet was not producing.
+       `.stat-group.scoring-summary` is 0,2,0 and wins wherever it sits. */
+    .stat-group.scoring-summary, .scoring-summary,
+    .scoring-summary table.stat-table {
       page-break-inside:auto; break-inside:auto; }
     .scoring-summary thead { display:table-header-group; }
     .scoring-summary tr { page-break-inside:avoid; break-inside:avoid; }
@@ -1103,7 +1151,16 @@ const TIMEOUTS_PER_OT = 1;
     //
     // Each block still refuses to split internally, so if the two cannot
     // fit together the second moves whole rather than tearing.
-    html += '<div class="page-break">' +
+    // NO FORCED BREAK BEFORE THE PAIR any more, 30 Aug 2026. It was put
+    // here so the two blocks could be compared without a fold between
+    // them -- which is still true, and still enforced: they share one
+    // wrapper that refuses to split. What it ALSO did was start a fresh
+    // sheet for 400px of content, stranding the scoring summary above it
+    // on a half-empty page and leaving its own page 39% inked.
+    //
+    // Flowing them onto whatever the summary leaves keeps the comparison
+    // intact and stops paying a whole sheet for it.
+    html += '<div class="team-block-pair">' +
               teamBlock('teamA', false) + teamBlock('teamB', true) +
             '</div>';
 
