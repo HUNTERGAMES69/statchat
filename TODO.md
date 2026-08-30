@@ -3508,7 +3508,8 @@ were being scored. It is not duplicated here; read it first.
 - [x] Copyright notice broke `view.html` and `login.html` layout — both
       centre their body with flex
 - [x] `season_report.html` copyright notice restored (never deployed)
-- [x] `view2.html` built — scoring detail crew view
+- [x] `view2.html` built — scoring detail crew view (renamed
+      `scoresummary.html` on 30 August 2026)
 
 ### Reverted, on purpose
 
@@ -3521,7 +3522,9 @@ were being scored. It is not duplicated here; read it first.
 
 ### Opened this session
 
-- [ ] `view2.html` has no entry point. Nothing links to it.
+- [x] `view2.html` has no entry point. Nothing links to it. — DONE 30
+      August 2026: renamed `scoresummary.html` and linked from the
+      dashboard row menu, for both in-progress and final games.
 - [ ] The box-score auditor has not been swept against the SPECIAL TEAMS or
       RETURN paths. The fumble and interception sweep found five faults in
       it; assume the untested paths carry more.
@@ -3534,3 +3537,83 @@ were being scored. It is not duplicated here; read it first.
 - [ ] Rotate the live overlay key exposed in chat.
 - [ ] Repo still public; GitHub MCP connector still to be added.
 
+## 30 August 2026 — opened this session
+
+The documentation debt from today's two crew-view changes is NOT here. It
+is under **AFTER GAME ONE** at the foot of this file, because every item
+in it needs a live game on screen before it can be done.
+
+- [ ] Four tests assert against things that changed today and will fail:
+      `current_drive_tile_check.js`, `drive_boundary_check.js` and
+      `scoring_summary_tile_check.js` read `prevDriveLogScroll`;
+      `half_totals_check.js` asserts the old bracket string and greps
+      `view.html` for the old variable name. `drive_boundary_check.js`
+      used the previous-drive panel as its OBSERVATION SURFACE for drive
+      boundaries, so it needs re-pointing at the series tiles rather than
+      deleting — the boundary logic is unchanged.
+- [ ] The series card on the crew view still hides when a wrapped play
+      text and a timeout sub-line land together (-25px against a 524px
+      quad). 110px tiles kept; 96px would fit every state.
+- [ ] Settle how a Cowork session gets WRITE access to this repo. Read
+      works today over anonymous HTTPS — `git ls-remote` and `git fetch`
+      both succeed against the public repo, verified 30 August 2026.
+      Write has never been attempted, so whether the session can push is
+      genuinely unknown rather than known to fail; an earlier note here
+      claimed it could not, which was an assumption written down as a
+      fact. Either way anonymous read stops the moment the repo goes
+      private, so the read path has to be replaced before that happens.
+
+## AFTER GAME ONE
+
+Work that cannot be done before a real game has been played on the current
+build. Nothing here is blocked on a decision — only on the game existing.
+
+### The help documentation
+
+`help.html` is fully caught up with both of 30 August's crew-view changes:
+the series tiles that replaced the previous-drive card
+(`LIVE_GAME_FEEDBACK` item 8) and the yardage bracket, which now holds the
+yardage SINCE halftime rather than the figure AT halftime. What is left is
+everything that is a PICTURE or a PRINT of that page, and every picture
+needs a live game on screen.
+
+**Screenshots — reshoot during or after game one**
+
+- [ ] `tips/14-crew-view.jpg` — shows the Previous Drive card, which no
+      longer exists. Used by `tips.html`, so it also lands in
+      `statchat-tips.pdf`. Shot in Q2, so it shows no bracket either way.
+- [ ] `tips/15-halftime.jpg` — Previous Drive card.
+- [ ] `tips/16-third-quarter.jpg` — Previous Drive card AND the old
+      bracket, `264 [184]`, where the same game now reads `264 [80]`. Its
+      caption in `help.html` currently says the shot predates the change,
+      which is honest but is not a substitute for the picture. Reshoot in
+      the THIRD QUARTER specifically: the bracket does not appear until
+      the first second-half play.
+
+**PDFs — reprint once the screenshots are replaced**
+
+- [ ] `statchat-help.pdf` — a print of `help.html`, confirmed by matching
+      its extracted text. 21 pages. Stale in BOTH the text (it still
+      carries "the figure as it stood at halftime — 487 [284]" and the
+      note about overtime leaving the bracket alone) and the two
+      screenshots. This is the one that actively misleads: a crew reading
+      it gets the bracket backwards.
+- [ ] `statchat-tips.pdf` — a print of `tips.html`. 14 pages. The TEXT is
+      fine — `tips.html` never mentions the bracket, verified by
+      extracting the PDF and finding no match. Stale only through
+      `14-crew-view.jpg`, so it is the lower priority of the two.
+
+No generator for either lives in this repo — `tools/` holds only
+`make_broadcast.py` — so whatever produced them originally has to produce
+them again, or they get printed from the pages by hand.
+
+### Also waiting on a real game
+
+Both carried down from the 29 August list rather than moved out of it —
+that section is a log of what was opened that night and rewriting it would
+lose the date. Gathered here so this heading is the whole answer to "what
+is blocked on game one".
+
+- [ ] `?debug=1` guides on `broadcast.html`, never tested in vMix.
+- [ ] The six-minute branding refresh timer, which has never run through a
+      full game.

@@ -887,17 +887,11 @@ function absSecToClockStr(absSec){
 //
 // The 50 keeps its own name: it belongs to neither side, and "Neville 50"
 // would be wrong however the possession reads.
-function markerLabelNamed(fp, possession){
-  if (fp === null || fp === undefined) return '';
-  if (fp === 50) return 'the 50';
-  const ownTeam = possession || 'teamA';
-  const side = fp < 50 ? ownTeam : otherTeam(ownTeam);
-  const name = (TEAMS[side] || {}).name;
-  // Falls back to the shared wording if a team has no name yet -- better
-  // "opp 45" than "undefined 45".
-  if (!name) return markerLabel(fp);
-  return name + ' ' + (fp < 50 ? fp : (100 - fp));
-}
+// markerLabelNamed moved to engine.js on 30 August 2026, when game.html
+// needed the same wording for the drive-start spot nudge. Left as a note
+// rather than silently: this page reads it on the banner, the current
+// drive card and the series tiles, and a reader looking for it here
+// should be told where it went rather than assume it was deleted.
 
 function readFileAsDataURL(file){
   return new Promise(resolve => {
@@ -2162,6 +2156,17 @@ function extractNameTag(rawName){
         ? '<span style="color:#8d99a6; font-size:12px; margin-right:6px;">' +
           (p.quarter >= 5 ? 'OT' : 'Q' + p.quarter) + '</span>'
         : '';
+      // THE CLOCK ON A SCORING PLAY, 30 August 2026. Same rule and same
+      // source as the entry page's own log -- isStampableScore and
+      // scoreStamp both live in engine.js so the two logs cannot drift.
+      // .clock only: the quarter tag is already immediately left of it.
+      const stamp = isStampableScore(p)
+        ? (function(){
+            const st = scoreStamp(plays, p);
+            return st ? '<span style="color:#ffc72c; font-size:12px; font-weight:700; margin-right:6px;">' +
+                        st.clock + '</span>' : '';
+          })()
+        : '';
       const text = stripTeamNames(p.text || '').replace(/TOUCHDOWN/g, '<strong>TOUCHDOWN</strong>');
       // The first NON-DIVIDER line, not simply the first entry: an "End
       // of 1st half" rule sitting on top would otherwise take the
@@ -2173,7 +2178,7 @@ function extractNameTag(rawName){
       } else if (isTdOrFg(p)){
         style = ' style="font-weight:700;"';
       }
-      return '<div class="logline"' + style + '>' + qtag + text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
+      return '<div class="logline"' + style + '>' + qtag + stamp + text + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
     }).join('');
   }
 
@@ -2283,8 +2288,31 @@ function extractNameTag(rawName){
     // to change.
     // #111 on a near-black panel is the washed-out text Andy reported.
     // These are inline, so no stylesheet override could have reached them.
+    // THE CLOCK, WHEN THIS PLAY IS A SCORE. 30 August 2026.
+    // ------------------------------------------------------------------
+    // .full here, not .clock: unlike the log lines there is no quarter
+    // tag beside this one, and a bare "5:12" on a card watched from
+    // across a room does not say which quarter it belongs to.
+    //
+    // Inline and much smaller than the 36px headline on purpose. It is a
+    // fact ABOUT the play rather than part of what happened, and the
+    // touchdown is what a spectator is reading. Gold, matching every
+    // other clock reading on this page.
+    //
+    // Sits on the LOCKED play, which is the touchdown rather than the try
+    // that follows it -- `p` has already been swapped back by the
+    // touchdown lock above, which is exactly the play the stamp belongs
+    // to under Andy's exclude-the-try rule.
+    const scoreStampHtml = isStampableScore(p)
+      ? (function(){
+          const st = scoreStamp(plays, p);
+          return st ? '<span style="font-size:20px; font-weight:700; color:#ffc72c; ' +
+                      'margin-left:12px; white-space:nowrap;">' + st.full + '</span>' : '';
+        })()
+      : '';
     const playHtml = '<div style="font-size:36px; font-weight:700; color:#eef1f4; line-height:1.2; margin-top:16px;">' +
-      breakPlayText(text) + (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
+      breakPlayText(text) + scoreStampHtml +
+      (p.unresolved ? '<span class="badge unresolved">unresolved</span>' : '') + '</div>';
     // Identical construction to the banner's own down/distance/spot
     // text a few hundred lines up -- same hasDrive guard, same
     // ordinal/markerLabel calls, same state and distDisplay passed in
@@ -2439,7 +2467,7 @@ function extractNameTag(rawName){
         }
       }
     });
-    // ONE IMPLEMENTATION, in engine.js, since 30 Aug 2026 -- view2.html
+    // ONE IMPLEMENTATION, in engine.js, since 30 Aug 2026 -- scoresummary.html
     // needs the same number for its scoring rows. driveTeam is passed
     // explicitly rather than letting the helper re-derive it: this
     // function already computed it from the same slice, and handing it

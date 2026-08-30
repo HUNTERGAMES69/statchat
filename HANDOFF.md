@@ -386,7 +386,8 @@ watching a real game being scored or from a bug reported during one.
 - **Player report printed a blank first page** for receivers: a 991px section
   card against ~958px of printable height, with `page-break-inside: avoid`.
   Cards may now break; the parts inside them may not.
-- **view2.html** -- a second crew view showing every scoring play with the
+- **view2.html** (renamed `scoresummary.html`, 30 Aug) -- a second crew
+  view showing every scoring play with the
   drive behind it, two columns of nine, sized so eighteen fit at 1920x1080
   without scrolling. Nothing links to it yet; the entry point is undecided.
 

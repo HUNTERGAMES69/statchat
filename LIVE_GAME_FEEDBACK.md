@@ -12,12 +12,50 @@ Opened 27 August 2026, during the first weekend two tenants ran live games.
 
 ---
 
-## Agreed — to build
+## Built
 
 ### 8. Drop the previous-drive tile, replace with four series tiles
 
-**Decided**, mocked and approved 27 Aug. The previous-drive card goes; four
-tiles take the space, all read from the current series:
+**Complete, 30 August 2026.** Shipped in `view.html`: the Previous Drive
+card, `renderDriveSummary` and the previous-drive paint call are gone, and
+`renderSeriesTiles` renders the four tiles from the same `currentDrivePlays`
+slice the Current Drive card above it already reads.
+
+**Three things differ from the spec below, all measured.**
+
+- **No "This Series" heading.** quadTR is 524px of usable height. The
+  Current Drive card runs 188px on a one-line play text and 267px once
+  the text wraps and a timeout lands under it. An `h2` costs 21px, and at
+  21px the tiles overflowed the quad on any wrapped play text — which is
+  most plays — so `adjustDriveCardVisibility` hid them. Correct,
+  verified, and never on screen. The four tile labels carry the reading.
+- **One state still hides the card:** a wrapped play text plus a timeout
+  sub-line, at −25px. Keeping 110px costs that case; 96px tiles fit every
+  measured state. 110px kept.
+- **Names resolve from the JERSEY NUMBER**, via engine.js's `playerName`,
+  with the stored name as fallback. Reported live: both long tiles showed
+  a number and no name. Roles do not reliably carry one — `parseInput`,
+  the keyboard path a scorer uses at speed, writes `{ team, num, yards }`
+  and no name; only the click handlers add one. The same shape as the bad
+  snap: the roles come from the parser.
+
+`adjustDriveCardVisibility` degrades in one stage now rather than two.
+Previous Drive could drop its tile row and keep its outcome line; this card
+IS its tiles, and dropping one of two rows would mean choosing which two of
+the four facts survive.
+
+**Left for the end-of-session test batch:** three checks assert on
+`prevDriveLogScroll` — `current_drive_tile_check.js`,
+`drive_boundary_check.js`, `scoring_summary_tile_check.js`. The last one
+used that panel as its observation surface for drive-boundary behavior, so
+it needs re-pointing at the series tiles rather than deleting.
+
+---
+
+The spec as agreed, kept for the record:
+
+The previous-drive card goes; four tiles take the space, all read from the
+current series:
 
 | Tile | Shows |
 | --- | --- |
@@ -51,7 +89,15 @@ of the two and the hierarchy is inverted. Left alone for now -- if it ever
 reads wrong on air, the fix is probably to lift the play line rather than
 to shrink this one.
 
-Mock: `series_tiles.html`.
+**That 20px does not match the deployed page.** `renderCurrentDriveLastPlay`
+builds the play line at 36px inline, and has in every copy since before
+this item was written; the only 20px line in that quad was Previous Drive's
+own outcome line, which this item removes. So the hierarchy was never
+inverted, and nothing needs lifting. Recorded rather than deleted, because
+the note is the reason nobody went looking.
+
+Mock: `series_tiles.html` -- never in the repo, so the prose above was the
+spec that was built from.
 
 ---
 
@@ -114,31 +160,57 @@ tackle on a kicking play at all. A scorer would fill the field in and see
 nothing appear, which is worse than not offering it.
 
 Making it count means adding `kickoff`, `punt` and `kickoff_return` to
-`TACKLE_TYPES`, and that runs into two things:
+`TACKLE_TYPES`, and that runs into the `defense` slot.
 
-- **The guided kickoff already writes the RETURNER into the `defense`
-  slot** (`game.html`, in the `kickoff_return` roles). It is inert today
-  because the engine ignores `defense` on that play type. Add
-  `kickoff_return` to `TACKLE_TYPES` and every returner in every past game
-  is suddenly credited with a tackle, on the receiving team, against
-  himself.
-- **Those roles are already saved.** Fixing the code stops it happening
-  again; it does not clean up what is stored. Existing guided-kickoff rows
-  would need a migration or would stay wrong.
+**CORRECTED 30 August 2026.** What follows replaces this item's original
+account, which was wrong in a way that mattered: it said only the guided
+kickoff writes the returner into `defense`, and planned a one-file fix
+around that. Three paths do it.
 
-**Order of work, when it happens:**
+| Path | Where | Play type |
+| --- | --- | --- |
+| Guided kickoff | `game.html` ~7304 | `kickoff_return` |
+| Kickoff, click path | `game.html` ~12884 | `kickoff` |
+| Punt, click path | `game.html` ~13014 | `punt` |
 
-1. Fix the returner-in-`defense` slot in the guided kickoff roles.
-2. Decide whether to migrate existing rows, or accept that games already
-   played carry it.
-3. Add the three types to `TACKLE_TYPES`.
+The two click paths write `defense` and `returner` as the SAME player, side
+by side. So adding the three types to `TACKLE_TYPES` credits every returner
+in every game with a tackle on his own return, on all three trees.
+
+**And `defense` is not inert on those plays.** `returnerEligible()`
+(`game.html` ~4134) builds the RETURNER PICKER by scanning `r.defense` on
+exactly `kickoff_return`, `kickoff` and `punt`. The slot is live, and the
+long note at ~3558 explains why it doubles up — with the observation that
+splitting the returner out "belongs with the return-stats work".
+
+That work has since happened. `roles.returner` exists and carries the same
+player plus yards and kind, so the slot can be freed by pointing the picker
+at `returner` instead. That is the real first step, and it is larger than
+"fix the guided kickoff".
+
+**MIGRATION IS MOOT.** Andy's call, 30 August 2026: everything in the
+database to this point is development and demo data, including the two
+tenant games on the first live weekend. The first regular-season game has
+not happened. Nothing stored needs cleaning up, and no dated fallback is
+needed for rows written before the returner role shipped on 23 August.
+
+**Order of work, revised:**
+
+1. Point `returnerEligible` at `roles.returner`.
+2. Stop all three paths writing the returner into `roles.defense`.
+3. Add the three types to `TACKLE_TYPES`, to the auditor's own literal
+   copy of that list, and to `DEFENSIVE_CREDIT_TYPES` (`game.html` ~3580),
+   which gates which players the "Tackled by" picker offers.
 4. Then the UI, which is the easy part and should go last.
 
-Also worth checking at the same time: whether a special-teams tackle should
-appear in the defensive table or a special-teams one, and whether the
-box-score auditor needs the same three types added — it currently mirrors
-`TACKLE_TYPES` exactly, and the sweep on 27 Aug found five faults in it, so
-it should be re-swept after any change here.
+A special-teams tackle lands in the **defensive table**, with tackles from
+scrimmage. It is a tackle; a separate special-teams tackle column would
+split one statistic across two tables and make neither add up.
+
+The box-score auditor mirrors `TACKLE_TYPES` as a hand-written literal
+rather than reading the constant, so it needs the same three types and a
+re-sweep. The 30 August special-teams sweep is in `tests/` terms a fixture
+set of 28 shapes; re-run it with tacklers present.
 
 ---
 
@@ -318,8 +390,8 @@ throughout; whether it re-runs the checks; whether it is admin-only.
 ### 7. Removed 30 August 2026 — duplicate
 
 A second crew view showing the scoring summary large, on one page. Already
-built: it is `view2.html`. The remaining work is its entry point, which is
-tracked in `TODO.md`, not here.
+built: it is `scoresummary.html`, renamed from `view2.html` on 30 August
+2026 and linked from the dashboard row menu the same day. Nothing is left.
 
 Numbers are stable references, so this one is retired rather than reused.
 

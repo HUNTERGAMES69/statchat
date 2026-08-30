@@ -97,7 +97,8 @@ function formatDuration(sec){
 // HOW LONG ONE DRIVE TOOK.
 // ------------------------
 // Lifted out of view.html's computeDriveSummary on 30 August 2026, when
-// view2.html needed the same number for its scoring rows. Same reasoning
+// scoresummary.html needed the same number for its scoring rows (it was
+// view2.html when this was written). Same reasoning
 // as formatDuration directly above and as the team-defense fix on 29
 // August: the moment a second page wants a rule, the rule moves here,
 // because a second copy does not announce itself until the two disagree
@@ -124,8 +125,8 @@ function formatDuration(sec){
 // in a score is closed by the ENSUING KICKOFF, several plays past the
 // scoring play, so an endIdx set at the score returns 0 rather than the
 // drive's time. The next drive's start index is the safe answer, and is
-// what computeDriveSummary passes. Cost paid live on view2.html,
-// 30 August 2026.
+// what computeDriveSummary passes. Cost paid live on scoresummary.html
+// (then named view2.html), 30 August 2026.
 //
 // A drive still in progress genuinely has no total yet -- its start is
 // still pending -- and correctly returns 0. view.html's current-drive
@@ -172,6 +173,31 @@ function markerLabel(fp){
   if (fp === null || fp === undefined) return '';
   if (fp === 50) return 'the 50';
   return fp < 50 ? ('own ' + fp) : ('opp ' + (100 - fp));
+}
+
+// THE SAME YARD LINE, SAID WITH TEAM NAMES.
+// -----------------------------------------
+// Lifted out of view.html on 30 August 2026, when the entry page needed
+// it too for the drive-start spot nudge -- the third time this session a
+// rule moved here the moment a second caller wanted it.
+//
+// "2nd & 10 at opp 45" asks the reader to work out whose 45 that is.
+// That is the right register for the SCORER, who knows whose ball it is,
+// and the wrong one for anybody reading a screen they did not enter --
+// which is why markerLabel above keeps own/opp and this exists beside it
+// rather than replacing it.
+//
+// The 50 keeps its own name: it belongs to neither side.
+function markerLabelNamed(fp, possession){
+  if (fp === null || fp === undefined) return '';
+  if (fp === 50) return 'the 50';
+  const ownTeam = possession || 'teamA';
+  const side = fp < 50 ? ownTeam : otherTeam(ownTeam);
+  const name = (TEAMS[side] || {}).name;
+  // Falls back to the shared wording if a team has no name yet -- better
+  // "opp 45" than "undefined 45".
+  if (!name) return markerLabel(fp);
+  return name + ' ' + (fp < 50 ? fp : (100 - fp));
 }
 
 function luminance(hex){
@@ -628,7 +654,7 @@ function scoringSummary(playsList){
       // scoring indexes therefore drifts out of step the first time a
       // PAT is converted, and pairs row N with someone else's play.
       //
-      // view2.html did exactly that, and its Drive/Yds/Long tiles have
+      // scoresummary.html did exactly that, and its Drive/Yds/Long tiles have
       // been describing the wrong drive from the first converted try
       // since the page was written -- unnoticed because nothing links to
       // it yet. Handing the index out here is the only way a caller can
@@ -650,6 +676,95 @@ function scoringSummary(playsList){
     });
   }
   return out;
+}
+
+// WHEN A SCORE HAPPENED.
+// ----------------------
+// Added 30 August 2026. Returns { q, clock, full } for a scoring play --
+// { q:'Q3', clock:'5:12', full:'Q3 5:12' } -- or null when the clock was
+// never entered for it. Callers that already print a quarter use .clock;
+// callers that print nothing use .full. Nobody has to build the string.
+//
+// NO NEW DATA, AND IT WORKS ON GAMES ALREADY PLAYED. A play row carries
+// no clock of its own: the clock is a SEPARATE play, written immediately
+// after the one it belongs to (see the pushAndPersist calls in
+// game.html's submit path), carrying effect.clockEvent.absSec. So a
+// score's time is the clock event sitting directly behind it, and every
+// game in the database already has them.
+//
+// THE WALK STOPS AT THE NEXT REAL PLAY. Everything between a play and
+// its clock event is administrative -- the clock itself, a direction
+// marker, a quarter marker -- and isAdminMarker already knows which
+// those are. Walking further would hand a score the clock of whatever
+// came next, which on a touchdown is the PAT and then the kickoff.
+//
+// TWO HONEST LIMITS, both worth knowing before trusting a stamp:
+//
+//   1. ON A TURNOVER RETURNED FOR A SCORE the clock names the moment
+//      POSSESSION CHANGED, not the moment of the score -- that is the
+//      whole subject of item 4 in LIVE_GAME_FEEDBACK. An interception
+//      returned 40 yards stamps at the interception, a few seconds
+//      early. Andy's call, 30 Aug: stamp it anyway. A stamp that is
+//      seconds early is worth more to a crew than no stamp, and the
+//      alternative is a blank on exactly the plays people ask about.
+//
+//   2. THE CLOCK IS OPTIONAL AT ENTRY. A score entered without one gets
+//      null, and every caller shows nothing rather than a placeholder --
+//      the same rule time of possession already follows, for the same
+//      reason: 0:00 would state something false.
+//
+// Deliberately does NOT call absSecToClockStr(). That helper derives the
+// quarter FROM absSec, which is right in regulation and wrong in
+// overtime, where absSec runs past four quarters. The clock play carries
+// its own quarter, so this reads it rather than re-deriving it.
+function scoreStamp(playsList, play){
+  const list = playsList || [];
+  const idx = list.indexOf(play);
+  if (idx === -1) return null;
+  let ev = null, evPlay = null;
+  for (let i = idx + 1; i < list.length; i++){
+    const p = list[i];
+    // isAdminMarker ALONE IS NOT ENOUGH HERE, found by fixture rather
+    // than by reading: it does not count a direction marker
+    // (effect.setDirection), and game.html's submit path writes the
+    // direction marker BETWEEN a play and its clock -- play, then
+    // direction, then clock. So a kickoff returned for a touchdown had
+    // its own clock one step further away than the walk would go, and
+    // stamped as nothing.
+    //
+    // Widened here rather than in isAdminMarker, which is shared with
+    // findDriveStarts and countPossessions. A direction marker is
+    // administrative for the purpose of "what is the next REAL play",
+    // and changing the shared helper to say so would move drive
+    // boundaries as a side effect of adding a timestamp.
+    const admin = isAdminMarker(p) || !!(p.effect && p.effect.setDirection);
+    if (!admin) break;
+    if (p.effect && p.effect.clockEvent){ ev = p.effect.clockEvent; evPlay = p; break; }
+  }
+  if (!ev || typeof ev.absSec !== 'number') return null;
+  const quarter = (evPlay && evPlay.quarter) || play.quarter || 1;
+  const len = quarterLengthSec;
+  const remaining = len - (ev.absSec - (quarter - 1) * len);
+  // A clock outside its own quarter means the event and the quarter
+  // disagree, which is a corrupted row rather than a late whistle.
+  // Reporting nothing is honest; reporting "-0:07" is not.
+  if (remaining < 0 || remaining > len) return null;
+  const mins = Math.floor(remaining / 60), secs = remaining % 60;
+  const clock = mins + ':' + String(secs).padStart(2, '0');
+  const q = quarter >= 5 ? 'OT' : 'Q' + quarter;
+  return { q: q, clock: clock, full: q + ' ' + clock };
+}
+
+// IS THIS A SCORE THAT SHOULD CARRY A STAMP?
+// Andy's rule, 30 August 2026: every scoring play EXCEPT the try. A PAT
+// or a two-point attempt belongs to the touchdown above it and happens
+// with the clock stopped, so a second timestamp beside it says nothing
+// the touchdown's own has not already said.
+function isStampableScore(play){
+  const e = play && play.effect;
+  if (!e || !e.score || !e.score.points) return false;
+  const t = play.roles && play.roles.playType;
+  return t !== 'pat' && t !== 'twopt';
 }
 
 function countTurnovers(playsList){
@@ -1183,7 +1298,30 @@ function computeBoxScore(playsList){
     //
     // The recovery itself is untouched: fumRec is credited whether or not
     // anyone is named, including to a TEAM bucket.
-    const TACKLE_TYPES = ['rush', 'pass', 'sack'];
+    // KICKS AND RETURNS ADDED 30 August 2026, which the comment above
+    // says they are excluded from -- that paragraph described the world
+    // before `roles.returner` existed. Back then `defense` on a kicking
+    // play WAS the returner, so counting those types would have credited
+    // the man being tackled. All three entry paths now write the returner
+    // to `roles.returner` and leave `defense` for the cover tackler, so
+    // the credit lands on the right player on the right team.
+    //
+    // A cover tackle is often the most notable thing a special-teams
+    // player does all night, and until now it could not be recorded at
+    // all. It counts in the DEFENSIVE table beside tackles from
+    // scrimmage: it is a tackle, and a separate special-teams column
+    // would split one statistic across two tables so that neither adds
+    // up.
+    //
+    // NO TFL FALLS OUT OF THIS, by construction rather than by luck.
+    // Both TFL branches gate on `effect.statYds < 0`, and statYds is set
+    // only for the isStat plays -- rush, pass, incomplete, sack. A kick
+    // carries none, so a cover tackle at the 12 cannot invent a tackle
+    // for loss. The unattributed-TFL branch above is doubly safe: its
+    // `victim` is derived from carrier or passer, neither of which
+    // exists on a kicking play.
+    const TACKLE_TYPES = ['rush', 'pass', 'sack',
+                          'kickoff', 'kickoff_return', 'punt'];
 
     // AN UNATTRIBUTED TACKLE FOR LOSS STILL COUNTS FOR THE TEAM.
     // ------------------------------------------------------------------
@@ -1588,6 +1726,7 @@ if (typeof module !== 'undefined' && module.exports) {
     quarterLabel,
     formatDuration,
     markerLabel,
+    markerLabelNamed,
     normalizeHex,
     luminance,
     colorDistance,
@@ -1601,6 +1740,8 @@ if (typeof module !== 'undefined' && module.exports) {
     countPossessions,
     countTurnovers,
     scoringSummary,
+    scoreStamp,
+    isStampableScore,
     resolveNumbersInText,
     stripTeamNames,
     computeState,
@@ -1737,7 +1878,13 @@ function auditBoxScore(playsList){
     }
 
     // --- defense
-    if (r.defense && ['rush','pass','sack'].indexOf(t) !== -1){
+    // The same six types as computeBoxScore's TACKLE_TYPES. Written out
+    // rather than imported on purpose -- an auditor that shares the
+    // constant it is auditing agrees with the engine by construction and
+    // proves nothing. Kicks and returns added 30 August 2026 alongside
+    // the engine's.
+    if (r.defense && ['rush','pass','sack',
+                      'kickoff','kickoff_return','punt'].indexOf(t) !== -1){
       const k = key('defense', r.defense);
       put(r.defense.team, 'defense', k, 'tackles', 1);
       const lost = (r.carrier && (r.carrier.yards || 0) < 0) || t === 'sack';

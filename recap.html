@@ -197,7 +197,10 @@
   .scoring-summary h2, .scoring-summary .section-title { text-align:left; }
   .scoring-summary table th, .scoring-summary table td { text-align:left; vertical-align:top; }
   .scoring-summary tbody tr:nth-child(odd) { background:#f7f8f9; }
-  .scoring-summary .ss-qtr { width:42px; }
+  .scoring-summary .ss-qtr { width:52px; }
+  .scoring-summary .ss-clock { font-size:11px; font-weight:700; color:#8a6d00;
+    letter-spacing:0; font-variant-numeric:tabular-nums; margin-top:1px; }
+
   .scoring-summary .ss-team { width:118px; font-weight:700; }
   /* The one RIGHT justified column. Numbers align on their right edge --
      "Neville 7" and "Neville 27" should end level, not start level -- and
@@ -831,6 +834,23 @@ function isAdminMarker(p){
     // answers "how did the points get there", which the quarter line
     // above states and does not explain.
     const scoring = scoringSummary(plays);
+        // THE CLOCK A SCORE HAPPENED AT, under its quarter. 30 August
+        // 2026. Reads engine.js's scoreStamp, the same helper the play
+        // log, the crew view and the score summary use, so a stamp
+        // cannot say one time on a report and another on air.
+        //
+        // e.idx is the source play index scoringSummary returns; nothing
+        // here rebuilds its own list of scoring plays.
+        //
+        // Nothing is shown when the clock was never entered -- no dash,
+        // no placeholder. Same rule time of possession already follows.
+        const stampFor = (e) => {
+          const p = plays[e.idx];
+          if (!p || typeof isStampableScore !== 'function' || !isStampableScore(p)) return '';
+          const st = scoreStamp(plays, p);
+          return st ? '<div class="ss-clock">' + st.clock + '</div>' : '';
+        };
+
     // Which of our two team keys is at home. TEAMS.teamA is always OUR
     // team; isHome says whether that is the home side for this fixture.
     const homeIsA = !!TEAMS.teamA.isHome;
@@ -855,7 +875,7 @@ function isAdminMarker(p){
           // both.
           const detail = e.detail ? ' <span class="ss-detail">(' + e.detail + ')</span>' : '';
           return '<tr>' +
-            '<td class="ss-qtr">' + (e.quarter >= 5 ? 'OT' : 'Q' + e.quarter) + '</td>' +
+            '<td class="ss-qtr">' + (e.quarter >= 5 ? 'OT' : 'Q' + e.quarter) + stampFor(e) + '</td>' +
             '<td class="ss-team">' + TEAMS[e.team].name + '</td>' +
             '<td>' + e.text + detail + '</td>' +
             // Named, not "7-0". A bare pair leaves a reader working out
