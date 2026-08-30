@@ -24,7 +24,10 @@
 //
 // DEPENDS ON the page providing, before this script runs:
 //     TEAMS, plays, startingPossession, quarterLengthSec,
-//     TIMEOUTS_PER_HALF, isAdminMarker, otherTeam, clockToAbsSeconds
+//     TIMEOUTS_PER_HALF, otherTeam, clockToAbsSeconds
+// isAdminMarker was on that list until 30 August 2026 and is now defined
+// HERE -- see the note above findDriveStarts for why nine page-local
+// copies were not nine legitimate differences.
 // Those differ legitimately between pages (game.html builds TEAMS from a
 // live roster; the reports build it from a saved game) or are page
 // state, so they stay put.
@@ -353,6 +356,43 @@ if (num === 'TEAM') return 'TEAM';
   // not a bare "#22" -- once he has actually been credited on a play.
   if (t.rosterUnassigned && t.rosterUnassigned[num]) return t.rosterUnassigned[num];
   return '#' + num;
+}
+
+// IS THIS ROW ADMINISTRATIVE RATHER THAN A PLAY?
+// ==============================================================
+// Moved here 30 August 2026. It was declared in NINE pages -- view,
+// broadcast, broadcast_stats, broadcast_leaders, recap, stat_package,
+// season_report, scoresummary and game -- and engine.js's own dependency
+// note above claimed these "differ legitimately between pages". They did
+// not. Seven were byte-identical and two had drifted:
+//
+//   scoresummary.html carried `return !!(p && p.is_divider)` -- dividers
+//   only. That silently blanked every scoring timestamp on the page, and
+//   fed findDriveStarts a rule that would let a drive open on a clock
+//   line, which is the exact fault the comment inside that function
+//   records paying for once already.
+//
+//   broadcast_leaders.html was missing `e.timeout`, so it never received
+//   the 19 August fix for a timeout being treated as a real play.
+//
+// Neither was found by a report. Both were found by lining the nine
+// copies up beside each other -- which is the whole argument for a rule
+// living in one place, made twice in one file.
+//
+// A RESET MARKER IS NOT ADMINISTRATIVE. It announces a drive and
+// findDriveStarts opens one on it deliberately; returning true here
+// would make every drive start on the play after its own marker.
+//
+// BOTH SPELLINGS of the divider flag. Most pages map the database column
+// to `isDivider`; scoresummary.html passes `is_divider` straight
+// through. Reading one and not the other is how a page ends up with a
+// rule that is right everywhere except where it is used.
+function isAdminMarker(p){
+  if (!p) return true;
+  const e = p.effect || {};
+  if (e.isReset) return false;
+  return !!(e.clockEvent || e.setQuarter || e.forcePossession || e.timeout ||
+            p.isDivider || p.is_divider);
 }
 
 function findDriveStarts(playsList){
@@ -1736,6 +1776,7 @@ if (typeof module !== 'undefined' && module.exports) {
     nameInDefense,
     nameInSpecialTeams,
     playerName,
+    isAdminMarker,
     findDriveStarts,
     countPossessions,
     countTurnovers,

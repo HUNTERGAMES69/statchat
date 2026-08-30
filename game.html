@@ -1958,18 +1958,10 @@ function isDriveTileNoise(p){
   if (t.indexOf('Manual score adjust') === 0) return true;
   return false;
 }
-function isAdminMarker(p){
-  if (!p) return true;
-  const e = p.effect || {};
-  if (e.isReset) return false;
-  // e.timeout added 19 Aug 2026: a timeout call has no bearing on
-  // possession or drive state at all, but was never in this list --
-  // so findDriveStarts treated it as a real play, and a timeout called
-  // between a defensive score and its own PAT became the target a
-  // phantom drive boundary landed on, registering an unearned
-  // possession for the scoring team. Reported from a real game.
-  return !!(e.clockEvent || e.setQuarter || e.forcePossession || e.timeout || p.isDivider);
-}
+// isAdminMarker moved to engine.js on 30 August 2026. It was declared in
+// nine pages; seven were identical and two had drifted. Left as a note
+// rather than a silent deletion, because a reader looking for it here
+// should be told where it went.
 
 // Jersey numbers resolve across ALL THREE roster units, not just the one
 // the play type implies. High-school rosters routinely list a player
@@ -4162,44 +4154,6 @@ const RETURNER_POS_RANK = (() => {
   ['K','PK','P','LS','H','KO'].forEach(p => rank[p] = 3);
   return rank;
 })();
-// WHO COULD HAVE MADE A COVER TACKLE.
-// ==================================================================
-// defenseEligible() on its own is the wrong pool for a kicking play,
-// and the reason is structural rather than a matter of taste: that
-// function deliberately NEVER pre-populates -- a player appears only
-// once he has been credited on a defensive play. On a kickoff the
-// covering side has usually been credited with nothing at all, and on
-// the OPENING kickoff of a half it is guaranteed to have been. So the
-// picker was empty at exactly the moment it was most needed.
-//
-// Measured, 30 August 2026, on a fresh game: defenseEligible returned 0
-// for both teams while the special-teams roster held 3 and the
-// defensive roster held 3. Reported the same day as "doesn't bring up a
-// picker or roster numbers".
-//
-// So: credited defenders first, in the numeric order defenseEligible
-// already chose and for the reason recorded there -- a scorer has a
-// number from the spotter and needs to FIND it -- then the SPECIAL-TEAMS
-// roster appended for anyone not already in the list. The cover unit is
-// drawn from special teams, which is the same reasoning
-// specialTeamsEligible uses to pre-populate for kickers.
-//
-// The full DEFENSIVE roster is deliberately NOT merged in. That would be
-// twenty-odd names at zero credits, which is the exact complaint
-// defenseEligible's own comment records about pre-populating.
-function coverEligible(team){
-  const list = defenseEligible(team);
-  const seen = {};
-  list.forEach(e => { seen[e.num] = true; });
-  const st = TEAMS[team].rosterSpecialTeams || {};
-  Object.keys(st).sort(byJersey).forEach(num => {
-    if (seen[num]) return;
-    seen[num] = true;
-    list.push({ num, name: st[num] || rosterName(team, num, ['special', 'defense', 'offense']) || '',
-                unit: 'special', pos: '' });
-  });
-  return list;
-}
 function returnerRank(pos){
   const r = RETURNER_POS_RANK[(pos || '').toUpperCase()];
   return r === undefined ? 2 : r;
@@ -6863,7 +6817,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Tackled by (' +
             TEAMS[guided.kickingTeam].name + ')</p>' +
           '<div id="gr_cover_grid" class="grid-inline-manual">' +
-            pickerHtml(coverEligible(guided.kickingTeam), 'gr_cover_pick') +
+            pickerHtml(defenseEligible(guided.kickingTeam), 'gr_cover_pick') +
             '<input autocomplete="off" type="text" id="gr_cover_manual" placeholder="type #">' +
           '</div>' +
         '</div>' +
@@ -9402,7 +9356,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // offer the returning side as its own tacklers, which is the fault
     // this whole change exists to end, wearing a different hat.
     function covBlock(label){
-      const list = coverEligible(off);
+      // defenseEligible, which NEVER pre-populates -- a player is offered
+      // only once he has actually been credited on a defensive play.
+      //
+      // A version of this merged the special-teams roster in, on the
+      // reasoning that the covering side has no credits at the opening
+      // kickoff so the picker is empty exactly when it is first needed.
+      // Andy's call, 30 August 2026: it should be empty. The same
+      // argument was made and rejected for defenseEligible itself, whose
+      // own comment records it -- seeding a picker with names on zero
+      // credits is what made the old one unscannable. An empty picker
+      // and a manual box is the app's answer, on every tree.
+      const list = defenseEligible(off);
       const inner = '<div class="pick-row">' +
           '<div id="pp_cover_grid" class="grid-inline-manual">' +
             pickerHtml(list, 'pp_cover_pick', null, null, true) +

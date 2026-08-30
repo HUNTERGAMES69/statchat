@@ -217,7 +217,38 @@
   const PENALTIES = {};
   function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
   const TIMEOUTS_PER_HALF = 3;
-  function isAdminMarker(p){ return !!(p && p.is_divider); }
+  // THE REAL RULE, not a stub. Corrected 30 August 2026 after the score
+  // timestamps came back blank on every row.
+  // ------------------------------------------------------------------
+  // This page carried `return !!(p && p.is_divider)` -- dividers only.
+  // Every other page in the app (view, broadcast, broadcast_stats,
+  // recap, stat_package, season_report, game) carries the full rule, and
+  // engine.js documents isAdminMarker as one of the globals a page must
+  // supply. A stub satisfies "supplied" and answers the question wrong.
+  //
+  // TWO THINGS IT BROKE HERE, only one of them reported:
+  //
+  //   scoreStamp() walks forward from a scoring play looking for the
+  //   clock event written immediately after it, stopping at the next
+  //   REAL play. With clock events not counted as administrative, the
+  //   walk stopped on the clock event itself, found nothing, and every
+  //   stamp came back null.
+  //
+  //   findDriveStarts() -- which this page calls for the Drive/Yds/Long
+  //   tiles -- uses isAdminMarker to refuse to open a drive on an
+  //   administrative row. The engine's own comment records what that
+  //   costs: a completed scoring drive displaying as
+  //   "Clock - 5:00 at change of possession" with 0/0 tiles. This page
+  //   has been exposed to that since it was written.
+  //
+  // `isDivider` AND `is_divider`: the loader above maps the database
+  // column through unchanged as is_divider, while every other page uses
+  // the camelCase name. Both are read so this cannot depend on which
+  // spelling a row happens to arrive with.
+  // isAdminMarker moved to engine.js on 30 August 2026. It was declared in
+  // nine pages; seven were identical and two had drifted. Left as a note
+  // rather than a silent deletion, because a reader looking for it here
+  // should be told where it went.
   function clockToAbsSeconds(){ return null; }
 
   // SCALE TO THE MONITOR, exactly as view.html does, so the two pages behave
