@@ -2114,22 +2114,47 @@ function getLastClockAbsSec(){
 // Fills only an EMPTY box. If something is already there the scorer put
 // it there, and a helper that overwrites a typed value is worse than one
 // that does nothing.
-function prefillTouchbackClock(inputId){
+// THE PREFILL SOURCE: the last clock event IN THE CURRENT QUARTER, and
+// the quarter length when there is none.
+//
+// Scoped to the quarter deliberately. getLastClockAbsSec() walks the
+// whole game, so at the second-half kickoff it returns the 0:00 that
+// closed the first half -- prefilling 0:00 onto a kick that happens at
+// 12:00. The opening kickoff of each half has no event of its own to
+// read, and the right answer there is a full quarter.
+//
+// Gives the opening kickoff 12:00, a second-half kickoff 12:00, and a
+// kickoff after a mid-quarter score the clock at that score.
+function kickoffClockPrefill(){
+  const q = (computeState().quarter) || 1;
+  for (let i = plays.length - 1; i >= 0; i--){
+    const ev = plays[i].effect && plays[i].effect.clockEvent;
+    if (!ev) continue;
+    const c = absSecToClockStr(ev.absSec);
+    if (!c) continue;
+    if (c.q === q) return c.text;
+    // An event from an EARLIER quarter means this quarter has none. A
+    // half-closing 0:00 reads as the quarter it ended, not the one it
+    // begins, so this is the second-half kickoff case.
+    if (c.q < q) break;
+  }
+  const mins = Math.floor(quarterLengthSec / 60), secs = quarterLengthSec % 60;
+  return mins + ':' + String(secs).padStart(2, '0');
+}
+
+// Renamed from prefillTouchbackClock, 30 Aug 2026: it now runs on every
+// kickoff, not only a touchback, which is what its own reasoning always
+// implied -- the touchback was the general case, noticed first.
+function prefillKickoffClock(inputId){
   const el = document.getElementById(inputId);
   if (!el || el.value.trim()) return;
-  const last = absSecToClockStr(getLastClockAbsSec());
-  if (!last) return;
-  el.value = last.text;
-  // AND CLOSE THE PAD IF IT BEAT US TO IT.
-  // The guard in raiseClockPad stops the 60ms and 250ms retries, but this
-  // prefill is deferred on setTimeout(0) while the first raise is on
-  // requestAnimationFrame -- and which of those runs first is not something
-  // to rely on. If the pad is already up on this field, the value it was
-  // asking for has just arrived, so it has nothing left to do.
+  const val = kickoffClockPrefill();
+  if (!val) return;
+  el.value = val;
   if (padEl && padEl.style.display !== 'none' && padTargetId === inputId) closePad();
   // Marked so the confirm step can tell a derived value from a typed one
   // -- the same distinction the spot calculator already draws.
-  el.dataset.fromTouchback = '1';
+  el.dataset.prefilled = '1';
 }
 
 // THE LAST CLOCK ENTERED, as a coach would read it back.
@@ -2173,6 +2198,67 @@ function absSecToClockStr(absSec){
 // nothing has been entered yet. Called wherever a clock box is shown.
 // Silent if the element is absent, so a panel that has not been given one
 // costs nothing.
+// WHAT THIS CLOCK ENTRY DID TO THE ACCOUNTING.
+// ---------------------------------------------------------------------
+// Two failures that were previously invisible, both reported at the one
+// moment a scorer can still fix them -- immediately after typing, while
+// they remember what they typed. At finalize the same numbers are an
+// unattributable mystery an hour old.
+//
+//   1. A BACKWARDS CLOCK. engine.js clamps a negative possession to zero,
+//      which is right, but it used to do so in silence: the drive came
+//      out short and nothing said why. The clamp now counts, and this
+//      says so.
+//
+//   2. A GAP. Every second of game clock belongs to exactly one team, so
+//      TOP(A) + TOP(B) has to account for the clock that has run. What is
+//      left over is dead-ball time -- the try, the wait before a kickoff
+//      -- which is CORRECT to be unassigned. So this reports only the
+//      change this entry made, not the running total, and only once it is
+//      big enough to be a mistake rather than a whistle.
+//
+// A whole minute is the threshold. Dead-ball gaps between possessions run
+// to tens of seconds; a minute of missing time is an entry in the wrong
+// quarter or against the wrong team.
+// THE PREFILL NOTE, in one place because it appears on two surfaces --
+// the guided kickoff and the ordinary kickoff panel -- and a scorer who
+// meets it in both should read the same sentence.
+//
+// Andy's wording, 30 Aug 2026: say WHY the value is there, and recommend
+// against overriding it. The first draft ended "Change it if the ball was
+// fielded at a different time", which invites an edit on a value that is
+// almost always right. The clock is stopped before every kickoff, so the
+// prefill is not a guess -- it is the same number the board was showing.
+function clockPrefillNote(value){
+  return 'Prefilled: ' + value + '. The clock stops on the score and does not run ' +
+    'during the try, so this is the clock when the ball was fielded — it is not a ' +
+    'guess. Leave it unless the board actually showed something different.';
+}
+
+function reportClockAudit(before){
+  const after = computeState().clockAudit;
+  if (!after) return;
+  const msgs = [];
+  const b0 = (before && before.backwards) ? before.backwards.count : 0;
+  if (after.backwards.count > b0){
+    const secs = after.backwards.seconds - ((before && before.backwards) ? before.backwards.seconds : 0);
+    msgs.push('That clock runs backwards against the possession it closes, so ' +
+      fmtDuration(secs) + ' was not counted. The possession will read short. ' +
+      'Undo and re-enter it if the time was wrong.');
+  }
+  const gained = after.unattributed - ((before && before.unattributed) || 0);
+  if (gained >= 60){
+    msgs.push(fmtDuration(gained) + ' of game time is not attributed to either team. ' +
+      'That usually means a clock landed in the wrong quarter or against the wrong side.');
+  }
+  if (msgs.length) showMsg('gameMsg', msgs.join(' '), 'error');
+}
+// m:ss from a count of seconds, for the messages above.
+function fmtDuration(secs){
+  const n = Math.max(0, Math.round(secs));
+  return Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0');
+}
+
 function renderLastClockHint(elId){
   const el = document.getElementById(elId);
   if (!el) return;
@@ -2532,6 +2618,55 @@ function flagNoReceiver(out, isCompletedPass, recTok){
   if (out && isCompletedPass && (!recTok || recTok === '?' || recTok === '-')){
     out.warnNoReceiver = true;
   }
+  return out;
+}
+
+// WHEN POSSESSION ACTUALLY CHANGED.
+// ---------------------------------------------------------------------
+// Every clock prompt in the app says "Clock", which everywhere else means
+// AFTER the play. On three of the four turnover trees that reading is
+// wrong, because possession changes PARTWAY THROUGH the play:
+//
+//   punt or kickoff returned   at the catch
+//   interception returned      at the interception
+//   fumble returned            at the recovery
+//   turnover on downs          at the whistle -- the play's own end
+//
+// Only the last matches the natural reading. On the other three, entering
+// the clock after the play hands the whole return to the team that just
+// lost the ball: the return's seconds fall BEFORE the receiving team's
+// possession starts and are attributed to nobody.
+//
+// So the label names the moment, per tree, from one rule -- the clock
+// when possession changed. A punt-only note would fix a quarter of the
+// problem and leave interceptions and fumbles wrong in exactly the same
+// way. See LIVE_GAME_FEEDBACK.md item 4.
+//
+// Set on the returned object beside flipEligible, not inside `effect`,
+// for the same reason warnNoReceiver is: playRow() copies named fields
+// only, so this stays in the browser and is never written to a play row.
+//
+// A TOUCHBACK OR AN OUT-OF-BOUNDS KICK GETS NOTHING. Nobody fielded the
+// ball, so there is no catch to name and the whistle IS the moment --
+// which is what the plain label already says.
+function withClockMoment(out, moment){
+  if (out && moment) out.clockMoment = moment;
+  return out;
+}
+
+// A KICKOFF'S CLOCK IS DERIVABLE, so it is prefilled rather than asked
+// for. The clock stops on a score, does not run during a try, and
+// restarts only when the ball is legally touched by the receiving team --
+// so the clock at the catch IS the clock at the previous stoppage.
+//
+// That is why the touchback prefill was never a special case: it was the
+// general case, noticed first. See LIVE_GAME_FEEDBACK.md item 4.
+//
+// Marked on the parsed play, same as clockMoment, and for the same
+// reason -- playRow() copies named fields only, so neither reaches the
+// database.
+function withClockPrefill(out){
+  if (out) out.clockPrefill = true;
   return out;
 }
 
@@ -3025,7 +3160,12 @@ function parseInput(raw, state){
     // moment, not the offense's failed one. Same bug, same fix, found
     // in thirteen other branches the same night -- see the field goal
     // block just below for the one that was actually reported.
-    return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter };
+    // Named whether or not it was returned: the interception itself is
+    // the change of possession, and a pick with no return still has the
+    // clock stopping at the catch rather than at the whistle.
+    return withClockMoment(
+      { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter },
+      'when the ball was intercepted');
   }
   if (type === 'f'){
     const rec = rest[0], retyds = rest[1];
@@ -3070,8 +3210,10 @@ function parseInput(raw, state){
       // A fumble after a COMPLETION is still a completed pass, and the
       // receiver rides in p1 here rather than rest[0] -- the fumble code
       // is keyed on the receiver, with the passer in the attempt token.
-      return flagNoReceiver({ text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter },
-        !!(attempt && attempt.kind === 'p'), p1);
+      return withClockMoment(
+        flagNoReceiver({ text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter },
+          !!(attempt && attempt.kind === 'p'), p1),
+        'when it was recovered');
     }
     // RECOVERED BY THE OFFENSE: possession is kept, so this is an ordinary
     // stat play and the down must advance exactly once -- which is what
@@ -3194,7 +3336,11 @@ function parseInput(raw, state){
     t += coverPhrase();
     let score = null;
     if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
-    return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter };
+    // Only when it was actually fielded. `ret` is absent on a punt that
+    // was downed with nothing after it, and a touchback returned above.
+    return withClockMoment(
+      { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter },
+      ret ? 'when the punt was fielded' : null);
   }
   if (type === 'pm'){
     // Muffed / fumbled punt. The receiving team failed to secure the
@@ -3341,7 +3487,15 @@ function parseInput(raw, state){
     t += coverPhrase();
     let score = null;
     if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
-    return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter };
+    // NO MOMENT LABEL ON A KICKOFF. Andy's call, 30 Aug 2026, and it is
+    // what the decision actually said: prefilling REMOVES the question
+    // rather than relabelling it. The clock is stopped before a kickoff,
+    // so the value is derivable and the scorer should be confirming a
+    // number rather than reading a sentence about which number to enter.
+    // The other three trees keep their wording -- their moments cannot be
+    // derived, because the clock is running.
+    return withClockPrefill(
+      { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter });
   }
   if (type === 'km'){
     // Muffed / fumbled kickoff. Same shape as a muffed punt: if the
@@ -7158,9 +7312,33 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // only thing being asked for, which is what made the pad welcome.
       // Tapping the box still opens it.
       const grClock = document.getElementById('guidedReturnClock');
+      // PREFILLED ON EVERY GUIDED KICKOFF, not only a touchback.
+      // ------------------------------------------------------------------
+      // Reported by Andy, 30 Aug 2026: the ordinary panel had been changed
+      // and this had not, so the two kickoffs that ALWAYS come through the
+      // guided flow -- the opening kick of each half -- were the two that
+      // never prefilled. They are also the two where the answer is most
+      // certain: a full quarter, every time.
+      //
+      // Done here, when the return step renders, rather than inside
+      // refreshGrTb: that only runs when Touchback is toggled, which is
+      // why the old prefill reached a touchback and nothing else.
+      const grWarn = document.getElementById('grClockWarn');
+      if (grClock){
+        prefillKickoffClock('guidedReturnClock');
+        if (grWarn && grClock.value.trim()){
+          grWarn.textContent = clockPrefillNote(grClock.value.trim());
+          grWarn.style.display = 'block';
+        }
+      }
       if (grClock) grClock.addEventListener('input', e => {
         const w = document.getElementById('grClockWarn');
-        if (w) w.style.display = e.target.value.trim() ? 'none' : 'block';
+        if (!w) return;
+        // Once the scorer types, the note has served its purpose: they
+        // have taken the value over, and what matters again is whether
+        // the box ends up empty.
+        w.textContent = "Optional — but with no clock this possession's time won't be counted.";
+        w.style.display = e.target.value.trim() ? 'none' : 'block';
       });
       const grTbBtn = document.getElementById('gr_touchback_toggle'), grTbCb = document.getElementById('gr_touchback');
       // EVERYTHING THAT DESCRIBES A RETURN. Touchback, out of bounds, muff
@@ -7193,7 +7371,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         document.getElementById('gr_ko_ret_fum_wrap')];
       const refreshGrTb = () => {
         const tb = grTbCb.checked;
-        if (tb) prefillTouchbackClock('guidedReturnClock');
+        // Still here for the case where the scorer cleared the box and
+        // then chose Touchback. prefillKickoffClock is a no-op on a field
+        // that already holds a value, so on the ordinary path this does
+        // nothing -- the render above has already filled it.
+        if (tb) prefillKickoffClock('guidedReturnClock');
         // Clears BOTH, not just muff. Onside was left set, so Touchback
         // and Onside kick could be lit at once -- the guided panel's
         // version of the exclusivity gap fixed on the plain trees.
@@ -12064,7 +12246,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const refreshKoMode = () => {
         const tb = document.getElementById('pp_ko_touchback').checked;
         // A touchback stops the clock where the scoring play left it.
-        if (tb) prefillTouchbackClock('confirmClockInput');
+        if (tb) prefillKickoffClock('confirmClockInput');
         const muffed = document.getElementById('pp_ko_muffed').checked;
         const onsideEl = document.getElementById('pp_ko_onside');
         const onside = !!(onsideEl && onsideEl.checked);
@@ -13154,7 +13336,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         setTimeout(() => {
           const cc = document.getElementById('confirmClockInput');
           if (cc) cc.value = '';
-          prefillTouchbackClock('confirmClockInput');
+          prefillKickoffClock('confirmClockInput');
         }, 0);
       } else if (koMuffed){
         const recTeamTok = document.querySelector('input[name=pp_ko_muffrec]:checked').value;
@@ -13804,6 +13986,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         (pending.effect && (pending.effect.endsDrive || pending.effect.newPossession ||
                             pending.effect.flip)));
       document.getElementById('confirmClockRow').style.display = needsClock ? 'block' : 'none';
+      // THE LABEL NAMES THE MOMENT. See withClockMoment above parseInput
+      // for why: "Clock" everywhere else in the app means after the play,
+      // and on a return that reading gives the whole return away to the
+      // team that just lost the ball.
+      //
+      // Read off `pending`, NOT off pending.roles -- roles are attached
+      // by buildAndReview AFTER showConfirm returns, and reading playType
+      // here always sees undefined. That trap already cost the PAT clock
+      // prompt once; the note beside followsTouchdown above records it.
+      // SET UNCONDITIONALLY, not only when the row is shown. The label is
+      // a persistent element: leaving it alone when the row is hidden
+      // leaves the LAST play's moment sitting in it, and the next play
+      // that does need a clock but has no moment of its own would inherit
+      // it -- a punt's "when the punt was fielded" appearing over a
+      // turnover on downs. Caught by the UI check, not by reading it.
+      const clkLbl = document.getElementById('confirmClockLabel');
+      if (clkLbl){
+        clkLbl.textContent = (pending && pending.clockMoment)
+          ? 'Clock ' + pending.clockMoment
+          : 'Clock';
+      }
       // Rendered every time the row is shown, not once at load: an undo
       // or another device's play can change what "last entered" means
       // between one play and the next.
@@ -13814,6 +14017,33 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const ccw = document.getElementById('confirmClockWarn');
       if (ccw) ccw.style.display = 'block';
       if (needsClock) document.getElementById('confirmClockInput').value = '';
+
+      // THE KICKOFF PREFILL. See withClockPrefill above parseInput: the
+      // clock is stopped before a kickoff, so the value is derivable and
+      // the scorer confirms a number instead of recalling one.
+      //
+      // AFTER the clear above, not before -- that line empties the field
+      // on every review, and prefilling first would be wiped by it. The
+      // ordering is the whole reason this sits here rather than beside
+      // the label.
+      //
+      // The note replaces the skip-warning rather than joining it: with a
+      // value already in the box, "with no clock this possession's time
+      // won't be counted" describes a situation the scorer is not in, and
+      // two notes under one field is one too many to read at speed.
+      if (needsClock && pending && pending.clockPrefill){
+        prefillKickoffClock('confirmClockInput');
+        const cci = document.getElementById('confirmClockInput');
+        if (ccw){
+          ccw.textContent = clockPrefillNote((cci && cci.value.trim()) || '');
+          ccw.style.display = 'block';
+        }
+      } else if (ccw){
+        // Restored, because the element is shared and the message above
+        // would otherwise persist onto the next play that needs a clock.
+        // Same class of fault as the stale moment label.
+        ccw.textContent = "Optional — but with no clock this possession's time won't be counted.";
+      }
       // THE PAD OPENS ITSELF HERE TOO. The first pass at this covered
       // only showClockPrompt()'s own card, which is not the screen a
       // tree actually lands on: a play that changes possession comes
@@ -13932,6 +14162,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (clockVal && clockAbsSec !== null){
       const q = computeState().quarter;
       const absSec = clockAbsSec;
+      // Snapshotted BEFORE the clock event is written, so the report below
+      // can say what THIS entry changed rather than what the game totals
+      // happen to be. See reportClockAudit.
+      const auditBefore = computeState().clockAudit;
       if (flipHappened){
         pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' at change of possession (' + TEAMS[outgoingTeam].name + ' \u2192 ' + TEAMS[incomingTeam].name + ')', effect: { clockEvent: { type: 'transition', outgoingTeam, incomingTeam, absSec } }, quarter: q });
       }
@@ -13971,6 +14205,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const scoringTeam = preState.possession;
         pushAndPersist({ id: nextId++, text: 'Clock — ' + normalizeClockStr(q, clockVal) + ' end of possession (' + TEAMS[scoringTeam].name + ')', effect: { clockEvent: { type: 'end', team: scoringTeam, absSec } }, quarter: q });
       }
+      // ONE CALL, AFTER ALL THE BRANCHES. Each of them writes a different
+      // shape of clock event and several write two; putting the check
+      // inside them would mean five copies that could disagree about what
+      // counts as a problem.
+      reportClockAudit(auditBefore);
     }
     // A new set of downs normally follows a change of possession, but a
     // muffed punt recovered by the kicking team gives one to the team

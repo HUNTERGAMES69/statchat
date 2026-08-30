@@ -892,6 +892,13 @@ function computeState(playsList){
     quarter: 1,
     scores: { teamA: 0, teamB: 0 },
     possessionTime: { teamA: 0, teamB: 0 },
+    // What the possession-time clamp refused, and how far the clock has
+    // run. Both feed the partition check exposed at the end of this
+    // function; both are zero on a game with no clock entries at all,
+    // which is not a fault -- it is a game nobody timed.
+    clockBackwards: { count: 0, seconds: 0 },
+    clockFirstAbsSec: null,
+    clockLastAbsSec: 0,
     // How many SERIES overtime has run, counted from 1 once it starts and
     // 0 before. NFHS overtime is played in rounds of one series each way,
     // so the round a coach names is ceil(series / 2) -- OT1 covers the
@@ -1076,17 +1083,43 @@ function computeState(playsList){
       // replay, so once this fires it fires for every later event.
       if (state.quarter < 5){
         const ce = e.clockEvent;
+        // COUNT WHAT THE CLAMP SWALLOWS.
+        // --------------------------------------------------------------
+        // Every one of these deltas is wrapped in Math.max(0, ...), which
+        // is right -- a negative possession is not a thing -- but it
+        // fails SILENTLY. A clock entered earlier than the one that
+        // opened the possession contributes zero, so the drive comes out
+        // short and nothing anywhere says why. That is the shape of fault
+        // this app keeps finding late: correct-looking output from a bad
+        // input, with the evidence discarded at the moment it existed.
+        //
+        // So the clamp still clamps, and now it also reports. See
+        // LIVE_GAME_FEEDBACK item 4.
+        const credit = (team, absSec) => {
+          const delta = absSec - pendingClockStart[team];
+          if (delta < 0){
+            state.clockBackwards.count += 1;
+            state.clockBackwards.seconds += -delta;
+          }
+          state.possessionTime[team] += Math.max(0, delta);
+          pendingClockStart[team] = null;
+        };
         if (ce.type === 'start'){ pendingClockStart[ce.team] = ce.absSec; }
         if (ce.type === 'end' && pendingClockStart[ce.team] !== null){
-          state.possessionTime[ce.team] += Math.max(0, ce.absSec - pendingClockStart[ce.team]);
-          pendingClockStart[ce.team] = null;
+          credit(ce.team, ce.absSec);
         }
         if (ce.type === 'transition'){
           if (pendingClockStart[ce.outgoingTeam] !== null){
-            state.possessionTime[ce.outgoingTeam] += Math.max(0, ce.absSec - pendingClockStart[ce.outgoingTeam]);
-            pendingClockStart[ce.outgoingTeam] = null;
+            credit(ce.outgoingTeam, ce.absSec);
           }
           pendingClockStart[ce.incomingTeam] = ce.absSec;
+        }
+        // The furthest the game clock has reached, for the partition
+        // check below. Read from the events rather than from the quarter,
+        // because a quarter marker moves the period without moving time.
+        if (ce.absSec !== null && ce.absSec !== undefined){
+          state.clockLastAbsSec = Math.max(state.clockLastAbsSec || 0, ce.absSec);
+          if (state.clockFirstAbsSec === null) state.clockFirstAbsSec = ce.absSec;
         }
       }
     }
@@ -1111,6 +1144,46 @@ function computeState(playsList){
   // object itself, so nothing outside this function can mutate the
   // value this function is still using on a later call.
   state.pendingClockStart = { teamA: pendingClockStart.teamA, teamB: pendingClockStart.teamB };
+
+  // THE PARTITION CHECK. Every second of game clock belongs to exactly
+  // one team, so TOP(A) + TOP(B) must account for the clock that has run.
+  // ---------------------------------------------------------------------
+  // Run from the events rather than at finalize, deliberately: the moment
+  // a gap opens, the entry that caused it is the one just made, and a
+  // scorer can still remember what they typed. At finalize the same
+  // number is an unattributable mystery an hour old.
+  //
+  // WHAT COUNTS AS ELAPSED: from the first clock event to the furthest
+  // one. Not from zero -- the game has no measured time before its first
+  // entry, and counting from zero would report the whole pre-entry period
+  // as missing on every game whose opening kickoff clock was skipped.
+  //
+  // AN OPEN POSSESSION IS NOT A GAP. A drive still running has time that
+  // has not been credited yet because its closing event has not been
+  // entered; that is the normal state mid-drive, so it is subtracted
+  // before anything is called unattributed.
+  //
+  // The remainder is genuinely unassigned: dead-ball time between an end
+  // and the next start -- the try, the gap before a kickoff -- which
+  // belongs to nobody and is CORRECT to be unassigned. So this reports a
+  // number rather than an error; game.html decides what is worth saying
+  // about it, and to whom.
+  (function(){
+    const first = state.clockFirstAbsSec;
+    const last = state.clockLastAbsSec || 0;
+    const elapsed = (first === null) ? 0 : Math.max(0, last - first);
+    const attributed = (state.possessionTime.teamA || 0) + (state.possessionTime.teamB || 0);
+    let open = 0;
+    ['teamA', 'teamB'].forEach(t => {
+      const p = pendingClockStart[t];
+      if (p !== null && p !== undefined) open += Math.max(0, last - p);
+    });
+    state.clockAudit = {
+      elapsed, attributed, open,
+      unattributed: Math.max(0, elapsed - attributed - open),
+      backwards: state.clockBackwards
+    };
+  })();
   return state;
 }
 
