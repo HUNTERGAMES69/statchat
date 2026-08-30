@@ -2507,6 +2507,34 @@ function penaltyOptionsFor(side){
   return items;
 }
 
+// NO RECEIVER ON A COMPLETION.
+// ---------------------------------------------------------------------
+// The receiver is optional by design: a completion downfield is often
+// clearly a completion for N yards well before the jersey is readable,
+// and forcing a number there would either stall entry or invite a
+// guess. So this WARNS at the review screen and never refuses.
+//
+// Incompletions are deliberately excluded. An intended receiver on a
+// throw nobody caught is genuinely often unknowable, and warning on
+// every incompletion would be constant noise on a banner that also
+// carries the impossible-gain refusals.
+//
+// SET ON THE RETURNED OBJECT, beside flipEligible -- never inside
+// `effect`. playRow() copies a fixed list of named fields, so a sibling
+// stays in the browser; a flag on `effect` would be written to the
+// database on every such play and live there forever.
+//
+// One rule, one implementation: what counts as "missing" lives here.
+// The call sites only say which token is the receiver, because that
+// token sits in a different slot in each branch -- rest[0] on a
+// completion, p1 on a fumble after one.
+function flagNoReceiver(out, isCompletedPass, recTok){
+  if (out && isCompletedPass && (!recTok || recTok === '?' || recTok === '-')){
+    out.warnNoReceiver = true;
+  }
+  return out;
+}
+
 function parseInput(raw, state){
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -2858,9 +2886,9 @@ function parseInput(raw, state){
     else if (type === 'p'){
       netYards = parseInt(rest[1]) || 0; tackler = rest[2];
       if (isSafety){
-        return { text: O(p1) + ' pass' + (rest[0] === '?' ? '' : ' to ' + O(rest[0])) + ' ' + gainPhrase(netYards) + ' — tackled in own end zone — SAFETY',
+        return flagNoReceiver({ text: O(p1) + ' pass' + (rest[0] === '?' ? '' : ' to ' + O(rest[0])) + ' ' + gainPhrase(netYards) + ' — tackled in own end zone — SAFETY',
           effect: { score: { team: def, points: 2 }, endsDrive: true },
-          flipEligible: false, team: off, quarter: state.quarter };
+          flipEligible: false, team: off, quarter: state.quarter }, true, rest[0]);
       }
       // The receiver is optional -- a completion downfield is often
       // clearly a completion for N yards before the number is readable.
@@ -2919,7 +2947,10 @@ function parseInput(raw, state){
 
     const effect = { isStat: true, statYds: netYards, fieldDelta: netYards, td, converts, turnoverOnDowns };
     if (score) effect.score = score;
-    return { text, effect, flipEligible: turnoverOnDowns, flipTo: def, team: off, quarter: state.quarter };
+    // Shared by rush, pass, incomplete, sack and kneel, so the pass test
+    // is explicit: only type 'p' has a receiver slot at rest[0].
+    return flagNoReceiver({ text, effect, flipEligible: turnoverOnDowns, flipTo: def, team: off, quarter: state.quarter },
+      type === 'p', rest[0]);
   }
 
   if (type === 'x'){
@@ -3007,7 +3038,11 @@ function parseInput(raw, state){
       // reads it, and the takeover spot comes from the panel's own spot
       // field. Same reasoning, same shape, as a bad snap recovered by
       // the defense.
-      return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter };
+      // A fumble after a COMPLETION is still a completed pass, and the
+      // receiver rides in p1 here rather than rest[0] -- the fumble code
+      // is keyed on the receiver, with the passer in the attempt token.
+      return flagNoReceiver({ text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter },
+        !!(attempt && attempt.kind === 'p'), p1);
     }
     // RECOVERED BY THE OFFENSE: possession is kept, so this is an ordinary
     // stat play and the down must advance exactly once -- which is what
@@ -3049,12 +3084,13 @@ function parseInput(raw, state){
           turnoverOnDowns: ownTurnover,
           flipApplied: ownTurnover
         } : {});
-    return { text: lead + ' — recovered by own team' +
+    return flagNoReceiver({ text: lead + ' — recovered by own team' +
         (isSafety ? ', in the end zone — SAFETY'
                   : (ownConverts ? ' — 1st down'
                                  : (ownTurnover ? ' — turnover on downs' : ''))),
       effect: ownEffect,
-      flipEligible: false, team: off, quarter: state.quarter };
+      flipEligible: false, team: off, quarter: state.quarter },
+      !!(attempt && attempt.kind === 'p'), p1);
   }
   if (type === 'pt'){
     const yds = rest[0], ret = rest[1], retyds = rest[2];
@@ -3355,7 +3391,7 @@ function parseInput(raw, state){
     const failedOnDowns = !td && !convertsFake && (state.down || 4) >= 4;
     if (!td) t += failedOnDowns ? ' — NO GOOD, turnover on downs'
                                 : (convertsFake ? ' — FIRST DOWN' : '');
-    return {
+    return flagNoReceiver({
       text: t,
       effect: Object.assign(
         { isStat: true, statYds: netY, fieldDelta: netY, td, converts: convertsFake },
@@ -3363,7 +3399,7 @@ function parseInput(raw, state){
         failedOnDowns ? { turnoverOnDowns: true } : {}),
       flipEligible: failedOnDowns, flipTo: def,
       team: off, quarter: state.quarter, roles
-    };
+    }, kind === 'p', rec);
   }
   if (type === 'ks'){
     // Onside kick. Structurally the same as a muffed kickoff -- the ball
@@ -3556,7 +3592,12 @@ function parseInput(raw, state){
       return { text: O(p1) + ' 2PT pass' + (receiverNum === '?' ? '' : ' to ' + O(receiverNum)) + ' — INCOMPLETE', effect: { endsDrive: true }, flipEligible: false, team: off, quarter: state.quarter };
     }
     const score = { team: off, points: 2 };
-    return { text: O(p1) + ' 2PT pass' + (receiverNum === '?' ? '' : ' to ' + O(receiverNum)) + ' — GOOD', effect: { endsDrive: true, score }, flipEligible: false, team: off, quarter: state.quarter };
+    // A conversion credits no receiving stat -- NFHS keeps try yardage out
+    // of the box score -- so nothing is lost from the numbers here. The
+    // NAME still is: without it the recap reads "2PT pass — GOOD" with
+    // nobody catching it. Warned for that reason, not a statistical one.
+    return flagNoReceiver({ text: O(p1) + ' 2PT pass' + (receiverNum === '?' ? '' : ' to ' + O(receiverNum)) + ' — GOOD', effect: { endsDrive: true, score }, flipEligible: false, team: off, quarter: state.quarter },
+      true, receiverNum);
   }
   return null;
 }
@@ -13574,12 +13615,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // the play is marked, so it must warn regardless of TD status.
       const gain = pending.effect && typeof pending.effect.statYds === 'number' ? pending.effect.statYds : 0;
       const distToGoal = state.fieldPos !== null ? 100 - state.fieldPos : null;
+      // COLLECTED, NOT ASSIGNED ONE AT A TIME.
+      // ------------------------------------------------------------------
+      // The three yardage checks below are variants of one question and
+      // stay mutually exclusive. The receiver check is a SEPARATE
+      // question, and the old shape -- each branch overwriting
+      // textContent -- meant whichever ran last was the only one seen. A
+      // pass to nobody that also overshot the goal line would have shown
+      // one fault and hidden the other.
+      const warnings = [];
       if (gain > 0 && distToGoal !== null && gain > distToGoal){
-        warningEl.textContent = '⚠️ This gain (' + gain + ' yds) is more than possible here -- only ' + distToGoal + ' yds to the goal line. The maximum this play could have gained is ' + distToGoal + ' yds.';
-        warningEl.style.display = 'block';
+        warnings.push('This gain (' + gain + ' yds) is more than possible here -- only ' + distToGoal + ' yds to the goal line. The maximum this play could have gained is ' + distToGoal + ' yds.');
       } else if (gain > 0 && distToGoal !== null && gain === distToGoal && !pending.effect.td){
-        warningEl.textContent = '⚠️ This gain (' + gain + ' yds) reaches the goal line exactly -- only ' + distToGoal + ' yds away. If this scored, go back and check the touchdown box first.';
-        warningEl.style.display = 'block';
+        warnings.push('This gain (' + gain + ' yds) reaches the goal line exactly -- only ' + distToGoal + ' yds away. If this scored, go back and check the touchdown box first.');
       } else if (pending.effect.td && distToGoal !== null && gain < distToGoal){
         // The mirror of the check above, and the one that was missing: a
         // touchdown has to reach the goal line, so the gain must equal
@@ -13587,9 +13635,32 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // opponent's 49 as a score leaves the ball on their 16 while
         // still awarding six points -- the score, the player's TD and
         // the yardage all go in wrong, with nothing to flag it.
-        warningEl.textContent = '⚠️ This is marked a touchdown but only gains ' + gain + ' yds, and the goal line is ' +
+        warnings.push('This is marked a touchdown but only gains ' + gain + ' yds, and the goal line is ' +
           distToGoal + ' yds away -- the ball would stop on the ' + (100 - (state.fieldPos + gain)) +
-          '. A touchdown from here has to be ' + distToGoal + ' yds.';
+          '. A touchdown from here has to be ' + distToGoal + ' yds.');
+      }
+      // A COMPLETION WITH NOBODY CATCHING IT. Set by parseInput, which is
+      // the one point every entry path reaches -- keypad, the point-and-
+      // pick tree, and the fake punt/field-goal panel all build a code and
+      // parse it. Warns; never refuses. The receiver is optional on
+      // purpose and a scorer who cannot read the number should still be
+      // able to save the play and its yardage.
+      if (pending.warnNoReceiver){
+        warnings.push('NO RECEIVER SELECTED — this completion will be saved with the yardage but no receiving credit. Go back and pick a receiver, or save it as it stands.');
+      }
+      // Built as nodes with textContent rather than an innerHTML string.
+      // Every warning here is assembled from numbers and literals today,
+      // but the next one added may not be, and a banner that renders
+      // markup is a trap waiting for the first warning that quotes a
+      // player's name.
+      if (warnings.length){
+        warningEl.textContent = '';
+        warnings.forEach(w => {
+          const line = document.createElement('div');
+          line.style.margin = '2px 0';
+          line.textContent = '⚠️ ' + w;
+          warningEl.appendChild(line);
+        });
         warningEl.style.display = 'block';
       }
       if (pending.flipEligible){
