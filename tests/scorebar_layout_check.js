@@ -62,11 +62,11 @@ chk(/body\.layout-bug #bug\.is-live \{ grid-template-columns:1fr 1fr; \}/.test(s
     'otherwise leaves home in the auto track and narrower than away');
 
 // ---- scores outboard, identity centred -----------------------------------
-chk(/#sideAway \.pts \{ text-align:left;  order:1; \}/.test(src),
-    'the away score is first and left-aligned — the outer edge on that side');
-chk(/#sideHome \.pts \{ text-align:right; order:2; \}/.test(src) &&
+chk(/#sideAway \.pts \{ text-align:right; order:1; \}/.test(src),
+    'the away score is the first item, on the outer edge of that side');
+chk(/#sideHome \.pts \{ text-align:left;  order:2; \}/.test(src) &&
     /#sideHome \.ident \{ order:1; \}/.test(src),
-    'and the home score is last and right-aligned, with the identity before it');
+    'and the home score is the last item, with the identity before it');
 chk(!/sgap/.test(src),
     'no spacer opposite the score — mirroring the score centres the identity ' +
     'in the WHOLE column, and the requirement is between the score and the ' +
@@ -107,10 +107,20 @@ chk(/\.ident\{ flex:1 1 auto; display:flex;[\s\S]{0,60}justify-content:center;/.
 //
 // Worse on the away side, where a long name leaves no slack to hide it. That
 // is why home looked right and away did not, with both measuring 0px off.
-chk(/\.pts  \{ flex:0 0 auto; font-size:44px;/.test(src) && !/min-width:2ch/.test(src),
-    'the score box fits its digits EXACTLY, with no minimum — twice this was ' +
-    'a fixed width, and both times the leftover space inside the box sat ' +
-    'between the glyph and the identity');
+chk(/\.pts  \{ flex:0 0 auto; min-width:2ch;/.test(src),
+    'two digits are always reserved, so the column never changes for any ' +
+    'score from 0 to 99');
+
+// THE DIRECTION OF THE ALIGNMENT IS THE WHOLE POINT. A reserved box with the
+// digits pushed OUTWARD leaves the spare space between the glyph and the
+// identity, which is what threw the centring off in the first place. Pushed
+// INWARD, the glyph's inner edge is fixed: the identity never moves, and a
+// single-digit score simply sits further in from the outer edge.
+chk(/#sideAway \.pts \{ text-align:right;/.test(src),
+    'the away digits sit against the INNER edge of their box, not the outer');
+chk(/#sideHome \.pts \{ text-align:left;/.test(src),
+    'and the home digits likewise — spare space on the outside, where it ' +
+    'is static and invisible, never between the glyph and the identity');
 chk(/font-variant-numeric:tabular-nums/.test(src),
     'with tabular figures, so 0 through 99 occupy the same width and the ' +
     'identity does not shift when a team goes from 9 to 10');
