@@ -4162,6 +4162,44 @@ const RETURNER_POS_RANK = (() => {
   ['K','PK','P','LS','H','KO'].forEach(p => rank[p] = 3);
   return rank;
 })();
+// WHO COULD HAVE MADE A COVER TACKLE.
+// ==================================================================
+// defenseEligible() on its own is the wrong pool for a kicking play,
+// and the reason is structural rather than a matter of taste: that
+// function deliberately NEVER pre-populates -- a player appears only
+// once he has been credited on a defensive play. On a kickoff the
+// covering side has usually been credited with nothing at all, and on
+// the OPENING kickoff of a half it is guaranteed to have been. So the
+// picker was empty at exactly the moment it was most needed.
+//
+// Measured, 30 August 2026, on a fresh game: defenseEligible returned 0
+// for both teams while the special-teams roster held 3 and the
+// defensive roster held 3. Reported the same day as "doesn't bring up a
+// picker or roster numbers".
+//
+// So: credited defenders first, in the numeric order defenseEligible
+// already chose and for the reason recorded there -- a scorer has a
+// number from the spotter and needs to FIND it -- then the SPECIAL-TEAMS
+// roster appended for anyone not already in the list. The cover unit is
+// drawn from special teams, which is the same reasoning
+// specialTeamsEligible uses to pre-populate for kickers.
+//
+// The full DEFENSIVE roster is deliberately NOT merged in. That would be
+// twenty-odd names at zero credits, which is the exact complaint
+// defenseEligible's own comment records about pre-populating.
+function coverEligible(team){
+  const list = defenseEligible(team);
+  const seen = {};
+  list.forEach(e => { seen[e.num] = true; });
+  const st = TEAMS[team].rosterSpecialTeams || {};
+  Object.keys(st).sort(byJersey).forEach(num => {
+    if (seen[num]) return;
+    seen[num] = true;
+    list.push({ num, name: st[num] || rosterName(team, num, ['special', 'defense', 'offense']) || '',
+                unit: 'special', pos: '' });
+  });
+  return list;
+}
 function returnerRank(pos){
   const r = RETURNER_POS_RANK[(pos || '').toUpperCase()];
   return r === undefined ? 2 : r;
@@ -6825,7 +6863,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<p style="font-size:13px; color:#8d99a6; margin:0 0 4px;">Tackled by (' +
             TEAMS[guided.kickingTeam].name + ')</p>' +
           '<div id="gr_cover_grid" class="grid-inline-manual">' +
-            pickerHtml(defenseEligible(guided.kickingTeam), 'gr_cover_pick') +
+            pickerHtml(coverEligible(guided.kickingTeam), 'gr_cover_pick') +
             '<input autocomplete="off" type="text" id="gr_cover_manual" placeholder="type #">' +
           '</div>' +
         '</div>' +
@@ -7231,6 +7269,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         grTdBtn.style.borderColor = grTdCb.checked ? '#1a7a4c' : '#ccc';
       });
       attachNameConfirm('gr_returner_manual', guided.receivingTeam, ['defense','special','offense']);
+      // THE COVER TACKLER'S OWN. Missing when the field shipped on
+      // 30 August 2026, and reported the same day: the box accepted a
+      // number and then did nothing with it -- no roster name, no choice
+      // between two players wearing it.
+      //
+      // Every other manual box in the app has one of these, including the
+      // returner box directly above and the play panel's own cover field.
+      // This one was written by hand for the guided flow (covBlock lives
+      // inside renderPlayPanel and is out of scope here) and the call was
+      // simply not carried across with the rest of the pattern.
+      //
+      // The KICKING team, matching where the picker's own list comes
+      // from. Resolving against the receiving team would offer the wrong
+      // roster and quietly write a name onto the wrong squad.
+      attachNameConfirm('gr_cover_manual', guided.kickingTeam, ['defense','special','offense']);
       document.getElementById('guidedReturnSave').addEventListener('click', () => {
         const yds = document.getElementById('gr_yards').value.trim();
         const td = document.getElementById('gr_td').checked;
@@ -9349,7 +9402,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // offer the returning side as its own tacklers, which is the fault
     // this whole change exists to end, wearing a different hat.
     function covBlock(label){
-      const list = defenseEligible(off);
+      const list = coverEligible(off);
       const inner = '<div class="pick-row">' +
           '<div id="pp_cover_grid" class="grid-inline-manual">' +
             pickerHtml(list, 'pp_cover_pick', null, null, true) +
