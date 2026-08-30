@@ -2547,6 +2547,38 @@ function extractNameTag(rawName){
     // exactly the way the display filter above documents.
     const ours = teamKey => !driveTeam || teamKey === driveTeam;
 
+    // THE NAME IS RESOLVED FROM THE JERSEY NUMBER, NOT READ OFF THE ROLE.
+    // --------------------------------------------------------------------
+    // Reported live, 30 Aug 2026: both long tiles showed a number and no
+    // name. The first version read `role.name`, and roles DO NOT RELIABLY
+    // CARRY ONE -- it depends which entry path wrote the play. The click
+    // handlers in game.html write `name: sel.carrierName || undefined`;
+    // parseInput, the keyboard path a scorer actually uses at speed,
+    // writes `{ team, num, yards }` and no name at all. So the field was
+    // present in every fixture I built and absent in most real plays.
+    // Exactly the bad-snap shape: the roles come from the PARSER, and
+    // code written against the click handler describes a path that
+    // rarely runs.
+    //
+    // playerName() is engine.js's own resolver, the one the box score
+    // and every report already use, and it falls back to '#22' when the
+    // number is on no roster. The stored name is used only when the
+    // roster cannot answer -- so a player who has left the roster still
+    // shows the name the play was entered with.
+    //
+    // 'offense' is the preferred unit because every play reaching these
+    // two tiles is a scrimmage play by the team with the ball. This is a
+    // DISPLAY-ONLY resolution on a live tile about the current game; it
+    // does not touch how the box score keys its buckets and does not
+    // prejudge item 1.
+    const nameOf = role => {
+      if (!role) return '';
+      const resolved = (role.team && role.num !== undefined)
+        ? playerName(role.team, role.num, 'offense') : '';
+      if (resolved && resolved.charAt(0) !== '#') return resolved;
+      return role.name || resolved || '';
+    };
+
     let longPass = null, longRush = null;
     let sackCount = 0, sackYds = 0;
     const pen = { teamA: { n: 0, yds: 0 }, teamB: { n: 0, yds: 0 } };
@@ -2577,10 +2609,10 @@ function extractNameTag(rawName){
         // keeps the tile. Ties going to the earlier play is arbitrary
         // either way; it is fixed here so the tile does not flicker
         // between two names as later plays land.
-        if (!longPass || y > longPass.yds) longPass = { yds: y, name: r.receiver.name || '' };
+        if (!longPass || y > longPass.yds) longPass = { yds: y, who: nameOf(r.receiver) };
       } else if (act === 'rush' && r.carrier && ours(r.carrier.team)){
         const y = r.carrier.yards || 0;
-        if (!longRush || y > longRush.yds) longRush = { yds: y, name: r.carrier.name || '' };
+        if (!longRush || y > longRush.yds) longRush = { yds: y, who: nameOf(r.carrier) };
       } else if (act === 'sack' && r.passer && ours(r.passer.team)){
         sackCount += 1;
         // passer.yards on a sack is stored as a POSITIVE magnitude and
@@ -2609,7 +2641,7 @@ function extractNameTag(rawName){
     // says a pass was completed for no gain -- where the truth on the
     // first play of a series is that nothing has happened yet.
     const longTile = (label, hit) => hit
-      ? tile(label, [[hit.yds, hit.name]])
+      ? tile(label, [[hit.yds, hit.who]])
       : tile(label, [[null, '—']]);
 
     const teamName = k => (TEAMS[k] && TEAMS[k].name) || (k === 'teamA' ? 'Us' : 'Them');
