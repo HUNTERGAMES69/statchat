@@ -283,9 +283,42 @@
 
     /* The eyebrow appears only in print, on every section: a detached
        page should say what document it belongs to. */
-    .sec-eyebrow { display:block; }
+    /* The eyebrow is print-only and was the last thing on the sheet
+       still under AA -- #9aa3b2 is 2.5:1, which on paper is a rumour. */
+    .sec-eyebrow { display:block; color:#5a6472 !important;
+                   font-size:11.5px; letter-spacing:0.12em; }
     .sec-title { font-size:17px; }
     .team-band { padding:7px 11px; }
+
+    /* ===== INK, NOT LIGHT ==========================================
+       Reported from a printed sheet, 30 Aug 2026: "text is too light and
+       hard to read." Measured rather than adjusted by eye -- every text
+       colour on the rendered print page, against the white it sits on:
+
+         #9aa3b2  2.54:1   the section eyebrow, the running footer
+         #999999  2.85:1   leader labels, subsection labels, the notes
+         #888888  3.54:1   every table heading and stat label -- 104 of
+                           them on one sheet, the single biggest offender
+         #7c8794  3.65:1   the section sub-line
+
+       WCAG AA wants 4.5:1 for text this size. All four fail, and paper is
+       harsher than a screen: there is no backlight behind a grey label,
+       only ink coverage. #5a6472 measures 6.0:1 -- comfortably readable,
+       and still obviously secondary to the #1a1a1a values beside it,
+       which run 17.4:1.
+
+       PRINT ONLY. The same colours fail on screen for the same reason,
+       but the screen design was not what was reported and changing it is
+       a separate decision. Flagged rather than folded in silently. */
+    .sec-eyebrow, .print-footer,
+    .leader-card .leader-label, .st-subsection-label, .no-stats,
+    .team-compare .stat-label, table.player-table th, .quarter-table th,
+    .header .sub, .sec-sub, .leader-card .leader-stat span,
+    .scoring-summary .ss-detail { color:#5a6472 !important; }
+    /* The "@" between the two team names sat at #bbb -- 1.9:1, which on
+       paper is barely there at all. It is a separator, so it stays quiet,
+       but quiet has a floor. */
+    .vs-sep { color:#6b7280 !important; }
 
     body { background:#fff; }
     .wrap { max-width:none; padding:0 24px; }
@@ -304,30 +337,53 @@
        space rather than save it. The scoreboard card and the scoring
        summary were butted together; the summary's own rows were tight
        enough that seven scores read as a block rather than seven events. */
-    .header { margin-bottom:46px; }
-    .scoring-summary { margin-top:46px !important; }
-    .sec-head { margin:22px 0 14px; }
-    .sec-title { font-size:17px; }
-    .sec-sub { font-size:11.5px; }
-    /* 11px vertical: each score gets its own band of space, which is what
-       makes a scoring summary scannable rather than a wall. */
-    .scoring-summary table th, .scoring-summary table td { padding:17px 9px; }
+    /* ===== FILLED WITH TYPE, NOT WITH AIR =========================
+       Measured on the rendered print page: the recap ran 53% full -- the
+       gaps above were spending space, and the sheet still ended half
+       empty. Andy's call, 30 Aug: keep the page count, fill the pages.
+       So the space goes into TYPE rather than into margin. Bigger type
+       is also the second half of the legibility fix: an 11px label at
+       6:1 is still an 11px label.
+
+       The two 46px margins met in the middle for 92px of nothing between
+       the scoreboard and the first table. Reduced to 26 and 24 -- still a
+       clear break, no longer a hole -- and the reclaimed space is handed
+       to the tables below. */
+    .header { margin-bottom:26px; }
+    .scoring-summary { margin-top:24px !important; }
+    .sec-head { margin:20px 0 13px; }
+    .sec-title { font-size:21px; }
+    .sec-sub { font-size:13px; }
+    /* Each score still gets its own band of space, which is what makes a
+       scoring summary scannable rather than a wall -- but the band is now
+       mostly the row's own type rather than padding around it. */
+    .scoring-summary table th, .scoring-summary table td { padding:14px 9px; font-size:14px; }
     .scoring-summary .ss-score { line-height:1.5; }
-    .team-compare .col-head { font-size:13.5px; padding-bottom:9px; }
-    .team-compare .stat-row > div { padding:8px 0; font-size:13px; }
-    .team-compare .stat-label { font-size:11px; }
+    .scoring-summary .ss-clock { font-size:12.5px; }
+    .team-compare .col-head { font-size:16px; padding-bottom:10px; }
+    .team-compare .stat-row > div { padding:9px 0; font-size:15.5px; }
+    .team-compare .stat-label { font-size:13px; }
 
     /* The team pages. These rows carried 5px of padding on a page that
        was two-thirds empty -- the numbers were legible and the sheet
        looked unfinished, which is a worse problem than being tight. */
-    .team-band { margin:30px 0 14px; padding:10px 15px; font-size:12.5px; }
-    table.player-table { font-size:12.5px; }
-    table.player-table th, table.player-table td { padding:7px 8px; }
+    .team-band { margin:26px 0 13px; padding:11px 15px; font-size:14.5px; }
+    table.player-table { font-size:14.5px; }
+    table.player-table th, table.player-table td { padding:9px 8px; }
+    /* The column headings carry 0.02-0.04em of tracking at 11px, which on
+       paper reads as gaps inside the word rather than as elegance. At
+       12.5px they can carry their own weight without it. */
+    table.player-table th { font-size:12.5px; letter-spacing:0.01em; }
     .leaders-strip { gap:14px; }
-    .leader-card { padding:14px 16px; }
-    .leader-card .leader-stat { font-size:23px; }
-    .team-identity-name { font-size:14px; }
-    .team-header-logo { width:52px; height:52px; }
+    .leader-card { padding:16px 18px; }
+    .leader-card .leader-stat { font-size:27px; }
+    .leader-card .leader-label { font-size:12px; }
+    .leader-card .leader-name { font-size:16px; }
+    .team-identity-name { font-size:15.5px; }
+    .team-header-logo { width:56px; height:56px; }
+    .st-subsection-label { font-size:12px; }
+    .no-stats { font-size:14px; }
+    .print-footer { font-size:10.5px; }
     .section { padding:15px 16px; margin-bottom:14px; }
 
     /* CONDENSED FOR PAPER. The on-screen spacing is built for scrolling,
