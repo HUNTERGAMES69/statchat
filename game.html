@@ -2736,6 +2736,29 @@ function parseInput(raw, state){
   // meant and still means, so nothing stored already changes.
   const kickingRecovered = rest[rest.length - 1] === 'kr';
   if (kickingRecovered) rest.pop();
+  // THE COVER TACKLER, e.g. "cov:44". Kickoffs and punts only.
+  // -------------------------------------------------------------------
+  // A NAMED token, not a positional slot. Both kicking branches read
+  // their arguments by index -- 'pt' takes yards, returner and return
+  // yardage as rest[0..2] -- so adding a fourth position would shift
+  // every code already written and mean two grammars for one play.
+  //
+  // Pulled out of `rest` wherever it sits, before anything reads an
+  // index, for the same reason the fumble flags are: leaving it in
+  // would let it be misread as return yardage.
+  //
+  // WHY IT IS IN THE CODE AT ALL. The tackler was already being saved
+  // on roles.defense and credited correctly in the box score, but the
+  // log line never named him -- "punts 38, returned by #31 for 12" and
+  // nothing more -- while every scrimmage play has said "tackled by"
+  // since the beginning. parseInput builds the sentence from the code
+  // alone, so the only way for the sentence to carry him is for the
+  // code to.
+  let coverNum = null;
+  for (let i = rest.length - 1; i >= 0; i--){
+    const mc = /^cov:(.+)$/i.exec(String(rest[i]));
+    if (mc){ coverNum = mc[1]; rest.splice(i, 1); break; }
+  }
   // OWN-RECOVERY SPOT, e.g. "orec:34".
   // ---------------------------------------------------------------------
   // Where the offense recovered its own fumble, as an absolute
@@ -2778,6 +2801,12 @@ function parseInput(raw, state){
   const isTouchback = rest[rest.length - 1] === 'tb';
   if (isTouchback) rest.pop();
   const O = n => nameInOffense(off, n), D = n => nameInDefense(def, n), ST = n => nameInSpecialTeams(off, n);
+  // The cover tackler's phrase, in one place so the kickoff and punt
+  // branches cannot word it differently. ST, not D: on a kick the
+  // tackler belongs to the KICKING team, which is `off` here -- D would
+  // look him up on the returning side and find the wrong player or
+  // nobody. Same reasoning as the kicking-team recovery above.
+  const coverPhrase = () => (coverNum ? ', tackled by ' + ST(coverNum) : '');
   // "rush for 0" reads as though something is missing. Football says
   // "no gain", so the log should too. One helper for every yardage
   // phrase, so rush and pass can never drift apart in wording.
@@ -3162,6 +3191,7 @@ function parseInput(raw, state){
         // the explicit team name to the text, 19 Aug 2026.
         flipEligible: !kickingRecovers, flipTo: def, team: td ? recTeam : off, quarter: state.quarter };
     }
+    t += coverPhrase();
     let score = null;
     if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter };
@@ -3308,6 +3338,7 @@ function parseInput(raw, state){
     // scoped to that block and unreachable from here. Confirmed against
     // 'pt', which has exactly this same pair of independent
     // declarations, one per branch, rather than assumed.
+    t += coverPhrase();
     let score = null;
     if (td){ t += ' — TOUCHDOWN ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 6 }; }
     return { text: t, effect: score ? { score } : {}, flipEligible: true, flipTo: def, team: td ? def : off, quarter: state.quarter };
@@ -13180,7 +13211,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           roles.recovery = { team: fumRecTeamTok === 'k' ? off : def,
                               num: fumRecNum !== '?' ? fumRecNum : undefined };
         } else {
-          code = sel.kicker + 'ko ' + yds + (retTok ? ' ' + retTok + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
+          // cov: ahead of the td flag -- see the punt builder for why.
+          code = sel.kicker + 'ko ' + yds + (retTok ? ' ' + retTok + (retyds ? ' ' + retyds : ' 0') : '') +
+            (sel.cover ? ' cov:' + sel.cover : '') + (td ? ' td' : '');
         }
       }
     } else if (type === 'punt' && document.getElementById('pp_punt_fake') &&
@@ -13323,7 +13356,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           roles.recovery = { team: fumRecTeamTok === 'k' ? off : def,
                               num: fumRecNum !== '?' ? fumRecNum : undefined };
         } else {
-        code = sel.punter + 'pt ' + yds + (retTok ? ' ' + retTok + (retyds ? ' ' + retyds : ' 0') : '') + (td ? ' td' : '');
+        // cov: goes in ahead of the td flag, which parseInput pops from
+        // the END of the token list. A named token after it would be
+        // read as the flag's position and the touchdown would be lost.
+        code = sel.punter + 'pt ' + yds + (retTok ? ' ' + retTok + (retyds ? ' ' + retyds : ' 0') : '') +
+          (sel.cover ? ' cov:' + sel.cover : '') + (td ? ' td' : '');
         }
         }
       }
