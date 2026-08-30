@@ -2673,25 +2673,48 @@ function extractNameTag(rawName){
     // that calls this, so it is always current.
     const notLive = phase === 'HALFTIME' || phase === 'FINAL';
 
-    // THE GAME AS IT STOOD AT HALFTIME.
+    // WHAT HAS HAPPENED SINCE HALFTIME.
     // ---------------------------------------------------------------------
     // Total, pass and rush each carry a bracketed second figure from the
-    // second half onward: what that number was when the half ended.
+    // second half onward: that team's yardage SINCE THE BREAK.
     //
-    // Computed by running the SAME computeBoxScore over the first-half
-    // plays, not by snapshotting a running total. A snapshot would be wrong
-    // the moment a first-half play is corrected after halftime -- which is
+    // CHANGED 30 August 2026. The bracket used to hold the figure as it
+    // stood AT halftime. Same information either way -- one is the other
+    // subtracted from the total -- but mid-third-quarter the question a
+    // crew asks out loud is "what have they done since the break", and
+    // that was the number nobody had without doing arithmetic on air.
+    //
+    // Computed by running the SAME computeBoxScore over the second-half
+    // plays, not by subtracting one total from another and not by
+    // snapshotting. Subtraction would be right for yardage and quietly
+    // wrong for anything else that ever joins these tiles (a long, a
+    // percentage, a completion rate), and a snapshot would be wrong the
+    // moment a first-half play is corrected after halftime -- which is
     // ordinary, since corrections are entered when somebody notices, not
     // when the mistake happened.
     //
-    // Quarters 1 and 2, always. Overtime accrues into the game total and
-    // leaves the bracket alone: it is a fixed reference point, and a
-    // reference that moves is not one.
-    const firstHalfPlays = plays.filter(p => (p.quarter || 0) <= 2);
-    const halfBox = computeBoxScore(firstHalfPlays);
-    // FROM THE FIRST SECOND-HALF PLAY, not from the quarter changing. At
-    // the Q3 kickoff the two figures are identical -- "284 [284]" -- which
-    // reads as a bug rather than as information.
+    // QUARTERS 3 AND 4 ONLY. OVERTIME IS NOT THE SECOND HALF.
+    // ---------------------------------------------------------------------
+    // Andy's call, 30 Aug 2026, and it is the football reading: overtime
+    // is its own period, not part of the second half, so yardage gained
+    // there does not belong in a tile labelled as the second half.
+    //
+    // THE CONSEQUENCE, stated because it is not obvious. In regulation,
+    // game total minus bracket is the first half. Once overtime starts
+    // that stops being true -- the remainder is then the first half PLUS
+    // the overtime, because OT still accrues to the game total and no
+    // longer appears in the bracket. Nothing on screen is wrong; the
+    // subtraction simply stops meaning what it meant, and anybody adding
+    // a check on these two numbers needs to know that before writing it.
+    const secondHalfPlays = plays.filter(p => {
+      const q = p.quarter || 0;
+      return q >= 3 && q <= 4;
+    });
+    const secondHalfBox = computeBoxScore(secondHalfPlays);
+    // FROM THE FIRST SECOND-HALF PLAY, not from the quarter changing.
+    // Unchanged, and it still earns its place: before the break there is
+    // no second half to report, and "284 []" or "284 [0]" on a first-half
+    // screen states a fact about a period that has not started.
     const showHalf = plays.some(p => (p.quarter || 0) >= 3);
     // Needed for the possession marker on each team's header. This
     // function did not previously care who had the ball.
@@ -2751,26 +2774,29 @@ function extractNameTag(rawName){
       // differently at 12 of 18 than at 12 of 34" -- and that argument
       // still holds, which is why comp and att remain in the per-category
       // tables further down this page. What changed is what these three
-      // tiles are FOR: a game total beside its halftime figure. Two pairs
-      // of numbers in one tile is one pair too many at 34px.
+      // tiles are FOR: a game total beside its second-half figure. Two
+      // pairs of numbers in one tile is one pair too many at 34px.
       const yardsOf = (bucket) =>
         Object.keys(bucket).reduce((t, n) => t + (bucket[n].yds || 0), 0);
-      const hs = halfBox[teamKey];
-      const halfPass  = yardsOf(hs.passing);
-      const halfRush  = yardsOf(hs.rushing);
-      const halfTotal = halfPass + halfRush;
+      // Named for what they now hold. `halfBox`/`halfTotal` meant the
+      // FIRST half until today, and a name that quietly changes meaning is
+      // how the next reader gets it backwards.
+      const hs = secondHalfBox[teamKey];
+      const secondHalfPass  = yardsOf(hs.passing);
+      const secondHalfRush  = yardsOf(hs.rushing);
+      const secondHalfTotal = secondHalfPass + secondHalfRush;
       // Interpolated as HTML, so it is built from numbers this function
       // computed rather than from anything a scorer typed.
-      const withHalf = (val, half) => showHalf
-        ? val + '<span class="stat-tile-half">[' + half + ']</span>'
+      const withSecondHalf = (val, sh) => showHalf
+        ? val + '<span class="stat-tile-half">[' + sh + ']</span>'
         : String(val);
 
       const topSec = (liveState.possessionTime || {})[teamKey] || 0;
       const tiles = [
         [possessions[teamKey] || 0, 'Possessions'],
-        [withHalf(totalYds, halfTotal), 'Total Yards'],
-        [withHalf(passYds, halfPass), 'Pass Yards'],
-        [withHalf(rushYds, halfRush), 'Rush Yards'],
+        [withSecondHalf(totalYds, secondHalfTotal), 'Total Yards'],
+        [withSecondHalf(passYds, secondHalfPass), 'Pass Yards'],
+        [withSecondHalf(rushYds, secondHalfRush), 'Rush Yards'],
         [playsFor(teamKey), 'Total Plays'],
         [turnovers[teamKey] || 0, 'Turnovers'],
         [pen.count + '-' + pen.yds, 'Penalties'],
