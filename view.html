@@ -2312,8 +2312,10 @@ function extractNameTag(rawName){
   function computeDriveSummary(startIdx, endIdx){
     const driveTeam = computeState(plays.slice(0, startIdx + 1)).possession;
     if (driveTeam !== 'teamA' && driveTeam !== 'teamB') return null;
-    const stateBefore = computeState(plays.slice(0, startIdx));
-    const stateAtEnd = computeState(plays.slice(0, endIdx));
+    // stateBefore / stateAtEnd removed 30 Aug 2026. Their ONLY consumer
+    // was the possession-time delta, which now lives in engine.js as
+    // driveTop() -- leaving two full computeState() passes here would be
+    // dead work that still looked load-bearing.
     const segment = plays.slice(startIdx, endIdx);
     const scrimmageTypes = ['rush','pass','incomplete','sack','int','fumble'];
     let rushes = 0, rushYds = 0, passes = 0, passYds = 0, totalPlays = 0, totalYds = 0, scoringPlayText = null;
@@ -2437,7 +2439,13 @@ function extractNameTag(rawName){
         }
       }
     });
-    const top = stateAtEnd.possessionTime[driveTeam] - stateBefore.possessionTime[driveTeam];
+    // ONE IMPLEMENTATION, in engine.js, since 30 Aug 2026 -- view2.html
+    // needs the same number for its scoring rows. driveTeam is passed
+    // explicitly rather than letting the helper re-derive it: this
+    // function already computed it from the same slice, and handing it
+    // over means the two cannot disagree about whose drive this is even
+    // if the derivation ever changes on one side.
+    const top = driveTop(plays, startIdx, endIdx, driveTeam);
     let lastPlayText = null;
     if (!scoringPlayText){
       for (let i = segment.length - 1; i >= 0; i--){

@@ -94,6 +94,45 @@ function formatDuration(sec){
   return m + ':' + String(s % 60).padStart(2, '0');
 }
 
+// HOW LONG ONE DRIVE TOOK.
+// ------------------------
+// Lifted out of view.html's computeDriveSummary on 30 August 2026, when
+// view2.html needed the same number for its scoring rows. Same reasoning
+// as formatDuration directly above and as the team-defense fix on 29
+// August: the moment a second page wants a rule, the rule moves here,
+// because a second copy does not announce itself until the two disagree
+// and by then it has been wrong for a while.
+//
+// possessionTime is cumulative per team across the whole game, so a
+// single drive is the DELTA either side of it -- state at the end minus
+// state before it began. Deriving it any other way (summing clock events
+// inside the slice, say) would have to re-implement the pending-start
+// bookkeeping and the transition handling in computeState, which is
+// where every clock rule in this app already lives.
+//
+// `team` is optional and defaults to whoever had the ball at startIdx,
+// derived exactly as computeDriveSummary derives it -- the state AFTER
+// the first play of the drive, not before it, because a drive that opens
+// on a change of possession has not flipped yet at startIdx - 1.
+//
+// Returns SECONDS, unformatted. Callers pick their own presentation;
+// formatDuration is right there for the usual one.
+function driveTop(playsList, startIdx, endIdx, team){
+  const list = playsList || [];
+  const driveTeam = team ||
+    computeState(list.slice(0, startIdx + 1)).possession;
+  if (driveTeam !== 'teamA' && driveTeam !== 'teamB') return 0;
+  const before = computeState(list.slice(0, startIdx));
+  const atEnd = computeState(list.slice(0, endIdx));
+  // Math.max(0, ...) mirrors computeState's own clamp on the same
+  // quantity. It should be unreachable -- cumulative time cannot fall --
+  // but a negative here would print as "-0:14" on air, and the clamp in
+  // computeState is documented as swallowing bad entries rather than
+  // failing loudly, so the same protection belongs on the way out.
+  return Math.max(0, (atEnd.possessionTime[driveTeam] || 0) -
+                     (before.possessionTime[driveTeam] || 0));
+}
+
 // FIELD POSITION -> the way a coach says it.
 // -----------------------------------------
 // fieldPos is possession-relative: 0 is the offence's own goal line, 100

@@ -176,7 +176,19 @@
       }
     }
     if (!count) return null;
-    return { count: count, yds: yds, long: long, longKind: longKind };
+    // TIME OF POSSESSION, from engine.js's driveTop -- the SAME rule
+    // view.html's drive tiles read, moved there on 30 Aug 2026 rather
+    // than restated here. endIdx is exclusive, matching the slice
+    // convention computeDriveSummary uses, so the scoring play itself
+    // is inside the drive it ended.
+    //
+    // The driving team is left to the helper. `from` can be the
+    // fallback (prevScoreIdx + 1) rather than a real drive start when
+    // findDriveStarts returns nothing, and the helper derives the team
+    // from the state after that play either way -- which is the same
+    // derivation, applied to the same index, as the tiles above use.
+    const top = driveTop(plays, from, scoreIdx + 1);
+    return { count: count, yds: yds, long: long, longKind: longKind, top: top };
   }
 
   function render(){
@@ -212,6 +224,12 @@
       const tiles = d
         ? [['Drive', d.count + (d.count === 1 ? ' play' : ' plays')],
            ['Yds', d.yds],
+           // AN EM DASH AT ZERO, not "0:00". A drive cannot take no
+           // time, so zero here means the clock was never entered for
+           // it -- and 0:00 states a duration where the truth is that
+           // there isn't one. Same reading the Long tile beside it
+           // already uses for the same reason.
+           ['TOP', d.top ? formatDuration(d.top) : '—'],
            ['Long', d.long ? (d.long + ' ' + d.longKind) : '—']]
           .map(x => '<div class="mini"><span class="mini-l">' + x[0] +
                     '</span><span class="mini-v">' + x[1] + '</span></div>').join('')
