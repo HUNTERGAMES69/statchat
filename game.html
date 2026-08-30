@@ -2074,9 +2074,7 @@ function clockHelpFor(val){
         'The last two digits are always the seconds, so a minute is "100", not "60".';
     }
     if (mins * 60 + secs > quarterLengthSec){
-      return '"' + val + '" is longer than a quarter. A quarter in this game is ' + qs +
-        ', so the clock never reads more than that. If the game uses a different quarter ' +
-        'length, change it in the game settings rather than entering a time past it.';
+      return '"' + val + '" is longer than a quarter. A quarter in this game is ' + qs + '.';
     }
   }
   return '"' + val + '" is not a clock value. Use M:SS (9:47) or just the digits (947) — ' +
@@ -2291,13 +2289,11 @@ function reportClockAudit(before){
   if (after.backwards.count > b0){
     const secs = after.backwards.seconds - ((before && before.backwards) ? before.backwards.seconds : 0);
     msgs.push('That clock runs backwards against the possession it closes, so ' +
-      fmtDuration(secs) + ' was not counted. The possession will read short. ' +
-      'Undo and re-enter it if the time was wrong.');
+      fmtDuration(secs) + ' was not counted. The possession will read short.');
   }
   const gained = after.unattributed - ((before && before.unattributed) || 0);
   if (gained >= 60){
-    msgs.push(fmtDuration(gained) + ' of game time is not attributed to either team. ' +
-      'That usually means a clock landed in the wrong quarter or against the wrong side.');
+    msgs.push(fmtDuration(gained) + ' of game time is not attributed to either team.');
   }
   if (msgs.length) showMsg('gameMsg', msgs.join(' '), 'error');
 }
@@ -2364,12 +2360,23 @@ function confirmClockAdvances(absSec, clockVal){
     const fmt = (c, fallback) => c ? c.text + ' (Q' + c.q + ')' : fallback;
     const gap = Math.round(lastAbsSec - absSec);
     const gapStr = Math.floor(gap / 60) + ':' + String(gap % 60).padStart(2, '0');
+    // FACTS ONLY. Andy, 30 Aug 2026: "The people logging these games are
+    // scorers, they know all the reasons. The message needs to just say
+    // the clock entry is different and by how much. The scorer will
+    // decide why and what to do about it."
+    //
+    // So the guesses go. An earlier draft ended "If it belongs in a
+    // different quarter, that is usually the cause", and "the game clock
+    // counts down" explained something the reader has known longer than
+    // the app has existed. Both were the app talking down to someone who
+    // knows more about the situation than it does.
+    //
+    // What survives is the three numbers and what the buttons do.
     return confirm(
       'That clock goes backwards.\n\n' +
-      'You entered:  ' + fmt(shown, String(clockVal)) + '\n' +
-      'Last recorded: ' + fmt(prev, '—') + '\n\n' +
-      'The game clock counts down, so this is ' + gapStr + ' EARLIER than the last ' +
-      'time recorded. If it belongs in a different quarter, that is usually the cause.\n\n' +
+      'You entered:    ' + fmt(shown, String(clockVal)) + '\n' +
+      'Last recorded:  ' + fmt(prev, '—') + '\n' +
+      'Difference:     ' + gapStr + ' earlier\n\n' +
       'OK saves it as entered. Cancel goes back so you can change it.');
   }
   return true;
