@@ -2319,7 +2319,37 @@ function renderLastClockHint(elId){
 function confirmClockAdvances(absSec, clockVal){
   const lastAbsSec = getLastClockAbsSec();
   if (lastAbsSec !== null && absSec < lastAbsSec){
-    return confirm('This clock value (' + clockVal + ') is earlier than the last time recorded for this game. Click OK to save it anyway, or Cancel to go back and fix it -- nothing will be saved if you cancel.');
+    // THE MESSAGE HAS TO CARRY THE FACT THE DECISION NEEDS.
+    // ------------------------------------------------------------------
+    // Reported by Andy, 30 Aug 2026. The old wording read:
+    //
+    //   "This clock value (1115) is earlier than the last time recorded
+    //    for this game. Click OK to save it anyway, or Cancel to go back
+    //    and fix it -- nothing will be saved if you cancel."
+    //
+    // Three faults. It echoed the RAW KEYSTROKES back -- "1115" is what
+    // the scorer typed, not a clock, and seeing it as a number makes a
+    // correct entry look like a typo. It never said what the last time
+    // WAS, which is the one fact needed to judge whether this entry is
+    // wrong or the previous one was. And it spent its last clause
+    // explaining the Cancel button.
+    //
+    // Both times are now shown, normalized and with their quarters,
+    // because the same 11:15 means a different moment in Q1 and Q3 --
+    // and a clock entered against the wrong quarter is the most common
+    // way this fires on a value that is otherwise right.
+    const shown = absSecToClockStr(absSec);
+    const prev = absSecToClockStr(lastAbsSec);
+    const fmt = (c, fallback) => c ? c.text + ' (Q' + c.q + ')' : fallback;
+    const gap = Math.round(lastAbsSec - absSec);
+    const gapStr = Math.floor(gap / 60) + ':' + String(gap % 60).padStart(2, '0');
+    return confirm(
+      'That clock goes backwards.\n\n' +
+      'You entered:  ' + fmt(shown, String(clockVal)) + '\n' +
+      'Last recorded: ' + fmt(prev, '—') + '\n\n' +
+      'The game clock counts down, so this is ' + gapStr + ' EARLIER than the last ' +
+      'time recorded. If it belongs in a different quarter, that is usually the cause.\n\n' +
+      'OK saves it as entered. Cancel goes back so you can change it.');
   }
   return true;
 }
