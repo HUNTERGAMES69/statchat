@@ -115,6 +115,24 @@ function formatDuration(sec){
 // the first play of the drive, not before it, because a drive that opens
 // on a change of possession has not flipped yet at startIdx - 1.
 //
+// endIdx MUST INCLUDE THE EVENT THAT CLOSES THE POSSESSION, and that is
+// the one thing about this helper that is easy to get wrong.
+// possessionTime does not accrue play by play: computeState holds a
+// PENDING start for the team with the ball and pays it out only when a
+// closing clock event is replayed -- a 'transition' (a punt, a kickoff,
+// an interception, a fumble recovery) or an 'end'. A drive that finishes
+// in a score is closed by the ENSUING KICKOFF, several plays past the
+// scoring play, so an endIdx set at the score returns 0 rather than the
+// drive's time. The next drive's start index is the safe answer, and is
+// what computeDriveSummary passes. Cost paid live on view2.html,
+// 30 August 2026.
+//
+// A drive still in progress genuinely has no total yet -- its start is
+// still pending -- and correctly returns 0. view.html's current-drive
+// tile shows SOP (the clock the possession began at) in that state
+// instead of a duration; anything else reading this should decide what
+// it wants to say rather than printing 0:00.
+//
 // Returns SECONDS, unformatted. Callers pick their own presentation;
 // formatDuration is right there for the usual one.
 function driveTop(playsList, startIdx, endIdx, team){
@@ -601,6 +619,24 @@ function scoringSummary(playsList){
     if (!sc || !sc.team || !sc.points) continue;
     running[sc.team] += sc.points;
     out.push({
+      // WHICH PLAY THIS ROW CAME FROM. Added 30 August 2026.
+      // ----------------------------------------------------------------
+      // A try is FOLDED into the touchdown above it by the branch a few
+      // lines up, so this function emits one row per touchdown-plus-try
+      // while the play log carries `effect.score` on BOTH. Any caller
+      // that wants the play behind a row and rebuilds its own list of
+      // scoring indexes therefore drifts out of step the first time a
+      // PAT is converted, and pairs row N with someone else's play.
+      //
+      // view2.html did exactly that, and its Drive/Yds/Long tiles have
+      // been describing the wrong drive from the first converted try
+      // since the page was written -- unnoticed because nothing links to
+      // it yet. Handing the index out here is the only way a caller can
+      // be right without restating the folding rule.
+      //
+      // Purely additive: no existing consumer reads this field, and the
+      // rows are otherwise unchanged.
+      idx: i,
       quarter: p.quarter || walkQuarter,
       team: sc.team,
       points: sc.points,

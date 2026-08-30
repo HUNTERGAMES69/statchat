@@ -187,7 +187,28 @@
     // findDriveStarts returns nothing, and the helper derives the team
     // from the state after that play either way -- which is the same
     // derivation, applied to the same index, as the tiles above use.
-    const top = driveTop(plays, from, scoreIdx + 1);
+    // ENDS AT THE NEXT DRIVE START, NOT AT THE SCORING PLAY.
+    // ------------------------------------------------------------------
+    // Reported live, 30 Aug 2026: every TOP read as an em dash.
+    // possessionTime does not accrue play by play -- computeState holds
+    // a PENDING start for the team with the ball and only pays it out
+    // when a closing clock event is replayed. A drive that ends in a
+    // score is closed by the ensuing kickoff's `transition`, which sits
+    // AFTER the scoring play, so slicing at scoreIdx + 1 asked for the
+    // delta before the payout and got zero every time.
+    //
+    // view.html never hit this because computeDriveSummary's endIdx is
+    // already the next drive's start index, which is past the kickoff.
+    // Measured, not reasoned: same drive, endIdx = scoreIdx + 1 gives
+    // 0s and endIdx = next start gives 214s.
+    //
+    // The plays/yards counters above deliberately still stop at the
+    // score -- the try and the kickoff are not part of the drive's
+    // offense. Only the CLOCK needs the wider window, because that is
+    // where the possession is actually closed out.
+    let until = plays.length;
+    for (const s of starts){ if (s > scoreIdx){ until = s; break; } }
+    const top = driveTop(plays, from, until);
     return { count: count, yds: yds, long: long, longKind: longKind, top: top };
   }
 
@@ -210,9 +231,21 @@
       return;
     }
 
-    // index of each scoring play, so the drive can be found
-    const scoreIdx = [];
-    plays.forEach((p, i) => { if (p.effect && p.effect.score) scoreIdx.push(i); });
+    // THE ROW CARRIES ITS OWN PLAY INDEX, since 30 August 2026.
+    // ------------------------------------------------------------------
+    // This used to walk the log for every play with effect.score and pair
+    // rows[n] with that list's nth entry. scoringSummary FOLDS a try into
+    // the touchdown above it, so it returns one row per touchdown-plus-
+    // try while the log carries a score on both -- and from the first
+    // converted PAT onward, row N was paired with someone else's play.
+    // Measured: a three-touchdown log paired row 1 (Sterlington's score)
+    // with Ouachita's PAT, and row 2 with Sterlington's touchdown.
+    //
+    // Every drive tile on this page reads from that index, so all of
+    // them -- plays, yards, long, and now TOP -- were describing the
+    // wrong drive. Nothing links to this page yet, which is the only
+    // reason it was never reported.
+    const scoreIdx = rows.map(r => r.idx);
 
     list.innerHTML = rows.map((r, n) => {
       const t = TEAMS[r.team] || {};
