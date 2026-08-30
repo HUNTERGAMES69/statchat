@@ -6250,7 +6250,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   document.getElementById('clockPromptInput').addEventListener('keydown', e => { if (e.key === 'Enter') resolveClockPrompt(false); });
   document.getElementById('confirmClockInput').addEventListener('input', e => {
     const w = document.getElementById('confirmClockWarn');
-    if (w) w.style.display = e.target.value.trim() ? 'none' : 'block';
+    if (!w) return;
+    // THE TEXT IS RESET, NOT JUST HIDDEN. This only toggled display, so
+    // after a prefill the element kept the prefill sentence -- and
+    // clearing the box brought it back: "Prefilled: 12:00 ... Leave it
+    // unless the board showed something different", over an empty field
+    // with nothing to leave.
+    //
+    // Once the scorer types, the value is theirs and the only thing worth
+    // saying is what happens if they leave it empty. Same treatment the
+    // guided flow already got; this listener was missed.
+    w.textContent = "Optional — but with no clock this possession's time won't be counted.";
+    w.style.display = e.target.value.trim() ? 'none' : 'block';
   });
 
   function startGuided(quarterNum, targetPhase){
