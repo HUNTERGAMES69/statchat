@@ -7475,6 +7475,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // play panel's own 'ko'/'km' branches earlier the same night.
         // Harmless to set alongside the touchback/oob/return cases,
         // which already flip and so were already correct without it.
+        // THE COVER TACKLER, IN THE SENTENCE TOO.
+        // ----------------------------------------------------------------
+        // The guided flow builds its own text rather than going through
+        // parseInput, so the `cov:` token that made the kickoff and punt
+        // PANELS say "tackled by" does not reach it. Without this the
+        // guided kickoff would credit the tackle correctly and never
+        // mention it -- which is worse than the original gap, because the
+        // log line is now the thing a scorer checks to confirm the credit
+        // landed. A false negative there sends someone hunting a bug that
+        // is not present.
+        //
+        // GUARDED IDENTICALLY to the roles.defense assignment below, not
+        // merely similarly. If the two conditions ever drift, the sentence
+        // and the stat line start disagreeing about the same play, and
+        // there is no way to tell from the log which one is right.
+        const grCover = (!muffed && !onside && guided.coverNum && guided.coverNum())
+          ? guided.coverNum() : null;
+        if (grCover){
+          text += ', tackled by ' + nameInSpecialTeams(guided.kickingTeam, grCover);
+        }
         if (td){ text += ' — TOUCHDOWN'; effect.score = { team: takingOver, points: 6 }; effect.endsDrive = true; }
         pushAndPersist({ id: nextId++, text, effect, team: takingOver, quarter: guided.quarter,
           roles: Object.assign({ playType: 'kickoff_return' },
