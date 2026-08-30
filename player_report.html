@@ -329,10 +329,11 @@
 
   // engine.js states at the top of the file what the host page must
   // provide: TEAMS, plays, startingPossession, quarterLengthSec,
-  // TIMEOUTS_PER_HALF, isAdminMarker and otherTeam. They differ
-  // legitimately between pages -- game.html builds TEAMS from a live
-  // roster, the reports from a saved game -- so they live here rather
-  // than in the engine.
+  // TIMEOUTS_PER_HALF and otherTeam. They differ legitimately between
+  // pages -- game.html builds TEAMS from a live roster, the reports from
+  // a saved game -- so they live here rather than in the engine.
+  // isAdminMarker was on that list and did NOT differ legitimately: it
+  // moved into engine.js on 30 Aug 2026.
   let plays = [], startingPossession = 'teamA', quarterLengthSec = 720;
   const TEAMS = {};
   let ourBranding = {};
@@ -341,14 +342,11 @@
   const TIMEOUTS_PER_HALF = 3;
   const TIMEOUTS_PER_OT = 1;
 
-  // Clock markers, quarter dividers and manual possession flips are
-  // announcements, not plays. A reset is a real event and is excluded.
-  function isAdminMarker(p){
-    if (!p) return true;
-    const e = p.effect || {};
-    if (e.isReset) return false;
-    return !!(e.clockEvent || e.setQuarter || e.forcePossession || p.isDivider);
-  }
+  // isAdminMarker lives in engine.js, loaded above. This page's own copy
+  // was missed in the 30 Aug 2026 sweep that consolidated the other nine;
+  // it predated the 19 Aug `e.timeout` fix, so a timeout counted as a
+  // real play here. That affects any per-player rate this page derives
+  // from a play count.
 
   // Every finalized game in the selected season, already reduced to what
   // this page needs: one entry per game, holding that game's box score

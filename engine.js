@@ -1641,16 +1641,19 @@ if (typeof globalThis !== 'undefined' && globalThis.RECEIVE_POS === undefined){
 }
 
 if (typeof module !== 'undefined' && module.exports) {
+  // POINTS AT THE CANONICAL FUNCTION. It used to re-type the rule here,
+  // which is how the file that owns "one rule, one implementation" came
+  // to hold two implementations of it. The retyped copy never got
+  // `p.is_divider`, and a top-level `function` declaration in a CommonJS
+  // module is module-scoped -- it is NOT on globalThis -- so the guard
+  // below always fired and every Node consumer (the harness, the feed)
+  // silently got the stale rule. Measured 30 Aug 2026: the copy above
+  // returns true for {is_divider:true}, the copy here returned false.
+  //
+  // Assign, never restate. The guard stays only so a host that has
+  // already installed its own global is not clobbered.
   if (typeof globalThis.isAdminMarker !== 'function') {
-    globalThis.isAdminMarker = function isAdminMarker(p){
-      if (!p) return true;
-      const e = p.effect || {};
-      if (e.isReset) return false;
-      // e.timeout added 19 Aug 2026 -- see game.html for the full
-      // reasoning. Kept in sync with the six HTML copies by hand;
-      // TODO.md already tracks this duplication as an ongoing cost.
-      return !!(e.clockEvent || e.setQuarter || e.forcePossession || e.timeout || p.isDivider);
-    };
+    globalThis.isAdminMarker = isAdminMarker;
   }
   if (typeof globalThis.otherTeam !== 'function') {
     globalThis.otherTeam = function otherTeam(t){

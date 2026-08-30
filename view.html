@@ -113,7 +113,11 @@
      hidden #scoringCard is the real last child, so .card.compact's
      16px bottom margin was still being applied to a card that has
      nothing beneath it. */
-  .series-card { margin-top:14px; padding-top:10px; padding-bottom:0;
+  /* margin-top 14px -> 8px, 30 Aug 2026. Six pixels, which is what the
+     touchdown-plus-PAT case was overflowing by. See
+     adjustDriveCardVisibility: the clamp there is the actual fix, this
+     just keeps the common case from clamping at all. */
+  .series-card { margin-top:8px; padding-top:10px; padding-bottom:0;
                  margin-bottom:0; border-top:1px solid var(--sc-rule); }
   .series-tile-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   /* height, not min-height: min-height is a floor a long name can still
@@ -2071,33 +2075,82 @@ function extractNameTag(rawName){
     if (!isResultsMode) adjustDriveCardVisibility();
   }
 
-  // Measures the actual rendered content against the quadrant's real
-  // height and progressively frees up space for Current Drive if
-  // Previous Drive would otherwise force scrolling -- first dropping
-  // just its tile row, then the whole card if that's still not enough.
-  // Always starts from fully visible so it correctly un-hides again
-  // once there's more room (e.g. after Undo shortens the current drive).
+  // THE SERIES CARD IS NO LONGER AN EVICTION CANDIDATE. 30 Aug 2026.
+  // -------------------------------------------------------------------
+  // Andy's rule, reported from a live screen: the tiles are part of the
+  // current drive readout and must live and die with it -- everything in
+  // this quad changes and resets together. Hiding them mid-drive makes
+  // the quad look broken, because the data they describe is still on
+  // screen right above them.
+  //
+  // WHAT IT COST TO KEEP THEM: 5px. A touchdown headline wraps to two
+  // lines at 36px, and the PAT sub-line under it adds 36px more, which
+  // took quadTR from 524px of content to 529px in a 524px box. The old
+  // rule then dropped the whole 236px tile card to recover five
+  // pixels. Measured, not guessed -- the reported case reproduces at
+  // exactly 529 vs 524.
+  //
+  // So the element that yields is now the one whose height actually
+  // VARIES. The tile card is a fixed 236px by construction; the play
+  // text is anything from one line to three. It yields by clamping,
+  // which costs the bottom few pixels of the last line in the rare
+  // case, instead of by removing four facts from the screen in the
+  // common one.
+  //
+  // The .series-card top margin also came down 14px -> 8px, which is
+  // enough on its own that the reported touchdown-plus-PAT case now
+  // fits with a pixel to spare and never clamps at all. That trim is
+  // NOT the fix -- a longer pair of names still wraps to three lines
+  // and overflows again. The clamp is the fix; the trim just keeps the
+  // common case pixel-clean.
   function adjustDriveCardVisibility(){
     const quad = document.getElementById('quadTR');
     const seriesCard = document.getElementById('seriesCard');
-    if (!quad || !seriesCard) return;
+    const driveLog = document.getElementById('driveLogScroll');
+    if (!quad || !seriesCard || !driveLog) return;
 
-    // Always start fully visible, so it un-hides again once there is room
-    // -- after an Undo shortens the current drive, or when a two-line
-    // play text becomes one.
+    // Always start from unclamped and fully visible, so the card
+    // recovers its full height once there is room again -- after an Undo
+    // shortens the current drive, or when a two-line play text becomes
+    // one. Without this reset the clamp would ratchet down and never
+    // come back up.
+    // Always start from every line shown and the card visible, so the
+    // display recovers in full once there is room again -- after an Undo
+    // shortens the current drive, or when a two-line play text becomes
+    // one. Without this reset the degrade would ratchet and never come
+    // back up.
     seriesCard.classList.remove('hidden');
+    const kids = Array.prototype.slice.call(driveLog.children);
+    kids.forEach(k => { k.style.display = ''; });
     if (quad.scrollHeight <= quad.clientHeight) return;
 
-    // ONE STAGE NOW, WHERE PREVIOUS DRIVE HAD TWO. That card degraded by
-    // dropping its tile row first and the whole card second, because its
-    // tile row was a summary a reader could lose without losing the
-    // card's point (the outcome line). This card IS its tiles: dropping
-    // a row would leave a heading over a gap, and dropping ONE of the
-    // two rows would mean choosing which two of the four facts survive
-    // -- a choice nothing in the layout is qualified to make. So it goes
-    // whole, and the current drive keeps the quad, which is the priority
-    // it always had.
-    seriesCard.classList.add('hidden');
+    // WHOLE LINES, DROPPED FROM THE BOTTOM.
+    // -----------------------------------------------------------------
+    // driveLogScroll's children are discrete lines, emitted in this
+    // order: the play text, the try result, the down and distance, then
+    // any timeouts. Reverse order is already ascending order of
+    // importance, so dropping from the end sheds the least useful line
+    // first. Re-measured after each one, so it removes the minimum
+    // number rather than a guessed block.
+    //
+    // NOT a max-height clamp, which was the first attempt and is worth
+    // recording: overflow:hidden establishes a new block formatting
+    // context, which STOPS the play text's 16px top margin collapsing
+    // out through driveLogScroll. The element grows 16px the instant
+    // the clamp lands, so a cut measured beforehand falls 16px high and
+    // slices a line through the middle -- and the 16px it adds is
+    // overflow that then has to be paid for out of the same budget.
+    // Dropping children needs no overflow property, so none of that
+    // applies.
+    //
+    // `i >= 1` deliberately: the play text is the first child and is
+    // never the thing that goes. If even it does not fit, the quad
+    // clips at its own edge, which still leaves the play a spectator is
+    // reading on screen.
+    for (let i = kids.length - 1; i >= 1; i--){
+      if (quad.scrollHeight <= quad.clientHeight) break;
+      kids[i].style.display = 'none';
+    }
   }
 
   // HOISTED TO TOP LEVEL, 19 Aug 2026 -- this used to be a private
