@@ -82,7 +82,78 @@
      one still reads as belonging to the play above it rather than as a
      new play. */
   .play-clause { display:block; padding-left:0.9em; }
-    .drive-card.drive-previous { margin-top:30px; padding-top:14px; padding-bottom:16px; border-top:1px solid var(--sc-rule); }
+  /* SERIES TILES — replaced the Previous Drive card, 30 Aug 2026.
+     ------------------------------------------------------------------
+     Four facts about the CURRENT series, not a summary of a finished
+     one. Previous Drive answered "what just ended"; a crew on air is
+     asking "what has this series done", and the four answers below are
+     the ones they asked for out loud during a live game.
+
+     HEIGHT IS FIXED AT 110px PER TILE and never derived from content.
+     The whole point is that nothing moves as the numbers change: a name
+     arriving in a tile that was empty a play ago must not push the grid.
+     Names therefore TRUNCATE rather than wrap -- a wrapped name is the
+     one thing that would break the height, so overflow is clipped and
+     ellipsised at the name, which is the only variable-width thing here.
+
+     THE NUMBER AND THE NAME SHARE A BASELINE, 40px against 21px, on one
+     line. Stacked, the right half of every tile sat empty. align-items:
+     baseline (not center) is what makes the two sizes read as one line
+     rather than two things that happen to be adjacent. */
+  /* CHROME TRIMMED TO WHAT THE QUAD CAN AFFORD, and measured rather than
+     eyeballed. quadTR is 524px of usable height at 1920x1080. The
+     Current Drive card above runs 188px on a one-line play text and
+     267px once the text wraps and a timeout sub-line lands under it --
+     so at Previous Drive's old spacing (26px margin, 14px padding, 16px
+     bottom margin) the series card overflowed the quad and
+     adjustDriveCardVisibility hid it on every play whose text wrapped.
+     Correct, verified, and never on screen.
+
+     margin-bottom:0 because :last-child does not match here -- the
+     hidden #scoringCard is the real last child, so .card.compact's
+     16px bottom margin was still being applied to a card that has
+     nothing beneath it. */
+  .series-card { margin-top:14px; padding-top:10px; padding-bottom:0;
+                 margin-bottom:0; border-top:1px solid var(--sc-rule); }
+  .series-tile-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  /* height, not min-height: min-height is a floor a long name can still
+     push past, which is the jump this tile exists to prevent. */
+  /* TOP-ALIGNED, NOT CENTERED. Centered was the first version and it put
+     the four labels on three different lines: Penalties carries two rows
+     and centers a taller block, so its label sat 13px above Sacks' on the
+     same row of the grid. The labels are what the eye scans across, so
+     they align and the slack falls to the bottom of the shorter tiles. */
+  .series-tile { height:110px; box-sizing:border-box; background:#f5f7fa;
+                 border-radius:8px; padding:10px 12px; overflow:hidden;
+                 display:flex; flex-direction:column; justify-content:flex-start; }
+  .series-tile-label { font-size:15px; font-weight:700; color:#777;
+                       text-transform:uppercase; letter-spacing:0.03em;
+                       margin-bottom:6px; }
+  .series-line { display:flex; align-items:baseline; gap:10px; min-width:0; }
+  .series-num { flex:0 0 auto; font-size:40px; font-weight:700; line-height:1;
+                color:var(--sc-navy, #1a1a2e); font-variant-numeric:tabular-nums; }
+  /* min-width:0 is load-bearing. A flex item defaults to min-width:auto,
+     which is its CONTENT width -- so text-overflow:ellipsis never fires
+     and a long name widens the row instead of truncating in it. Same
+     class of fault as the min-height:0 notes on the team tiles above. */
+  .series-name { flex:1 1 auto; min-width:0; font-size:21px; font-weight:600;
+                 line-height:1.1; color:#5b6068;
+                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .series-empty { font-size:21px; font-weight:600; line-height:1.1; color:#8a94a0; }
+  /* PENALTIES CARRIES TWO ROWS, one per team, so its type steps down to
+     fit two baselines inside the same 110px every other tile uses. Both
+     teams are listed because 2-15 against your own defense and against
+     theirs are different facts and a crew reads them differently -- and
+     because two rows keep this tile populated at 0, which takes the
+     first-play-of-a-series state from four empty tiles down to two. */
+  /* Two 29px baselines, a label and the tile padding do not fit 110px at
+     the one-row tile's spacing -- measured, it clipped by 4px, which is
+     the bottom of the second team's row. The label margin and the gap
+     between the rows absorb it; the type sizes are left alone. */
+  .series-tile.two-row .series-num { font-size:29px; }
+  .series-tile.two-row .series-name { font-size:17px; }
+  .series-tile.two-row .series-tile-label { margin-bottom:4px; }
+  .series-tile.two-row .series-line + .series-line { margin-top:5px; }
   .team-summary-row { display:flex; gap:28px; flex:1; min-height:0; }
   /* min-height:0 as well as min-width:0. A flex child defaults to a minimum
    of its CONTENT size in the flex direction, so this column refused to be
@@ -263,8 +334,14 @@ body{ background:var(--v-ink) !important; color:var(--v-paper) !important; }
 .drive-card{ background:#151a21 !important; border-color:var(--v-edge) !important; }
 .drive-current{ background:rgba(124,181,24,.07) !important;
                 border-left:4px solid var(--v-brand) !important; }
-.drive-previous{ background:#151a21 !important;
-                 border-left:4px solid var(--v-data) !important; }
+/* The series tiles sit in the same well the team tiles use, one step
+   darker than the panel, so each number reads out of its own box. */
+.series-tile{ background:#0f141a !important; border:1px solid #1e262f !important; }
+.series-num{ color:var(--v-paper) !important; }
+.series-name{ color:var(--v-mute) !important; }
+.series-tile-label{ color:var(--v-mute) !important; }
+.series-empty{ color:#6f7c8a !important; }
+.series-card{ border-top-color:var(--v-edge) !important; }
 .inline-stat-item{ background:var(--v-raise) !important; border:1px solid #262f39 !important;
                    color:var(--v-paper) !important; }
 .inline-stat-line{ color:var(--v-paper) !important; }
@@ -339,7 +416,6 @@ body{ background:var(--v-ink) !important; color:var(--v-paper) !important; }
 .drive-card{ --drive-heading:#8d99a6 !important; }
 .drive-current{ --drive-heading:var(--v-brand-hi) !important;
                 --drive-accent:var(--v-brand) !important; }
-.drive-previous{ --drive-accent:var(--v-data) !important; }
 #scoringCard h2, .score-detail,
 .inline-stat-item .stat-label{ color:var(--v-mute) !important; }
 table.stattable th, table.player-stat-table th{ color:#8fa6bf !important; }
@@ -453,9 +529,20 @@ h2{ color:var(--v-mute) !important; }
           <div id="currentDriveTiles"></div>
           <div id="driveLogScroll"></div>
         </div>
-        <div class="card compact drive-card drive-previous">
-          <h2>Previous Drive</h2>
-          <div id="prevDriveLogScroll"></div>
+        <!-- THIS SERIES. Replaced the Previous Drive card, 30 Aug 2026.
+             No new data: all four tiles derive from plays already in the
+             log, sliced at the drive boundary findDriveStarts already
+             computes for the card above. -->
+        <!-- NO HEADING, and it is not an oversight. Measured: quadTR is
+             524px and the Current Drive card above runs 188px on a
+             one-line play text and 267px once the text wraps and a
+             timeout lands under it. An h2 costs 21px of that budget,
+             and at 21px the tiles overflow the quad the moment a play
+             text wraps -- which is most plays -- so the card would be
+             hidden by adjustDriveCardVisibility more often than shown.
+             The four tile labels carry the reading on their own. -->
+        <div class="card compact series-card" id="seriesCard">
+          <div class="series-tile-grid" id="seriesTiles"></div>
         </div>
         <!-- Takes the whole quad at halftime and at the final whistle.
              Both drive cards are hidden then: there is no current drive
@@ -1679,8 +1766,10 @@ function extractNameTag(rawName){
       // the down/distance/spot resulting from it directly underneath
       // -- the exact same state and formatting the banner at the top
       // of the page already uses, so the two can never disagree.
-      // Previous Drive is deliberately untouched by this -- its own
-      // renderDriveSummary() below is unchanged.
+      // The card below this one is deliberately untouched by this. It
+      // was Previous Drive and is now the series tiles, which read the
+      // unfiltered slice rather than this display list -- see the note
+      // at renderSeriesTiles for why the two must not share a filter.
       let currentDriveDisplayList = currentDriveOwnTeamPlays.filter(x => !isDriveTileNoise(x));
       // Requested directly: an ordinary kickoff was invisible in BOTH
       // drive tiles -- filed under the KICKING team at the tail of the
@@ -1790,15 +1879,19 @@ function extractNameTag(rawName){
       // Declared outside the branch: paintDrive() colors both cards from
       // these further down, and scoping them to the else left it reading
       // an undefined name the moment the start-of-half state was hit.
-      let currentSummary = null, prevSummary = null;
+      let currentSummary = null;
       if (secondHalfPending){
         const q = (state.quarter && state.quarter >= 3) ? state.quarter : 3;
         document.getElementById('driveLogScroll').innerHTML =
           '<div style="font-size:36px; font-weight:700; color:#eef1f4; line-height:1.2; ' +
           'margin-top:16px;">Start of Q' + q + '</div>';
         document.getElementById('currentDriveTiles').innerHTML = '';
-        document.getElementById('prevDriveLogScroll').innerHTML =
-          '<div style="color:#8d99a6;">no previous drive yet</div>';
+        // The series tiles render EMPTY here rather than being blanked,
+        // for the same reason the penalties tile lists both teams at
+        // zero: the grid holding its shape across a state change is the
+        // whole point of a fixed height. Blanking it would collapse the
+        // quad between "Start 2nd half" and the kickoff and pop it back.
+        document.getElementById('seriesTiles').innerHTML = renderSeriesTiles([], null);
       } else {
 
       document.getElementById('driveLogScroll').innerHTML =
@@ -1853,19 +1946,25 @@ function extractNameTag(rawName){
               '<span class="stat-label">' + label + '</span></span>').join('') + '</div>'
         : '';
 
-      // Null once the interval is the floor: the drive before it belongs
-      // to the first half, and showing it beside a second-half card
-      // invites reading it as the possession that just ended.
-      // Null unless the PREVIOUS drive also belongs to this half. Testing
-      // the current one was not enough: once the second half's own New
-      // drive registers, the one before it is still the last drive of the
-      // first half, and it rendered beside a second-half card as though
-      // it were the possession that just ended.
-      const prevStart = resetIdxs.length >= 2 ? resetIdxs[resetIdxs.length - 2] : -1;
-      prevSummary = (prevStart >= 0 && (halfDivIdx === -1 || prevStart > halfDivIdx))
-        ? computeDriveSummary(prevStart, resetIdxs[resetIdxs.length - 1])
-        : null;
-      document.getElementById('prevDriveLogScroll').innerHTML = renderDriveSummary(prevSummary);
+      // THIS SERIES, from the SAME slice the card above renders from.
+      // ----------------------------------------------------------------
+      // currentDrivePlays, not a second walk of `plays` with its own idea
+      // of where the drive began. The half-clamp reasoning, the reset
+      // markers, the onside-kick case and the period boundaries are all
+      // already settled in findDriveStarts and read once at driveFloor;
+      // re-deriving the boundary here is exactly the "second copy that
+      // does not announce itself until the two disagree" shape that put
+      // three different team-defense totals on three surfaces.
+      //
+      // Deliberately NOT currentDriveOwnTeamPlays: that list is filtered
+      // for DISPLAY (it keeps the other team's scoring play, drops their
+      // kickoff) and its membership rules are about what belongs in a
+      // play log. These tiles count events, and the team test each tile
+      // needs differs per tile -- penalties are stamped with the
+      // penalized team, a sack is charged to the passer's team. Each one
+      // asks the play directly.
+      document.getElementById('seriesTiles').innerHTML =
+        renderSeriesTiles(currentDrivePlays, driveTeam);
       }
 
       // AT HALFTIME AND FINAL, THE SCORING SUMMARY TAKES THE QUAD.
@@ -1888,7 +1987,7 @@ function extractNameTag(rawName){
       const isFinal = phase === 'FINAL';
       const showScoring = phase === 'HALFTIME';
       const scoringCard = document.getElementById('scoringCard');
-      document.querySelectorAll('#quadTR .drive-current, #quadTR .drive-previous')
+      document.querySelectorAll('#quadTR .drive-current, #quadTR .series-card')
         .forEach(el => { el.style.display = (showScoring || isFinal) ? 'none' : ''; });
       scoringCard.style.display = (showScoring || isFinal) ? '' : 'none';
       if (isFinal){
@@ -1972,8 +2071,11 @@ function extractNameTag(rawName){
           // drive cards.
         card.style.setProperty('--drive-tint', mixHex(bg, '#191f27', 0.82));
       };
+      // ONLY THE CURRENT DRIVE CARD IS PAINTED NOW. The series card takes
+      // no team color on purpose: penalties list BOTH teams inside one
+      // tile, so a single team accent on the card would be a claim the
+      // contents contradict.
       paintDrive('.drive-current', currentSummary);
-      paintDrive('.drive-previous', prevSummary);
     } else {
       document.getElementById('allPlaysScroll').innerHTML = renderLogLines(plays.slice().reverse()) || '<div style="color:#8d99a6;">No plays recorded.</div>';
     }
@@ -1991,26 +2093,33 @@ function extractNameTag(rawName){
   // once there's more room (e.g. after Undo shortens the current drive).
   function adjustDriveCardVisibility(){
     const quad = document.getElementById('quadTR');
-    const prevCard = document.querySelector('.drive-previous');
-    const prevTiles = prevCard ? prevCard.querySelector('.inline-stat-line') : null;
-    if (!quad || !prevCard) return;
+    const seriesCard = document.getElementById('seriesCard');
+    if (!quad || !seriesCard) return;
 
-    prevCard.classList.remove('hidden');
-    if (prevTiles) prevTiles.classList.remove('hidden');
-
+    // Always start fully visible, so it un-hides again once there is room
+    // -- after an Undo shortens the current drive, or when a two-line
+    // play text becomes one.
+    seriesCard.classList.remove('hidden');
     if (quad.scrollHeight <= quad.clientHeight) return;
 
-    if (prevTiles) prevTiles.classList.add('hidden');
-    if (quad.scrollHeight <= quad.clientHeight) return;
-
-    prevCard.classList.add('hidden');
+    // ONE STAGE NOW, WHERE PREVIOUS DRIVE HAD TWO. That card degraded by
+    // dropping its tile row first and the whole card second, because its
+    // tile row was a summary a reader could lose without losing the
+    // card's point (the outcome line). This card IS its tiles: dropping
+    // a row would leave a heading over a gap, and dropping ONE of the
+    // two rows would mean choosing which two of the four facts survive
+    // -- a choice nothing in the layout is qualified to make. So it goes
+    // whole, and the current drive keeps the quad, which is the priority
+    // it always had.
+    seriesCard.classList.add('hidden');
   }
 
   // HOISTED TO TOP LEVEL, 19 Aug 2026 -- this used to be a private
   // helper nested inside renderAll(), which is fine as long as only
   // renderAll ever calls it. renderDriveSummary (Previous Drive's own
-  // full play log, added the same night) needed it too, and a function
-  // declared inside another function is invisible outside it -- calling
+  // full play log, added the same night; removed 30 Aug 2026 with the
+  // card itself) needed it too, and a function declared inside another
+  // function is invisible outside it -- calling
   // it from renderDriveSummary threw "renderLogLines is not defined" in
   // the real page even though an isolated test of both functions
   // together passed cleanly, because extracting them side by side into
@@ -2389,48 +2498,123 @@ function extractNameTag(rawName){
     return out;
   }
 
-  function renderDriveSummary(summary){
-    if (!summary) return '<div style="color:#8d99a6;">no previous drive yet</div>';
-    const teamName = TEAMS[summary.team].name;
-    const tiles = [
-      ['RUSH', summary.rushes + '/' + summary.rushYds],
-      ['PASS', summary.passes + '/' + summary.passYds],
-      // TOTAL plays/yards, matching the Current Drive tile exactly. This
-      // read 'YARDS 80' against the live tile's 'TOTAL 4/66' -- the same
-      // four tiles in the same order, with the third one counting a
-      // different thing under a different name. Two drives side by side
-      // are there to be compared, and one of the four numbers could not
-      // be. totalPlays was already computed; only the tile was missing it.
-      ['TOTAL', summary.totalPlays + '/' + summary.totalYds],
-      ['TOP', formatDuration(summary.top)]
-    ];
-    const outcome = summary.scoringPlayText || summary.lastPlayText || 'No plays recorded';
-    const outcomeColor = summary.scoringPlayText ? '#1a7a4c' : '#555';
-    // A SEPARATE, SMALLER LINE, not appended onto the touchdown text --
-    // the scoring line is already long once a player's full name is in
-    // it, and this tile has already been fixed once for wrapping (the
-    // clock hint, on the header line above). Color carries the same
-    // good/bad meaning it does everywhere else in this app: green for
-    // the attempting team's own success, red for anything else, whether
-    // that is a miss, a block, an interception or a fumble.
-    const tryHtml = summary.tryOutcome
-      ? '<div style="font-size:16px; line-height:1.3; margin-top:4px; color:' +
-        (summary.tryOutcome.good ? '#1a7a4c' : '#a32d2d') + ';">' + summary.tryOutcome.text + '</div>'
-      : '';
-    return '<div class="inline-stat-line">' +
-      tiles.map(([label, val]) => '<span class="inline-stat-item"><span class="stat-value">' + val + '</span><span class="stat-label">' + label + '</span></span>').join('') +
-      '</div>' +
-      // Requested directly, bumped again after the first pass still
-      // read too small next to Current Drive's now-36px headline --
-      // deliberately still short of that, since this is a summary of a
-      // FINISHED drive, not the thing the page is live for.
-      '<div style="font-size:20px; line-height:1.3; margin-top:4px;"><strong>' + teamName + ':</strong> <span style="color:' + outcomeColor + '; font-weight:' + (summary.scoringPlayText ? '700' : '600') + ';">' + breakPlayText(outcome) + '</span></div>' +
-      tryHtml;
+  // THIS SERIES, IN FOUR TILES. Replaced renderDriveSummary, 30 Aug 2026.
+  // ====================================================================
+  // `list` is the current drive's slice, already cut at the boundary
+  // findDriveStarts produced; `driveTeam` is whoever has the ball.
+  //
+  // EVERY TILE ASKS THE PLAY, NEVER THE ROSTER AND NEVER THE PLAY TEXT.
+  // Yardage comes off the role that owns it -- receiver.yards for a
+  // completion, carrier.yards for a rush, passer.yards for a sack --
+  // matching computeBoxScore exactly. Parsing p.text would be a second
+  // implementation of rules the engine already owns, and the whole
+  // reason team defense was wrong on three surfaces.
+  //
+  // THE TEAM TEST DIFFERS PER TILE, on purpose:
+  //   long pass / long rush / sacks  the OFFENSE, so driveTeam
+  //   penalties                      BOTH, keyed on effect.penaltyTeam,
+  //                                  which is stamped with the PENALIZED
+  //                                  team and not the team whose drive
+  //                                  the flag fell in
+  // A single shared filter would have to be wrong for one of them.
+  function renderSeriesTiles(list, driveTeam){
+    const seq = Array.isArray(list) ? list : [];
+    const esc = v => String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    // A play's own type, with the fumble indirection resolved. A fumble
+    // records what the play WAS in `attempt` (see computeDriveSummary's
+    // note: ask the play, do not guess from the roster), so a
+    // catch-and-fumble is a completion for these tiles exactly as it is
+    // for the box score. Without this a 40-yard catch that ended in a
+    // fumble would not be the long pass of the series.
+    const actOf = p => {
+      const r = p.roles || {};
+      return r.playType === 'fumble' ? (r.attempt || null) : (r.playType || null);
+    };
+    // Whose offense the play belongs to, taken from the ROLE rather than
+    // p.team. p.team is the row's filed team and a penalty row carries
+    // the penalized side, so reading it here would mis-file plays in
+    // exactly the way the display filter above documents.
+    const ours = teamKey => !driveTeam || teamKey === driveTeam;
+
+    let longPass = null, longRush = null;
+    let sackCount = 0, sackYds = 0;
+    const pen = { teamA: { n: 0, yds: 0 }, teamB: { n: 0, yds: 0 } };
+
+    seq.forEach(p => {
+      const r = p.roles || {};
+      const e = p.effect || {};
+
+      // PENALTIES FIRST AND UNCONDITIONALLY. A flag is not a play and
+      // carries no playType, so it must not fall through the act
+      // switch below -- and it counts for whichever team it was called
+      // on, including the defense during our own series, which is half
+      // the reason this tile lists both.
+      if (e.penaltyTeam && pen[e.penaltyTeam]){
+        pen[e.penaltyTeam].n += 1;
+        // Math.abs, not the raw value: fieldDelta is signed from the
+        // offense's point of view elsewhere in this file, and a tile
+        // reading "2 for -15" would read as yards gained by the flag.
+        // A penalty's yardage is a magnitude here.
+        pen[e.penaltyTeam].yds += Math.abs(e.penaltyYds || 0);
+        return;
+      }
+
+      const act = actOf(p);
+      if (act === 'pass' && r.receiver && ours(r.receiver.team)){
+        const y = r.receiver.yards || 0;
+        // Strictly greater, so the FIRST of two equal-length catches
+        // keeps the tile. Ties going to the earlier play is arbitrary
+        // either way; it is fixed here so the tile does not flicker
+        // between two names as later plays land.
+        if (!longPass || y > longPass.yds) longPass = { yds: y, name: r.receiver.name || '' };
+      } else if (act === 'rush' && r.carrier && ours(r.carrier.team)){
+        const y = r.carrier.yards || 0;
+        if (!longRush || y > longRush.yds) longRush = { yds: y, name: r.carrier.name || '' };
+      } else if (act === 'sack' && r.passer && ours(r.passer.team)){
+        sackCount += 1;
+        // passer.yards on a sack is stored as a POSITIVE magnitude and
+        // SUBTRACTED by the engine (rushing TEAM yds -= passer.yards).
+        // Summing it raw and labelling it "lost" says the same thing
+        // the box score does, without a sign flip that would have to
+        // agree with the engine's forever.
+        sackYds += Math.abs(r.passer.yards || 0);
+      }
+    });
+
+    // One tile: a label, then one or more number+name lines sharing a
+    // baseline. `lines` is a list of [number, trailing text] pairs.
+    const tile = (label, lines, extraClass) =>
+      '<div class="series-tile' + (extraClass ? ' ' + extraClass : '') + '">' +
+        '<div class="series-tile-label">' + esc(label) + '</div>' +
+        lines.map(([num, text]) => num === null
+          ? '<div class="series-line"><span class="series-empty">' + esc(text) + '</span></div>'
+          : '<div class="series-line">' +
+              '<span class="series-num">' + esc(num) + '</span>' +
+              '<span class="series-name">' + esc(text) + '</span>' +
+            '</div>').join('') +
+      '</div>';
+
+    // An em dash, not "0" and not an empty tile. Zero is a claim -- it
+    // says a pass was completed for no gain -- where the truth on the
+    // first play of a series is that nothing has happened yet.
+    const longTile = (label, hit) => hit
+      ? tile(label, [[hit.yds, hit.name]])
+      : tile(label, [[null, '—']]);
+
+    const teamName = k => (TEAMS[k] && TEAMS[k].name) || (k === 'teamA' ? 'Us' : 'Them');
+    const penTile = tile('Penalties', ['teamA', 'teamB'].map(k =>
+      [pen[k].n, teamName(k) + ' · ' + pen[k].yds + ' yds']), 'two-row');
+
+    const sackTile = sackCount
+      ? tile('Sacks', [[sackCount, sackYds + ' yds lost']])
+      : tile('Sacks', [[null, '—']]);
+
+    return longTile('Long pass', longPass) + longTile('Long rush', longRush) +
+           penTile + sackTile;
   }
-
-
-
-
 
   function renderTeamSummary(){
     const box = computeBoxScore(plays);

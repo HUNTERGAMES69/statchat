@@ -315,21 +315,13 @@ throughout; whether it re-runs the checks; whether it is admin-only.
 
 ---
 
-### 7. A second crew view: scoring summary, large, one page
+### 7. Removed 30 August 2026 — duplicate
 
-A separate view page showing the scoring summary at a size a camera can
-read, scaled to fit on one screen with no scrolling.
+A second crew view showing the scoring summary large, on one page. Already
+built: it is `view2.html`. The remaining work is its entry point, which is
+tracked in `TODO.md`, not here.
 
-The existing crew view already switches its top-right quad to a scoring
-summary at halftime and at the final whistle, so the content exists -- this
-is a different presentation of it, not a new calculation.
-
-Note: the crew view scales a fixed 1920x1080 `.wrap` to the viewport. A
-second page should do the same rather than inventing its own sizing, or the
-two will drift apart on the same monitor.
-
-**Open:** whether it replaces the halftime behaviour on the main crew view or
-sits beside it as its own URL.
+Numbers are stable references, so this one is retired rather than reused.
 
 ## Notes
 
