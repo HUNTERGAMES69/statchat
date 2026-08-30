@@ -127,7 +127,23 @@
      and centers a taller block, so its label sat 13px above Sacks' on the
      same row of the grid. The labels are what the eye scans across, so
      they align and the slack falls to the bottom of the shorter tiles. */
-  .series-tile { height:110px; box-sizing:border-box; background:#f5f7fa;
+  /* 110px -> 96px, 30 Aug 2026, and this is the real fix for the tiles
+     vanishing on a PAT.
+     ------------------------------------------------------------------
+     At 110px the quad fit its contents at 524px in a 524px box -- EXACTLY,
+     with zero slack. A touchdown headline plus a PAT line landed on the
+     boundary, so any pixel of variation in a real game (a score stamp
+     that pushes the headline to a third line, a down-and-distance line
+     still showing, a longer pair of names) tipped it over, and the
+     degrade then had to take something away. Shaving margins bought
+     single pixels and left the same cliff one play further on.
+
+     Two rows of tiles, so 14px off each is 28px of genuine headroom.
+     96px is the alternative Andy raised when the tiles were first
+     built; the two-row Penalties tile needed its type tightened a
+     little to fit (below), which is measured, not guessed: content
+     needs 95px in a 94px box at the old sizes, 94px in 94px at these. */
+  .series-tile { height:96px; box-sizing:border-box; background:#f5f7fa;
                  border-radius:8px; padding:10px 12px; overflow:hidden;
                  display:flex; flex-direction:column; justify-content:flex-start; }
   .series-tile-label { font-size:15px; font-weight:700; color:#777;
@@ -154,10 +170,13 @@
      the one-row tile's spacing -- measured, it clipped by 4px, which is
      the bottom of the second team's row. The label margin and the gap
      between the rows absorb it; the type sizes are left alone. */
-  .series-tile.two-row .series-num { font-size:29px; }
-  .series-tile.two-row .series-name { font-size:17px; }
-  .series-tile.two-row .series-tile-label { margin-bottom:4px; }
-  .series-tile.two-row .series-line + .series-line { margin-top:5px; }
+  /* Tightened with the drop to 96px above. Penalties is the only tile
+     that carries two rows, so it is the only one that has to give
+     anything up, and it gives up 3px of type rather than a row. */
+  .series-tile.two-row .series-num { font-size:26px; }
+  .series-tile.two-row .series-name { font-size:16px; }
+  .series-tile.two-row .series-tile-label { margin-bottom:3px; }
+  .series-tile.two-row .series-line + .series-line { margin-top:3px; }
   .team-summary-row { display:flex; gap:28px; flex:1; min-height:0; }
   /* min-height:0 as well as min-width:0. A flex child defaults to a minimum
    of its CONTENT size in the flex direction, so this column refused to be
@@ -2143,11 +2162,24 @@ function extractNameTag(rawName){
     // Dropping children needs no overflow property, so none of that
     // applies.
     //
-    // `i >= 1` deliberately: the play text is the first child and is
-    // never the thing that goes. If even it does not fit, the quad
-    // clips at its own edge, which still leaves the play a spectator is
-    // reading on screen.
-    for (let i = kids.length - 1; i >= 1; i--){
+    // `i >= 2` deliberately, and this is the second correction to this
+    // rule. The first version protected only the play text, and Andy
+    // reported the consequence immediately: the tiles stayed but the
+    // "Trey Johnson PAT — GOOD" line went instead. The try result is
+    // the CONFIRMATION that the entry landed -- it is the reason a
+    // scorer looks at this card after a score at all, and it is not
+    // available anywhere else on the crew view at a glance.
+    //
+    // So the first two children -- the play text and the try line --
+    // are both off limits. Only the down-and-distance line and any
+    // timeouts can be shed, and the 28px freed by the 96px tiles above
+    // means it is rare that even those have to go.
+    //
+    // If it still does not fit after everything droppable is gone, the
+    // quad clips at its own edge. That is the honest floor: nothing in
+    // this function is qualified to choose between the play, the score
+    // it produced, and the four tiles.
+    for (let i = kids.length - 1; i >= 2; i--){
       if (quad.scrollHeight <= quad.clientHeight) break;
       kids[i].style.display = 'none';
     }
