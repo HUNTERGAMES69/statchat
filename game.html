@@ -2125,6 +2125,24 @@ function getLastClockAbsSec(){
 //
 // Gives the opening kickoff 12:00, a second-half kickoff 12:00, and a
 // kickoff after a mid-quarter score the clock at that score.
+// RETURNS THE REASON, NOT JUST THE NUMBER. The two branches below are
+// two different facts about football, and the note shown to the scorer
+// has to say the one that applies:
+//
+//   'stoppage'    a kickoff during the game. The clock stopped on the
+//                 score and did not run during the try.
+//   'periodStart' the opening kickoff of a half. Nothing has happened
+//                 yet, so the clock is still at the full quarter.
+//
+// Reported by Andy, 30 Aug 2026: the note said "the clock stops on the
+// score" on the opening kickoff of a half, where there has been no score.
+// Correct arithmetic, nonsense explanation -- and an explanation that is
+// obviously wrong invites a scorer to override a value that is right.
+//
+// Derived from WHICH BRANCH SUPPLIED THE VALUE rather than from which
+// screen is asking. The guided flow is always a period start today, but
+// tying the wording to the surface would be a second rule that could
+// disagree with the first.
 function kickoffClockPrefill(){
   const q = (computeState().quarter) || 1;
   for (let i = plays.length - 1; i >= 0; i--){
@@ -2132,14 +2150,14 @@ function kickoffClockPrefill(){
     if (!ev) continue;
     const c = absSecToClockStr(ev.absSec);
     if (!c) continue;
-    if (c.q === q) return c.text;
+    if (c.q === q) return { value: c.text, source: 'stoppage' };
     // An event from an EARLIER quarter means this quarter has none. A
     // half-closing 0:00 reads as the quarter it ended, not the one it
     // begins, so this is the second-half kickoff case.
     if (c.q < q) break;
   }
   const mins = Math.floor(quarterLengthSec / 60), secs = quarterLengthSec % 60;
-  return mins + ':' + String(secs).padStart(2, '0');
+  return { value: mins + ':' + String(secs).padStart(2, '0'), source: 'periodStart' };
 }
 
 // Renamed from prefillTouchbackClock, 30 Aug 2026: it now runs on every
@@ -2148,9 +2166,13 @@ function kickoffClockPrefill(){
 function prefillKickoffClock(inputId){
   const el = document.getElementById(inputId);
   if (!el || el.value.trim()) return;
-  const val = kickoffClockPrefill();
-  if (!val) return;
+  const pf = kickoffClockPrefill();
+  if (!pf || !pf.value) return;
+  const val = pf.value;
   el.value = val;
+  // Kept on the field so whichever surface renders the note can ask what
+  // the value means without recomputing it and risking a different answer.
+  el.dataset.prefillSource = pf.source;
   if (padEl && padEl.style.display !== 'none' && padTargetId === inputId) closePad();
   // Marked so the confirm step can tell a derived value from a typed one
   // -- the same distinction the spot calculator already draws.
@@ -2229,10 +2251,15 @@ function absSecToClockStr(absSec){
 // fielded at a different time", which invites an edit on a value that is
 // almost always right. The clock is stopped before every kickoff, so the
 // prefill is not a guess -- it is the same number the board was showing.
-function clockPrefillNote(value){
+function clockPrefillNote(value, source){
+  const tail = ' Leave it unless the board actually showed something different.';
+  if (source === 'periodStart'){
+    return 'Prefilled: ' + value + '. This is the opening kickoff of the period, so ' +
+      'the clock is still at the full quarter — it is not a guess.' + tail;
+  }
   return 'Prefilled: ' + value + '. The clock stops on the score and does not run ' +
     'during the try, so this is the clock when the ball was fielded — it is not a ' +
-    'guess. Leave it unless the board actually showed something different.';
+    'guess.' + tail;
 }
 
 function reportClockAudit(before){
@@ -7327,7 +7354,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       if (grClock){
         prefillKickoffClock('guidedReturnClock');
         if (grWarn && grClock.value.trim()){
-          grWarn.textContent = clockPrefillNote(grClock.value.trim());
+          grWarn.textContent = clockPrefillNote(grClock.value.trim(),
+                                                grClock.dataset.prefillSource);
           grWarn.style.display = 'block';
         }
       }
@@ -14035,7 +14063,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         prefillKickoffClock('confirmClockInput');
         const cci = document.getElementById('confirmClockInput');
         if (ccw){
-          ccw.textContent = clockPrefillNote((cci && cci.value.trim()) || '');
+          ccw.textContent = clockPrefillNote((cci && cci.value.trim()) || '',
+                                             cci && cci.dataset.prefillSource);
           ccw.style.display = 'block';
         }
       } else if (ccw){
