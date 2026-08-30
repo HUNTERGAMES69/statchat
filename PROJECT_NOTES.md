@@ -4077,3 +4077,79 @@ tips.html.
 
 This is the shape of fault worth watching for elsewhere: the app is correct,
 the entry is plausible, and the number is wrong.
+
+
+## 29 August 2026 — architectural notes from the first live-game weekend
+
+### One rule, one implementation
+
+Team defensive statistics were computed in three places. `view.html` and
+`broadcast_stats.html` each reduced the plays themselves; `computeBoxScore`
+did its own thing. Interceptions, sacks and fumble recoveries agreed BY
+COINCIDENCE -- the engine has a TEAM-row fallback for those three, so the
+totals matched. Tackles for loss had no such fallback, so an unattributed
+one counted on air and vanished from the stat pack.
+
+Both pages now read `computeBoxScore`. The rule is in the engine and nowhere
+else. This is the same shape as the `cmp`/`comp` split and the pre-`engine.js`
+duplication: **a second copy does not announce itself until the two disagree,
+and by then it has been wrong for a while.**
+
+### The box-score auditor was thinner than it looked
+
+Sweeping every fumble and interception shape found ONE engine bug and FIVE in
+the auditor -- a fumble recovery counted as a tackle, `fumRec` never
+credited, sack fumbles excluded, the TEAM row missing and then added as a
+plain `if` where the engine writes `} else if`, and the separate TEAM sack a
+sack-fumble earns.
+
+Every one was a path no fixture had exercised. The auditor is only as good as
+the shapes it has been run against, and it had never been run against a
+defender on a fumble. **The special-teams and return paths have still not had
+this treatment.**
+
+### Two mechanisms doing one job
+
+The kicking pickers had recency in `specialTeamsEligible` and preselection in
+`KICK_DEFAULTS`, both pooling field goals with PATs. Scoping one left the
+other pooling, and the reported symptom survived a verified fix.
+
+Worth generalising: when a fix is confirmed and the report persists, the
+question is not "was the fix right" but "what else does that job".
+
+### Print layout is a per-page property, not a global one
+
+`.card { page-break-inside: avoid }` is right for a short card and impossible
+for one taller than a page -- the browser pushes it whole and leaves the page
+before it nearly empty. A receiver's section measured 991px against roughly
+958px of printable height. Cards may break; the totals strip, the splits grid
+and individual table rows may not.
+
+`season_report.html` puts avoid on `.section` and `stat_package.html` on
+`table.stat-table`. **Both could hit the same wall on a long season** and
+neither has been measured.
+
+### Adding one element to nineteen pages is nineteen layout changes
+
+The copyright sweep put a paragraph at the foot of every page. `view.html`
+and `login.html` centre their body with flex and hold ONE child, so the
+notice became a second flex item and the content slid sideways -- on the
+crew view, the page that goes on air.
+
+The check written to catch it was given a hand-typed list of pages and
+`login.html` was not on it. It now sweeps the directory and derives the
+exceptions from the CSS. **A test that encodes what someone remembered is
+worth less than no test, because it reads as coverage.**
+
+### The clock convention the app never states
+
+Every clock prompt says "Clock". On a rush that unambiguously means after
+the play. On a kickoff or punt return it has to mean when the ball was
+FIELDED -- possession changes partway through the play, and entering the
+tackle time hands the whole return to the team that just lost the ball.
+
+The rule lives in the help file, not at the point of entry. A kickoff can
+prefill instead (the clock is stopped beforehand, so the catch time IS the
+previous stoppage); a punt cannot, because the clock is running. Recorded as
+item 4 in `LIVE_GAME_FEEDBACK.md`.
+

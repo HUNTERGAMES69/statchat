@@ -3484,3 +3484,53 @@ nobody runs. Revisit if the baseline is ever regenerated.
   confused**, and were: a `sql/history/README.md` upload silently landed
   as a copy of `sql/README.md`. When delivering more than one README,
   present them one at a time and verify each before sending the next.
+
+
+## 29 August 2026 — first live-game weekend
+
+`LIVE_GAME_FEEDBACK.md` is the live list for everything raised while games
+were being scored. It is not duplicated here; read it first.
+
+### Closed this session
+
+- [x] Bad snap records a fumble (fixed at the parser, not the click handler)
+- [x] Team tackles for loss credited to the TEAM row when unattributed
+- [x] `view.html` and `broadcast_stats.html` read the box score for team
+      defense instead of each reducing plays themselves
+- [x] Defensive picker in jersey order, shared numbers merged in
+- [x] Defensive picker stacked, number over name, 72px
+- [x] Shared jersey numbers prefer the picker's own unit
+- [x] Tackled by open on render (rush and pass)
+- [x] Penalty quick row, four side-specific buttons
+- [x] Kicker recency scoped per tree — BOTH `specialTeamsEligible` and
+      `KICK_DEFAULTS`
+- [x] Player report blank first page (unbreakable 991px card)
+- [x] Copyright notice broke `view.html` and `login.html` layout — both
+      centre their body with flex
+- [x] `season_report.html` copyright notice restored (never deployed)
+- [x] `view2.html` built — scoring detail crew view
+
+### Reverted, on purpose
+
+- [ ] Tackled by on the kicking trees. UI written and pulled: `TACKLE_TYPES`
+      does not credit kicking plays, so the field would collect a credit that
+      reaches nothing. `LIVE_GAME_FEEDBACK.md` item 2 has the order of work,
+      including the guided kickoff writing the RETURNER into the `defense`
+      slot — inert today, wrong the moment `kickoff_return` joins
+      `TACKLE_TYPES`.
+
+### Opened this session
+
+- [ ] `view2.html` has no entry point. Nothing links to it.
+- [ ] The box-score auditor has not been swept against the SPECIAL TEAMS or
+      RETURN paths. The fumble and interception sweep found five faults in
+      it; assume the untested paths carry more.
+- [ ] `season_report.html` (`.section`) and `stat_package.html`
+      (`table.stat-table`) carry the same unbreakable-block risk that blanked
+      a page in the player report. Neither measured.
+- [ ] `?debug=1` guides on `broadcast.html` never tested in vMix.
+- [ ] The six-minute branding refresh timer has never run through a real
+      game.
+- [ ] Rotate the live overlay key exposed in chat.
+- [ ] Repo still public; GitHub MCP connector still to be added.
+

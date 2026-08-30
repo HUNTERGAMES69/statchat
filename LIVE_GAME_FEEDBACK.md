@@ -14,7 +14,52 @@ Opened 27 August 2026, during the first weekend two tenants ran live games.
 
 ## Agreed — to build
 
-*(nothing yet)*
+### 8. Drop the previous-drive tile, replace with four series tiles
+
+**Decided**, mocked and approved 27 Aug. The previous-drive card goes; four
+tiles take the space, all read from the current series:
+
+| Tile | Shows |
+| --- | --- |
+| Long pass | yards, then the receiver's name |
+| Long rush | yards, then the carrier's name |
+| Penalties | BOTH teams, one row each: team, count, yards |
+| Sacks | count, then yards lost |
+
+**The number and the name share a baseline**, 40pt against 21pt. Stacked,
+the right half of every tile sat empty; on one line the tile fills its
+width.
+
+**Penalties list both teams** because 2-15 against your own defence and
+against theirs are different facts, and a crew reads them differently. The
+two rows also keep that tile looking populated when the count is zero,
+which takes the first-play-of-a-series state from four empty tiles down to
+two.
+
+**Every tile is 110px**, so nothing jumps as the numbers change. Names
+truncate rather than wrap, which is what holds the height. Tested against
+"Ouachita Robicheaux" and "Ouachita Christian" at 760, 900 and 1100px wide
+-- nothing clipped at any of them.
+
+**No new data.** All four derive from plays already in the log; the crew
+view has drive boundaries from `findDriveStarts`, so "this series" is the
+plays since the current drive began.
+
+The situation line stays at its current 24px. Noted while mocking: the play
+line above it renders at 20px, so the situation line is already the larger
+of the two and the hierarchy is inverted. Left alone for now -- if it ever
+reads wrong on air, the fix is probably to lift the play line rather than
+to shrink this one.
+
+Mock: `series_tiles.html`.
+
+---
+
+
+
+*(add here as they come up)*
+
+---
 
 ---
 
@@ -241,9 +286,50 @@ each other rather than the label carrying the whole burden.
 
 ## Raised, not yet discussed
 
-*(add here as they come up)*
+### 5. Scorebug overlay — drop the Q1 version, adjust the score-only one
+
+The full scoreboard with the quarter panel goes entirely. The score-only
+version stays but needs work; what specifically is not yet settled.
+
+Both were rebuilt on 27 Aug -- equal columns, scores outboard, identity
+centred, two digits reserved. Whatever the adjustment turns out to be, it
+lands on top of that rather than starting again.
+
+**Open:** what the adjustment is.
 
 ---
+
+### 6. Edit a play in place, after a game is finalized
+
+Today a wrong play can be deleted and re-entered, which puts it back at the
+end of the log with the order wrong even when the totals come right. A
+finalized game has no correction path at all short of that.
+
+Worth noting alongside: `roles` is stored as jsonb and read back verbatim,
+so an edit means rewriting that column on one play row. Nothing re-derives
+it. The 27 Aug bad-snap fault is a live example -- a play already saved
+keeps its old shape and the only fixes are delete-and-re-enter or SQL.
+
+**Open:** whether editing is restricted to a finalized game or offered
+throughout; whether it re-runs the checks; whether it is admin-only.
+
+---
+
+### 7. A second crew view: scoring summary, large, one page
+
+A separate view page showing the scoring summary at a size a camera can
+read, scaled to fit on one screen with no scrolling.
+
+The existing crew view already switches its top-right quad to a scoring
+summary at halftime and at the final whistle, so the content exists -- this
+is a different presentation of it, not a new calculation.
+
+Note: the crew view scales a fixed 1920x1080 `.wrap` to the viewport. A
+second page should do the same rather than inventing its own sizing, or the
+two will drift apart on the same monitor.
+
+**Open:** whether it replaces the halftime behaviour on the main crew view or
+sits beside it as its own URL.
 
 ## Notes
 

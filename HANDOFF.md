@@ -357,3 +357,69 @@ Edit the email in all three statements: `\set` does not work in the Supabase
 SQL editor, and a variable it ignores is sent literally, matching nothing
 while reporting success. Run the SELECT at the top first -- an UPDATE that
 matches no rows is not an error.
+
+
+# WHERE TO PICK UP — end of 29 August 2026
+
+The first weekend two tenants ran live games. Everything below came from
+watching a real game being scored or from a bug reported during one.
+
+## Deployed and working
+
+- **Bad snap records a fumble.** Was `playType: 'rush'`, so no fumble, no
+  recovery credit, no turnover. Fixed at the PARSER, which is where the roles
+  actually come from -- the click handler builds them as
+  `pending.roles = pending.roles || {...}` and `parseInput` had already
+  supplied them, so the first fix changed dead code and shipped broken.
+- **Team tackles for loss.** An unattributed TFL vanished from the box score
+  while the crew view counted it -- three on air against one in the stat
+  pack. The engine now credits the TEAM row, and `view.html` and
+  `broadcast_stats.html` read the box score instead of each reducing the
+  plays themselves.
+- **Defensive picker**: jersey order, stacked number-over-name at 72px, and
+  shared numbers offer the picker's own unit first.
+- **Tackled by** opens on render on the rush and pass trees.
+- **Penalty quick row**: four buttons under the team choice, side-specific.
+- **Kicker recency scoped per tree.** TWO mechanisms had to be fixed --
+  `specialTeamsEligible` for the ordering and `KICK_DEFAULTS` for the
+  preselection. Fixing one left the field goal kicker preselected on the PAT.
+- **Player report printed a blank first page** for receivers: a 991px section
+  card against ~958px of printable height, with `page-break-inside: avoid`.
+  Cards may now break; the parts inside them may not.
+- **view2.html** -- a second crew view showing every scoring play with the
+  drive behind it, two columns of nine, sized so eighteen fit at 1920x1080
+  without scrolling. Nothing links to it yet; the entry point is undecided.
+
+## Reverted deliberately
+
+**Tackled by on the kicking trees.** The UI was written and pulled:
+`TACKLE_TYPES` is `['rush','pass','sack']`, so the credit would reach
+nothing. Item 2 in `LIVE_GAME_FEEDBACK.md` records the order of work.
+
+## Read this next
+
+`LIVE_GAME_FEEDBACK.md` is new and is the live list. Eight items: one agreed
+and ready to build, four with decisions recorded, three raised but not
+designed. It supersedes anything in this file about what comes next.
+
+## What this session should have taught, and cost me time by not knowing
+
+- **A test that asserts what you REMEMBER is worthless.** Twice: a check for
+  "pages whose body centres with flex" was given a list I typed out, and
+  `login.html` was not on it and had exactly the fault. Sweep the directory;
+  derive the exceptions from the CSS.
+- **Verifying a fix is not verifying THE fix.** The kicker ordering genuinely
+  changed and the reported problem persisted, because a second mechanism
+  decided the preselection. When a report survives a verified fix, look for
+  the other thing that does the same job.
+- **An assertion can be true and describe dead code.** The bad-snap test
+  checked the click handler, which was correct and never ran.
+- **A fixture where two rules give the same answer proves neither.** The
+  punter was numbered 9, the lowest on the roster, so a numeric fallback and
+  a working recency both put him first.
+- **Adding a footer to nineteen pages is nineteen layout changes.** The
+  copyright sweep broke `view.html` and `login.html`, both of which centre
+  their body with flex, and the crew view is the page that goes on air.
+- **`quarterLabel` takes a state, not a number.** `(state && state.quarter)
+  || 1` means a bare integer silently becomes Q1.
+
