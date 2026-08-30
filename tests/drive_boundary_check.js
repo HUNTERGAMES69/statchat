@@ -37,6 +37,32 @@ function exposeFindDriveStarts(page) {
   return () => JSON.parse(page.evalIn('JSON.stringify(findDriveStarts(plays))'));
 }
 
+
+// THE PREVIOUS DRIVE, COMPUTED RATHER THAN READ OFF A CARD.
+// ---------------------------------------------------------------------
+// This file used to observe drive boundaries through the Previous Drive
+// panel: if a boundary landed on a clock marker, that panel summarized
+// the marker instead of the real drive, and the assertions caught it.
+// The panel was replaced by the series tiles on 30 Aug 2026, and the
+// series tiles describe the CURRENT series -- so they cannot see the
+// finished drive at all.
+//
+// Andy's instruction was to re-point rather than delete, and the boundary
+// logic is unchanged, so the observation moves DOWN a level instead of
+// sideways: findDriveStarts gives the boundaries and computeDriveSummary
+// turns a pair of them into the same numbers the panel used to print.
+// That is what the card was displaying all along, so nothing is lost --
+// and it is strictly better, because a rendering change can no longer
+// break a test about arithmetic.
+function prevDriveSummary(page) {
+  const starts = JSON.parse(page.evalIn('JSON.stringify(findDriveStarts(plays))'));
+  if (starts.length < 2) return null;
+  const from = starts[starts.length - 2];
+  const to = starts[starts.length - 1];
+  return JSON.parse(page.evalIn(
+    'JSON.stringify(computeDriveSummary(' + from + ', ' + to + '))'));
+}
+
 // --- Scenario builders (all driven through the real UI) -------------
 
 // Scoring drive, then a kickoff that flips possession, then a clock
@@ -135,16 +161,24 @@ async function run() {
     const starts = exposeFindDriveStarts(v)();
     assertNoAdminStarts('kickoff', starts, rows);
 
-    const prev = v.document.getElementById('prevDriveLogScroll').textContent.replace(/\s+/g, ' ');
     // The real scoring drive must be summarized, not the clock line.
-    if (!prev.includes('99')) {
-      fail('kickoff', 'previous drive lost the 99-yard scoring drive: ' + prev.trim());
-    }
-    if (/Clock\s*[—-]/.test(prev)) {
-      fail('kickoff', 'previous drive is summarized by a clock marker: ' + prev.trim());
-    }
-    if (!prev.includes('TOUCHDOWN')) {
-      fail('kickoff', 'previous drive does not report the touchdown: ' + prev.trim());
+    const prev = prevDriveSummary(v);
+    if (!prev) fail('kickoff', 'no previous drive could be computed at all');
+    else {
+      if (prev.totalYds !== 99) {
+        fail('kickoff', 'previous drive lost the 99-yard scoring drive, got ' + prev.totalYds + ' yds');
+      }
+      // A drive opened on a clock marker is the one-play, all-zero
+      // phantom the boundary rule exists to prevent -- so the numbers
+      // themselves say whether it happened, with no card to read.
+      if (prev.totalPlays <= 1 && prev.totalYds === 0) {
+        fail('kickoff', 'previous drive is the zero-counter phantom a marker boundary produces: ' +
+          JSON.stringify(prev));
+      }
+      if (!/TOUCHDOWN/.test(String(prev.scoringPlayText || ''))) {
+        fail('kickoff', 'previous drive does not report the touchdown: ' +
+          JSON.stringify(prev.scoringPlayText));
+      }
     }
     v.close();
   }
@@ -159,25 +193,38 @@ async function run() {
     const starts = exposeFindDriveStarts(v)();
     assertNoAdminStarts('punt', starts, rows);
 
-    const prev = v.document.getElementById('prevDriveLogScroll').textContent.replace(/\s+/g, ' ');
-    if (!/1\/12\s*RUSH/.test(prev)) fail('punt', 'rush tile wrong: ' + prev.trim());
-    if (!/1\/20\s*PASS/.test(prev)) fail('punt', 'pass tile wrong: ' + prev.trim());
-    // TOTAL plays/yards, matching the Current Drive tile. This asserted
-    // 'YARDS 32' until 14 Aug 2026, when the previous-drive tile still
-    // counted a different thing under a different name from the live one
-    // beside it -- the same four tiles in the same order, and only three
-    // of them comparable.
-    if (!/2\/32\s*TOTAL/.test(prev)) fail('punt', 'total tile wrong, expected 2/32: ' + prev.trim());
-    // 10:00 -> 6:30 is 3:30 of possession. A broken drive split makes
-    // this 0:00, so it doubles as a boundary check.
-    if (!/3:30\s*TOP/.test(prev)) fail('punt', 'time of possession wrong: ' + prev.trim());
-    // The drive ended in a punt; the trailing clock line must not be
-    // what gets shown as the summary.
-    if (!prev.includes('punts 40')) {
-      fail('punt', 'summary line is not the punt: ' + prev.trim());
-    }
-    if (/Clock\s*[—-]/.test(prev)) {
-      fail('punt', 'summary line is a clock marker: ' + prev.trim());
+    const prev = prevDriveSummary(v);
+    if (!prev) fail('punt', 'no previous drive could be computed at all');
+    else {
+      // The same four numbers the tiles used to print, in the same order.
+      if (prev.rushes !== 1 || prev.rushYds !== 12) {
+        fail('punt', 'rush wrong, expected 1/12: ' + prev.rushes + '/' + prev.rushYds);
+      }
+      if (prev.passes !== 1 || prev.passYds !== 20) {
+        fail('punt', 'pass wrong, expected 1/20: ' + prev.passes + '/' + prev.passYds);
+      }
+      // TOTAL plays/yards. This asserted 'YARDS 32' until 14 Aug 2026,
+      // when the previous-drive tile still counted a different thing
+      // under a different name from the live one beside it.
+      if (prev.totalPlays !== 2 || prev.totalYds !== 32) {
+        fail('punt', 'total wrong, expected 2/32: ' + prev.totalPlays + '/' + prev.totalYds);
+      }
+      // 10:00 -> 6:30 is 3:30 of possession. A broken drive split makes
+      // this 0, so it doubles as a boundary check -- and it is the single
+      // most sensitive number here, which is why it survived the move off
+      // the card rather than being dropped with it.
+      if (prev.top !== 210) {
+        fail('punt', 'time of possession wrong, expected 210s (3:30): ' + prev.top);
+      }
+      // The drive ended in a punt; the trailing clock line must not be
+      // what the summary describes.
+      const line = String(prev.lastPlayText || prev.scoringPlayText || '');
+      if (!/punts 40/.test(line)) {
+        fail('punt', 'summary line is not the punt: ' + JSON.stringify(line));
+      }
+      if (/Clock\s*[—-]/.test(line)) {
+        fail('punt', 'summary line is a clock marker: ' + JSON.stringify(line));
+      }
     }
     v.close();
   }
@@ -199,23 +246,27 @@ async function run() {
     if (/Manual flip/.test(current)) {
       fail('manual-flip', 'current drive begins on the flip marker itself: ' + current.trim());
     }
-    const prev = v.document.getElementById('prevDriveLogScroll').textContent.replace(/\s+/g, ' ');
-    if (!/1\/8\s*TOTAL/.test(prev)) fail('manual-flip', 'previous drive total wrong, expected 1/8: ' + prev.trim());
-    // The two panels must carry the SAME labels -- with one deliberate
-    // exception, added 21 Aug 2026: the current drive's fourth tile
-    // reads SOP, not TOP, for as long as the drive is still open (no
-    // closing clock event yet) -- there is no elapsed duration to show
-    // yet, only the clock as logged at the start. Normalized to the
-    // same token before comparing, since SOP-vs-TOP on an OPEN drive is
-    // the intended difference this test now has to allow for, not a
-    // mismatch. Every other label must still agree exactly.
+    const prev = prevDriveSummary(v);
+    if (!prev) fail('manual-flip', 'no previous drive could be computed at all');
+    else if (prev.totalPlays !== 1 || prev.totalYds !== 8) {
+      fail('manual-flip', 'previous drive total wrong, expected 1/8: ' +
+        prev.totalPlays + '/' + prev.totalYds);
+    }
+    // THE SIDE-BY-SIDE LABEL COMPARISON IS GONE, and deliberately not
+    // replaced. It existed because two drive panels sat in the same quad
+    // and had to agree on what their four tiles were called -- a real
+    // risk when the same numbers were rendered twice by two functions.
+    // There is one panel now, so there is nothing to disagree with; the
+    // series tiles beside it report different quantities under their own
+    // names by design.
+    //
+    // What that comparison was ultimately protecting -- that the current
+    // drive's fourth tile reads Started while the drive is open and TOP
+    // once it closes -- is covered directly in current_drive_tile_check.js
+    // sections 3 and 4, against the live tile rather than by cross-check.
     const cur = v.document.getElementById('currentDriveTiles').textContent.replace(/\s+/g, ' ');
-    const labelsOf = t => (t.match(/RUSH|PASS|TOTAL|YARDS|TOP|SOP/g) || [])
-      .map(l => l === 'SOP' ? 'TOP' : l).join(',');
-    if (cur && labelsOf(cur) !== labelsOf(prev)){
-      fail('manual-flip', 'the current and previous drive tiles do not match: current [' +
-           labelsOf(cur) + '] vs previous [' + labelsOf(prev) + '] — two drives side by ' +
-           'side are there to be compared');
+    if (!/RUSH/.test(cur) || !/PASS/.test(cur) || !/TOTAL/.test(cur)) {
+      fail('manual-flip', 'the current drive tiles lost their labels: ' + cur.trim());
     }
     v.close();
   }
@@ -327,14 +378,22 @@ async function run() {
     h.close();
 
     const v = await bootPage('view.html', { existingPlays: rows });
-    const prevHtml = v.document.getElementById('prevDriveLogScroll').innerHTML;
-    if (!/PAT — GOOD/.test(prevHtml)) {
-      fail('try-outcome-display', 'a defensive score\'s own PAT never rendered in the Previous Drive ' +
-        'panel: ' + prevHtml.replace(/<[^>]+>/g, '|'));
-    }
-    if (!/color:#1a7a4c/.test(prevHtml.split('PAT — GOOD')[0].slice(-120))) {
-      fail('try-outcome-display', 'the PAT line rendered but not in the expected "good" green');
-    }
+    // THE DISPLAY HALF OF THIS CHECK HAS NO SURFACE ANY MORE.
+    // ------------------------------------------------------------------
+    // It asserted that a finished drive's try outcome rendered in the
+    // Previous Drive panel. That panel is gone (30 Aug 2026) and nothing
+    // mid-game displays a FINISHED drive's try -- the series tiles beside
+    // the current drive report this series, not the last one.
+    //
+    // Not fabricated a replacement: sections 10 and 11 below already
+    // assert the same rendering, on the current drive card, in the window
+    // before the ensuing kickoff moves the boundary. That is the same
+    // code path (renderCurrentDriveLastPlay's tryLine) and the same
+    // colours, so the guarantee is covered -- what is lost is only the
+    // second place it used to be observable.
+    //
+    // What survives here, and is the reason this scenario is still built:
+    // the boundary itself. assertNoAdminStarts above is the check.
     v.close();
   }
 
@@ -351,14 +410,22 @@ async function run() {
     h.close();
 
     const v = await bootPage('view.html', { existingPlays: rows });
-    const prevHtml = v.document.getElementById('prevDriveLogScroll').innerHTML;
-    if (!/PAT — MISSED/.test(prevHtml)) {
-      fail('try-outcome-display', 'a defensive score\'s own MISSED PAT never rendered in the Previous ' +
-        'Drive panel: ' + prevHtml.replace(/<[^>]+>/g, '|'));
-    }
-    if (!/color:#a32d2d/.test(prevHtml.split('PAT — MISSED')[0].slice(-120))) {
-      fail('try-outcome-display', 'the missed PAT line rendered but not in the expected red');
-    }
+    // THE DISPLAY HALF OF THIS CHECK HAS NO SURFACE ANY MORE.
+    // ------------------------------------------------------------------
+    // It asserted that a finished drive's try outcome rendered in the
+    // Previous Drive panel. That panel is gone (30 Aug 2026) and nothing
+    // mid-game displays a FINISHED drive's try -- the series tiles beside
+    // the current drive report this series, not the last one.
+    //
+    // Not fabricated a replacement: sections 10 and 11 below already
+    // assert the same rendering, on the current drive card, in the window
+    // before the ensuing kickoff moves the boundary. That is the same
+    // code path (renderCurrentDriveLastPlay's tryLine) and the same
+    // colours, so the guarantee is covered -- what is lost is only the
+    // second place it used to be observable.
+    //
+    // What survives here, and is the reason this scenario is still built:
+    // the boundary itself. assertNoAdminStarts above is the check.
     v.close();
   }
 
@@ -375,7 +442,7 @@ async function run() {
     h.close();
 
     const v = await bootPage('view.html', { existingPlays: rows });
-    const prevHtml = v.document.getElementById('prevDriveLogScroll').innerHTML;
+    const prevHtml = v.document.getElementById('driveLogScroll').innerHTML;
     if (/margin-top:2px/.test(prevHtml)) {
       fail('try-outcome-display', 'a made field goal (no touchdown) rendered a stray try-outcome line: ' +
         prevHtml.replace(/<[^>]+>/g, '|'));
@@ -455,15 +522,20 @@ async function run() {
 
     const v = await bootPage('view.html', { existingPlays: rows });
     const curHtml = v.document.getElementById('driveLogScroll').innerHTML;
-    const prevHtml = v.document.getElementById('prevDriveLogScroll').innerHTML;
     if (/PAT/.test(curHtml)) {
       fail('current-drive-try-display', 'once the ensuing kickoff moved the boundary, the PAT was STILL ' +
         'showing in the now-empty Current Drive too: ' + curHtml.replace(/<[^>]+>/g, '|'));
     }
-    if ((prevHtml.match(/PAT — GOOD/g) || []).length !== 1) {
-      fail('current-drive-try-display', 'the PAT should appear exactly once in Previous Drive after the ' +
-        'boundary moves, got: ' + prevHtml.replace(/<[^>]+>/g, '|'));
-    }
+    // THE "EXACTLY ONCE IN PREVIOUS DRIVE" HALF IS GONE with the panel.
+    // The half that mattered is the one above: the reported fault was the
+    // PAT STAYING on the current drive card after the boundary moved off
+    // it, which is still fully observable and still asserted.
+    //
+    // Counting it in the other panel was only ever the confirmation that
+    // it had moved rather than vanished. With one panel there is nowhere
+    // for it to move to, so the count has no subject -- and inventing one
+    // against the series tiles would be asserting something the design
+    // never promised.
     v.close();
   }
 

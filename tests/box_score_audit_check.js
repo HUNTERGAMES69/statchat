@@ -83,7 +83,21 @@ chk(/statIssues\.slice\(0, 8\)/.test(gameSrc),
   const fn = /function auditBoxScore\(playsList\)\{[\s\S]*?\n\}/.exec(engineSrc);
   chk(!!fn, 'auditBoxScore is a real function');
   if (fn) {
-    chk(!/computeBoxScore|bucket\(/.test(fn[0]),
+    // COMMENTS STRIPPED FIRST. The guarantee is that auditBoxScore does
+    // not CALL computeBoxScore or its bucket helper -- it is a second,
+    // independent count, and that is the entire reason it can catch a
+    // fault in the first one. Mentioning the other function BY NAME in a
+    // comment is not a violation; it is the cross-reference a reader
+    // needs, and this file started failing on 30 Aug 2026 purely because
+    // comments were added saying "the same six types as computeBoxScore's
+    // TACKLE_TYPES" and "mirrors computeBoxScore's own lastKickoffKicker".
+    //
+    // A check that forbids naming the thing you must stay independent of
+    // punishes the documentation that makes the independence legible.
+    const auditCode = fn[0]
+      .replace(/\/\*[\s\S]*?\*\//g, '')     // block comments
+      .replace(/^\s*\/\/.*$/gm, '');       // line comments
+    chk(!/computeBoxScore|bucket\(/.test(auditCode),
         'and counts without calling computeBoxScore or its bucket helper — ' +
         'the whole value is in it being a separate implementation');
     // BUCKET NAMING is shared on purpose: a different key would report every

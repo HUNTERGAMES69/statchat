@@ -3,7 +3,8 @@
 // ---------------------------------------------------------------------
 // Requested directly, 21 Aug 2026, mocked up and approved before any
 // code changed. Two related changes to view.html's top-right "Current
-// Drive" tile, Previous Drive deliberately untouched by both:
+// Drive" tile. The sections that covered Previous Drive were re-pointed
+// at the series tiles that replaced it on 30 Aug 2026 -- see 5 and 9:
 //
 // 1. Instead of listing every play in the drive, only the most recent
 //    one is shown, at 30px, with the down/distance/spot it resulted in
@@ -74,43 +75,43 @@ async function run() {
     const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('currentDriveTiles') || {}).innerHTML });
     await new Promise(r => setTimeout(r, 150));
     const html = v.document.getElementById('currentDriveTiles').innerHTML;
-    if (!/SOP/.test(html)) fail('sop-label', 'expected the fourth tile to read SOP while the drive is open, got: ' + html);
+    // "Started", NOT "SOP". The label was an abbreviation with a badge
+    // around it until 25 Aug 2026, when Andy had both replaced by the
+    // plain word: the box was carrying meaning the text now carries, and
+    // it was the only label on the row wearing a colour. This section
+    // still asserts the same GUARANTEE -- while a drive is open the
+    // fourth tile reports where the possession started, not elapsed time
+    // -- against the wording the app actually uses.
+    if (!/Started/.test(html)) fail('sop-label', 'expected the fourth tile to read Started while the drive is open, got: ' + html);
     if (!/11:24/.test(html)) fail('sop-value', 'expected the logged start-of-possession clock 11:24, got: ' + html);
     if (/<span class="stat-label"[^>]*>TOP/.test(html)) fail('sop-not-top', 'must not still read TOP while the drive has no closing clock event, got: ' + html);
-    // THE TILE MATCHES ITS NEIGHBOURS; ONLY THE LABEL IS BADGED. The
-    // whole tile used to be amber, which made the quad look uneven for
-    // what is simply a fourth reading, and tinted the clock value along
-    // with it. What needs saying is that SOP is a different KIND of
-    // number from TOP -- where the possession started, not how long it
-    // has run -- so the mark goes on the word that changes between the
-    // two states.
+    // THE TILE MATCHES ITS NEIGHBOURS, and now so does the label. The
+    // whole tile was amber once, then just the label was badged, and now
+    // neither is. What the check is really protecting is that this tile
+    // never becomes visually special: it is a fourth reading on a row of
+    // four, and the difference between "Started" and "TOP" is carried by
+    // the word.
     const win = v.window;
     const items = [...v.document.querySelectorAll('#currentDriveTiles .inline-stat-item')];
     if (items.length !== 4) fail('sop-tiles', 'expected four tiles, got ' + items.length);
     const bgs = new Set(items.map(i => win.getComputedStyle(i).backgroundColor));
     if (bgs.size !== 1) {
-      fail('sop-styling', 'the SOP tile should match its neighbours, got backgrounds: ' + [...bgs].join(', '));
+      fail('sop-styling', 'the Started tile should match its neighbours, got backgrounds: ' + [...bgs].join(', '));
     }
-    const sopLabel = items.map(i => i.querySelector('.stat-label'))
-      .find(l => l && /SOP/.test(l.textContent));
-    if (!sopLabel) fail('sop-badge-missing', 'no SOP label found');
-    else {
-      if (!sopLabel.classList.contains('stat-label-badge')) {
-        fail('sop-badge', 'the SOP label should carry the badge that marks it as not a live stat');
+    const labels = items.map(i => i.querySelector('.stat-label')).filter(Boolean);
+    const startedLabel = labels.find(l => /Started/.test(l.textContent));
+    if (!startedLabel) fail('sop-badge-missing', 'no Started label found');
+    // NO LABEL IS BADGED any more -- asserted for all four rather than
+    // for the odd one out, so a badge creeping back onto any of them is
+    // caught wherever it lands.
+    labels.forEach(l => {
+      if (l.classList.contains('stat-label-badge')) {
+        fail('sop-badge-spread', l.textContent + ' should not be badged -- the badge was removed 25 Aug 2026');
       }
-      // Boxed, not merely tinted: at label size a colour change alone is
-      // easy to miss.
-      const lc = win.getComputedStyle(sopLabel);
-      if (lc.backgroundColor === 'rgba(0, 0, 0, 0)') fail('sop-badge-fill', 'the badge needs a fill');
-      if (parseFloat(lc.borderTopWidth) <= 0) fail('sop-badge-border', 'the badge needs its outline');
-      // And the other three labels must NOT be badged.
-      items.map(i => i.querySelector('.stat-label'))
-        .filter(l => l && !/SOP/.test(l.textContent))
-        .forEach(l => {
-          if (l.classList.contains('stat-label-badge')) {
-            fail('sop-badge-spread', l.textContent + ' should not be badged');
-          }
-        });
+    });
+    const colors = new Set(labels.map(l => win.getComputedStyle(l).color));
+    if (colors.size !== 1) {
+      fail('sop-label-colour', 'all four labels should read the same; got: ' + [...colors].join(', '));
     }
     v.close();
   }
@@ -137,10 +138,17 @@ async function run() {
     v.close();
   }
 
-  // --- 5. Previous Drive is completely unaffected by any of the
-  // above -- still shows all four ORIGINAL tiles (TOP, never SOP,
-  // since a finished drive by definition has a closing clock event or
-  // none logged at all), and the full renderDriveSummary() format.
+  // --- 5. THE SERIES TILES, which replaced Previous Drive on 30 Aug
+  // 2026. This section used to assert that the SOP/TOP change did not
+  // leak into the other card in the quad. There is still another card in
+  // the quad, so the guarantee survives with a new subject: the four
+  // series tiles describe THIS series and never borrow the current
+  // drive's clock vocabulary.
+  //
+  // SOP is the point. It is a live reading -- where the possession
+  // started, shown while the drive is still open -- and it belongs to the
+  // current drive card alone. A series tile showing it would be claiming
+  // something about a set of downs that the tile does not measure.
   {
     const h = await bootGamePage();
     setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
@@ -151,14 +159,26 @@ async function run() {
     const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
     h.close();
 
-    const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('prevDriveLogScroll') || {}).innerHTML });
+    const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('seriesTiles') || {}).innerHTML });
     await new Promise(r => setTimeout(r, 150));
-    const html = v.document.getElementById('prevDriveLogScroll').innerHTML;
-    if (!/RUSH/.test(html) || !/PASS/.test(html) || !/TOTAL/.test(html) || !/TOP/.test(html)) {
-      fail('previous-drive-tiles-unaffected', 'expected all four original tiles (RUSH/PASS/TOTAL/TOP), got: ' + html);
+    const el = v.document.getElementById('seriesTiles');
+    const html = el ? el.innerHTML : '';
+    const count = el ? el.querySelectorAll('.series-tile').length : 0;
+    if (count !== 4) fail('series-tile-count', 'expected four series tiles, got ' + count);
+    // Named for what they report, in the order the grid lays them out.
+    ['Long pass', 'Long rush', 'Penalties', 'Sacks'].forEach(label => {
+      if (!new RegExp(label, 'i').test(html)) {
+        fail('series-tile-labels', 'expected a "' + label + '" tile, got: ' + html.slice(0, 300));
+      }
+    });
+    if (/SOP/.test(html)) fail('series-no-sop', 'the series tiles must never show SOP -- that is the current drive card\'s live reading, got: ' + html);
+    if (/\bTOP\b/.test(html)) fail('series-no-top', 'time of possession belongs to the current drive card, not a series tile, got: ' + html);
+    // BOTH TEAMS ON THE PENALTIES TILE, even at zero. A single-team
+    // penalty count invites the reading that the other team has none
+    // recorded rather than none called.
+    if (!/Neville/.test(html) || !/TEST OPP/.test(html)) {
+      fail('series-penalties-both-teams', 'the penalties tile should name both teams, got: ' + html.slice(0, 400));
     }
-    if (/SOP/.test(html)) fail('previous-drive-no-sop', 'Previous Drive must never show SOP -- it is always a finished drive, got: ' + html);
-    if (!/punts 40/.test(html)) fail('previous-drive-summary-unchanged', 'expected the unchanged summary-line format, got: ' + html);
     v.close();
   }
 
@@ -227,60 +247,82 @@ async function run() {
     v.close();
   }
 
-  // --- 9. Previous Drive's own outcome text is larger too (16px, up
-  // from 13px) -- readable, but still well short of Current Drive's
-  // 30px headline, since this is a summary of a finished drive, not
-  // the thing the page is live for. Tested directly against
-  // renderDriveSummary() with a hand-built touchdown+PAT summary,
-  // rather than fighting a full possession-change UI sequence for a
-  // check that only needs the function's own output.
+  // --- 9. THE SERIES CARD'S PLACEMENT AND TYPE SCALE.
+  // Sections 9 and 10 both tested the removed Previous Drive card: its
+  // outcome text staying under Current Drive's headline, and the fixed
+  // gap and divider above it. renderDriveSummary() is gone, so the first
+  // guarantee has no subject -- and it does NOT carry over, because the
+  // series number is deliberately 40px, LARGER than the 36px headline.
+  // It is a stat readout meant to be read across a room, not prose
+  // competing with the play. Asserting "smaller than the headline" here
+  // would be inventing a rule the design never had.
+  //
+  // What does carry over is the placement: a fixed, moderate gap with a
+  // visible divider, so the card reads as its own thing rather than as a
+  // continuation of the drive log above it.
   {
-    const v = await bootPage('view.html', { existingPlays: [], readyWhen: win => (win.document.getElementById('prevDriveLogScroll') || {}).innerHTML !== undefined });
-    await new Promise(r => setTimeout(r, 100));
-    const summary = {
-      team: 'teamA', rushes: 4, rushYds: 22, passes: 2, passYds: 18, totalPlays: 6, totalYds: 40, top: 165,
-      scoringPlayText: 'TOUCHDOWN, N Runningback 6 yd run', lastPlayText: null,
-      tryOutcome: { text: 'N Kicker (Neville) PAT good', good: true }
-    };
-    const html = v.evalIn('renderDriveSummary(' + JSON.stringify(summary) + ')');
-    if (!/font-size:20px/.test(html)) fail('prev-drive-outcome-larger', 'expected the outcome line at 20px, got: ' + html);
-    if (/font-size:36px/.test(html)) fail('prev-drive-not-as-large-as-current', 'Previous Drive\'s outcome text must stay well under Current Drive\'s 36px, got: ' + html);
-    if (!/PAT good/.test(html)) fail('prev-drive-try-line', 'expected the PAT sub-line to still render, got: ' + html);
-    // Requested directly in the same follow-up: the PAT/try sub-line
-    // was still too small next to the now-larger outcome line above
-    // it -- bumped from 12px to 15px, still visibly the smaller of the
-    // two on purpose.
-    if (!/font-size:16px/.test(html)) fail('prev-drive-try-line-larger', 'expected the PAT sub-line at 16px, got: ' + html);
-    v.close();
-  }
+    const h = await bootGamePage();
+    setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 25 });
+    enterPlay(h, { type: 'rush', carrier: '22', yards: '20' });
+    const rows = h.db.plays.map((r, i) => Object.assign({}, r, { sequence_number: r.sequence_number || i + 1 }));
+    h.close();
 
-  // --- 10. Previous Drive sits a fixed, moderate distance below
-  // Current Drive's own content -- changed from margin-top:auto
-  // (which pinned it to the absolute bottom edge, but pushed ALL the
-  // tile's leftover space above it instead) to a fixed gap, so
-  // whatever space remains falls below it near the tile's own bottom
-  // edge, where padding-bottom already accounts for it. Still has a
-  // visible divider above it either way.
-  {
-    const v = await bootPage('view.html', { existingPlays: [], readyWhen: win => (win.document.getElementById('prevDriveLogScroll') || {}).innerHTML !== undefined });
-    await new Promise(r => setTimeout(r, 100));
-    const el = v.document.querySelector('.drive-previous');
-    const style = v.window.getComputedStyle(el);
-    if (style.marginTop !== '30px') fail('moderate-gap-above', 'expected a fixed 30px gap above Previous Drive, not margin-top:auto (which pins to the absolute bottom instead), got: ' + style.marginTop);
-    // Reported directly from a live screenshot: at desktop width the
-    // stacked tiles' text read too small against tiles stretched that
-    // wide -- bumped to 28px values with 13px labels, checked as
-    // computed styles rather than markup so a stray override anywhere
-    // else in the stylesheet would still be caught.
-    v.evalIn('document.getElementById("prevDriveLogScroll").innerHTML = renderDriveSummary({ team: "teamA", rushes: 1, rushYds: 5, passes: 1, passYds: 8, totalPlays: 2, totalYds: 13, top: 60, scoringPlayText: null, lastPlayText: "x", tryOutcome: null })');
-    const val = v.document.querySelector('.inline-stat-item .stat-value');
-    const lab = v.document.querySelector('.inline-stat-item .stat-label');
-    if (v.window.getComputedStyle(val).fontSize !== '28px') fail('tile-value-size', 'expected tile values at 28px, got: ' + v.window.getComputedStyle(val).fontSize);
-    if (v.window.getComputedStyle(lab).fontSize !== '13px') fail('tile-label-size', 'expected tile labels at 13px, got: ' + v.window.getComputedStyle(lab).fontSize);
-    if (!/1px solid/.test(style.borderTop)) fail('divider-above', 'expected a visible border-top divider above Previous Drive, got: ' + style.borderTop);
-    // Requested directly, same follow-up: the content sat flush against
-    // the tile's bottom edge with no breathing room once pinned there.
-    if (style.paddingBottom !== '16px') fail('bottom-spacing', 'expected 16px of padding below Previous Drive\'s own content, got: ' + style.paddingBottom);
+    const v = await bootPage('view.html', { existingPlays: rows, readyWhen: win => (win.document.getElementById('seriesTiles') || {}).innerHTML });
+    await new Promise(r => setTimeout(r, 150));
+    const card = v.document.querySelector('.series-card');
+    if (!card) fail('series-card-missing', 'no .series-card in the DOM');
+    else {
+      const style = v.window.getComputedStyle(card);
+      // 8px, not the old 30px. The gap came down with the tiles on 30 Aug
+      // to buy quad headroom -- see the note in view.html. Asserted as a
+      // computed style so a stray override anywhere else is caught.
+      if (style.marginTop !== '8px') {
+        fail('series-gap-above', 'expected an 8px gap above the series card, got: ' + style.marginTop);
+      }
+      if (!/1px solid/.test(style.borderTop)) {
+        fail('series-divider-above', 'expected a visible border-top divider above the series card, got: ' + style.borderTop);
+      }
+    }
+
+    // THE TYPE SCALE, as computed styles rather than markup.
+    const num = v.document.querySelector('.series-tile:not(.two-row) .series-num');
+    const lab = v.document.querySelector('.series-tile .series-tile-label');
+    const two = v.document.querySelector('.series-tile.two-row .series-num');
+    if (!num || !lab) fail('series-type-missing', 'could not find a series number and label to measure');
+    else {
+      if (v.window.getComputedStyle(num).fontSize !== '40px') {
+        fail('series-num-size', 'expected series numbers at 40px, got: ' + v.window.getComputedStyle(num).fontSize);
+      }
+      if (v.window.getComputedStyle(lab).fontSize !== '15px') {
+        fail('series-label-size', 'expected series labels at 15px, got: ' + v.window.getComputedStyle(lab).fontSize);
+      }
+    }
+    // THE TWO-ROW TILE IS SMALLER, and has to be: Penalties carries a row
+    // per team in the same 96px box. If these ever match, the tile clips
+    // and the second team's line is the one that goes.
+    if (two) {
+      const oneSize = parseInt(v.window.getComputedStyle(num).fontSize, 10);
+      const twoSize = parseInt(v.window.getComputedStyle(two).fontSize, 10);
+      if (!(twoSize < oneSize)) {
+        fail('series-two-row-smaller', 'the two-row tile type must stay smaller than the single-row tile: ' +
+          twoSize + 'px against ' + oneSize + 'px');
+      }
+    }
+
+    // --- and the CURRENT drive's own tiles keep their sizes. This was
+    // section 10's second half, and it is the part that still has a
+    // subject: the four inline stats above the play text.
+    const val = v.document.querySelector('#currentDriveTiles .inline-stat-item .stat-value');
+    const vlab = v.document.querySelector('#currentDriveTiles .inline-stat-item .stat-label');
+    if (!val || !vlab) fail('current-tiles-missing', 'no current-drive inline stats rendered');
+    else {
+      if (v.window.getComputedStyle(val).fontSize !== '28px') {
+        fail('tile-value-size', 'expected tile values at 28px, got: ' + v.window.getComputedStyle(val).fontSize);
+      }
+      if (v.window.getComputedStyle(vlab).fontSize !== '13px') {
+        fail('tile-label-size', 'expected tile labels at 13px, got: ' + v.window.getComputedStyle(vlab).fontSize);
+      }
+    }
     v.close();
   }
 
@@ -434,7 +476,14 @@ async function run() {
     await new Promise(r => setTimeout(r, 150));
     let html = v.document.getElementById('driveLogScroll').innerHTML;
     if (!/font-size:36px[^>]*>[^<]*rush for 8/.test(html)) fail('timeout-additive', 'expected the rush still as the headline, got: ' + html);
-    if (!/color:#7a5c00[^>]*>Timeout — /.test(html)) fail('timeout-line', 'expected the timeout as an amber sub-line, got: ' + html);
+    // AMBER, but not #7a5c00 any more. That was the dark-on-light value
+    // from before the dark theme; the sub-line now uses the app's own
+    // amber, #ffc72c, the same token the clock readings and the spot
+    // nudge use. The guarantee is unchanged -- a timeout is additive,
+    // rendered as its own coloured sub-line under the play rather than
+    // replacing it -- so the check follows the colour rather than
+    // pinning the old one.
+    if (!/color:#ffc72c[^>]*>Timeout — /.test(html)) fail('timeout-line', 'expected the timeout as an amber sub-line, got: ' + html);
     if (html.indexOf('rush for 8') > html.indexOf('Timeout')) fail('timeout-order', 'the play must come BEFORE the timeout line, got: ' + html);
     v.close();
 
@@ -604,7 +653,7 @@ if (require.main === module) {
     console.log('Failures: ' + failures.length);
     failures.forEach(f => console.log('  [' + f.area + '] ' + f.detail));
     if (!failures.length) {
-      console.log('  only the most recent play shows, at the larger size, with the down/distance/spot it resulted in beneath it; the fourth tile correctly reads SOP while a drive is open and TOP once closed; Previous Drive is untouched throughout.');
+      console.log('  only the most recent play shows, at the larger size, with the down/distance/spot it resulted in beneath it; the fourth tile correctly reads Started while a drive is open and TOP once closed; the series tiles report this series and never borrow the drive card\'s clock vocabulary.');
     }
     process.exitCode = failures.length ? 1 : 0;
   }).catch(e => { console.error(e.stack); process.exit(1); });

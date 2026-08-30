@@ -33,7 +33,34 @@ const view = async (rows, game) => {
   await new Promise(r => setTimeout(r, 200));
   return w;
 };
-const shown = (w, sel) => w.window.getComputedStyle(w.document.querySelector(sel)).display !== 'none';
+// DEFENSIVE ABOUT A MISSING ELEMENT. This threw
+// "The provided value is not of type 'Element'" the day the previous-drive
+// card was removed, which killed the whole run at the first assertion and
+// reported nothing about the twenty checks behind it. A selector that
+// matches nothing is a real failure, but it should be reported as one
+// rather than as a crash.
+const shown = (w, sel) => {
+  const el = w.document.querySelector(sel);
+  if (!el) return null;                       // caller decides what that means
+  return w.window.getComputedStyle(el).display !== 'none';
+};
+
+// THE BANNER NO LONGER CARRIES DOWN AND DISTANCE.
+// ---------------------------------------------------------------------
+// Removed 23 Aug 2026: it took a full line of its own and pushed the
+// banner to three lines on an iPad. The situation is already on screen in
+// Current Drive, so nothing was lost.
+//
+// These checks used to read #downText, which has not existed since then --
+// so they were throwing rather than asserting, and the throw killed the
+// run before the twenty checks behind it. What is still worth guarding is
+// the DECISION: the banner shows the phase and the quarter, never a down.
+// #quarterText is what is there now.
+const bannerDown = (w) => {
+  const el = w.document.getElementById('quarterText');
+  const txt = el ? (el.textContent || '').trim() : '';
+  return /\d+(st|nd|rd|th) & /.test(txt) ? txt : '';
+};
 
 async function run() {
   const failures = [];
@@ -53,7 +80,13 @@ async function run() {
     const half = rows.concat([{ id: 'h1', text: 'End of 1st half', effect: {}, is_divider: true, quarter: 2, sequence_number: 99 }]);
     const w = await view(half);
     if (shown(w, '.drive-current')) fail('halftime:current', 'the Current Drive card should be hidden at halftime');
-    if (shown(w, '.drive-previous')) fail('halftime:previous', 'the Previous Drive card should be hidden at halftime');
+    // THE SERIES CARD, which replaced the Previous Drive card on 30 Aug
+    // 2026. view.html hides `.drive-current` and `.series-card` together
+    // at halftime and at final, in one query, so the pair cannot drift
+    // apart -- and this asserts the pair rather than just the survivor.
+    const seriesAtHalf = shown(w, '.series-card');
+    if (seriesAtHalf === null) fail('halftime:series', 'no .series-card in the DOM at all');
+    else if (seriesAtHalf) fail('halftime:series', 'the series tiles should be hidden at halftime');
     if (!shown(w, '#scoringCard')) fail('halftime:scoring', 'the scoring summary should take the quad at halftime');
     const head = w.document.getElementById('scoringHeading').textContent;
     if (!/first half/i.test(head)) fail('halftime:heading', 'expected a first-half heading, got: ' + head);
@@ -210,15 +243,32 @@ async function run() {
     if (w.document.getElementById('currentDriveTiles').textContent.trim()) {
       fail('half-reset:tiles', 'the tiles still carry first-half figures: ' + w.document.getElementById('currentDriveTiles').textContent.trim());
     }
-    if (!/no previous drive/i.test(w.document.getElementById('prevDriveLogScroll').textContent)) {
-      fail('half-reset:previous', 'Previous Drive should not show a first-half drive after the interval');
+    // THE SERIES TILES, which replaced the Previous Drive card. The old
+    // check looked for the words "no previous drive"; the equivalent
+    // guarantee now is that the tiles are PRESENT but EMPTY.
+    //
+    // Present matters as much as empty. view.html renders
+    // renderSeriesTiles([], null) here rather than blanking the grid,
+    // deliberately: a fixed-height card that disappears between "Start
+    // 2nd half" and the kickoff collapses the quad and pops it back. So
+    // asserting only "no first-half data" would pass if the card vanished
+    // altogether, which is the failure the empty render exists to prevent.
+    const tilesEl = w.document.getElementById('seriesTiles');
+    const tileCount = tilesEl ? tilesEl.querySelectorAll('.series-tile').length : 0;
+    if (tileCount !== 4) {
+      fail('half-reset:series-shape', 'expected four series tiles holding the quad open, got ' + tileCount);
+    }
+    const tileTxt = (tilesEl ? tilesEl.textContent : '').replace(/\s+/g, ' ');
+    if (/rush for 9|punts/i.test(tileTxt)) {
+      fail('half-reset:series', 'the series tiles are still showing a first-half play: ' + tileTxt);
     }
     // THE BANNER TOO. computeState() keeps the down, distance and spot the
     // first half ended on, so the black bar read "3rd & 16 at own 12"
     // while the teams lined up to kick. Reported from a real game.
-    if (w.document.getElementById('downText').textContent.trim()) {
+    const staleBanner = bannerDown(w);
+    if (staleBanner) {
       fail('half-reset:banner', 'the banner is still showing the situation the interval interrupted: ' +
-        JSON.stringify(w.document.getElementById('downText').textContent.trim()));
+        JSON.stringify(staleBanner));
     }
     w.close();
 
@@ -231,9 +281,10 @@ async function run() {
     if (/punts|rush for 9/.test(head)) fail('half-reset:stale', 'a first-half play is showing on a second-half card: ' + JSON.stringify(head.trim()));
     // Still blank through the kick: a kickoff sets no down, so there is
     // nothing to report until a snap or a drive marker lands.
-    if (w.document.getElementById('downText').textContent.trim()) {
-      fail('half-reset:banner-kickoff', 'the banner should stay blank during the kickoff, got: ' +
-        JSON.stringify(w.document.getElementById('downText').textContent.trim()));
+    const kickBanner = bannerDown(w);
+    if (kickBanner) {
+      fail('half-reset:banner-kickoff', 'the banner should carry no down during the kickoff, got: ' +
+        JSON.stringify(kickBanner));
     }
     // AND IN THE TILE, which builds its own copy of that line -- fixing
     // the banner alone left "3rd & 16 at own 12" sitting under the
