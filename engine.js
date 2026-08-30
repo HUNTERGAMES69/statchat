@@ -1663,10 +1663,15 @@ function auditBoxScore(playsList){
   // lets the roster resolve it -- except the returner, which passes a name.
   const stKey = (p) => key('specialTeams', p, false);
 
+  // The kicker of the most recent kickoff, for the legacy touchback path
+  // below. Mirrors computeBoxScore's own lastKickoffKicker exactly.
+  let lastKickoffKicker = null;
+
   (playsList || []).forEach(p => {
     const r = p.roles, e = p.effect || {};
     if (!r || !r.playType) return;
     const t = r.playType;
+    if (t === 'kickoff' && r.kicker) lastKickoffKicker = r.kicker;
 
     // --- rushing. A fumble on a running play is still a carry.
     if (r.carrier && (t === 'rush' || (t === 'fumble' && r.attempt === 'rush'))){
@@ -1804,6 +1809,34 @@ function auditBoxScore(playsList){
     if (r.kicker && t === 'kickoff'){
       put(r.kicker.team, 'specialTeams', stKey(r.kicker), 'kickoffs', 1);
       if (r.kicker.touchback) put(r.kicker.team, 'specialTeams', stKey(r.kicker), 'touchbacks', 1);
+    }
+    // A TOUCHBACK RECORDED ON ITS OWN PLAY, and the legacy text path.
+    // ------------------------------------------------------------------
+    // Both missing until the special-teams sweep on 30 August 2026. The
+    // guided kickoff flow cannot put the touchback on the kick -- it
+    // writes the kick before anyone knows where the ball came down -- so
+    // the outcome arrives as a separate play carrying kickoffTouchback.
+    // The auditor counted neither that nor the text-matched path for
+    // rows saved before the role existed, so EVERY guided kickoff
+    // touchback reported "the log says 0, the stat line says 1" at
+    // finalize: a scorer chasing a phantom disagreement on a play they
+    // had entered correctly.
+    //
+    // Counted as a TOUCHBACK ONLY. The kickoff itself was already
+    // counted on the play that recorded the kick, and incrementing
+    // kickoffs here as well would report two kicks for one -- the same
+    // note computeBoxScore carries, for the same reason.
+    if (r.kickoffTouchback){
+      put(r.kickoffTouchback.team, 'specialTeams', stKey(r.kickoffTouchback), 'touchbacks', 1);
+    } else if (t === 'kickoff_return' &&
+               String(p.text || '').toUpperCase().indexOf('TOUCHBACK') !== -1){
+      // String matching, not a regex, for the reason recorded at
+      // computeBoxScore's copy: tests/engine_standalone_check.js cannot
+      // parse regex literals and reads /TOUCHBACK/ as an undefined
+      // global.
+      if (lastKickoffKicker){
+        put(lastKickoffKicker.team, 'specialTeams', stKey(lastKickoffKicker), 'touchbacks', 1);
+      }
     }
     if (r.kicker && t === 'fg'){
       const k = stKey(r.kicker);
