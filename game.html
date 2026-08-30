@@ -2057,9 +2057,30 @@ function clockHelpFor(val){
     return '"' + val + '" is ambiguous -- it could mean ' + val + ' seconds or ' + val + ' minutes. ' +
       'Type "0' + val + '" for ' + val + ' seconds, or "' + val + '00" for ' + val + ':00.';
   }
-  return '"' + val + '" is not a valid clock value for this quarter. Use M:SS (9:47) or just ' +
-    'the digits (947). The last two digits are always the seconds, and the value cannot ' +
-    'exceed the quarter length.';
+  // NAME THE ACTUAL CAUSE. This was one message for three different
+  // faults, so a scorer who typed 9:75 was told about the quarter length
+  // -- true of the app, irrelevant to their mistake -- and one who typed
+  // 13:00 was told the value "cannot exceed the quarter length" without
+  // being told what the quarter length is. Same fault Andy reported on
+  // the backwards-clock warning: the message withholds the fact the
+  // reader needs to act on it.
+  const qs = Math.floor(quarterLengthSec / 60) + ':' +
+             String(quarterLengthSec % 60).padStart(2, '0');
+  const m = /^(\d{1,2}):(\d{2})$/.exec(val) || /^(\d*)(\d{2})$/.exec(val);
+  if (m){
+    const mins = m[1] ? parseInt(m[1], 10) : 0, secs = parseInt(m[2], 10);
+    if (secs > 59){
+      return '"' + val + '" reads as ' + secs + ' seconds, and there is no such thing. ' +
+        'The last two digits are always the seconds, so a minute is "100", not "60".';
+    }
+    if (mins * 60 + secs > quarterLengthSec){
+      return '"' + val + '" is longer than a quarter. A quarter in this game is ' + qs +
+        ', so the clock never reads more than that. If the game uses a different quarter ' +
+        'length, change it in the game settings rather than entering a time past it.';
+    }
+  }
+  return '"' + val + '" is not a clock value. Use M:SS (9:47) or just the digits (947) — ' +
+    'the last two digits are always the seconds. A quarter here is ' + qs + '.';
 }
 function normalizeClockStr(quarter, clockStr){
   let m = clockStr.match(/^(\d{1,2}):(\d{2})$/);
