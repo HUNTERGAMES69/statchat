@@ -1408,18 +1408,26 @@
      which is why it needs no beforeSend and the others cannot have the
      tag copied to them unchanged.
 
-     THE SRC PATH IS PROJECT-SPECIFIC and has to be pasted from the
-     Vercel dashboard (Analytics -> Enable, which prints the snippet).
-     It is NOT /_vercel/insights/script.js any more -- that path still
-     serves, but ad blockers match on it by name, and a marketing page
-     is exactly where blocker-heavy traffic shows up. The placeholder
-     below 404s on purpose: a wrong unique path fails visibly in the
-     Network tab, where a silently-blocked legacy path does not.
+     /_vercel/insights/ IS THE RIGHT PATH HERE, and the docs' talk of a
+     per-project "unique path" does not apply. That path is not a value
+     anyone copies out of the dashboard -- it is DISCOVERED AT RUNTIME
+     by the @vercel/analytics npm package, which is what Vercel means by
+     resilient intake. A static tag on a page with no build step cannot
+     discover anything, so it uses the fixed route that enabling
+     analytics provisions. The dashboard offers no HTML option in its
+     framework dropdown for the same reason: every flow it lists assumes
+     a bundler.
+
+     THE COST OF THAT is that /_vercel/insights is the exact string ad
+     blockers match on, so blocked visitors are invisible. Undercounting,
+     never overcounting -- treat the number as a floor. It also means a
+     blocked visit and no visit look identical, so test with blockers
+     off or the tag reads as broken when it is working.
 
      Anchor jumps (#stats, #feeds, #pricing, #compare, #contact) are
      not page views. This reports one row, "/", however far a visitor
      scrolls. Section-level interest would need custom events, which
      are Pro-only. -->
-<script defer src="/REPLACE-WITH-UNIQUE-PATH-FROM-VERCEL/script.js"></script>
+<script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>
