@@ -1158,6 +1158,44 @@
             '<button class="secondary rowMenuBtn" data-id="' + g.id + '" style="padding:4px 10px; font-size:16px; line-height:1;">⋮</button>' +
             '<div class="rowMenu hidden" data-id="' + g.id + '" style="position:absolute; right:0; top:100%; background:var(--sc-card); border:1px solid var(--sc-rule-strong); border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,0.55); z-index:10; min-width:140px; overflow:hidden;">' +
               (currentIsAdmin ? '<a href="create_game.html?edit=' + g.id + '" style="display:block; padding:8px 12px; color:#eef1f4; font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid var(--sc-rule);">Game setup</a>' : '') +
+              // ON AIR control. Admin and scorers both: the crew sets up
+              // the day before and Andy may not be there. Everything that
+              // makes this hard to do by accident lives in the handler --
+              // the button only carries the context the confirmations
+              // need.
+              //
+              // SECOND IN THE MENU, directly under Game setup. Andy's
+              // call, 31 Aug 2026. It had been eighth, below four report
+              // links, which is a long way down for the one item the crew
+              // touches before every broadcast.
+              //
+              // BLUE, the same token as Crew View and Score summary. The
+              // three of them are now contiguous at the top and they are
+              // the same thing -- the broadcast surfaces -- with ON AIR
+              // as the switch that makes the other two live. Reports stay
+              // green below them, destructive stays amber and red.
+              //
+              // Take OFF AIR keeps --sc-red: it is the state that is
+              // already live, and the filled dot and the colour both say
+              // so. Blue for the off state, red for the on state, so the
+              // menu item's colour tells you which way it will go before
+              // you read it.
+              //
+              // Both were bare hex literals until 31 Aug -- #0f6e56 at
+              // 2.67:1 and #b00020 at 2.26:1 on this card, against a
+              // 4.5:1 standard, which is what "hard to read" was. Tokens
+              // now: 6.61:1 and 7.67:1, and they follow the theme.
+              (currentCanEnterGames
+                ? '<button class="broadcastBtn" data-id="' + g.id +
+                  '" data-on="' + (g.is_broadcast ? '1' : '0') +
+                  '" data-label="' + String(matchup).replace(/"/g, '&quot;') +
+                  '" data-status="' + g.status +
+                  '" style="display:block; width:100%; text-align:left; padding:8px 12px; ' +
+                  'background:none; border:none; font-weight:700; font-size:13px; ' +
+                  'border-bottom:1px solid var(--sc-rule); color:' +
+                  (g.is_broadcast ? 'var(--sc-red)' : 'var(--sc-blue)') + ';">' +
+                  (g.is_broadcast ? '\u25CF Take OFF AIR' : 'Set as ON AIR') + '</button>'
+                : '') +
               (g.status === 'in_progress' ? '<a href="view.html?id=' + g.id + '" style="display:block; padding:8px 12px; color:var(--sc-blue, #1565c0); font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid var(--sc-rule);">Crew View</a>' : '') +
               (g.status === 'final' ? '<a href="view.html?id=' + g.id + '&mode=results" style="display:block; padding:8px 12px; color:var(--sc-blue, #1565c0); font-weight:600; font-size:13px; text-decoration:none; border-bottom:1px solid var(--sc-rule);">Crew View</a>' : '') +
               // SCORE SUMMARY, directly under Crew View because it is the
@@ -1178,38 +1216,6 @@
               // "view" should not mean "can walk off with everything".
               // Scorers keep it because they are the ones at the stadium
               // when something looks wrong.
-              // ON AIR control. Admin and scorers both: the crew sets up
-              // the day before and Andy may not be there. Everything that
-              // makes this hard to do by accident lives in the handler --
-              // the button only carries the context the confirmations
-              // need.
-              (currentCanEnterGames
-                ? '<button class="broadcastBtn" data-id="' + g.id +
-                  '" data-on="' + (g.is_broadcast ? '1' : '0') +
-                  '" data-label="' + String(matchup).replace(/"/g, '&quot;') +
-                  '" data-status="' + g.status +
-                  '" style="display:block; width:100%; text-align:left; padding:8px 12px; ' +
-                  'background:none; border:none; font-weight:700; font-size:13px; ' +
-                  // THE ONLY TWO COLOURS IN THIS MENU THAT DO NOT COME
-                  // FROM A TOKEN, and both were chosen for a white page:
-                  // #0f6e56 measures 2.67:1 on the dark menu and #b00020
-                  // 2.26:1, against a 4.5:1 standard. Reported 31 Aug
-                  // 2026 -- "Set as ON AIR is hard to read".
-                  //
-                  // --sc-green-dark was ADDED for this exact colour when
-                  // the Stat package link was fixed, and the note beside
-                  // it in the palette says so. That audit resolved
-                  // var() fallbacks; this one is a bare literal inside a
-                  // JS string, so it was invisible to it and kept the
-                  // deep green nobody could read.
-                  //
-                  // Tokens now, like every other item here: 8.00:1 and
-                  // 7.67:1, and they follow the theme instead of
-                  // assuming one.
-                  'border-bottom:1px solid var(--sc-rule); color:' +
-                  (g.is_broadcast ? 'var(--sc-red)' : 'var(--sc-green-dark)') + ';">' +
-                  (g.is_broadcast ? '\u25CF Take OFF AIR' : 'Set as ON AIR') + '</button>'
-                : '') +
               (currentCanEnterGames ? '<button class="exportGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--sc-ink); font-weight:600; font-size:13px; border-bottom:1px solid var(--sc-rule);">Download backup</button>' : '') +
               (currentIsAdmin ? '<button class="resetGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--sc-amber); font-weight:600; font-size:13px; border-bottom:1px solid var(--sc-rule);">Reset game</button>' : '') +
               (currentIsAdmin ? '<button class="deleteGameBtn" data-id="' + g.id + '" style="display:block; width:100%; text-align:left; padding:8px 12px; background:none; border:none; color:var(--sc-red, #a32d2d); font-weight:600; font-size:13px;">Delete game</button>' : '') +
