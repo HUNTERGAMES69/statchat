@@ -452,7 +452,46 @@ const TIMEOUTS_PER_OT = 1;
   function maxStat(bucketObj, key){
     return Object.keys(bucketObj).reduce((t, n) => Math.max(t, bucketObj[n][key] || 0), 0);
   }
-  function mergeInto(target, key, delta){
+  // ONE PLAYER, ONE LINE, WHATEVER THE SPELLING.
+  // ---------------------------------------------------------------------
+  // Reported 31 Aug 2026: forty-four Neville players appearing twice on the
+  // season surfaces, each once in Title Case and once in ALL CAPS, with the
+  // season split between the two.
+  //
+  // NOT A CODE FAULT. The 2025 roster was typed in title case and the 2026
+  // one in capitals, and both have been used inside the 2026 season -- so
+  // the box score, which keys its buckets by display name (see keyFor() in
+  // engine.js), correctly produced two different names. Right within a
+  // game; wrong the moment a season is added up across games.
+  //
+  // THE KEY STAYS A DISPLAY NAME. This report prints Object.keys() straight
+  // onto the page in a dozen places, so lowercasing the key would put
+  // lowercase names on a report parents read. Instead the incoming name is
+  // resolved to whichever spelling is already accumulating.
+  const normName = (n) => String(n).trim().replace(/\s+/g, ' ').toLowerCase();
+
+  // Which spelling to keep when two arrive. A name in capitals is almost
+  // always a roster typed that way rather than a considered choice, so a
+  // mixed-case spelling wins -- and that is also what keeps "LaBroderick
+  // Wilson" from being flattened to "LABRODERICK WILSON". Nothing here
+  // re-cases anybody: it only picks between spellings that were entered.
+  function canonicalKey(target, name){
+    const want = normName(name);
+    const found = Object.keys(target).find(k => normName(k) === want);
+    if (!found) return name;
+    const foundShouts = found === found.toUpperCase();
+    const nameShouts  = name === name.toUpperCase();
+    if (foundShouts && !nameShouts){
+      // Move the accumulated line onto the better spelling.
+      target[name] = target[found];
+      delete target[found];
+      return name;
+    }
+    return found;
+  }
+
+  function mergeInto(target, rawKey, delta){
+    const key = canonicalKey(target, rawKey);
     if (!target[key]) target[key] = {};
     Object.keys(delta).forEach(k => {
       // A LIST OF MAXIMA, and every "long" has to be on it. `retLong`

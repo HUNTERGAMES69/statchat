@@ -270,8 +270,30 @@
     });
   }
 
+  // ONE PLAYER, ONE ROW, WHATEVER THE SPELLING.
+  // ---------------------------------------------------------------------
+  // Reported 31 Aug 2026 with a screenshot: "PARKER ROBINSON" first and
+  // "Parker Robinson" second, on the same board, with his season split
+  // between them.
+  //
+  // computeBoxScore keys its buckets by DISPLAY NAME, deliberately -- see
+  // the long note at keyFor() in engine.js. Within one game that is right.
+  // Across a season it is not, because the name can reach the box score by
+  // two different routes: from the game's roster, or from a name typed on
+  // the play itself when the number was not rostered. Two games, two
+  // routes, two capitalisations, two rows -- and both of them wrong,
+  // because each holds only half his season.
+  //
+  // The merge key is normalised; the DISPLAY name is chosen separately
+  // below. Matching on case and spacing only: anything cleverer starts
+  // merging players who genuinely are different people.
+  const mergeKey = (name) => String(name).trim().replace(/\s+/g, ' ').toLowerCase();
+
   function merge(into, name, line){
-    const acc = into[name] = into[name] || {};
+    const k = mergeKey(name);
+    const acc = into[k] = into[k] || { __names: [] };
+    // Every spelling seen, so the best one can be picked for the caption.
+    acc.__names.push(String(name).trim().replace(/\s+/g, ' '));
     Object.keys(line).forEach(k => {
       const v = line[k];
       if (typeof v !== 'number') return;
@@ -303,8 +325,20 @@
         merge(totals, n, bucket[n]);
       });
     });
+    // WHICH SPELLING GOES ON AIR. The most frequently seen one wins, and a
+    // tie goes to the one that is not shouting: a roster typed in caps is
+    // common, and "PARKER ROBINSON" across a lower third looks like an
+    // error even when it is what somebody entered.
+    const displayName = (names) => {
+      const count = {};
+      names.forEach(n => { count[n] = (count[n] || 0) + 1; });
+      return Object.keys(count).sort((a, b) =>
+        (count[b] - count[a]) ||
+        ((a === a.toUpperCase() ? 1 : 0) - (b === b.toUpperCase() ? 1 : 0)) ||
+        a.localeCompare(b))[0];
+    };
     const all = Object.keys(totals)
-      .map(n => ({ name: n, d: totals[n] }))
+      .map(n => ({ name: displayName(totals[n].__names || [n]), d: totals[n] }))
       .filter(x => view.rank(x.d) > 0);
     // qualify() sees the whole field, because a minimum that means
     // anything is relative to what everyone else did.
