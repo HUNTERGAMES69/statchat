@@ -74,6 +74,17 @@ function boot(profileRow, opts) {
         if (op === 'is' && val === null) out = out.filter(r => r[col] != null);
         return api;
       },
+      // THE MIRROR OF not(...,'is',null). Added 31 Aug 2026 when the Live
+      // games query started excluding soft-deleted games with
+      // .is('deleted_at', null) -- without it this mock throws "is is not
+      // a function" and the whole file dies on a page change that is
+      // correct. `not` had been here since Recovery tools needed the
+      // other direction; only one half of the pair was ever written.
+      is(col, val){
+        if (val !== null) throw new Error('mock is() only handles null');
+        out = out.filter(r => r[col] == null);
+        return api;
+      },
       in(col, vals){ out = out.filter(r => vals.indexOf(r[col]) !== -1); return api; },
       order(){ return api; },
       limit(){ return api; },
