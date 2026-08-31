@@ -86,6 +86,19 @@ function seasonState(tenant, now){
     return { key:'suspended', label:'Suspended', days:days, endsOn:end,
              blurb:'This account has been suspended. It can read everything and change nothing.' };
   }
+  // LIFETIME, added 31 Aug 2026 for StatChat's own tenant and the school
+  // whose people helped design it. Never billed, never chased, no date to
+  // count towards -- so it short-circuits before any of the arithmetic
+  // below, and `days` is deliberately null rather than some large number
+  // that a caller might one day render.
+  //
+  // BELOW suspended and above everything else. A suspended lifetime
+  // tenant is suspended: it cannot write, whatever its billing says, and
+  // the status line has to lead with that.
+  if (t.subscription === 'lifetime'){
+    return { key:'lifetime', label:'Lifetime', days:null, endsOn:null,
+             blurb:'This account does not expire and is never billed.' };
+  }
   if (!end){
     // A trial with no date is the ordinary state of a tenant nobody has
     // billed yet -- not an error, and not something to nag about.

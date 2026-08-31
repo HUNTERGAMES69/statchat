@@ -660,11 +660,16 @@
         // it was red. That is the status line lying about the one thing it
         // is being read to find out.
         const season = seasonState(t);
+        // Lifetime borrows the 'live' pill rather than getting a colour of
+        // its own: it means the same thing to an operator scanning the
+        // column -- this school is fine, move on.
         const pill = off ? 'lapsed'
+                   : season.key === 'lifetime' ? 'live'
                    : season.key === 'expired' ? 'lapsed'
                    : t.subscription === 'active' ? 'live'
                    : t.subscription === 'lapsed' ? 'lapsed' : 'trial';
         const label = off ? 'Suspended'
+                    : season.key === 'lifetime' ? 'Lifetime'
                     : season.key === 'expired' ? 'Expired'
                     : t.subscription === 'lapsed' ? 'Lapsed \u2014 read only'
                     : t.subscription.charAt(0).toUpperCase() + t.subscription.slice(1);
@@ -717,6 +722,11 @@
           // with the school's own Account page so the two cannot disagree.
           '<td>' + (function(){
             const st = seasonState(t);
+            // NOT AN EM DASH. A dash means "no date on file", which is what
+            // an unbilled trial has. A lifetime tenant is not missing a
+            // date -- it has none by definition, and saying so is the
+            // point of the state.
+            if (st.key === 'lifetime') return '<span style="color:#6b7680;">Lifetime</span>';
             if (!t.renews_on) return '<span style="color:#6b7680;">\u2014</span>';
             const tone = st.key === 'expired'  ? 'var(--sc-red, #a32d2d)'
                        : st.key === 'expiring' ? 'var(--sc-amber-text, #a37a00)'
@@ -756,9 +766,22 @@
                 // row to a super admin and protect_tenant_billing_columns()
                 // returns early for one, so the ordinary client can write
                 // these two columns and nobody else can.
-                '<button data-paid="' + esc(t.id) + '" data-name="' + esc(t.name) + '" ' +
+                // THE PAYMENT CONTROL IS NOT OFFERED ON A LIFETIME ROW.
+                // There are no season dates to change, and a control that
+                // would immediately be undone by the constraint in 025 is
+                // a control that teaches the operator the console is
+                // unreliable.
+                (t.subscription === 'lifetime' ? '' :
+                  '<button data-paid="' + esc(t.id) + '" data-name="' + esc(t.name) + '" ' +
                   'data-renews="' + esc(t.renews_on || '') + '">' +
-                  (t.renews_on ? 'Change season dates' : 'Record payment') + '</button>' +
+                  (t.renews_on ? 'Change season dates' : 'Record payment') + '</button>') +
+                // LIFETIME. Same shape as Mark as demo below, because it is
+                // the same kind of thing: a standing property of the tenant
+                // rather than an action taken on it.
+                '<button data-life="' + esc(t.id) + '" data-name="' + esc(t.name) + '" ' +
+                  'data-on="' + (t.subscription === 'lifetime' ? '1' : '0') + '">' +
+                  (t.subscription === 'lifetime' ? 'Remove lifetime' : 'Mark as lifetime') +
+                  '</button>' +
                 '<button data-demo="' + esc(t.id) + '" data-on="' + (t.is_demo ? '1' : '0') + '" ' +
                   'data-name="' + esc(t.name) + '">' +
                   (t.is_demo ? 'Unmark as demo' : 'Mark as demo') + '</button>' +
@@ -885,6 +908,47 @@
       const wasOpen = menu && !menu.classList.contains('hidden');
       closeMenus(null);
       if (menu && !wasOpen){ menu.classList.remove('hidden'); closeMenus(menu); }
+      return;
+    }
+
+    // LIFETIME ON OR OFF.
+    // -------------------------------------------------------------------
+    // Setting it CLEARS the renewal date in the same statement, because
+    // 025 has a constraint refusing the pair -- a lifetime row with a date
+    // would eventually pass that date and start warning about a school
+    // that is never billed. Doing it in one update rather than two also
+    // means there is no moment where the row violates the constraint.
+    //
+    // Removing it drops to 'trial' with no date, which is the honest
+    // state: not billed. It does not invent an 'active' season that
+    // nobody paid for. Record payment is back on the menu straight after.
+    const life = e.target.closest('[data-life]');
+    if (life){
+      closeMenus(null);
+      const id = life.getAttribute('data-life');
+      const name = life.getAttribute('data-name');
+      const turningOn = life.getAttribute('data-on') !== '1';
+      if (!confirm(turningOn
+            ? 'Mark ' + name + ' as lifetime?\n\n' +
+              'They are never billed and never chased: no renewal date, no expiry ' +
+              'warning here or on their own Account page.\n\n' +
+              'This grants no access. Suspend still works on them exactly as it ' +
+              'does on anybody else.\n\nGo ahead?'
+            : 'Remove lifetime from ' + name + '?\n\n' +
+              'They go back to a trial with no season paid for, and will start ' +
+              'appearing as unpaid until you record one.\n\nGo ahead?')) return;
+      const { error } = await supabaseClient.from('tenants')
+        .update(turningOn ? { subscription: 'lifetime', renews_on: null }
+                          : { subscription: 'trial',    renews_on: null })
+        .eq('id', id);
+      if (error){
+        showMsg('Could not change that: ' + esc(error.message), 'error');
+        return;
+      }
+      showMsg(turningOn
+        ? esc(name) + ' is now lifetime \u2014 never billed, never chased.'
+        : esc(name) + ' is no longer lifetime, and has no season paid for.', 'success');
+      loadTenants();
       return;
     }
 
