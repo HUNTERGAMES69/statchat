@@ -1125,14 +1125,37 @@
         '</div>';
     } else {
       // New game: default the quarter length to the standard 12 minutes,
-      // and figure out the next designator from how many games already
-      // exist this season (G1 if none yet, G2 if one exists, and so on).
+      // and suggest the next designator.
+      //
+      // COUNTED, AND THAT WAS THE BUG. This used to be
+      // `games.length + 1` -- so with G1, G2 and G3 saved and G2 since
+      // deleted the count is two and it suggested "G3", which already
+      // exists. Deleting the MOST RECENT game did it every time: five
+      // games, delete G5, count is four, suggest G5, collide. The person
+      // then gets a unique-constraint error naming a game they cannot
+      // find, because 012 hides deleted rows from their own tenant.
+      //
+      // The highest number in use plus one cannot collide with anything
+      // that is here, and 027 means a deleted game no longer holds its
+      // name. Designators that are not "G<number>" are ignored for the
+      // arithmetic and left alone -- plenty of real ones are "Bayou Jamb
+      // 2026" or "P3", and they should not be renumbered.
       document.getElementById('quarterLen').value = 12;
       const seasonYearVal = parseInt(document.getElementById('seasonYear').value);
       const { data: existingSeasonGames } = await supabaseClient
-        .from('games').select('id').eq('season_year', seasonYearVal);
-      const nextNum = (existingSeasonGames ? existingSeasonGames.length : 0) + 1;
-      document.getElementById('designator').value = 'G' + nextNum;
+        .from('games').select('designator, deleted_at').eq('season_year', seasonYearVal);
+      // deleted_at is SELECTED and filtered here as well as by RLS: the
+      // platform account reads every row through is_super_admin(), so
+      // without this it would suggest around deleted games while a
+      // tenant user did not -- two people getting different suggestions
+      // from the same data.
+      const live = (existingSeasonGames || []).filter(g => !g.deleted_at);
+      let highest = 0;
+      live.forEach(g => {
+        const m = /^G(\d+)$/i.exec(String(g.designator || '').trim());
+        if (m) highest = Math.max(highest, parseInt(m[1], 10));
+      });
+      document.getElementById('designator').value = 'G' + (highest + 1);
     }
 
     // season_year IS REQUIRED HERE. Without it, this resolves against
@@ -1806,7 +1829,19 @@
       const { data: game, error: gameError } = await supabaseClient
         .from('games').insert(gamePayload).select('id').single();
       if (gameError){
-        showMsg('setupMsg', 'Could not create game: ' + gameError.message, 'error');
+        // A RAW POSTGRES ERROR IS NOT AN ANSWER. "duplicate key value
+        // violates unique constraint games_tenant_designator_key" tells
+        // a coach nothing about what to do, and names a constraint
+        // rather than the field they typed. Reported 31 Aug 2026.
+        let msg = gameError.message || 'Unknown error.';
+        if (/duplicate key|unique constraint/i.test(msg) && /designator/i.test(msg)){
+          msg = 'You already have a game called \u201c' + designator + '\u201d in the ' +
+                seasonYear + ' season. Give this one a different designator.';
+        } else if (/duplicate key|unique constraint/i.test(msg)){
+          msg = 'Something about this game clashes with one you already have. ' +
+                'Try a different designator, and tell us if it keeps happening.';
+        }
+        showMsg('setupMsg', 'Could not create game: ' + msg, 'error');
         return;
       }
       gameId = game.id;
