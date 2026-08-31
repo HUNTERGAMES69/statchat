@@ -121,6 +121,33 @@
   .fieldnote { font-size:12px; color:#6b7680; margin:4px 0 0; }
   /* Row actions. platform.html is deliberately LIGHT, so these are light --
      see "What is NOT converted" in DARK_THEME_PLAN.md. */
+  /* THE USERS TABLE BURSTS THE CARD ON "ALL TENANTS", and the email is why.
+     ------------------------------------------------------------------------
+     Reported 31 Aug 2026 with a screenshot: rows painting outside the white
+     card. One tenant at a time looked fine, which is the clue -- picking a
+     single tenant usually excludes the widest rows.
+
+     Two things stack up. An INVITED user gets four action buttons (Resend
+     invite, Change email, Temp password, Disable) where a confirmed one gets
+     three, and that cell is nowrap. Add a long address and the table's
+     min-content width goes past the 960px .wrap, so `table{width:100%}` is
+     overruled -- a table grows past its width when its content will not fit.
+
+     THE EMAIL IS THE CHEAPEST THING TO GIVE. It is the only cell with no
+     natural break, wrapping one reads as completely normal, and measured in
+     Chromium at 1440x900 it takes the table from 937px (13px outside the
+     card) back to 924px -- with the tallest row DROPPING from 85px to 57px,
+     because the badge column stops being squeezed too.
+     Letting the BUTTONS wrap also fits, but costs every row 20px of height
+     and a wrapped row of buttons reads as broken rather than as normal. */
+  td.email { overflow-wrap:anywhere; }
+
+  /* AND A BACKSTOP, so no future column or longer name can put content
+     outside the card again -- it scrolls within its own box instead. Costs
+     nothing today: measured, none of these containers scroll after the fix
+     above. */
+  #usersBody, #tenantsBody, #gamesBody, #recoveryBody, #delTenantsBody { overflow-x:auto; }
+
   .uact { font-size:12px; padding:5px 9px; border-radius:5px; border:1px solid #ccc;
           background:#fff; color:#1a1a2e; cursor:pointer; margin-left:5px;
           font-weight:600; }
@@ -1587,7 +1614,12 @@
         rows.map(u =>
           '<tr>' +
             '<td class="name">' + esc(u.displayName || '—') + '</td>' +
-            '<td>' + esc(u.email) + '</td>' +
+            // CLASSED so the stylesheet can let it wrap. An email is the one
+            // cell here with no natural break in it, and on "All tenants" it
+            // is what pushes the table past the 960px card -- see .card-table
+            // below. nth-child(2) would have done it too and would break the
+            // day a column is inserted.
+            '<td class="email">' + esc(u.email) + '</td>' +
             '<td>' + esc(u.role === 'game_entry' ? 'Game entry'
                        : u.role.charAt(0).toUpperCase() + u.role.slice(1)) + '</td>' +
             '<td>' + (u.lastSignInAt ? fmtWhen(u.lastSignInAt) : 'never') + '</td>' +
