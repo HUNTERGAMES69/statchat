@@ -1569,6 +1569,10 @@
   }
 
   let currentGameId = null;
+  // The tenant the OPEN GAME belongs to. Set in init() from the game row
+  // and read by loadSeasonLock, which must not rely on RLS to have
+  // narrowed the tenants table -- a platform admin sees every row.
+  let currentGameTenantId = null;
   let nextSequenceNumber = 1;
   let TEAMS = { teamA: {}, teamB: {} };
   let plays = [], nextId = 1, startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
@@ -1708,6 +1712,7 @@
       return;
     }
     const game = gameRows[0];
+    currentGameTenantId = game.tenant_id || null;
     gameLabel = game.designator;
     quarterLengthSec = game.quarter_length_seconds || 720;
     currentGameStatus = game.status;
@@ -1838,7 +1843,14 @@
     // NOT AWAITED. The page is already usable and this only ever takes
     // things away -- making the whole app wait on a billing lookup to
     // open a game would be the wrong trade every time.
-    loadSeasonLock();
+    // THE GAME'S OWN TENANT, passed in rather than left to RLS -- see
+    // the note in loadSeasonLock for why .limit(1) alone was not enough.
+    // Read from the module-level `currentGameTenantId`, NOT from a local
+    // `game`: enterMainView() is a different function from init(), where
+    // the row is loaded, and reaching for `game` here threw
+    // "game is not defined" on every page load -- caught by
+    // verify/gamelock.js only because it listens for page errors.
+    loadSeasonLock(currentGameTenantId);
   }
 
   function buildTeams(game, rosterRows, ourBranding){
@@ -5847,13 +5859,24 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // or billing.js somehow did not load, entry stays ON. Locking a scorer
   // out of a live game because a lookup timed out is a far worse failure
   // than letting an unpaid school enter a play the database will refuse.
-  async function loadSeasonLock(){
+  //
+  // SCOPED BY THE GAME'S OWN tenant_id. tenants_select narrows this to a
+  // single row for a school, which is why .limit(1) with no filter looked
+  // fine -- but is_super_admin() sees every tenant, so for a platform
+  // admin scoring a game this read whichever row came back first and
+  // could have locked entry on a live game because a DIFFERENT school
+  // had not paid. The fail-open design meant the likeliest outcome was
+  // silence rather than a lockout, which is worse: wrong and quiet.
+  // Found 31 Aug 2026 by tenant_scope_sweep.
+  async function loadSeasonLock(tenantId){
     if (typeof seasonState !== 'function') return;
+    if (!tenantId) return;          // fail open, exactly as below
     let row;
     try {
       const { data, error } = await supabaseClient
         .from('tenants')
         .select('subscription, renews_on, disabled_at, created_at, is_demo')
+        .eq('id', tenantId)
         .limit(1);
       if (error || !data || !data.length) return;
       row = data[0];

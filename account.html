@@ -405,8 +405,28 @@
   async function loadSeason(){
     const card = document.getElementById('seasonCard');
     if (!card) return;
+    // SCOPED BY THE SIGNED-IN USER'S OWN tenant_id, not left to RLS.
+    // ---------------------------------------------------------------
+    // tenants_select narrows this to one row for a school, so .limit(1)
+    // was right for every ordinary account -- and wrong for the one
+    // account most likely to look at it. is_super_admin() sees EVERY
+    // tenant, so on a platform admin's own Account page this returned
+    // whichever row the database happened to hand back first and showed
+    // that school's season as his own. Found 31 Aug 2026 by
+    // tenant_scope_sweep, which exists to catch exactly this: a query
+    // that is correct only because a policy is doing its filtering.
+    //
+    // Reads profiles first -- .eq('id', currentUserId) is already the
+    // shape the rest of this page uses -- and stops if there is no
+    // tenant, which is the honest answer for a platform-only account
+    // that belongs to no school.
+    const { data: me } = await supabaseClient
+      .from('profiles').select('tenant_id').eq('id', currentUserId).limit(1);
+    const myTenantId = me && me[0] && me[0].tenant_id;
+    if (!myTenantId) return;
     const { data, error } = await supabaseClient
-      .from('tenants').select('id, name, subscription, renews_on, disabled_at, created_at, is_demo').limit(1);
+      .from('tenants').select('id, name, subscription, renews_on, disabled_at, created_at, is_demo')
+      .eq('id', myTenantId).limit(1);
     if (error || !data || !data.length) return;   // nothing useful to say
     const t = data[0];
     // AN UNSELECTED COLUMN AND A NULL ONE ARE THE SAME THING IN JS, and
