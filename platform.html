@@ -133,14 +133,59 @@
      min-content width goes past the 960px .wrap, so `table{width:100%}` is
      overruled -- a table grows past its width when its content will not fit.
 
-     THE EMAIL IS THE CHEAPEST THING TO GIVE. It is the only cell with no
-     natural break, wrapping one reads as completely normal, and measured in
-     Chromium at 1440x900 it takes the table from 937px (13px outside the
-     card) back to 924px -- with the tallest row DROPPING from 85px to 57px,
-     because the badge column stops being squeezed too.
-     Letting the BUTTONS wrap also fits, but costs every row 20px of height
-     and a wrapped row of buttons reads as broken rather than as normal. */
-  td.email { overflow-wrap:anywhere; }
+     FIRST FIX (31 Aug, kept in the history below): let the email WRAP in its
+     own column. It fit -- 937px back to 924px -- but "fits" and "reads well"
+     are not the same thing, and the answer was addresses broken across three
+     ragged lines with the columns beside them mostly white space.
+
+     SECOND FIX, and the one here: the email moves UNDER the name and its
+     column goes away entirely. An account is one thing, not two, and the
+     name and the address are two ways of saying which one -- so they belong
+     in one cell. Removing a whole column buys far more room than wrapping
+     inside one ever could, the address gets the full width of the widened
+     Name column and stops wrapping at all at ordinary lengths, and the row
+     is no taller than it was because the second line fills space the wrapped
+     address was already using. */
+  .uemail { display:block; margin-top:2px; font-weight:400; font-size:12.5px;
+            color:#6b7680; overflow-wrap:anywhere; }
+  td.role, td.when { white-space:nowrap; }
+  /* WHERE THE SPARE WIDTH GOES. table{width:100%} makes the table fill the
+     card, and auto layout hands the surplus over min-content out across the
+     columns. Width 100% on one cell is the standard way to say "this column
+     takes all of it": every other column here is nowrap and settles at its
+     own min-content, so the whole surplus lands on the name and address,
+     which are the only things long enough to need it. */
+  #usersBody td.name { width:100%; }
+
+  /* AND THE USERS TAB HAS SIMPLY OUTGROWN THE 960px COLUMN.
+     ------------------------------------------------------------------------
+     Measured at 1258px with the real rows: the four columns beside the name
+     take 758px of the 924px available -- 409px of buttons on an invited row,
+     131px for a formatted timestamp, 125px for a status pill, 93px for a
+     role. That leaves 166px for a name AND an address, and the longest
+     addresses on the platform need about 230px. There is no surplus left to
+     redistribute; the rule above already gives the name every pixel going.
+
+     So the fix is width, not distribution.
+
+     THE WHOLE COLUMN WIDENS, not just the card. The first attempt widened
+     #panelUsers alone and pushed it out past the topbar and the tabs, which
+     stayed at 960px -- the card visibly overhung the page furniture on both
+     sides and read as a mistake rather than as a wide table. Everything in
+     the page lives in one .wrap, so moving .wrap keeps the brand, the tabs
+     and the card on the same two edges.
+
+     ONLY ON THE USERS TAB, which is why it is a class rather than a plain
+     media query: the other three tabs hold forms, and `label input
+     {width:100%}` would stretch a school-name field to 1220px, which is
+     worse than the problem being fixed.
+
+     ONLY ABOVE 1240px. A narrower window keeps the 960px column and falls
+     back to a wrapped address -- untidy, entirely readable, and better than
+     a console that needs a sideways scroll on a laptop. */
+  @media (min-width: 1240px) {
+    body.wide-users .wrap { max-width:1220px; }
+  }
 
   /* AND A BACKSTOP, so no future column or longer name can put content
      outside the card again -- it scrolls within its own box instead. Costs
@@ -545,6 +590,10 @@
       document.getElementById('tab' + cap).classList.toggle('on', t === which);
       document.getElementById('panel' + cap).classList.toggle('hidden', t !== which);
     });
+    // THE USERS TAB GETS A WIDER COLUMN -- see body.wide-users in the
+    // stylesheet. Set here rather than in CSS because the panels are siblings
+    // and CSS cannot style an ancestor from the one that happens to be shown.
+    document.body.classList.toggle('wide-users', which === 'users');
   }
   TABS.forEach(t => {
     const cap = t.charAt(0).toUpperCase() + t.slice(1);
@@ -1605,29 +1654,41 @@
     // a problem that was fixed one line earlier.
 
     const groupRow = (k, n) =>
-      '<tr><td colspan="6" style="padding:18px 10px 6px; border-bottom:none; ' +
+      '<tr><td colspan="5" style="padding:18px 10px 6px; border-bottom:none; ' +
         'font-size:14px; font-weight:700; color:var(--sc-ink-soft, #3a3a3a);">' +
         esc(heading(k)) +
         ' <span style="font-weight:400; color:#6b7680;">(' + n + ')</span></td></tr>';
 
     body.innerHTML = '<table>' +
-      '<tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th><th></th></tr>' +
+      '<tr><th>Name</th><th>Role</th><th>Last sign-in</th><th></th><th></th></tr>' +
       [...groups.keys()].sort().map(k => {
       const rows = groups.get(k).sort((a, b) =>
         (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
       return groupRow(k, rows.length) +
         rows.map(u =>
           '<tr>' +
-            '<td class="name">' + esc(u.displayName || '—') + '</td>' +
-            // CLASSED so the stylesheet can let it wrap. An email is the one
-            // cell here with no natural break in it, and on "All tenants" it
-            // is what pushes the table past the 960px card -- see .card-table
-            // below. nth-child(2) would have done it too and would break the
-            // day a column is inserted.
-            '<td class="email">' + esc(u.email) + '</td>' +
-            '<td>' + esc(u.role === 'game_entry' ? 'Game entry'
+            // NAME AND ADDRESS IN ONE CELL. They identify the same account,
+            // and splitting them across two columns cost the width that made
+            // every other column cramped -- see .uemail in the stylesheet.
+            //
+            // The address stays plain text rather than a mailto: link. Every
+            // other control in this row does something to the account; a link
+            // that leaves for a mail client in the middle of them is a
+            // different kind of thing wearing the same clothes.
+            // Each line gets its own element rather than a bare text node
+            // beside a span: two pieces of content, two nodes, and the name
+            // stays addressable on its own by anything reading this table.
+            '<td class="name"><span class="uname">' + esc(u.displayName || '—') + '</span>' +
+              '<span class="uemail">' + esc(u.email) + '</span></td>' +
+            // NOWRAP on both. The role is a three-item controlled vocabulary
+            // and the date is one formatted string; neither has a sensible
+            // break in it, and both were splitting across two lines ("Game /
+            // entry", "Aug 31, 10:59 / AM") purely because the status column
+            // beside them was holding slack it does not need. Pinning these
+            // pushes that slack where it belongs.
+            '<td class="role">' + esc(u.role === 'game_entry' ? 'Game entry'
                        : u.role.charAt(0).toUpperCase() + u.role.slice(1)) + '</td>' +
-            '<td>' + (u.lastSignInAt ? fmtWhen(u.lastSignInAt) : 'never') + '</td>' +
+            '<td class="when">' + (u.lastSignInAt ? fmtWhen(u.lastSignInAt) : 'never') + '</td>' +
             '<td class="right">' +
               (u.disabled ? '<span class="pill lapsed">Disabled</span>' : '') +
               (!u.emailConfirmedAt ? '<span class="pill trial">Invited</span>' : '') +
