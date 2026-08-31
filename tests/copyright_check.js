@@ -26,7 +26,12 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
 console.log('=== Copyright notices ===\n');
 
 // The live overlays. Source comment only.
-const OVERLAYS = ['broadcast.html', 'broadcast_stats.html', 'broadcast_leaders.html'];
+// broadcast_drive.html added 31 Aug 2026 with the overlay itself. This list
+// is the reason the check has to be edited whenever an overlay is added: an
+// overlay carries its notice in a source comment, because a visible one would
+// be burnt into the picture.
+const OVERLAYS = ['broadcast.html', 'broadcast_stats.html', 'broadcast_leaders.html',
+                  'broadcast_drive.html'];
 
 const pages = fs.readdirSync(root)
   .filter(f => f.endsWith('.html'))
