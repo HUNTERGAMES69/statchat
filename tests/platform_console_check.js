@@ -100,7 +100,22 @@ function boot(profileRow, opts) {
                ? { error: opts.usersError }
                : { users: opts.users || [] } };
   };
-  w.eval([...w.document.querySelectorAll('script')].map(s => s.textContent).join('\n;\n'));
+  // A LOCAL <script src> HAS NO textContent, so mapping the tags alone
+  // silently drops it -- and the page then runs with the shared rule
+  // simply missing. That is what happened when billing.js was added on
+  // 31 Aug 2026: every tenant row threw "seasonState is not defined" and
+  // this file went from green to a stack trace.
+  //
+  // Inlined by SOURCE, the same way tests/harness.js inlines engine.js,
+  // and general rather than named so the next shared script needs no
+  // change here. A remote src -- the Supabase CDN -- is already stubbed
+  // on the window above and must stay skipped.
+  w.eval([...w.document.querySelectorAll('script')].map(s => {
+    const src = s.getAttribute('src');
+    if (!src) return s.textContent;
+    if (/^https?:/i.test(src)) return '';
+    return fs.readFileSync(path.join(__dirname, '..', src), 'utf8');
+  }).join('\n;\n'));
   return { w, d: w.document, calls,
            fire: (s) => authCb && authCb('INITIAL_SESSION', s) };
 }
