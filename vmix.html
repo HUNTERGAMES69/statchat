@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Without this every page load logs a 404 for /favicon.ico.
+     Harmless, but a red console error should MEAN something. -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-title" content="StatChat">
+<title>StatChat — Feeds in vMix</title>
+<style>
+  /* THE SAME DASHBOARD BUTTON AS customize.html AND roster.html.
+     Those two render a bordered button; this page had a plain green text
+     link, so the way back looked different depending on which page you
+     were on. One control, one appearance. */
+  .backlink { text-decoration:none; padding:8px 14px; border-radius:6px;
+              border:1px solid var(--sc-rule-strong); color:var(--sc-ink); font-size:13px; font-weight:600;
+              display:inline-block; }
+
+  /* THE STATCHAT MARK, identical on every page reachable from the
+     dashboard. Same element, same size, same place: beside the page's own
+     heading. Uniformity is the point -- a mark that moves or resizes
+     between screens reads as decoration rather than as the product. */
+  .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
+  /* Dark-on-light artwork needs a plate on a #191f27 card. Undone in the
+     print block above, where the page is white again. */
+  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block;
+                  background:#fff; padding:2px; box-sizing:border-box; }
+
+  /* DARK, 25 August 2026. Recipe in DARK_THEME_PLAN.md.
+     Every --sc-* this page reads is defined, including the ones only
+     written as var(--x, #fallback) -- an undefined token silently becomes
+     the fallback, and every fallback here was chosen for white. */
+  :root{ color-scheme:dark; }
+  :root{
+    --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+    --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+    --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+    --sc-navy:#2f3a47;   /* A BUTTON FILL. Never text. */
+    --sc-green:#a3d93f;  --sc-green-tint:rgba(124,181,24,.14);
+    --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
+    --sc-amber:#ffc72c;  --sc-amber-text:#ffc72c;
+    --sc-amber-tint:rgba(255,199,44,.13);
+    --sc-blue:#5aa9f0;   --sc-link:#7cb518;
+    --sc-accent:#a3d93f; /* the heading/link green, see below */
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:14px; padding-top:calc(14px + env(safe-area-inset-top)); color:var(--sc-ink); }
+  .wrap { max-width:820px; margin:0 auto; }
+  .card { background:var(--sc-card); border:1px solid var(--sc-rule); color:var(--sc-ink); border-radius:12px; padding:22px 24px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:26px; margin:0 0 4px; }
+  h2 { font-size:20px; margin:26px 0 8px; padding-bottom:5px; border-bottom:2px solid var(--sc-green, #1a7a4c); }
+  h2:first-of-type { margin-top:0; }
+  /* #1a4d2e is a deep forest green -- 1.7:1 on this card. It is the
+     accent for headings, table heads and the contents list, so all four
+     move together to the light green. */
+  h3 { font-size:16px; margin:18px 0 6px; color:var(--sc-accent); }
+  h4 { font-size:14px; margin:14px 0 4px; }
+  /* SCREENSHOTS. Bounded rather than full-bleed: a shot of a 2500px window
+     at full width is unreadable on paper and pointless on screen small.
+     break-inside:avoid because a screenshot split across a page boundary
+     in the PDF is worse than white space at the foot of the page. */
+  figure.shot { margin:16px 0; break-inside:avoid; page-break-inside:avoid; }
+  figure.shot img { display:block; width:100%; max-width:760px;
+    border:1px solid var(--sc-rule-strong, #3d4854); border-radius:8px; }
+  figure.shot figcaption { font-size:13px; color:var(--sc-ink-muted, #8d99a6);
+    margin-top:7px; max-width:760px; line-height:1.5; }
+  p, li { line-height:1.55; font-size:15px; }
+  ol, ul { padding-left:22px; }
+  li { margin-bottom:5px; }
+  code { background:var(--sc-raise); color:var(--sc-ink); border:1px solid var(--sc-rule); border-radius:4px; padding:1px 5px; font-size:13px; font-family:ui-monospace, Menlo, Consolas, monospace; }
+  /* These are pictures of the app's buttons, so they follow the same rule
+     the real ones do: a fill for the affordance and a border for the edge.
+     Without the border they would be flat shapes here while every actual
+     button on every other page has one. */
+  .btn { display:inline-block; background:var(--sc-navy, #1a1a2e); color:var(--sc-ink); border:1px solid var(--sc-rule-strong); border-radius:6px; padding:2px 9px; font-size:13px; font-weight:600; }
+  .btn.gold { background:var(--sc-amber); color:#0d1117; border-color:#ffd964; }
+  .btn.green { background:rgba(124,181,24,.20); color:var(--sc-green); border-color:#6f9f22; }
+  .btn.red { background:rgba(176,0,32,.20); color:var(--sc-red); border-color:#c8455c; }
+  .note { background:rgba(124,181,24,.09); border-left:3px solid var(--sc-green); border-radius:4px; padding:10px 12px; margin:12px 0; font-size:14px; }
+  .warn { background:rgba(255,199,44,.10); border-left:3px solid var(--sc-amber); border-radius:4px; padding:10px 12px; margin:12px 0; font-size:14px; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:14px; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--sc-rule-strong, var(--sc-rule)); vertical-align:top; }
+  th { color:var(--sc-accent); font-size:13px; }
+  .toc { columns:2; column-gap:28px; font-size:14px; }
+  .toc a { color:var(--sc-accent); text-decoration:none; display:block; padding:3px 0; }
+  .toc a:hover { text-decoration:underline; }
+  .back { display:inline-block; margin-bottom:12px; color:var(--sc-accent); text-decoration:none; font-weight:600; font-size:14px; }
+  /* .backlink, not .back: the class changed and this rule is the only
+     thing keeping the button off a printed page. */
+  /* PAPER IS WHITE, and this page is meant to be printed and handed to a
+     crew. Everything the dark theme did has to be undone here or a reader
+     gets charcoal panels and a printer gets emptied.
+     The tokens are re-pointed rather than each rule being restated, which
+     is the whole reason the conversion went through tokens. */
+  @media print {
+    :root{ color-scheme:light;
+      --sc-page:#fff; --sc-card:#fff; --sc-raise:#f4f6f8;
+      --sc-ink:#1a1a1a; --sc-ink-soft:#3a3a3a; --sc-ink-muted:#5a5a5a;
+      --sc-rule:#dddddd; --sc-rule-strong:#bbbbbb;
+      --sc-accent:#1a4d2e; --sc-navy:#1a1a2e; }
+    body { background:#fff !important; color:#1a1a1a !important; }
+    .card { background:#fff !important; color:#1a1a1a !important;
+            border:1px solid var(--sc-rule-strong) !important; box-shadow:none; }
+    h1, h2, h3 { color:#1a1a1a !important; }
+    h3, h4, th, .toc a { color:#1a4d2e !important; }
+    code { background:#eef1f4 !important; color:#1a1a1a !important; }
+    /* The button pictures print as outlines: a solid dark fill on paper is
+       a waste of toner and reads worse than an outline does. */
+    .btn { background:#fff !important; color:#1a1a1a !important;
+           border:1px solid #999 !important; }
+    .btn.gold { background:#ffc72c !important; color:#1a1a2e !important; }
+    .btn.green, .btn.red { background:#fff !important; color:#1a1a1a !important; }
+    .note { background:#eef6f1 !important; }
+    .warn { background:#fff4d6 !important; }
+    .scMark > img { background:none !important; padding:0 !important; }
+    .backlink { display:none; }
+  }
+  /* The copyright line. Muted, small, and given its own top margin rather
+     than a bottom one, so adding it cannot push anything or change the
+     scroll height of a page that previously ended flush. */
+  .sc-copyright { margin:26px 0 0; padding:0 2px 4px; font-size:12px;
+    line-height:1.5; color:var(--sc-ink-muted, #8d99a6); opacity:.75;
+    text-align:center; max-width:760px; margin-left:auto; margin-right:auto; }
+  @media print { .sc-copyright { color:#666 !important; opacity:1; } }
+  /* THIS PAGE ONLY. help.html has no <pre> because it has no code blocks;
+     this page is mostly addresses, XPaths and one lump of XML.
+     white-space:pre-wrap rather than a scrollbar, because the print block
+     below turns this into paper and paper has no sideways scroll -- an
+     overflowing <pre> would simply be CLIPPED, silently, and the reader
+     would never learn there was more. */
+  pre { background:var(--sc-raise); border:1px solid var(--sc-rule);
+        border-left:3px solid var(--sc-green); border-radius:6px;
+        padding:12px 14px; margin:12px 0; font-size:12.5px; line-height:1.55;
+        font-family:ui-monospace, Menlo, Consolas, monospace;
+        white-space:pre-wrap; word-break:break-word; color:var(--sc-ink); }
+  @media print { pre { background:#f4f6f8 !important; color:#1a1a1a !important; } }
+  /* The settings you type into a vMix dialog. A definition list rather than
+     a table: two columns of prose in a <table> wrap badly on a phone, and
+     the crew reads this on one as often as not. */
+  dl.dialog { margin:12px 0; border:1px solid var(--sc-rule); border-radius:8px;
+              overflow:hidden; }
+  dl.dialog div { display:grid; grid-template-columns:170px 1fr;
+                  border-top:1px solid var(--sc-rule); }
+  dl.dialog div:first-child { border-top:none; }
+  dl.dialog dt { padding:9px 12px; background:var(--sc-raise); font-weight:600;
+                 font-size:14px; border-right:1px solid var(--sc-rule); }
+  dl.dialog dd { padding:9px 12px; margin:0; font-size:14px; min-width:0;
+                 overflow-wrap:anywhere; }
+  @media (max-width:560px) {
+    dl.dialog div { grid-template-columns:1fr; }
+    dl.dialog dt { border-right:none; border-bottom:1px solid var(--sc-rule); }
+  }
+  @media print { dl.dialog dt { background:#f4f6f8 !important; } }
+</style>
+</head>
+<body>
+<!-- NO BACK-LINK, and public, for exactly the reasons help.html gives: this
+     is documentation a crew reads, and half of them will never have a
+     StatChat account. Every link in from the app opens a new tab. -->
+<div class="wrap">
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding-bottom:14px; margin-bottom:20px; border-bottom:1px solid var(--sc-rule-strong, var(--sc-rule));">
+      <div class="scMark">
+        <img src="logo.png" alt="StatChat">
+        <h1>StatChat &mdash; feeds in vMix</h1>
+      </div>
+    </div>
+    <p style="color:var(--sc-ink-muted); margin-top:2px;">Set up once and never
+      touched again. The addresses follow whichever game is marked ON AIR, so
+      there is nothing to edit on game day.</p>
+
+    <div class="note" style="margin-top:14px;">
+      <strong>This is the vMix detail.</strong> For what ON AIR means, how to set
+      it, and the ready-made screen overlays, see
+      <a href="help.html#broadcast">Broadcasting (ON AIR)</a> in the main guide.
+    </div>
+
+    <div class="toc" style="margin-top:14px;">
+      <a href="#address">1. Get the address</a>
+      <a href="#source">2. Add it as a data source</a>
+      <a href="#graphic">3. Put it in a graphic</a>
+      <a href="#fields">4. Every field, by feed</a>
+      <a href="#trouble">5. When a graphic stops updating</a>
+    </div>
+
+    <div class="warn" style="margin-top:14px;">
+      <strong>Use XML, not JSON.</strong> vMix&rsquo;s JSON data source expects the
+      file to <em>be</em> an array &mdash; each element in the array becomes a row.
+      A StatChat feed is an object with the rows nested inside it under
+      <code>rows</code>, alongside the game&rsquo;s details, so vMix has nothing to
+      bind to. The JSON format is there for other software. In vMix, always
+      <code>&amp;format=xml</code>.
+    </div>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="address">1. Get the address</h2>
+    <p>One address per graphic, already built for you with your school&rsquo;s key
+      in it. Do not type one by hand.</p>
+    <ol>
+      <li>On the dashboard, open the <strong>&#8942;</strong> menu on the game&rsquo;s
+        row and choose <strong>Broadcast setup</strong>.</li>
+      <li>Set the format toggle to <strong>XML</strong>. Every address in the feed
+        table rewrites itself to <code>&amp;format=xml</code>.</li>
+      <li>Use the <span class="btn">Copy</span> button on the row you want.</li>
+    </ol>
+    <pre>https://statchat.co/api/feed?view=rushing&amp;format=xml&amp;key=20ceaabf28a1&hellip;</pre>
+    <div class="warn"><strong>Treat the address like a password.</strong> The
+      <code>key</code> is your school&rsquo;s, and anyone holding it can read your
+      live scoreboard. <span class="btn">Email to the crew</span> on the Broadcast
+      setup page is the safest way to hand them over.</div>
+    <div class="note"><strong>Mark a game ON AIR first.</strong> Every feed reads
+      whichever game is flagged; with nothing flagged it returns
+      <code>onAir="false"</code> and no rows. That is the most common reason a
+      graphic looks broken.</div>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="source">2. Add it as a data source</h2>
+    <ol>
+      <li>Click the menu icon in the <strong>bottom right corner</strong> of the main
+        vMix window and choose <strong>Data Sources Manager</strong>.</li>
+      <li>Click the <strong>add</strong> button. A settings window opens.</li>
+      <li>Fill it in:
+        <dl class="dialog">
+          <div><dt>Name</dt><dd>Something you will recognise on the mapping screen
+            later &mdash; <code>SC Rushing</code>, <code>SC Score</code>.</dd></div>
+          <div><dt>Type</dt><dd><strong>XML</strong></dd></div>
+          <div><dt>Data Location</dt><dd>Paste the address. Do not browse for a
+            file.</dd></div>
+          <div><dt>XPath</dt><dd>The step people miss. It tells vMix which element
+            is a row &mdash; see the table below. For rushing it is
+            <code>/feed/player</code>.</dd></div>
+          <div><dt>Update interval</dt><dd><strong>1&ndash;2 seconds.</strong> A
+            source that fetches once looks exactly like a frozen feed: right in
+            rehearsal, wrong all night.</dd></div>
+        </dl>
+      </li>
+      <li>Click <strong>OK</strong>. The Data Sources Manager shows the rows in a
+        table. <strong>Check them before building anything on it</strong> &mdash; if
+        that table is empty, go to section 5 rather than starting to map a title.</li>
+    </ol>
+
+    <h3>The XPath for each feed</h3>
+    <p>Every feed is wrapped in <code>&lt;feed&gt;</code> and each record gets its own
+      element. The element name changes with the view, which is why one XPath does
+      not work for all of them.</p>
+    <table>
+      <tr><th>View</th><th>XPath</th><th>Rows you get</th></tr>
+      <tr><td><code>score</code></td><td><code>/feed/game</code></td><td>One</td></tr>
+      <tr><td><code>drive</code></td><td><code>/feed/drive</code></td><td>One &mdash; the drive in progress</td></tr>
+      <tr><td><code>lastplay</code></td><td><code>/feed/play</code></td><td>One</td></tr>
+      <tr><td><code>teamstats</code></td><td><code>/feed/team</code></td><td>Two, one per team</td></tr>
+      <tr><td><code>rushing</code></td><td><code>/feed/player</code></td><td>One per player, most yards first</td></tr>
+      <tr><td><code>passing</code></td><td><code>/feed/player</code></td><td>One per player, most yards first</td></tr>
+      <tr><td><code>receiving</code></td><td><code>/feed/player</code></td><td>One per player, most yards first</td></tr>
+      <tr><td><code>defense</code></td><td><code>/feed/player</code></td><td>One per player, most tackles first</td></tr>
+    </table>
+
+    <h3>What vMix is actually reading</h3>
+    <p>A real rushing feed. Each attribute on <code>&lt;player&gt;</code> becomes a
+      column you can bind to.</p>
+<pre>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;feed view="rushing" onAir="true" game="Neville vs Ruston"
+      gameDate="2026-08-28" status="in_progress"
+      updated="2026-08-31T02:14:07.921Z"&gt;
+  &lt;player player="D. Ancelet" team="Neville" att="18" yds="142"
+          long="38" td="2" fum="0" /&gt;
+  &lt;player player="T. Guidry" team="Neville" att="9" yds="63"
+          long="21" td="0" fum="0" /&gt;
+&lt;/feed&gt;</pre>
+
+    <div class="warn"><strong><code>onAir</code> and <code>updated</code> are on the
+      wrapper, not on the rows.</strong> With the XPath set to
+      <code>/feed/player</code> your columns are the player&rsquo;s, so you cannot
+      also bind <code>onAir</code> from that same source. A graphic that greys itself
+      out when nothing is on air needs a <em>second</em> data source on the same
+      address with the XPath <code>/feed</code>.</div>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="graphic">3. Put it in a graphic</h2>
+    <p>vMix binds one title field at a time, so this is done once per piece of text
+      on the graphic.</p>
+    <ol>
+      <li>Right-click the Title input and choose <strong>Title Editor</strong>.</li>
+      <li>Select a field in the <strong>left-hand column</strong> &mdash; the text
+        objects in your title.</li>
+      <li>Click <strong>Data Source</strong> in the top menu bar.</li>
+      <li>Set the four options:
+        <dl class="dialog">
+          <div><dt>Table</dt><dd>The data source you named in section 2.</dd></div>
+          <div><dt>Column</dt><dd>The attribute &mdash; <code>player</code>,
+            <code>yds</code>, <code>td</code>. Left on <strong>Auto</strong> it
+            matches on the column name, so a title field actually named
+            <code>yds</code> finds it by itself.</dd></div>
+          <div><dt>Row</dt><dd>Left on <strong>Selected</strong> it follows whichever
+            row is selected in the Data Sources Manager. A fixed number pins the
+            field instead.</dd></div>
+          <div><dt>Format</dt><dd>Optional wrapper text. <code>{0} YDS</code> renders
+            <code>142 YDS</code>.</dd></div>
+        </dl>
+      </li>
+      <li>Repeat for every field &mdash; name, team, yards, touchdowns.</li>
+    </ol>
+
+    <h3>Choosing which player is on screen</h3>
+    <p>For any field left on <strong>Selected</strong>, the row comes from the Data
+      Sources Manager: click a row and every title bound to that source updates at
+      once.</p>
+    <ul>
+      <li><strong>Auto Next</strong> steps through the rows on a timer &mdash; type
+        the number of seconds in the box beside it. Tick <strong>Loop</strong> to
+        start again at the top.</li>
+      <li>For a shortcut or a stream deck, the functions are
+        <code>DataSourceNextRow</code>, <code>DataSourcePreviousRow</code> and
+        <code>DataSourceSelectRow</code>.</li>
+    </ul>
+    <div class="note"><strong>A top-three board does not need any of that.</strong>
+      Pin the fields instead: the first player&rsquo;s name to <strong>Row 1</strong>,
+      the second to <strong>Row 2</strong>, the third to <strong>Row 3</strong>. The
+      feed is already sorted, so the board re-orders itself as the game goes on.</div>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="fields">4. Every field, by feed</h2>
+    <p>Column names as they appear in vMix. Nothing is named after a switcher &mdash;
+      the feed describes football, and each suite maps it its own way.</p>
+    <table>
+      <tr><th>View</th><th>Columns</th></tr>
+      <tr><td><code>score</code></td><td>homeTeam homeScore awayTeam awayScore quarter quarterNumber overtimeRound down downOrdinal distance downAndDistance ballOn possession homeHasBall awayHasBall homeTimeouts awayTimeouts</td></tr>
+      <tr><td><code>drive</code></td><td>team plays yards startedAt</td></tr>
+      <tr><td><code>lastplay</code></td><td>text quarter team</td></tr>
+      <tr><td><code>teamstats</code></td><td>team score rushYards passYards totalYards rushAtt passComp passAtt totalPlays firstDowns thirdDownConv thirdDownAtt thirdDownPct fourthDownConv fourthDownAtt explosive sacks interceptions fumbleRec turnovers possessions timeOfPossession timeouts penaltyCount penaltyYards penalties</td></tr>
+      <tr><td><code>rushing</code></td><td>player team att yds long td fum</td></tr>
+      <tr><td><code>passing</code></td><td>player team att comp yds long td intThrown sacked</td></tr>
+      <tr><td><code>receiving</code></td><td>player team rec tgt yds long td fum</td></tr>
+      <tr><td><code>defense</code></td><td>player team tackles tfl sacks int fumRec</td></tr>
+      <tr><td><em>wrapper</em></td><td>view onAir game gameDate status resolvedBy updated
+        &mdash; only with the XPath set to <code>/feed</code></td></tr>
+    </table>
+  </div>
+
+  <!-- ================================================= -->
+  <div class="card">
+    <h2 id="trouble">5. When a graphic stops updating</h2>
+    <p>In the order worth checking.</p>
+    <ol>
+      <li><strong>Open the address in a browser.</strong> Current numbers mean the
+        feed is fine and the problem is inside vMix &mdash; work down this list.
+        Nothing at all means the problem is upstream; carry on.</li>
+      <li><strong>Is the update interval set?</strong> This is usually it. A data
+        source with no interval fetches once and then shows the same numbers for the
+        rest of the night.</li>
+      <li><strong>Does it say <code>onAir="false"</code>?</strong> Nobody has marked
+        a game ON AIR, or somebody took it off.</li>
+      <li><strong>Is the XPath right for that view?</strong> A source with no rows
+        and no error is nearly always <code>/feed/player</code> against a
+        <code>score</code> feed, or the other way round.</li>
+      <li><strong>Is the format XML?</strong> An address ending
+        <code>&amp;format=json</code> will connect and produce nothing usable.</li>
+      <li><strong>Did the key come through whole?</strong> The address is long and
+        copies badly by hand. Use the <span class="btn">Copy</span> button rather
+        than retyping it.</li>
+    </ol>
+    <div class="note">vMix menu names and dialog labels here are vMix&rsquo;s own, for
+      version 29, and may sit in a slightly different place in another version. The
+      field names and the XML structure are StatChat&rsquo;s and do not change.</div>
+  </div>
+
+  <p class="sc-copyright">&copy; 2026 StatChat. All rights reserved.
+    Unauthorized copying, modification or distribution of this software or
+    its documentation is prohibited.</p>
+</body>
+</html>
