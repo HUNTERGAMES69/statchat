@@ -1463,7 +1463,24 @@ function computeBoxScore(playsList){
       }
     }
 
-    if (r.defense && TACKLE_TYPES.includes(type)){
+    // ON A BLOCKED KICK, roles.defense MEANS "RECOVERED BY", NOT
+    // "TACKLED BY" -- and recovering a loose ball is not a tackle.
+    // ------------------------------------------------------------------
+    // One field, two meanings. The punt panel writes roles.defense from
+    // its "Tackled by" box on an ordinary return AND from its "Recovered
+    // by" box on a block. That was harmless while 'punt' was not a
+    // tackle type; adding cover tackles on 31 Aug 2026 made every blocked
+    // punt hand its recoverer a tackle he did not make. Found by the
+    // golden snapshot in tests/accuracy_check.js, which recorded the box
+    // gaining "O Linebacker tackles=1" on two blocked-punt fixtures.
+    //
+    // A tackle is a countable defensive statistic on a report a coach
+    // reads. Crediting a recovery as one inflates a real column with a
+    // different event.
+    //
+    // Field goals need no equivalent guard: 'fg' is not a TACKLE_TYPE.
+    const blockedKick = !!(r.punter && r.punter.blocked);
+    if (r.defense && TACKLE_TYPES.includes(type) && !blockedKick){
       const s = bucket(r.defense.team, 'defense', r.defense.num, r.defense.name);
       if (s){
         s.tackles = (s.tackles||0) + 1;
@@ -2000,8 +2017,13 @@ function auditBoxScore(playsList){
     // constant it is auditing agrees with the engine by construction and
     // proves nothing. Kicks and returns added 30 August 2026 alongside
     // the engine's.
-    if (r.defense && ['rush','pass','sack',
-                      'kickoff','kickoff_return','punt'].indexOf(t) !== -1){
+    // A BLOCKED KICK'S RECOVERER IS NOT A TACKLER -- the same rule the
+    // engine now applies, deliberately restated rather than imported.
+    // An auditor that shares the constant it is auditing agrees with the
+    // engine by construction and proves nothing.
+    if (r.defense && !(r.punter && r.punter.blocked) &&
+        ['rush','pass','sack',
+         'kickoff','kickoff_return','punt'].indexOf(t) !== -1){
       const k = key('defense', r.defense);
       put(r.defense.team, 'defense', k, 'tackles', 1);
       const lost = (r.carrier && (r.carrier.yards || 0) < 0) || t === 'sack';
