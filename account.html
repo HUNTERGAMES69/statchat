@@ -362,12 +362,39 @@
   // card ever touches this page or this project -- which is the entire
   // reason to use one rather than build a form.
   //
-  // *** PASTE THE LINK FROM YOUR STRIPE DASHBOARD BETWEEN THE QUOTES. ***
-  // Until it is filled in the card below says so rather than offering a
-  // button that goes nowhere: a dead Renew button on a billing screen is
-  // worse than no button, because the person who presses it concludes
-  // the payment failed.
-  const PAYMENT_LINK = '';
+  // Filled in 31 Aug 2026. A Payment Link is a public URL by design --
+  // it is meant to be pasted into emails and onto web pages -- so there
+  // is nothing secret about it sitting in this file.
+  //
+  // If it is ever blanked out the card below says so rather than
+  // offering a button that goes nowhere: a dead Renew button on a
+  // billing screen is worse than no button, because the person who
+  // presses it concludes the payment failed.
+  const PAYMENT_LINK = 'https://buy.stripe.com/28E28k2jg75J84QaCcfUQ00';
+
+  // WHICH SCHOOL JUST PAID YOU.
+  // ---------------------------------------------------------------------
+  // Without this a payment lands in Stripe as a name and an email, and
+  // matching it to a row on the platform console is guesswork -- a coach
+  // may pay from a personal address that says nothing about the school.
+  // `client_reference_id` travels with the payment and shows up beside it
+  // in the Stripe dashboard, so "who do I mark paid" has an exact answer.
+  //
+  // Tenant ids are UUIDs: alphanumeric and dashes, which is exactly what
+  // Stripe allows (up to 200 characters). Anything else is dropped rather
+  // than sent, because a malformed parameter is a link that fails at the
+  // one moment it must not.
+  //
+  // NOTE: this only arrives if "client reference ID" is switched on for
+  // the link in the Stripe dashboard. When it is off the parameter is
+  // ignored and the payment still goes through -- so this is free to send
+  // either way.
+  function paymentLinkFor(tenantId){
+    if (!PAYMENT_LINK) return '';
+    if (!tenantId || !/^[A-Za-z0-9_-]{1,200}$/.test(String(tenantId))) return PAYMENT_LINK;
+    return PAYMENT_LINK + (PAYMENT_LINK.indexOf('?') === -1 ? '?' : '&') +
+           'client_reference_id=' + encodeURIComponent(tenantId);
+  }
 
   // THE SCHOOL'S OWN VIEW OF ITS SEASON.
   // ---------------------------------------------------------------------
@@ -379,9 +406,22 @@
     const card = document.getElementById('seasonCard');
     if (!card) return;
     const { data, error } = await supabaseClient
-      .from('tenants').select('name, subscription, renews_on, disabled_at').limit(1);
+      .from('tenants').select('id, name, subscription, renews_on, disabled_at, created_at, is_demo').limit(1);
     if (error || !data || !data.length) return;   // nothing useful to say
     const t = data[0];
+    // AN UNSELECTED COLUMN AND A NULL ONE ARE THE SAME THING IN JS, and
+    // that has already cost this project once -- loadTenants shipped for
+    // weeks with deleted_at missing from its SELECT, so every tenant read
+    // as not-deleted and the bug was invisible.
+    //
+    // Here it would be worse than invisible. seasonState dates a trial
+    // from created_at; without it every trial reads as an unbounded
+    // "no season paid for yet" while the database (026) has already
+    // stopped accepting their plays. A school locked out, on a page
+    // telling them nothing is wrong, is the worst version of this screen.
+    if (!('created_at' in t)){
+      console.warn('tenants row is missing created_at — trial dates cannot be computed');
+    }
     const st = seasonState(t);
     card.classList.remove('hidden');
 
@@ -470,7 +510,7 @@
       return;
     }
     const a = document.createElement('a');
-    a.href = PAYMENT_LINK;
+    a.href = paymentLinkFor(t.id);
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     a.textContent = st.kind === 'trial' ? 'Buy a season' : 'Renew for next season';
