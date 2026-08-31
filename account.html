@@ -279,6 +279,20 @@
       </div>
     </div>
 
+    <!-- SEASON. Admin only, and a school's own admin only -- the platform
+         account has no tenant and would see an empty card about nothing.
+         Same condition the user management card below uses. -->
+    <div id="seasonCard" class="card hidden">
+      <h2>Season</h2>
+      <p class="sub" id="seasonSub"></p>
+      <div id="seasonState" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:6px;"></div>
+      <p id="seasonBlurb" style="margin:0 0 14px; color:var(--sc-ink-soft, #3a3a3a); font-size:14px;"></p>
+      <div id="seasonAction"></div>
+      <p style="margin:14px 0 0; font-size:13px; color:var(--sc-ink-muted, #8d99a6);">
+        Everything you have entered stays yours whatever this says &mdash; past games,
+        recaps, stat packages and season reports are always readable.</p>
+    </div>
+
     <div id="userMgmtCard" class="card hidden">
       <h2>User management</h2>
       <p class="sub">Invite a new user, or view, reset, resend, and remove existing ones. Admin only.</p>
@@ -298,6 +312,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="team-icon.js"></script>
+<!-- Season state. Shared with the platform console so the two can never
+     read different answers off the same row. -->
+<script src="billing.js"></script>
 <script>
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
@@ -334,6 +351,99 @@
     await supabaseClient.auth.signOut();
   });
 
+  // WHERE TO SEND SOMEBODY WHO WANTS TO PAY.
+  // =====================================================================
+  // A Stripe Payment Link. Stripe hosts the checkout, so nothing about a
+  // card ever touches this page or this project -- which is the entire
+  // reason to use one rather than build a form.
+  //
+  // *** PASTE THE LINK FROM YOUR STRIPE DASHBOARD BETWEEN THE QUOTES. ***
+  // Until it is filled in the card below says so rather than offering a
+  // button that goes nowhere: a dead Renew button on a billing screen is
+  // worse than no button, because the person who presses it concludes
+  // the payment failed.
+  const PAYMENT_LINK = '';
+
+  // THE SCHOOL'S OWN VIEW OF ITS SEASON.
+  // ---------------------------------------------------------------------
+  // Reads the tenant row directly: tenants_select grants a school its own
+  // row, and subscription/renews_on are ordinary columns on it. The
+  // protection in 009 is on WRITING them, not reading -- a school should
+  // be able to see when its own season ends without asking.
+  async function loadSeason(){
+    const card = document.getElementById('seasonCard');
+    if (!card) return;
+    const { data, error } = await supabaseClient
+      .from('tenants').select('name, subscription, renews_on, disabled_at').limit(1);
+    if (error || !data || !data.length) return;   // nothing useful to say
+    const t = data[0];
+    const st = seasonState(t);
+    card.classList.remove('hidden');
+
+    document.getElementById('seasonSub').textContent =
+      t.name ? t.name + '\u2019s StatChat season.' : 'Your StatChat season.';
+
+    const tone = { suspended:['var(--sc-red, #a32d2d)', 'rgba(176,0,32,.16)'],
+                   expired:  ['var(--sc-red, #a32d2d)', 'rgba(176,0,32,.16)'],
+                   expiring: ['var(--sc-amber-text, #a37a00)', 'rgba(255,199,44,.13)'],
+                   active:   ['var(--sc-green, #1a7a4c)', 'rgba(124,181,24,.14)'],
+                   trial:    ['var(--sc-ink-soft, #3a3a3a)', 'rgba(255,255,255,.09)'] }[st.key]
+                 || ['var(--sc-ink-soft, #3a3a3a)', 'rgba(255,255,255,.09)'];
+    // Built as nodes with textContent rather than assembled HTML -- this
+    // page has no escapeHtml and the tenant name is user-supplied.
+    const wrap = document.getElementById('seasonState');
+    wrap.textContent = '';
+    const pill = document.createElement('span');
+    pill.textContent = st.label;
+    pill.style.cssText = 'display:inline-block; padding:4px 12px; border-radius:999px; ' +
+      'font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; ' +
+      'color:' + tone[0] + '; background:' + tone[1] + ';';
+    wrap.appendChild(pill);
+    if (st.endsOn && st.key !== 'suspended'){
+      const when = document.createElement('span');
+      when.style.cssText = 'font-size:14px; color:var(--sc-ink-muted, #8d99a6);';
+      when.textContent = (st.days >= 0 ? 'Ends ' : 'Ended ') +
+        st.endsOn.toLocaleDateString(undefined, { year:'numeric', month:'long', day:'numeric' });
+      wrap.appendChild(when);
+    }
+    document.getElementById('seasonBlurb').textContent = st.blurb;
+
+    // THE BUTTON IS OFFERED WHEN IT WOULD HELP, not always. Somebody four
+    // months into a paid season does not need a Renew button, and a
+    // suspended account needs to talk to a person rather than pay again.
+    const act = document.getElementById('seasonAction');
+    act.textContent = '';
+    if (st.key === 'suspended'){
+      const p = document.createElement('p');
+      p.style.cssText = 'margin:0; font-size:14px;';
+      p.textContent = 'Get in touch and we will sort it out.';
+      act.appendChild(p);
+      return;
+    }
+    const wantsRenew = st.key === 'expired' || st.key === 'expiring' || st.key === 'trial';
+    if (!wantsRenew) return;
+    if (!PAYMENT_LINK){
+      const p = document.createElement('p');
+      p.style.cssText = 'margin:0; font-size:14px;';
+      p.textContent = 'Get in touch to renew.';
+      act.appendChild(p);
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = PAYMENT_LINK;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = st.key === 'trial' ? 'Buy a season' : 'Renew for next season';
+    a.style.cssText = 'display:inline-block; text-decoration:none; padding:11px 18px; ' +
+      'border-radius:6px; background:var(--sc-navy, #1a1a2e); ' +
+      'border:1px solid var(--sc-rule-strong); color:var(--sc-ink); font-weight:600;';
+    act.appendChild(a);
+    const note = document.createElement('p');
+    note.style.cssText = 'margin:10px 0 0; font-size:13px; color:var(--sc-ink-muted, #8d99a6);';
+    note.textContent = 'Opens Stripe in a new tab. We are never sent your card details.';
+    act.appendChild(note);
+  }
+
   async function init(){
     document.getElementById('accountEmail').textContent = currentUserEmail;
     const { data, error } = await supabaseClient
@@ -368,6 +478,7 @@
       // written when every account had a tenant, meeting an account that
       // deliberately has none.
       if (profile.role === 'admin' && !profile.is_super_admin){
+        loadSeason();
         document.getElementById('userMgmtCard').classList.remove('hidden');
         setTimeout(() => {
           document.getElementById('inviteEmailInput').value = '';

@@ -37,6 +37,9 @@
      adding one is a decision, not a convenience. -->
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Season state. Shared with account.html so the console and the school
+     can never read different answers off the same row. -->
+<script src="billing.js"></script>
 <link rel="stylesheet" href="statchat.css">
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
@@ -650,10 +653,19 @@
         // cannot write is the status line lying about the thing the
         // operator is looking it up to find out.
         const off = !!t.disabled_at;
+        // EXPIRY OUTRANKS THE STORED COLUMN, for the same reason
+        // suspension outranks everything below it: `subscription` stays
+        // 'active' forever once set, so a school whose season ended two
+        // months ago still read "Active" here while the Renews cell beside
+        // it was red. That is the status line lying about the one thing it
+        // is being read to find out.
+        const season = seasonState(t);
         const pill = off ? 'lapsed'
+                   : season.key === 'expired' ? 'lapsed'
                    : t.subscription === 'active' ? 'live'
                    : t.subscription === 'lapsed' ? 'lapsed' : 'trial';
         const label = off ? 'Suspended'
+                    : season.key === 'expired' ? 'Expired'
                     : t.subscription === 'lapsed' ? 'Lapsed \u2014 read only'
                     : t.subscription.charAt(0).toUpperCase() + t.subscription.slice(1);
         return '<tr>' +
@@ -699,7 +711,23 @@
           // customer", and a time of day beside a renewal date reads as
           // two different kinds of fact in adjacent columns.
           '<td>' + fmtDate(t.created_at) + '</td>' +
-          '<td>' + fmtDate(t.renews_on) + '</td>' +
+          // SEASON END, NOT JUST A DATE. A bare date makes the operator do
+          // the arithmetic, and the whole reason to look at this column is
+          // to find the schools that need chasing. seasonState is shared
+          // with the school's own Account page so the two cannot disagree.
+          '<td>' + (function(){
+            const st = seasonState(t);
+            if (!t.renews_on) return '<span style="color:#6b7680;">\u2014</span>';
+            const tone = st.key === 'expired'  ? 'var(--sc-red, #a32d2d)'
+                       : st.key === 'expiring' ? 'var(--sc-amber-text, #a37a00)'
+                       : 'inherit';
+            const tail = st.key === 'expired'
+                       ? ' <span style="font-size:12px;">' + (-st.days) + 'd ago</span>'
+                       : st.key === 'expiring'
+                       ? ' <span style="font-size:12px;">' + st.days + 'd</span>'
+                       : '';
+            return '<span style="color:' + tone + ';">' + fmtDate(t.renews_on) + tail + '</span>';
+          })() + '</td>' +
           '<td>' + (live[t.id] || 0) + '</td>' +
           '<td>' + (gone[t.id] || 0) + '</td>' +
           // A MENU, because a row now has more than one action and one of
@@ -718,6 +746,19 @@
                 // demo showed no demo controls, with nothing on screen saying
                 // why. A flag that gates a feature has to be settable where the
                 // feature lives.
+                // RECORD PAYMENT. Until this existed there was no way at all
+                // to mark a school paid: the menu had Suspend, Mark as demo
+                // and Delete, and 009's trigger correctly stops a school
+                // setting its own subscription -- so a sale could only be
+                // recorded by hand-writing SQL against the database.
+                //
+                // No migration needed. tenants_update already grants the
+                // row to a super admin and protect_tenant_billing_columns()
+                // returns early for one, so the ordinary client can write
+                // these two columns and nobody else can.
+                '<button data-paid="' + esc(t.id) + '" data-name="' + esc(t.name) + '" ' +
+                  'data-renews="' + esc(t.renews_on || '') + '">' +
+                  (t.renews_on ? 'Change season dates' : 'Record payment') + '</button>' +
                 '<button data-demo="' + esc(t.id) + '" data-on="' + (t.is_demo ? '1' : '0') + '" ' +
                   'data-name="' + esc(t.name) + '">' +
                   (t.is_demo ? 'Unmark as demo' : 'Mark as demo') + '</button>' +
@@ -844,6 +885,64 @@
       const wasOpen = menu && !menu.classList.contains('hidden');
       closeMenus(null);
       if (menu && !wasOpen){ menu.classList.remove('hidden'); closeMenus(menu); }
+      return;
+    }
+
+    // RECORDING A PAYMENT.
+    // -------------------------------------------------------------------
+    // Two fields, and the date is offered rather than demanded: 31 July of
+    // next year is right for essentially every sale (see nextSeasonEnd in
+    // billing.js), so the common case is pressing OK. Typing over it is
+    // there for the sale that is not ordinary.
+    const paid = e.target.closest('[data-paid]');
+    if (paid){
+      closeMenus(null);
+      const id = paid.getAttribute('data-paid');
+      const name = paid.getAttribute('data-name');
+      const existing = paid.getAttribute('data-renews') || '';
+      const suggested = existing || toISODate(nextSeasonEnd());
+      const answer = prompt(
+        (existing ? 'Season dates for ' : 'Record a payment from ') + name + '.\n\n' +
+        'The season ends on this date. Football runs August to December, so 31 July ' +
+        'is the one day of the year no game is in progress anywhere \u2014 which is ' +
+        'why every school expires then rather than on the anniversary of its ' +
+        'payment.\n\n' +
+        'Nothing is locked on this date. It drives the warnings on this console and ' +
+        'on the school\u2019s own Account page; Suspend is still the only thing that ' +
+        'stops them entering plays.\n\n' +
+        'Clear the box to remove the date entirely.\n\n' +
+        'Season ends (YYYY-MM-DD):', suggested);
+      if (answer === null) return;
+      const val = answer.trim();
+      // CLEARED, which is a real answer: a tenant billed by mistake, or one
+      // moved back to a trial. Handled explicitly rather than falling
+      // through to the format check and reading as a typo.
+      let renews = null, sub = 'trial';
+      if (val){
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(val) || !seasonDateFromISO(val)){
+          alert('That needs to be a date written as YYYY-MM-DD \u2014 for example ' +
+                toISODate(nextSeasonEnd()) + '.');
+          return;
+        }
+        renews = val; sub = 'active';
+      }
+      if (!confirm((renews
+            ? name + ' is paid through ' + renews + '.'
+            : name + ' has no paid season \u2014 the date will be cleared.') +
+          '\n\nGo ahead?')) return;
+      const { error } = await supabaseClient.from('tenants')
+        .update({ subscription: sub, renews_on: renews }).eq('id', id);
+      if (error){
+        // 009's trigger raises if this is ever called by anything but the
+        // platform, so a failure here is worth reading rather than
+        // swallowing.
+        showMsg('Could not record that: ' + esc(error.message), 'error');
+        return;
+      }
+      showMsg(renews
+        ? esc(name) + ' recorded as paid through ' + esc(renews) + '.'
+        : esc(name) + '\u2019s season dates cleared.', 'success');
+      loadTenants();
       return;
     }
 
