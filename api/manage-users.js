@@ -145,6 +145,35 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    // WHO ACTUALLY HAS TWO-FACTOR.
+    // -------------------------------------------------------------------
+    // Read from auth.mfa_factors through users_with_verified_mfa() (033),
+    // not from `u.factors` on the listUsers() rows above. That field is
+    // typed optional in supabase-js and the client only passes through
+    // whatever GoTrue's /admin/users returns; it came back undefined on
+    // every row, so `Array.isArray(undefined)` was false everywhere and the
+    // console showed "No 2FA" against accounts that plainly had it.
+    //
+    // ONE call for the whole list, not one per user.
+    //
+    // A FAILURE HERE IS "NOT KNOWN", NOT "NOBODY HAS IT". Leaving mfaIds
+    // null makes every mfaVerified false, and false renders as an amber
+    // "No 2FA" against admins -- which is the exact false claim this whole
+    // change exists to remove, and it would be indistinguishable from a
+    // real finding. So the answer travels with the list: mfaKnown false
+    // tells platform.html to render no pill at all and say why.
+    let mfaIds = null;
+    const { data: mfaRows, error: mfaErr } =
+      await adminClient.rpc('users_with_verified_mfa');
+    if (mfaErr) {
+      // Not fatal. The rest of this page -- roles, invites, disable, reset --
+      // is unrelated to MFA and must keep working if 033 has not been
+      // applied yet, or if the grant is wrong.
+      console.error('users_with_verified_mfa failed: ' + mfaErr.message);
+    } else {
+      mfaIds = new Set((mfaRows || []).map(r => r.user_id));
+    }
+
     const users = visible.map(u => ({
       id: u.id,
       email: u.email,
@@ -162,21 +191,10 @@ module.exports = async function handler(req, res) {
         // in yet, and a flag still set weeks later means they never did.
         mustChangePassword: !!(u.user_metadata && u.user_metadata.must_change_password),
         passwordSetAt: (u.user_metadata && u.user_metadata.password_set_at) || null,
-      // TWO-FACTOR, AND ONLY THE VERIFIED KIND.
-      // ------------------------------------------------------------------
-      // listUsers() already returns a `factors` array on every user, so this
-      // costs nothing -- no second call, and no per-user round trip, which
-      // admin.mfa.listFactors({ userId }) would have meant once per row.
-      //
-      // status === 'verified' is the whole test, and it is the same one the
-      // dashboard's Getting started card applies to the signed-in user. An
-      // enrollment that was started and abandoned sits at 'unverified'
-      // forever: it is a QR code somebody photographed and never confirmed,
-      // it protects nothing, and counting it would report an account as
-      // secured when it is not. That is the one direction this must never be
-      // wrong in.
-      mfaVerified: Array.isArray(u.factors) &&
-                   u.factors.some(f => f && f.status === 'verified'),
+      // TWO-FACTOR. See the mfaIds lookup above -- NOT u.factors, which is
+      // optional on this endpoint and was undefined on every row, reporting
+      // the whole platform as having no second factor.
+      mfaVerified: mfaIds ? mfaIds.has(u.id) : false,
       // WHICH SCHOOL EACH USER BELONGS TO.
       // ------------------------------------------------------------------
       // A tenant admin never needs this: everyone they can see is in their
@@ -191,7 +209,11 @@ module.exports = async function handler(req, res) {
         : null,
       isSuperAdmin: !!(profileById[u.id] && profileById[u.id].is_super_admin)
     }));
-    res.status(200).json({ users });
+    // mfaKnown travels with the list so the console can tell "nobody has 2FA"
+    // apart from "the 2FA lookup did not answer". Rendering an amber "No 2FA"
+    // in the second case is a false finding, and one indistinguishable from a
+    // real one.
+    res.status(200).json({ users, mfaKnown: mfaIds !== null });
     return;
   }
 
