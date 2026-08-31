@@ -753,7 +753,14 @@
             // date -- it has none by definition, and saying so is the
             // point of the state.
             if (st.key === 'lifetime') return '<span style="color:#6b7680;">Lifetime</span>';
-            if (!t.renews_on) return '<span style="color:#6b7680;">\u2014</span>';
+            // A TRIAL HAS AN END NOW (026: created_at + 30 days, or
+            // renews_on where one was granted), so the cell reads it off
+            // seasonState rather than off the column -- the column is
+            // still null for most of them. Marked as a trial date so it
+            // is not mistaken for a paid season running out.
+            if (!t.renews_on && (t.is_demo || st.kind !== 'trial'))
+              return '<span style="color:#6b7680;">\u2014</span>';
+            const shown = st.endsOn ? fmtDate(toISODate(st.endsOn)) : '\u2014';
             const tone = st.key === 'expired'  ? 'var(--sc-red, #a32d2d)'
                        : st.key === 'expiring' ? 'var(--sc-amber-text, #a37a00)'
                        : 'inherit';
@@ -762,7 +769,11 @@
                        : st.key === 'expiring'
                        ? ' <span style="font-size:12px;">' + st.days + 'd</span>'
                        : '';
-            return '<span style="color:' + tone + ';">' + fmtDate(t.renews_on) + tail + '</span>';
+            return '<span style="color:' + tone + ';">' + shown + tail + '</span>' +
+                   (st.kind === 'trial' && !t.is_demo
+                     ? '<div style="font-size:11.5px; color:#6b7680;">trial' +
+                       (t.renews_on ? ' \u00b7 extended' : '') + '</div>'
+                     : '');
           })() + '</td>' +
           '<td>' + (live[t.id] || 0) + '</td>' +
           '<td>' + (gone[t.id] || 0) + '</td>' +
@@ -804,6 +815,17 @@
                 // LIFETIME. Same shape as Mark as demo below, because it is
                 // the same kind of thing: a standing property of the tenant
                 // rather than an action taken on it.
+                // EXTEND TRIAL. Without it the only answers to "give us
+                // another two weeks" were to record a payment that never
+                // happened or to mark them lifetime -- both of which lie
+                // in the one place the books are kept. Writes renews_on
+                // and leaves subscription alone, which 026 reads as an
+                // override on created_at + 30 days.
+                (seasonState(t).kind === 'trial'
+                  ? '<button data-extend="' + esc(t.id) + '" data-name="' + esc(t.name) + '" ' +
+                    'data-ends="' + esc(toISODate(seasonState(t).endsOn) || '') + '">' +
+                    'Extend trial</button>'
+                  : '') +
                 '<button data-life="' + esc(t.id) + '" data-name="' + esc(t.name) + '" ' +
                   'data-on="' + (t.subscription === 'lifetime' ? '1' : '0') + '">' +
                   (t.subscription === 'lifetime' ? 'Remove lifetime' : 'Mark as lifetime') +
@@ -940,6 +962,54 @@
       const wasOpen = menu && !menu.classList.contains('hidden');
       closeMenus(null);
       if (menu && !wasOpen){ menu.classList.remove('hidden'); closeMenus(menu); }
+      return;
+    }
+
+    // EXTENDING A TRIAL.
+    // -------------------------------------------------------------------
+    // Writes renews_on and nothing else. The tenant stays subscription =
+    // 'trial', so it still reads TRIAL on both screens and still gets a
+    // Buy button -- it has simply been given more time. 026's
+    // tenant_trial_ends_on() prefers renews_on over created_at + 30 days,
+    // so this is the whole mechanism.
+    const ext = e.target.closest('[data-extend]');
+    if (ext){
+      closeMenus(null);
+      const id = ext.getAttribute('data-extend');
+      const name = ext.getAttribute('data-name');
+      const current = ext.getAttribute('data-ends') || '';
+      // Two weeks on from wherever it stands now, which is the answer
+      // nine times out of ten.
+      const from = seasonDateFromISO(current) || seasonToday();
+      const suggested = toISODate(new Date(from.getFullYear(), from.getMonth(),
+                                           from.getDate() + 14));
+      const answer = prompt(
+        'Extend ' + name + '\u2019s free trial.\n\n' +
+        'Their trial currently ends ' + (current || 'in 30 days from signup') + '.\n\n' +
+        'They stay a trial \u2014 this only moves the date. Use Record payment ' +
+        'when they actually pay.\n\n' +
+        'New trial end (YYYY-MM-DD), or clear the box to go back to the ' +
+        'standard 30 days from signup:', suggested);
+      if (answer === null) return;
+      const val = answer.trim();
+      if (val && (!/^\d{4}-\d{2}-\d{2}$/.test(val) || !seasonDateFromISO(val))){
+        alert('That needs to be a date written as YYYY-MM-DD \u2014 for example ' +
+              suggested + '.');
+        return;
+      }
+      if (!confirm((val ? name + '\u2019s trial will run to ' + val + '.'
+                        : name + '\u2019s trial goes back to 30 days from signup, ' +
+                          'which may already have passed.') +
+                   '\n\nGo ahead?')) return;
+      const { error } = await supabaseClient.from('tenants')
+        .update({ renews_on: val || null }).eq('id', id);
+      if (error){
+        showMsg('Could not extend that trial: ' + esc(error.message), 'error');
+        return;
+      }
+      showMsg(val ? esc(name) + '\u2019s trial now runs to ' + esc(val) + '.'
+                  : esc(name) + '\u2019s trial is back to the standard 30 days.', 'success');
+      loadTenants();
       return;
     }
 

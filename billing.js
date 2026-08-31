@@ -92,15 +92,50 @@ function toISODate(d){
 // console said TRIAL while the school's own page said ACTIVE. Two screens
 // disagreeing about one row is exactly what this file exists to prevent,
 // so the missing concept is added here rather than patched there again.
+// WHEN A TRIAL RUNS OUT.
+// ---------------------------------------------------------------------
+// created_at + 30 days, unless renews_on overrides it -- that override is
+// how the console grants an extension without pretending a payment was
+// made. Andy's spec, 31 Aug 2026.
+//
+// THE DATABASE IS THE AUTHORITY, not this. public.tenant_trial_ends_on()
+// in 026 computes the same thing and is what actually refuses a write;
+// this exists so the screens can say what is about to happen before it
+// happens. If the two ever disagree the SQL wins, and this is the copy
+// that is wrong -- which is why the rule is one line in both.
+const TRIAL_DAYS = 30;
+function trialEndsOn(tenant, now){
+  const t = tenant || {};
+  // A DEMO IS NOT ON A CLOCK. Demo tenants sit at subscription='trial'
+  // and nothing moves them off it, so without this every demo older than
+  // thirty days reads as an expired trial -- and, in 026, would actually
+  // have been refused its own writes.
+  if (t.is_demo) return null;
+  if (t.subscription !== 'trial' && t.subscription !== undefined &&
+      t.subscription !== null && t.subscription !== '') return null;
+  if (t.renews_on) return seasonDateFromISO(t.renews_on);
+  const created = seasonDateFromISO(t.created_at);
+  if (!created) return null;
+  return new Date(created.getFullYear(), created.getMonth(),
+                  created.getDate() + TRIAL_DAYS);
+}
+
 function seasonState(tenant, now){
   const t = tenant || {};
-  const end = seasonDateFromISO(t.renews_on);
   const today = seasonToday(now);
-  const days = end ? Math.round((end - today) / 86400000) : null;
   const kind = t.subscription === 'lifetime' ? 'lifetime'
              : t.subscription === 'active'   ? 'paid'
              : t.subscription === 'lapsed'   ? 'paid'
              : 'trial';
+  // A TRIAL ALWAYS HAS AN END NOW, whether or not anybody typed one --
+  // which is what removes the "no season paid for yet" limbo a trial used
+  // to sit in forever.
+  const end = kind === 'trial' ? trialEndsOn(t, now) : seasonDateFromISO(t.renews_on);
+  // AFTER `end`, not before it. Declared above with the other consts on
+  // the first pass, which put a const TDZ read of `end` one line ahead of
+  // its own initialiser -- seasonState threw on every call and every page
+  // that loads this file died at boot.
+  const days = end ? Math.round((end - today) / 86400000) : null;
 
   if (t.disabled_at){
     return { kind:kind, key:'suspended', label:'Suspended', days:days, endsOn:end,
@@ -140,14 +175,20 @@ function seasonState(tenant, now){
     return { kind:kind, key:'expired', label:'Expired', days:days, endsOn:end,
              blurb:'This ' + noun + ' ended on ' + toISODate(end) + '.' };
   }
-  // THIRTY DAYS, because the renewal lands on 31 July and the thing that
-  // has to happen before it matters is somebody remembering during their
-  // preseason. A week's notice in late July reaches a coach who is not
-  // reading email.
-  if (days <= 30){
+  // THE WARNING WINDOW DEPENDS ON THE LENGTH OF THE THING.
+  // -------------------------------------------------------------------
+  // Thirty days for a paid season: the renewal lands on 31 July and what
+  // has to happen first is somebody remembering during their preseason.
+  //
+  // Seven for a trial, because a trial IS thirty days -- a thirty-day
+  // window on a thirty-day trial means the amber warning is on from the
+  // moment they sign up, which teaches people to ignore it well before
+  // the week it starts mattering.
+  if (days <= (kind === 'trial' ? 7 : 30)){
     return { kind:kind, key:'expiring', label: kind === 'trial' ? 'Trial' : 'Expiring',
              days:days, endsOn:end,
-             blurb:'This ' + noun + ' ends in ' + days + ' day' + (days === 1 ? '' : 's') + '.' };
+             blurb: days === 0 ? 'This ' + noun + ' ends today.'
+                  : 'This ' + noun + ' ends in ' + days + ' day' + (days === 1 ? '' : 's') + '.' };
   }
   return { kind:kind, key:'active', label: kind === 'trial' ? 'Trial' : 'Active',
            days:days, endsOn:end,
@@ -160,5 +201,6 @@ function seasonState(tenant, now){
 // than assumed -- the exact trap that left engine.js's isAdminMarker
 // shim installing a stale copy of the rule it was meant to share.
 if (typeof module !== 'undefined' && module.exports){
-  module.exports = { seasonState, nextSeasonEnd, seasonDateFromISO, seasonToday, toISODate };
+  module.exports = { seasonState, nextSeasonEnd, seasonDateFromISO, seasonToday,
+                     toISODate, trialEndsOn, TRIAL_DAYS };
 }
