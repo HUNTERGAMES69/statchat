@@ -439,9 +439,24 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   chk(/is_demo, teams/.test(code),
       'is_demo is SELECTED, not just read — an unselected column is undefined, ' +
       'which would hide the badge and the controls on every tenant');
-  chk(/esc\(t\.name\)[\s\S]{0,60}t\.is_demo[\s\S]{0,120}DEMO/.test(code),
-      'a demo tenant is tagged BESIDE ITS NAME — status is subscription state, ' +
-      'and a school can be a demo AND lapsed, so the two are not the same column');
+  // REVERSED 31 Aug 2026, Andy's call. This used to assert the badge sat
+  // beside the NAME, on the reasoning that status was subscription state
+  // and a demo is not one of those. That held while Status carried four
+  // labels; it stopped holding when the column became a closed vocabulary
+  // answering "what kind of account is this", which is the question DEMO
+  // answers best. The badge beside the name is gone -- saying it twice in
+  // one row reads as a mistake.
+  chk(/t\.is_demo\s*\?\s*\{\s*cls:\s*'demo'/.test(code),
+      'a demo tenant reads DEMO in the STATUS column, and outranks everything ' +
+      'else there');
+  chk(!/esc\(t\.name\)[\s\S]{0,80}DEMO<\/span>/.test(code),
+      'and the old badge beside the name is gone, so the row does not say it twice');
+  // The one thing DEMO-wins-outright hides. Suspension is the only status
+  // that changes what anybody can do, so it has to survive on the row even
+  // when it cannot have the pill.
+  chk(/off && \(t\.disabled_reason \|\| t\.is_demo\)/.test(code),
+      'a suspended DEMO still says so under the row — the pill cannot show it, ' +
+      'and suspension is the one status that changes what anyone can do');
   chk(/data-demo=/.test(code) && /set_tenant_demo/.test(code),
       'and the flag can be SET from the console — 019 gated the seed and reset ' +
       'controls on it and gave no way to turn it on, so a tenant created to be a ' +
