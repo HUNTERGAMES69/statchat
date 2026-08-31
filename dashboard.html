@@ -398,6 +398,44 @@
   <div id="loading" class="card"><div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:14px;"><img src="logo.png" alt="StatChat" style="width:48px; height:auto; border-radius:8px;"><img id="splashTeamIcon" style="display:none; width:48px; height:48px; border-radius:8px; object-fit:cover;"></div><h1>Loading…</h1></div>
 
   <div id="dashboardView" class="hidden">
+    <!-- THE SUBSCRIPTION NOTICE, ABOVE EVERYTHING.
+         --------------------------------------------------------------
+         Not to be confused with #seasonNotice further down, which is
+         about the season YEAR being viewed. This one is about whether
+         the account is paid for.
+         Filled by renderSubscriptionNotice(); hidden on a healthy
+         account, which is almost every load. -->
+    <div id="subNotice" class="card hidden"
+         style="border-left:5px solid var(--sc-amber, #ffc72c); padding:16px 18px;">
+      <div id="subNoticeTitle" style="font-weight:700; font-size:17px; margin-bottom:6px;"></div>
+      <div id="subNoticeBody" style="font-size:14px; line-height:1.55; color:var(--sc-ink-soft, #c7d0da);"></div>
+      <div id="subNoticeAction" style="margin-top:12px;"></div>
+    </div>
+
+    <!-- AND A MODAL, ONCE, when entry has actually stopped. A banner is
+         easy to scroll past on the screen somebody opens on their way to
+         a game; being refused a play in the third quarter is not the
+         moment to find out. Shown once per browser session -- often
+         enough to be seen, rarely enough not to be trained away. -->
+    <div id="subModal" style="display:none; position:fixed; inset:0; z-index:200;
+         background:rgba(8,11,15,.72); align-items:center; justify-content:center; padding:20px;">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="subModalTitle"
+           style="background:var(--sc-card, #191f27); border:1px solid var(--sc-rule-strong);
+                  border-top:5px solid var(--sc-amber, #ffc72c); border-radius:12px;
+                  max-width:460px; width:100%; padding:22px 24px;
+                  box-shadow:0 20px 60px rgba(0,0,0,.55);">
+        <h2 id="subModalTitle" style="margin:0 0 10px; font-size:20px;"></h2>
+        <div id="subModalBody" style="font-size:14.5px; line-height:1.6; color:var(--sc-ink-soft, #c7d0da);"></div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;">
+          <a id="subModalGo" href="account.html"
+             style="display:none; text-decoration:none; padding:10px 16px; border-radius:6px;
+                    background:var(--sc-amber, #ffc72c); color:#0d1117; font-weight:700;
+                    font-size:14px;">Go to Account</a>
+          <button id="subModalClose" class="secondary" style="padding:10px 16px; font-size:14px;">Close</button>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="topbar">
         <!-- THREE PARTS, EACH LAYING OUT ON ITS OWN.
@@ -519,6 +557,9 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Season state. Shared with the platform console and the Account page,
+     so a school and StatChat can never read different answers off one row. -->
+<script src="billing.js"></script>
 <script src="team-icon.js"></script>
 <script>
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
@@ -622,7 +663,11 @@
             }
           }
           showView('dashboardView');
-          loadIsAdmin().then(() => { loadDashboard(); });
+          // AFTER loadIsAdmin, not beside it: the notice's wording depends
+          // on whether this person can actually pay, and currentIsAdmin is
+          // not set until that resolves. Running them in parallel showed a
+          // scorer the admin's copy about half the time.
+          loadIsAdmin().then(() => { loadDashboard(); renderSubscriptionNotice(); });
           loadAccountMenu();
         })();
       } else {
@@ -708,6 +753,112 @@
   let gsCustomized = false;
   let gsPlayerCount = 0;
   let gsHasMfa = false;
+
+  // THE SUBSCRIPTION NOTICE.
+  // =====================================================================
+  // Before this, a school whose trial had run out learned about it by
+  // entering a play and being refused by the database. Reported by Andy,
+  // 31 Aug 2026: "there should be a popup at minimum, warning of
+  // expiration and no input."
+  //
+  // WHAT IT SAYS DEPENDS ON WHO IS READING. An admin can fix it and gets
+  // sent to Account; a scorer cannot pay for anything and is told who
+  // can, because a payment link in front of somebody with no card is a
+  // dead end dressed up as an action.
+  //
+  // The modal fires ONCE PER SESSION, and only when entry has actually
+  // stopped. A modal on every load for a warning weeks out is how people
+  // learn to dismiss modals without reading them.
+  const SUB_MODAL_SEEN = 'sc_sub_modal_seen';
+  async function renderSubscriptionNotice(){
+    const box = document.getElementById('subNotice');
+    if (!box) return;
+    const { data, error } = await supabaseClient
+      .from('tenants')
+      // EVERY COLUMN seasonState READS. An unselected column is undefined
+      // and indistinguishable from null -- leave created_at out and every
+      // trial reads as unbounded while the database has already stopped
+      // it. That exact bug shipped on the Account page for an hour.
+      .select('subscription, renews_on, disabled_at, created_at, is_demo')
+      .limit(1);
+    if (error || !data || !data.length) return;
+    const st = seasonState(data[0]);
+
+    // A healthy account is told nothing at all. This runs on every load,
+    // and the common case has to be silent or it is noise.
+    if (st.key !== 'expired' && st.key !== 'expiring' && st.key !== 'suspended') return;
+
+    const admin = currentIsAdmin;
+    const who = admin
+      ? 'Open Account to start a season and entry switches straight back on.'
+      : 'Ask whoever manages this account to start a season \u2014 they can do it from their Account page.';
+
+    let title, body, stopped = false;
+    if (st.key === 'suspended'){
+      title = 'This account is suspended';
+      body = 'Games and plays cannot be saved. Everything already entered is still ' +
+             'here and still readable. Get in touch and we will sort it out.';
+      stopped = true;
+    } else if (st.key === 'expired'){
+      stopped = true;
+      title = st.kind === 'trial' ? 'Your free trial has ended' : 'This season has ended';
+      body = 'New games and plays cannot be saved for now. Everything already ' +
+             'entered is still here and still readable \u2014 games, recaps, stat ' +
+             'packages and season reports. ' + who;
+    } else {
+      title = st.kind === 'trial'
+        ? 'Your free trial ends in ' + st.days + ' day' + (st.days === 1 ? '' : 's')
+        : 'This season ends in ' + st.days + ' day' + (st.days === 1 ? '' : 's');
+      body = 'After that, new games and plays cannot be saved until a season is ' +
+             'started. Nothing already entered is affected. ' + who;
+    }
+
+    box.style.borderLeftColor = stopped
+      ? 'var(--sc-red, #a32d2d)' : 'var(--sc-amber, #ffc72c)';
+    document.getElementById('subNoticeTitle').textContent = title;
+    document.getElementById('subNoticeBody').textContent = body;
+    const act = document.getElementById('subNoticeAction');
+    act.textContent = '';
+    if (admin){
+      const a = document.createElement('a');
+      a.href = 'account.html';
+      a.textContent = stopped ? 'Start a season' : 'Go to Account';
+      a.style.cssText = 'display:inline-block; text-decoration:none; padding:9px 15px; ' +
+        'border-radius:6px; background:var(--sc-navy, #2f3a47); ' +
+        'border:1px solid var(--sc-rule-strong); color:var(--sc-ink); ' +
+        'font-weight:600; font-size:14px;';
+      act.appendChild(a);
+    }
+    box.classList.remove('hidden');
+
+    if (!stopped) return;
+    // sessionStorage, not localStorage: "once per session" should mean
+    // once per sitting, not once ever on this laptop. Wrapped because a
+    // browser with site data blocked throws on the read itself, and a
+    // notice that cannot remember being seen should still be shown.
+    let seen = false;
+    try { seen = sessionStorage.getItem(SUB_MODAL_SEEN) === '1'; } catch (e) { seen = false; }
+    if (seen) return;
+    const modal = document.getElementById('subModal');
+    if (!modal) return;
+    document.getElementById('subModalTitle').textContent = title;
+    document.getElementById('subModalBody').textContent = body;
+    const go = document.getElementById('subModalGo');
+    if (go) go.style.display = admin ? 'inline-block' : 'none';
+    modal.style.display = 'flex';
+    const close = () => {
+      modal.style.display = 'none';
+      try { sessionStorage.setItem(SUB_MODAL_SEEN, '1'); } catch (e) { /* fine */ }
+    };
+    document.getElementById('subModalClose').addEventListener('click', close);
+    // Clicking the backdrop closes it; clicking the card does not.
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    document.addEventListener('keydown', function esc(e){
+      if (e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); }
+    });
+    const closeBtn = document.getElementById('subModalClose');
+    if (closeBtn) closeBtn.focus();
+  }
 
   async function loadDashboard(){
     const { data, error } = await supabaseClient

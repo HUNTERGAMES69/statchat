@@ -1359,6 +1359,14 @@
       </div>
         </div>
 
+        <!-- WHY THE RAIL IS DEAD. The ladder disabling itself with no
+             explanation reads as the page being broken; this is the
+             sentence that makes it read as an account state instead.
+             Filled and shown by loadSeasonLock(). -->
+        <div id="seasonLockBar" style="display:none; margin-bottom:12px; padding:12px 14px;
+             border-radius:8px; font-size:14px; line-height:1.5; font-weight:600;
+             background:var(--sc-red-tint, rgba(176,0,32,.16));
+             border-left:4px solid var(--sc-red, #ff8fa3); color:var(--sc-ink, #eef1f4);"></div>
         <div id="entryStage">
       <!-- THE DRIVE-START SPOT NUDGE. Added 30 August 2026.
            ================================================================
@@ -1504,6 +1512,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="team-icon.js"></script>
 <script src="engine.js"></script>
+<!-- Season state, shared with the dashboard, the Account page and the
+     platform console. Loaded here so entry can be stopped with a sentence
+     rather than by a database exception after a whole play is typed. -->
+<script src="billing.js"></script>
 <script>
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
@@ -1587,6 +1599,10 @@
   }
   let guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null, step: null, targetPhase: null };
   let gamePhase = 'notStarted';
+  // TRUE once the tenant's season or trial has run out. Set by
+  // loadSeasonLock() after the page has its data; false until then, so a
+  // slow query never disables entry on a paid account.
+  let seasonLocked = false;
   let clockPrompt = null, clockPromptCallback = null;
   let currentGameStatus = 'setup';
   const ROLE_RANK = { view: 0, game_entry: 1, admin: 2 };
@@ -1819,6 +1835,10 @@
     renderAll();
     renderGuided();
     updatePhaseUI();
+    // NOT AWAITED. The page is already usable and this only ever takes
+    // things away -- making the whole app wait on a billing lookup to
+    // open a game would be the wrong trade every time.
+    loadSeasonLock();
   }
 
   function buildTeams(game, rosterRows, ourBranding){
@@ -5816,13 +5836,62 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       ? 'secondHalf' : 'halftime';
   }
 
+  // IS THIS TENANT ALLOWED TO ENTER PLAYS AT ALL?
+  // =====================================================================
+  // Reads the school's own tenant row -- tenants_select grants it -- and
+  // mirrors what 026's tenant_is_writable() will decide when a play is
+  // actually saved. The database is still the enforcement; this is the
+  // page saying so first.
+  //
+  // DELIBERATELY FAILS OPEN. If the query errors, or the row is missing,
+  // or billing.js somehow did not load, entry stays ON. Locking a scorer
+  // out of a live game because a lookup timed out is a far worse failure
+  // than letting an unpaid school enter a play the database will refuse.
+  async function loadSeasonLock(){
+    if (typeof seasonState !== 'function') return;
+    let row;
+    try {
+      const { data, error } = await supabaseClient
+        .from('tenants')
+        .select('subscription, renews_on, disabled_at, created_at, is_demo')
+        .limit(1);
+      if (error || !data || !data.length) return;
+      row = data[0];
+    } catch (e) { return; }
+    const st = seasonState(row);
+    if (st.key !== 'expired' && st.key !== 'suspended') return;
+
+    seasonLocked = true;
+    const bar = document.getElementById('seasonLockBar');
+    if (bar){
+      bar.textContent = st.key === 'suspended'
+        ? 'This account is suspended \u2014 plays cannot be saved. Everything ' +
+          'already entered is still here.'
+        : (st.kind === 'trial' ? 'Your free trial has ended' : 'This season has ended') +
+          ' \u2014 plays cannot be saved until a season is started. Everything ' +
+          'already entered is still here. An admin can start one from Account.';
+      bar.style.display = 'block';
+    }
+    updatePhaseUI();
+  }
+
   function updatePhaseUI(){
     // Recomputed on every render. The stored column is now a cache that
     // is always overwritten, kept only so an older page reading the game
     // row still sees something sensible.
     gamePhase = derivePhase();
 
-    const disable = guided.active || !!clockPrompt || gamePhase === 'notStarted' || gamePhase === 'halftime' || gamePhase === 'ended';
+    // SEASON LOCK. 026 refuses these writes at the database, which is the
+    // enforcement -- but a scorer who types a whole play and only finds
+    // out at Save has lost the play AND the twenty seconds. Andy, 31 Aug
+    // 2026: "warning of expiration and no input." The rail going dead
+    // with a sentence above it is what "no input" looks like from the
+    // press box.
+    //
+    // Reuses the existing `disable` rather than adding a second mechanism,
+    // so every control that already knows how to be unavailable stays
+    // consistent -- the same reasoning as gamePhase === 'halftime'.
+    const disable = seasonLocked || guided.active || !!clockPrompt || gamePhase === 'notStarted' || gamePhase === 'halftime' || gamePhase === 'ended';
     // Undo is blocked on a finalized game. The database refuses to delete
     // a play from a final game, so the button would drop it locally, look
     // like it worked, and the play would reappear on the next load --
@@ -14448,6 +14517,25 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     document.getElementById('spotNudgeYard').value =
       st.fieldPos <= 50 ? st.fieldPos : (100 - st.fieldPos);
     n.style.display = 'block';
+    // AND MAKE SURE IT IS ACTUALLY SEEN.
+    // ------------------------------------------------------------------
+    // The nudge is the first child of #entryStage, so it appears ABOVE
+    // where the confirm card just was. After a play saved from deep in a
+    // long change-of-possession tree the window can still be below it,
+    // and a nudge nobody sees is worse than no nudge -- the whole point
+    // is to catch a spot in the seconds before the next snap.
+    //
+    // PRECAUTIONARY, not a reported fault: I could not establish it in a
+    // test fixture, and guessing either way was worse than making it
+    // moot. Same guard as the confirm card -- only when it is genuinely
+    // off-screen, so nothing moves in the ordinary case.
+    try {
+      const r = n.getBoundingClientRect();
+      if (r.height > 0 && (r.top < 0 || r.top > window.innerHeight * 0.6)){
+        const target = Math.max(0, window.scrollY + r.top - 12);
+        if (window.scrollTo) window.scrollTo({ top: target, behavior: 'auto' });
+      }
+    } catch (e) { /* never let positioning break the nudge itself */ }
   }
   (function(){
     const n = document.getElementById('spotNudge');
