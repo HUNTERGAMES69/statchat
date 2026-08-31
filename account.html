@@ -428,7 +428,13 @@
     // LIFETIME IS NEVER OFFERED A RENEW BUTTON. It is the whole point of
     // the state, and a Renew button on an account that is never billed is
     // an invitation to pay for something already given away.
-    const wantsRenew = st.key === 'expired' || st.key === 'expiring' || st.key === 'trial';
+    //
+    // A TRIAL ALWAYS GETS ONE, however far off its end is -- keyed on
+    // `kind`, not on urgency. Keying it on `st.key` meant a trial with two
+    // months left computed as 'active' and was offered nothing at all,
+    // which is precisely the account most worth giving a way to buy.
+    const wantsRenew = st.kind === 'trial' ||
+                       st.key === 'expired' || st.key === 'expiring';
     if (!wantsRenew) return;
     if (!PAYMENT_LINK){
       const p = document.createElement('p');
@@ -441,7 +447,7 @@
     a.href = PAYMENT_LINK;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
-    a.textContent = st.key === 'trial' ? 'Buy a season' : 'Renew for next season';
+    a.textContent = st.kind === 'trial' ? 'Buy a season' : 'Renew for next season';
     a.style.cssText = 'display:inline-block; text-decoration:none; padding:11px 18px; ' +
       'border-radius:6px; background:var(--sc-navy, #1a1a2e); ' +
       'border:1px solid var(--sc-rule-strong); color:var(--sc-ink); font-weight:600;';

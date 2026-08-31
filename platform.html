@@ -685,14 +685,19 @@
         //              lands here too rather than inventing a seventh
         //              label for the same situation.
         //   TRIAL / ACTIVE  whatever the column actually says.
+        // READ OFF seasonState, NOT off t.subscription. The last two rungs
+        // used to consult the column directly, which worked only because
+        // no trial ever carried a date -- give one a date and this said
+        // TRIAL while the school's own Account page said ACTIVE, off the
+        // same row. `kind` is the shared answer to "what sort of account
+        // is this"; `key` is the shared answer to "how urgent is it".
         const status =
-            t.is_demo                    ? { cls:'demo',   text:'Demo' }
-          : off                          ? { cls:'off',    text:'Suspended' }
-          : season.key === 'lifetime'    ? { cls:'live',   text:'Lifetime' }
-          : season.key === 'expired'     ? { cls:'lapsed', text:'Expired' }
-          : t.subscription === 'lapsed'  ? { cls:'lapsed', text:'Expired' }
-          : t.subscription === 'active'  ? { cls:'live',   text:'Active' }
-                                         : { cls:'trial',  text:'Trial' };
+            t.is_demo                     ? { cls:'demo',   text:'Demo' }
+          : off                           ? { cls:'off',    text:'Suspended' }
+          : season.kind === 'lifetime'    ? { cls:'live',   text:'Lifetime' }
+          : season.key  === 'expired'     ? { cls:'lapsed', text:'Expired' }
+          : season.kind === 'paid'        ? { cls:'live',   text:'Active' }
+                                          : { cls:'trial',  text:'Trial' };
         const pill = status.cls, label = status.text;
         return '<tr>' +
           // THE CREST, ONCE THEY HAVE ONE. A tenant is recognised by its

@@ -76,14 +76,34 @@ function toISODate(d){
 //
 // `days` is signed: positive means days remaining, negative means days
 // since it lapsed. Null when there is no date to count to.
+// `key` and `kind` answer DIFFERENT QUESTIONS, and conflating them is
+// what made the console and the Account page disagree.
+//
+//   kind  what sort of account is this -- trial, paid, lifetime. It comes
+//         from the `subscription` column and does not change with the
+//         calendar. The console's status column wants this.
+//   key   how urgent is it right now -- active, expiring, expired. It
+//         comes from the date. The Account card wants this, because
+//         "ends in 3 days" is the whole reason that card exists.
+//
+// Until 31 Aug 2026 there was only `key`, and the console patched around
+// it by consulting `t.subscription` directly for its last two rungs. That
+// worked only because no trial ever had a date: give one a date and the
+// console said TRIAL while the school's own page said ACTIVE. Two screens
+// disagreeing about one row is exactly what this file exists to prevent,
+// so the missing concept is added here rather than patched there again.
 function seasonState(tenant, now){
   const t = tenant || {};
   const end = seasonDateFromISO(t.renews_on);
   const today = seasonToday(now);
   const days = end ? Math.round((end - today) / 86400000) : null;
+  const kind = t.subscription === 'lifetime' ? 'lifetime'
+             : t.subscription === 'active'   ? 'paid'
+             : t.subscription === 'lapsed'   ? 'paid'
+             : 'trial';
 
   if (t.disabled_at){
-    return { key:'suspended', label:'Suspended', days:days, endsOn:end,
+    return { kind:kind, key:'suspended', label:'Suspended', days:days, endsOn:end,
              blurb:'This account has been suspended. It can read everything and change nothing.' };
   }
   // LIFETIME, added 31 Aug 2026 for StatChat's own tenant and the school
@@ -96,31 +116,43 @@ function seasonState(tenant, now){
   // tenant is suspended: it cannot write, whatever its billing says, and
   // the status line has to lead with that.
   if (t.subscription === 'lifetime'){
-    return { key:'lifetime', label:'Lifetime', days:null, endsOn:null,
+    return { kind:'lifetime', key:'lifetime', label:'Lifetime', days:null, endsOn:null,
              blurb:'This account does not expire and is never billed.' };
   }
   if (!end){
     // A trial with no date is the ordinary state of a tenant nobody has
     // billed yet -- not an error, and not something to nag about.
-    return { key: t.subscription === 'active' ? 'active' : 'trial',
-             label: t.subscription === 'active' ? 'Active' : 'Trial',
+    return { kind:kind, key: kind === 'paid' ? 'active' : 'trial',
+             label: kind === 'paid' ? 'Active' : 'Trial',
              days:null, endsOn:null,
              blurb:'No season has been paid for yet.' };
   }
+  // THE LABEL FOLLOWS THE KIND, THE URGENCY FOLLOWS THE DATE.
+  // -------------------------------------------------------------------
+  // A trial that runs to a date is still a TRIAL, and calling it "Active"
+  // on the school's own page reads as "you have paid" to somebody who has
+  // not. So `label` is kind-aware while `key` stays the urgency, and the
+  // two screens use whichever they need: the console shows the kind, the
+  // Account card colours its pill by the urgency and puts the date in
+  // words underneath.
+  const noun = kind === 'trial' ? 'trial' : 'season';
   if (days < 0){
-    return { key:'expired', label:'Expired', days:days, endsOn:end,
-             blurb:'This season ended on ' + toISODate(end) + '.' };
+    return { kind:kind, key:'expired', label:'Expired', days:days, endsOn:end,
+             blurb:'This ' + noun + ' ended on ' + toISODate(end) + '.' };
   }
   // THIRTY DAYS, because the renewal lands on 31 July and the thing that
   // has to happen before it matters is somebody remembering during their
   // preseason. A week's notice in late July reaches a coach who is not
   // reading email.
   if (days <= 30){
-    return { key:'expiring', label:'Expiring', days:days, endsOn:end,
-             blurb:'This season ends in ' + days + ' day' + (days === 1 ? '' : 's') + '.' };
+    return { kind:kind, key:'expiring', label: kind === 'trial' ? 'Trial' : 'Expiring',
+             days:days, endsOn:end,
+             blurb:'This ' + noun + ' ends in ' + days + ' day' + (days === 1 ? '' : 's') + '.' };
   }
-  return { key:'active', label:'Active', days:days, endsOn:end,
-           blurb:'Paid through ' + toISODate(end) + '.' };
+  return { kind:kind, key:'active', label: kind === 'trial' ? 'Trial' : 'Active',
+           days:days, endsOn:end,
+           blurb: kind === 'trial' ? 'Trial through ' + toISODate(end) + '.'
+                                   : 'Paid through ' + toISODate(end) + '.' };
 }
 
 // Node consumers. A top-level `function` declaration in CommonJS is
