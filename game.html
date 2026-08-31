@@ -1262,7 +1262,12 @@
       <div id="syncStatus" style="display:none; margin:8px 0; padding:10px 12px; border-radius:8px; background:rgba(255,199,44,.13); border:1px solid #e0b84c; font-size:13px;"></div>
       <input autocomplete="off" type="text" id="code" style="display:none;">
 
-      <div class="row" style="margin-bottom:8px;">
+      <!-- id ADDED so the drive nudge can be cleared from here too. These
+           buttons sit ABOVE the ladder and are outside #typeRail, so the
+           rail's delegated listener never sees them -- and Quarter marker,
+           the half- and game-enders and Start overtime all open a panel
+           under the nudge exactly the way the rail utilities did. -->
+      <div class="row" id="phaseRow" style="margin-bottom:8px;">
         <button class="primary" id="startGameBtn">Start game</button>
         <!-- Quarter marker sits LEFT of the half- and game-ending buttons.
              It is the routine one -- pressed three times a game -- while
@@ -7960,16 +7965,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   document.querySelectorAll('.ptypeBtn').forEach(b => b.addEventListener('click', () => {
     // STARTING THE NEXT PLAY ACCEPTS THE SPOT. Andy's rule, 30 August
     // 2026, and it is the right one: pressing a play button is the
-    // scorer saying the ball is where the card says it is. Clearing here
-    // rather than on the next SAVE also means the nudge is never on
-    // screen at the same time as an open tree, so it costs no height
-    // during entry -- only in the pause between plays, which is when the
-    // officials are actually moving the ball.
+    // scorer saying the ball is where the card says it is.
     //
-    // Before the collapse branch below, so the card clears on the second
-    // press of the same button too -- that press closes a tree and is
-    // still a deliberate action on the ladder.
-    hideSpotNudge();
+    // THE hideSpotNudge() CALL THAT WAS HERE HAS MOVED to the rail's own
+    // delegated listener, which fires for every button on the ladder
+    // rather than only the nine that are .ptypeBtn. Leaving a copy here
+    // as well would be harmless but would put the rule in two places,
+    // and having it in one place and one only is what stops the next
+    // button that gets added from quietly missing it -- which is exactly
+    // how the utilities came to miss it.
     const t = b.dataset.type;
     if (currentLadderType === t){
       currentLadderType = null;
@@ -8015,6 +8019,29 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     rail.addEventListener('click', e => {
       const btn = e.target.closest('button');
       if (!btn || !rail.contains(btn)) return;
+      // THE DRIVE NUDGE GOES ON ANY LADDER PRESS, and this is the only
+      // place that decides it.
+      // -----------------------------------------------------------------
+      // It used to be hidden inside the .ptypeBtn handler, which covers
+      // Rush, Pass, Kickoff, Punt, Field goal, PAT, 2PT, Fumble and Safety
+      // -- and NONE of the nine utilities beside them. Bad snap, QB kneel,
+      // Penalty, Timeout, Adjust Down/Distance, Flip possession, Set clock,
+      // Quarter marker and Start overtime all opened their panel with the
+      // card still sitting above it. Reported with a screenshot of QB kneel
+      // doing exactly that.
+      //
+      // Two symptoms, one cause: the card overlapped the open panel, and it
+      // added its own height between the rail and the panel, so fitPanel()
+      // below measured a panel that was pushed down and scrolled to chase
+      // it.
+      //
+      // HERE rather than in nine handlers, because this listener already
+      // fires for every button in the rail -- a tenth button added later
+      // inherits it with nobody having to remember. And it is synchronous
+      // while fitPanel is deferred two frames, so the card is gone before
+      // the panel's position is ever measured: the scroll target is
+      // computed against the layout the scorer ends up looking at.
+      hideSpotNudge();
       clearActive();
         // ONLY HIGHLIGHT WHAT IS ACTUALLY OPEN.
         // Two listeners fire on one click: the button's own (target phase)
@@ -14603,6 +14630,28 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         String(st.down || 1) + ' ' + String(st.distance !== null ? st.distance : 10) + ' ' + marker;
       hideSpotNudge();
       showConfirm();
+    });
+  })();
+
+  // THE PHASE ROW CLEARS THE NUDGE TOO, on the same rule as the ladder.
+  // -------------------------------------------------------------------
+  // Delegated for the same reason the rail's is: one listener that cannot
+  // be missed by a button added later.
+  //
+  // CLEAR IS THE EXCEPTION, and deliberately. Every other button here is
+  // the scorer doing something -- marking a quarter, ending a half,
+  // starting overtime -- which is the moment the card's "starting the next
+  // play accepts this spot" applies. Clear ABANDONS an entry; the pending
+  // spot is still the right spot and still needs deciding, so taking the
+  // card away would lose information the scorer has not acted on.
+  (function(){
+    const row = document.getElementById('phaseRow');
+    if (!row) return;
+    row.addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if (!btn || !row.contains(btn)) return;
+      if (btn.id === 'phaseClearBtn') return;
+      hideSpotNudge();
     });
   })();
 
