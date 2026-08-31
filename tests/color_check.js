@@ -224,8 +224,14 @@ function run(){
       const m = src.match(re);
       return m ? m[1].replace(/\s|'/g, '') : null;
     };
+    // SIX COPIES, NOT FIVE. broadcast_stats.html carries the same three
+    // lists and was never in this guard -- so a position could be added
+    // to the five it did watch and silently left out of the sixth, which
+    // is precisely the drift the guard exists to catch. Found on 31 Aug
+    // 2026 while adding 'ST'.
     const pages = [['create_game.html', false], ['roster.html', false],
-                   ['game.html', true], ['view.html', true], ['broadcast.html', true]];
+                   ['game.html', true], ['view.html', true], ['broadcast.html', true],
+                   ['broadcast_stats.html', true]];
     ['OFFENSE_POS', 'DEFENSE_POS', 'SPECIAL_POS'].forEach(listName => {
       const values = pages.map(([f, isSet]) => [f, read(f, listName, isSet)]);
       const missing = values.filter(([, v]) => v === null).map(([f]) => f);
@@ -238,7 +244,7 @@ function run(){
       const differ = values.filter(([, v]) => v !== first).map(([f]) => f);
       if (differ.length){
         fail('position lists', listName + ' differs in ' + differ.join(', ') + ' from ' +
-             values[0][0] + '. Five copies exist and they must stay identical: a code the ' +
+             values[0][0] + '. Six copies exist and they must stay identical: a code the ' +
              'import accepts but the entry app does not know leaves that player with no unit');
       }
     });
@@ -254,7 +260,7 @@ if (require.main === module){
   f.forEach(x => console.log('  [' + x.area + '] ' + x.detail));
   if (!f.length){
     console.log('  shorthand hex expands, malformed input never yields NaN,');
-    console.log('  text stays readable, and the five position lists agree.');
+    console.log('  text stays readable, and the six position lists agree.');
   }
   process.exitCode = f.length ? 1 : 0;
 }
