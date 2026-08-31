@@ -84,8 +84,12 @@ module.exports = async (req, res) => {
     // is obvious from the gallery, and the wrong game is not.
     let resolvedId = gameId, resolvedBy = 'id';
     if (!resolvedId) {
+      // NOT A DELETED GAME. delete_game() does not clear is_broadcast, so
+      // one deleted while on air stays flagged and this service-key query
+      // would keep handing it to the crew view and every overlay.
       const { data: flagged } = await db.from('games')
-        .select('id').eq('is_broadcast', true).eq('tenant_id', tenantId).limit(1);
+        .select('id').eq('is_broadcast', true).eq('tenant_id', tenantId)
+        .is('deleted_at', null).limit(1);
       if ((flagged || [])[0]) {
         resolvedId = flagged[0].id; resolvedBy = 'broadcast flag';
       }
@@ -98,7 +102,11 @@ module.exports = async (req, res) => {
     const [gameRes, rosterRes, playsRes, teamRes, tenantRes] = await Promise.all([
       // SCOPED. `?id=` is caller-supplied, so without this a request could
         // name any school's game by id and be handed it.
-        db.from('games').select('*').eq('id', resolvedId).eq('tenant_id', tenantId).limit(1),
+        // `.is('deleted_at', null)` for the same reason as the scoping
+        // beside it: a deleted game is not a game, and an ?id= link to one
+        // must 404 rather than render it.
+        db.from('games').select('*').eq('id', resolvedId).eq('tenant_id', tenantId)
+          .is('deleted_at', null).limit(1),
       db.from('game_rosters').select('*').eq('game_id', resolvedId),
       db.from('plays').select('*').eq('game_id', resolvedId).order('sequence_number', { ascending: true }),
       db.from('teams').select('primary_color, secondary_color, logo_url').eq('tenant_id', tenantId).limit(1),

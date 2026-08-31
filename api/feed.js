@@ -292,8 +292,13 @@ module.exports = async (req, res) => {
     // serves whichever school happens to be on air — and after 010 the
     // broadcast flag is unique PER TENANT, so with two schools
     // broadcasting there are genuinely two rows to choose between.
+    // AND NOT A DELETED ONE. delete_game() sets deleted_at and leaves
+    // is_broadcast alone, so a game deleted while it was on air stays
+    // flagged -- and this query, holding the service key, would go on
+    // serving it to every overlay. See the note in api/seasondata.js.
     let { data: flagged } = await db.from('games')
-      .select('*').eq('is_broadcast', true).eq('tenant_id', tenantId).limit(1);
+      .select('*').eq('is_broadcast', true).eq('tenant_id', tenantId)
+      .is('deleted_at', null).limit(1);
     let game = (flagged || [])[0];
     let resolvedBy = 'broadcast flag';
     // THE in-progress FALLBACK WAS REMOVED, 22 Aug 2026 -- see the note in

@@ -115,7 +115,12 @@ module.exports = async (req, res) => {
       .from('games')
       .select('id, designator, game_date, home_team_name, away_team_name, ' +
               'our_team_is_home, status, is_public, final_score_us, final_score_opp')
-      .eq('share_token', token).eq('status', 'final').eq('is_public', true).limit(1);
+      // AND NOT DELETED. Without this, deleting a game leaves its public
+      // share link working -- the row is still there, still final, still
+      // is_public, and the service key sees straight past the RLS policy
+      // that hides it everywhere else.
+      .eq('share_token', token).eq('status', 'final').eq('is_public', true)
+      .is('deleted_at', null).limit(1);
     if (error) throw error;
     game = data && data[0];
   } catch (e) {

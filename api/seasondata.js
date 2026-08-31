@@ -64,8 +64,19 @@ module.exports = async (req, res) => {
       return;
     }
 
+      // DELETED GAMES ARE STILL ROWS. 012 made deletion soft and enforced it
+      // in the RLS SELECT policy -- which does nothing here, because this
+      // endpoint holds the service key and the service role has BYPASSRLS.
+      // Every filter RLS would have applied has to be written out.
+      //
+      // Reported 31 Aug 2026: a school with one in-progress game saw
+      // "2 games" on its season overlays, with stats from two games it had
+      // deleted. Same shape as the tenant scoping this file already spells
+      // out one line above -- RLS would have caught it in the app, and here
+      // nothing does.
     const { data: games, error: gamesErr } = await db.from('games')
       .select('*').eq('season_year', season).eq('status', 'final')
+      .is('deleted_at', null)
       // SCOPED. Without this the endpoint returns every school's season
       // for that year, not just the one whose key was presented.
       .eq('tenant_id', tenantId)
