@@ -1,0 +1,277 @@
+<!--
+  Copyright 2026 StatChat. All rights reserved.
+  Unauthorized copying, modification or distribution of this software
+  or its documentation is prohibited.
+
+  NOT SHOWN ON SCREEN, deliberately. This file is composited live into
+  a broadcast; a visible notice would be burnt into the picture.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<title>StatChat — Current drive overlay</title>
+<style>
+  /* A vMix browser input composites this over the programme feed, so
+     anything not explicitly painted shows the feed through. Do not give
+     html or body a background colour. */
+  html, body { background:transparent !important; margin:0; padding:0; overflow:hidden;
+               font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+               -webkit-font-smoothing:antialiased; }
+
+  /* Sized for a 1920x1080 input, anchored bottom-left -- the same corner as
+     the score bug and the leaders panel, so a director can cut between all
+     three without the eye moving. */
+  #panel { position:absolute; left:60px; bottom:60px; width:700px; display:none;
+           border-radius:10px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,0.55);
+           opacity:0; transform:translateY(10px);
+           transition:opacity 380ms ease, transform 380ms ease; }
+  #panel.shown { opacity:1; transform:translateY(0); }
+  @media (prefers-reduced-motion: reduce) {
+    #panel { transition:opacity 180ms ease; transform:none; }
+    #panel.shown { transform:none; }
+  }
+
+  #head { display:flex; align-items:center; gap:14px; padding:13px 22px; font-weight:800; }
+  #head img { height:40px; width:auto; display:block; }
+  #headText { min-width:0; flex:1; }
+  #headText .team { font-size:29px; line-height:1.1; letter-spacing:.01em;
+                    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #headText .kicker { font-size:15px; font-weight:700; opacity:.72; margin-top:2px;
+                      letter-spacing:.13em; text-transform:uppercase; }
+
+  #body { background:rgba(12,12,14,0.92); color:#fff; }
+
+  /* Three even tracks. A look rather than a stability measure -- the labels
+     are wider than any value that goes under them, so the columns would not
+     move either way. The panel's fixed width is what holds the graphic
+     still while plays are entered. */
+  #tiles { display:grid; grid-template-columns:1fr 1fr 1fr; }
+  .tile { padding:14px 22px 15px; border-left:1px solid rgba(255,255,255,0.10); }
+  .tile:first-child { border-left:none; }
+  .tile .k { font-size:14px; font-weight:700; opacity:.55; letter-spacing:.12em;
+             text-transform:uppercase; }
+  .tile .v { font-size:40px; font-weight:800; line-height:1.05; margin-top:3px;
+             font-variant-numeric:tabular-nums; }
+  /* A drive can go backwards, and it should look like it has. */
+  .tile .v.neg { color:#ff9d93; }
+  .tile .v small { font-size:19px; font-weight:700; opacity:.6; margin-right:6px;
+                   letter-spacing:.02em; }
+
+  /* Where the ball is NOW -- a different kind of fact from the tiles, which
+     are the drive. Suppressed with &dd=0 for crews whose score bug already
+     carries down and distance. */
+  #foot { border-top:1px solid rgba(255,255,255,0.11); padding:11px 22px 12px;
+          font-size:21px; font-weight:700; display:flex; gap:10px; align-items:baseline; }
+  #foot .at { opacity:.55; font-weight:600; font-size:18px; }
+  body.nodd #foot { display:none; }
+
+  body.debug { background:#123 !important; }
+</style>
+</head>
+<body>
+  <div id="panel">
+    <div id="head">
+      <img id="headLogo" alt="">
+      <div id="headText">
+        <div class="team" id="headTeam"></div>
+        <div class="kicker">Current drive</div>
+      </div>
+    </div>
+    <div id="body">
+      <div id="tiles">
+        <div class="tile"><div class="k">Plays</div><div class="v" id="vPlays"></div></div>
+        <div class="tile"><div class="k">Yards</div><div class="v" id="vYards"></div></div>
+        <div class="tile"><div class="k">Started</div><div class="v" id="vStart"></div></div>
+      </div>
+      <div id="foot"><span id="fDD"></span><span class="at" id="fAt"></span></div>
+    </div>
+  </div>
+
+<script src="team-icon.js"></script>
+<script src="engine.js"></script>
+<script>
+  // CURRENT DRIVE, for a vMix browser input.
+  // ---------------------------------------------------------------------
+  //     /broadcast_drive.html
+  //     /broadcast_drive.html?dd=0        without the down & distance line
+  //
+  // Data comes from /api/gamedata, which reads server-side with the service
+  // key. A browser input is unauthenticated and every RLS policy on plays
+  // requires an authenticated role, so querying Supabase from here returns
+  // nothing and renders a black rectangle -- the same lesson the score bug
+  // learned.
+  //
+  // NO TIME OF POSSESSION, deliberately. A drive's own TOP only accrues
+  // when a closing clock event is entered, so a LIVE drive reads 0:00 for
+  // as long as anybody would look at it. api/feed.js dropped the field for
+  // the same reason. Cumulative TOP is on the teamstats feed.
+  const params = new URLSearchParams(window.location.search);
+  const OVERLAY_KEY = params.get('key') || '';
+  const DEBUG = params.get('debug') === '1';
+  if (DEBUG) document.body.classList.add('debug');
+  if (params.get('dd') === '0') document.body.classList.add('nodd');
+
+  const POLL_MS = 2000;
+  let currentGameId = '';
+
+  // engine.js needs these from the host page.
+  let plays = [], startingPossession = 'teamA', quarterLengthSec = 720;
+  const TEAMS = {};
+  function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+  const TIMEOUTS_PER_HALF = 3;
+  const TIMEOUTS_PER_OT = 1;
+
+  function buildTeams(game, rosterRows, branding){
+    const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
+    const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    TEAMS.teamA = { name: ourName, bg: branding.primary_color || '#2b3440',
+      text: branding.secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{},
+      logo: branding.logo_url || null, isHome: !!game.our_team_is_home };
+    TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#6e7885',
+      text: game.opponent_secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{},
+      logo: game.opponent_logo_url || null, isHome: !game.our_team_is_home };
+    (rosterRows || []).forEach(r => {
+      const t = TEAMS[r.team_side];
+      if (!t) return;
+      const bucket = r.unit === 'defense' ? 'rosterDefense'
+                   : r.unit === 'special' ? 'rosterSpecialTeams' : 'rosterOffense';
+      t[bucket][String(r.jersey_number)] = r.player_name;
+    });
+  }
+
+  const label = (fp) => (fp === null || fp === undefined) ? ''
+    : fp === 50 ? 'the 50' : fp < 50 ? 'own ' + fp : 'opp ' + (100 - fp);
+  const ordinal = (n) => n + (['th','st','nd','rd'][(n % 100 - 20) % 10]
+                              || ['th','st','nd','rd'][n] || 'th');
+
+  // WHERE THE DRIVE STARTED -- computed, not taken from state.fieldPos.
+  // ---------------------------------------------------------------------
+  // The obvious version reads state.fieldPos, which is where the ball is
+  // NOW. api/feed.js's drive view did exactly that under the name
+  // `startedAt` and reported "opp 40" for a drive that began on own 34.
+  //
+  // Nor is it the state BEFORE the drive's first play: a change of
+  // possession sets fieldPos to null, so the play before a drive has no
+  // position at all. The start is the first position the drive itself
+  // establishes -- so walk forward from the drive's first index until a
+  // position appears.
+  function driveStart(list, from){
+    for (let i = from; i < list.length; i++){
+      const st = computeState(list.slice(0, i + 1));
+      if (st.fieldPos !== null && st.fieldPos !== undefined) return st.fieldPos;
+    }
+    return null;
+  }
+
+  function render(){
+    const panel = document.getElementById('panel');
+    const state = computeState(plays);
+
+    // IS THERE A DRIVE AT ALL. `down` is the test rather than possession,
+    // because possession carries over between series while down is null
+    // before the first snap, at a change of possession, and at half.
+    //
+    // NOTHING IS SHOWN AS NOTHING. Not a zeroed panel and not a "waiting"
+    // card: a drive box reading 0 plays 0 yards over live pictures reads as
+    // broken, and one left up from the last possession is worse -- it is
+    // confidently wrong.
+    const live = !!state.down && state.possession &&
+                 state.fieldPos !== null && state.fieldPos !== undefined;
+    if (!live){
+      panel.classList.remove('shown');
+      setTimeout(() => { if (!panel.classList.contains('shown')) panel.style.display = 'none'; }, 400);
+      return;
+    }
+
+    const starts = (typeof findDriveStarts === 'function') ? findDriveStarts(plays) : [];
+    const from = starts.length ? starts[starts.length - 1] : 0;
+    // Scrimmage plays only. A penalty and a timeout are not plays, and a
+    // panel that counts them disagrees with the stat sheet all night.
+    const scrimmage = plays.slice(from).filter(p => p.effect && p.effect.isStat);
+    const yards = scrimmage.reduce((t, p) => t + (p.effect.statYds || 0), 0);
+    const startFp = driveStart(plays, from);
+
+    const t = TEAMS[state.possession] || {};
+    const head = document.getElementById('head');
+    head.style.background = t.bg || '#2b3440';
+    head.style.color = (typeof safeTextColor === 'function')
+      ? safeTextColor(t.bg || '#2b3440') : (t.text || '#ffffff');
+    const logo = document.getElementById('headLogo');
+    if (t.logo){ logo.src = t.logo; logo.style.display = 'block'; }
+    else { logo.style.display = 'none'; }
+    document.getElementById('headTeam').textContent = t.name || '';
+
+    document.getElementById('vPlays').textContent = scrimmage.length;
+    const y = document.getElementById('vYards');
+    y.textContent = (yards < 0 ? '−' : '') + Math.abs(yards);
+    y.classList.toggle('neg', yards < 0);
+
+    const st = label(startFp);
+    document.getElementById('vStart').innerHTML = st
+      ? st.replace(/^own /, '<small>OWN</small> ').replace(/^opp /, '<small>OPP</small> ')
+      : '&mdash;';
+
+    const goal = state.fieldPos + state.distance >= 100;
+    document.getElementById('fDD').textContent =
+      ordinal(state.down) + ' & ' + (goal ? 'Goal' : state.distance);
+    document.getElementById('fAt').textContent = 'at ' + label(state.fieldPos);
+
+    panel.style.display = 'block';
+    requestAnimationFrame(() => panel.classList.add('shown'));
+  }
+
+  async function fetchAndRender(){
+    const qs = [];
+    if (currentGameId) qs.push('id=' + encodeURIComponent(currentGameId));
+    if (OVERLAY_KEY)   qs.push('key=' + encodeURIComponent(OVERLAY_KEY));
+    const r = await fetch('/api/gamedata' + (qs.length ? '?' + qs.join('&') : ''),
+      { cache: 'no-store' });
+    if (!r.ok){
+      const body = await r.json().catch(() => ({}));
+      throw new Error(body.error || ('HTTP ' + r.status));
+    }
+    const d = await r.json();
+    startingPossession = d.game.starting_possession || 'teamA';
+    quarterLengthSec   = d.game.quarter_length_seconds || 720;
+    buildTeams(d.game, d.roster || [], d.ourBranding || {});
+    plays = (d.plays || []).map(p => ({
+      id: p.id, seq: p.sequence_number, text: p.text,
+      effect: p.effect || {}, roles: p.roles || null,
+      team: p.team_side, quarter: p.quarter,
+      isDivider: !!p.is_divider, unresolved: !!p.unresolved
+    }));
+    render();
+  }
+
+  async function init(){
+    currentGameId = params.get('id') || '';
+    try {
+      await fetchAndRender();
+    } catch (e){
+      // Silent ON AIR by design: an overlay that prints an error puts that
+      // error on the broadcast. ?debug=1 says what happened; vMix never has
+      // that parameter, a person testing the address does.
+      document.getElementById('panel').style.display = 'none';
+      if (DEBUG){
+        document.body.innerHTML = '<pre style="color:#fff; font:16px monospace; padding:24px;">' +
+          'No drive shown.\n\n' + String(e && e.message ? e.message : e) +
+          '\n\nCheck /api/gamedata in a browser: it reports which game it ' +
+          'resolved, or says no game is on air.</pre>';
+      }
+      return;
+    }
+    // A later failure must not blank a working panel -- keep the last good
+    // state and try again on the next tick.
+    setInterval(() => { fetchAndRender().catch(() => {}); }, POLL_MS);
+  }
+  init();
+</script>
+</body>
+</html>
