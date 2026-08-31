@@ -954,6 +954,30 @@
       payload.userId = btn.dataset.id;
       payload.newPassword = pw;
 
+    } else if (act === 'changeEmail'){
+      // BOTH ADDRESSES IN FRONT OF THEM. The whole failure being fixed is
+      // a typo, so a prompt that does not show the old one invites a
+      // second typo on top of the first.
+      const next = prompt('Change the invite address for\n\n    ' + email +
+        '\n\nThe invite is re-sent to the new address as soon as this is saved. ' +
+        'Only works while an invite is unaccepted.\n\nNew email address:', email);
+      if (next === null) return;
+      const trimmed = next.trim();
+      if (!trimmed){ alert('Nothing entered — no change made.'); return; }
+      if (trimmed.toLowerCase() === email.toLowerCase()){
+        alert('That is the same address. Use Resend invite to send it again.');
+        return;
+      }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)){
+        alert('That does not look like an email address.'); return;
+      }
+      // READ BACK BEFORE SENDING. A confirm that only says "are you sure?"
+      // does not catch the thing this feature exists to catch.
+      if (!confirm('Send the invite to\n\n    ' + trimmed +
+                   '\n\ninstead of\n\n    ' + email + '\n\nGo ahead?')) return;
+      payload.userId = btn.dataset.id;
+      payload.email = trimmed;
+
     } else if (act === 'setDisabled'){
       const turningOff = btn.dataset.disabled === '1';
       if (!confirm((turningOff ? 'Disable' : 'Enable') + ' this account?\n\n    ' + email +
@@ -976,6 +1000,20 @@
       if (act === 'setPassword'){
         alert('Temporary password set for ' + email +
               '.\n\nThey must choose their own the first time they sign in.');
+      }
+      // A PARTIAL SUCCESS COMES BACK AS 200 WITH AN `error` ON IT: the
+      // address really did change and the invite really did not send, and
+      // an operator told only "done" would never resend, while one told
+      // only "failed" would try the whole change again. Both halves get
+      // said.
+      if (act === 'changeEmail'){
+        if (out.error){
+          alert(out.error);
+        } else {
+          alert('Invite address changed to ' + payload.email +
+                ',\nand a fresh invite has been sent there.\n\n' +
+                'The old address, ' + email + ', can no longer be used to accept it.');
+        }
       }
       // RELOADED FROM THE SERVER rather than patched in place. The row now
       // shows state the server owns -- disabled, temp password pending --
@@ -1246,7 +1284,14 @@
             //                  offers what has already happened.
             '<td class="right" style="white-space:nowrap;">' +
               (!u.emailConfirmedAt
-                ? '<button class="uact" data-act="resendInvite" data-email="' + esc(u.email) + '">Resend invite</button>'
+                ? '<button class="uact" data-act="resendInvite" data-email="' + esc(u.email) + '">Resend invite</button>' +
+                  // CHANGE EMAIL, only while the invite is unaccepted --
+                  // the same condition as Resend invite, and beside it,
+                  // because they are the two halves of "this invite went
+                  // to the wrong place". After it is accepted the address
+                  // is the person's identity, and the API refuses.
+                  '<button class="uact" data-act="changeEmail" data-id="' + esc(u.id) +
+                    '" data-email="' + esc(u.email) + '">Change email</button>'
                 : '<button class="uact" data-act="sendReset" data-email="' + esc(u.email) + '">Send reset</button>') +
               '<button class="uact" data-act="setPassword" data-id="' + esc(u.id) +
                 '" data-email="' + esc(u.email) + '">Temp password</button>' +
