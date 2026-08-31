@@ -131,6 +131,16 @@
   .pill.live   { background:var(--sc-green-tint, #e8f5e9); color:var(--sc-green, #1a7a4c); }
   .pill.trial  { background:#eef2f8; color:#3d5a80; }
   .pill.lapsed { background:var(--sc-amber-tint, #fff3cd); color:#8a6a00; }
+  /* SUSPENDED IS NOT THE SAME AS EXPIRED and must not look like it. One
+     is "we cut them off", the other is "they owe you" -- different
+     severities calling for different actions, and they shared the amber
+     pill until the status column became a controlled vocabulary. */
+  .pill.off    { background:var(--sc-red-tint, #fdecea); color:#a32d2d; }
+  .pill.demo   { background:#efe7f7; color:#5b3b86; }
+  /* THE STATUS COLUMN ONLY. .pill is also the users table's Invited /
+     Disabled / Temp password markers, and shouting those was not asked
+     for -- so the casing is a modifier rather than a change to .pill. */
+  .pill.status { text-transform:uppercase; letter-spacing:.05em; }
 
   button.act { padding:6px 12px; border-radius:var(--sc-radius-sm, 6px); border:none;
                background:var(--sc-green, #1a7a4c); color:#fff; font-size:13px;
@@ -653,26 +663,37 @@
         // cannot write is the status line lying about the thing the
         // operator is looking it up to find out.
         const off = !!t.disabled_at;
-        // EXPIRY OUTRANKS THE STORED COLUMN, for the same reason
-        // suspension outranks everything below it: `subscription` stays
-        // 'active' forever once set, so a school whose season ended two
-        // months ago still read "Active" here while the Renews cell beside
-        // it was red. That is the status line lying about the one thing it
-        // is being read to find out.
         const season = seasonState(t);
-        // Lifetime borrows the 'live' pill rather than getting a colour of
-        // its own: it means the same thing to an operator scanning the
-        // column -- this school is fine, move on.
-        const pill = off ? 'lapsed'
-                   : season.key === 'lifetime' ? 'live'
-                   : season.key === 'expired' ? 'lapsed'
-                   : t.subscription === 'active' ? 'live'
-                   : t.subscription === 'lapsed' ? 'lapsed' : 'trial';
-        const label = off ? 'Suspended'
-                    : season.key === 'lifetime' ? 'Lifetime'
-                    : season.key === 'expired' ? 'Expired'
-                    : t.subscription === 'lapsed' ? 'Lapsed \u2014 read only'
-                    : t.subscription.charAt(0).toUpperCase() + t.subscription.slice(1);
+        // THE STATUS COLUMN IS ONE VOCABULARY OF SIX. Andy's call, 31 Aug
+        // 2026. Before this it held four labels drawn from `subscription`
+        // and `renews_on`, while DEMO -- which is the first thing you need
+        // to know about a row -- sat as a separate badge beside the name
+        // and was easy to miss when scanning the column that is supposed
+        // to answer "what is this account".
+        //
+        // ORDER IS PRECEDENCE, and it is the whole design:
+        //
+        //   DEMO       Andy's call: it wins outright. A demo is never
+        //              billed and never chased, so nothing below it is
+        //              information -- see the note under the row for the
+        //              one case this hides.
+        //   SUSPENDED  the only status that changes what anybody can do.
+        //   LIFETIME   never billed, so no date below it applies.
+        //   EXPIRED    `subscription` stays 'active' forever once set, so
+        //              without this a school two months overdue read
+        //              ACTIVE beside its own red date. A stored 'lapsed'
+        //              lands here too rather than inventing a seventh
+        //              label for the same situation.
+        //   TRIAL / ACTIVE  whatever the column actually says.
+        const status =
+            t.is_demo                    ? { cls:'demo',   text:'Demo' }
+          : off                          ? { cls:'off',    text:'Suspended' }
+          : season.key === 'lifetime'    ? { cls:'live',   text:'Lifetime' }
+          : season.key === 'expired'     ? { cls:'lapsed', text:'Expired' }
+          : t.subscription === 'lapsed'  ? { cls:'lapsed', text:'Expired' }
+          : t.subscription === 'active'  ? { cls:'live',   text:'Active' }
+                                         : { cls:'trial',  text:'Trial' };
+        const pill = status.cls, label = status.text;
         return '<tr>' +
           // THE CREST, ONCE THEY HAVE ONE. A tenant is recognised by its
           // badge long before its name is read, and this list is the one
@@ -693,14 +714,14 @@
                 'onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),' +
                 '{className:\'crest\', textContent:this.alt||\'\'}))">'
               : '<span class="crest">' + esc(t.name.charAt(0).toUpperCase()) + '</span>') +
-            // THE DEMO TAG SITS WITH THE NAME, not in the status column.
-            // Status is subscription state -- trial, active, lapsed -- and a
-            // demo is not one of those; a school can be a demo AND lapsed.
-            // Beside the name it reads as "what this school IS", which is what
-            // it is, and it is the first thing the eye lands on in the row.
+            // THE DEMO BADGE USED TO SIT HERE, and the reasoning was that
+            // status is subscription state while a demo is not one of
+            // those. That held while Status had four labels; it stopped
+            // holding when the column became "what kind of account is
+            // this", which is the question DEMO answers best. Saying it
+            // twice in one row was the other option and it reads as a
+            // mistake.
             '<span>' + esc(t.name) +
-              (t.is_demo ? ' <span class="pill trial" style="margin-left:6px; ' +
-                'vertical-align:2px;">DEMO</span>' : '') +
               (t.full_name ? '<div style="font-weight:400; font-size:12.5px; color:#6b7680;">' +
                 esc(t.full_name) + '</div>' : '') +
             '</span></span></td>' +
@@ -709,7 +730,7 @@
           // is this, and the seed/reset controls in the menu. Both the SQL
           // functions refuse any tenant without the flag, so the badge is also
           // the honest indicator of which rows those controls can touch.
-          '<td><span class="pill ' + pill + '">' + esc(label) + '</span></td>' +
+          '<td><span class="pill status ' + pill + '">' + esc(label) + '</span></td>' +
           // DAY PRECISION, via the same fmtDate as Renews. created_at is a
           // timestamptz, so the hour is there to be shown -- but the
           // question this column answers is "how long have they been a
@@ -799,9 +820,15 @@
                 // is useful on its own.
               '</div>' +
             '</div>' +
-            (off && t.disabled_reason
-              ? '<div style="font-size:12px; color:#6b7680; margin-top:4px;">' +
-                esc(t.disabled_reason) + '</div>' : '') +
+            // DEMO WINS THE PILL, so a suspended demo would otherwise show
+            // no sign at all that it is suspended -- and suspension is the
+            // one status that changes what anybody can do. This line
+            // already existed for the reason text; it now also carries the
+            // bare fact when the pill cannot.
+            (off && (t.disabled_reason || t.is_demo)
+              ? '<div style="font-size:12px; color:#a32d2d; margin-top:4px;">' +
+                esc(t.is_demo ? ('Suspended' + (t.disabled_reason ? ' \u2014 ' + t.disabled_reason : ''))
+                              : t.disabled_reason) + '</div>' : '') +
           '</td>' +
         '</tr>';
       }).join('') + '</table>';
