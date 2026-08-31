@@ -36,7 +36,7 @@
 //   node tests/fuzz_attribution_check.js 200 12345 # reproduce a seed
 
 const { bootGamePage, bootPage } = require('./harness');
-const { enterPlay, setDrive, click, enterTimeout } = require('./ui_driver');
+const { enterPlay, setDrive, click, enterTimeout, UnreachableByUI } = require('./ui_driver');
 
 function rng(seed) {
   let s = seed >>> 0;
@@ -306,7 +306,7 @@ async function fuzzOneGame(seed, playsPerGame) {
         maybeTimeoutAfterFlip();
       }
       catch (e) {
-        if (!/UnreachableByUI|no .* button|missing element/i.test(e.message)) {
+        if (!(e instanceof UnreachableByUI)) {
           findings.push({ kind: 'threw', detail: 'kickoff: ' + e.message.split('\n')[0].slice(0, 100) });
         }
         setDrive(h, { down: 1, distance: 10, side: 'own', yardline: int(rand, 20, 40) });
@@ -323,7 +323,7 @@ async function fuzzOneGame(seed, playsPerGame) {
       enterPlay(h, spec);
       maybeTimeoutAfterFlip();
     } catch (e) {
-      if (!/UnreachableByUI|no .* button|missing element/i.test(e.message)) {
+      if (!(e instanceof UnreachableByUI)) {
         findings.push({ kind: 'threw', detail: spec.type + ': ' + e.message.split('\n')[0].slice(0, 100) });
       }
       plays++;

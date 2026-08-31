@@ -47,6 +47,13 @@ async function playThroughToSecondHalf(h) {
   click(win, doc.getElementById('startGameBtn'));
   click(win, doc.getElementById('pickA'));
   typeInto(win, doc.getElementById('gk_kicker_manual'), '3');
+  // A DIRECTION IS REQUIRED NOW. The guided kickoff panel gained
+  // "which way is <team> kicking" and refuses to save without it,
+  // so every helper that clicked straight through to Save has been
+  // stuck on the opening kickoff ever since -- which is why this
+  // walkthrough reported "0 plays in the log" rather than a failure
+  // anyone could act on. One click, before Save.
+  const _dir1 = doc.querySelector('.gk_dir_btn'); if (_dir1) click(win, _dir1);
   click(win, doc.getElementById('guidedKickoffSave'));
   typeInto(win, doc.getElementById('gr_yards'), '20');
   const sb = doc.querySelector('.gr_spot_side[data-side="own"]');
@@ -125,6 +132,13 @@ async function run() {
     click(win, doc.getElementById('startHalfBtn'));
     click(win, doc.getElementById('pickB'));
     typeInto(win, doc.getElementById('gk_kicker_manual'), '3');
+    // A DIRECTION IS REQUIRED NOW. The guided kickoff panel gained
+    // "which way is <team> kicking" and refuses to save without it,
+    // so every helper that clicked straight through to Save has been
+    // stuck on the opening kickoff ever since -- which is why this
+    // walkthrough reported "0 plays in the log" rather than a failure
+    // anyone could act on. One click, before Save.
+    const _dir2 = doc.querySelector('.gk_dir_btn'); if (_dir2) click(win, _dir2);
     click(win, doc.getElementById('guidedKickoffSave'));
     typeInto(win, doc.getElementById('gr_yards'), '18');
     const sb = doc.querySelector('.gr_spot_side[data-side="own"]');

@@ -32,7 +32,7 @@
 //   node tests/fuzz_period_transition_check.js 150 12345  # reproduce a seed
 
 const { bootGamePage } = require('./harness');
-const { enterPlay, setDrive } = require('./ui_driver');
+const { enterPlay, setDrive, UnreachableByUI } = require('./ui_driver');
 const {
   rng, pick, int, bool, randomDrivePlay, randomFourthDown, randomKickoff, randomTry,
   attributionFindings, GENERAL_INVARIANTS, OFFENSE
@@ -57,7 +57,7 @@ async function playSequence(h, rand, count, uncaughtErrors, plays) {
     try {
       enterPlay(h, spec);
     } catch (e) {
-      if (!/UnreachableByUI|no .* button|missing element/i.test(e.message)) {
+      if (!(e instanceof UnreachableByUI)) {
         uncaughtErrors.push({ playIndex: plays.count, msg: 'threw: ' + spec.type + ': ' + e.message.split('\n')[0].slice(0, 100) });
       }
       plays.count++;

@@ -59,6 +59,13 @@ async function guidedOnside(recoveringSide, spotPrefix, spotYardline) {
   click(win, doc.getElementById('startGameBtn'));
   click(win, doc.getElementById('pickA'));
   typeInto(win, doc.getElementById('gk_kicker_manual'), '3');
+  // A DIRECTION IS REQUIRED NOW -- the guided kickoff panel gained
+  // "which way is <team> kicking" and refuses to save without it, so
+  // this helper never reached the return step and reported "no onside
+  // toggle in the guided flow" when the toggle was there all along,
+  // one screen further on.
+  const dirBtn = doc.querySelector('.gk_dir_btn');
+  if (dirBtn) click(win, dirBtn);
   click(win, doc.getElementById('guidedKickoffSave'));
 
   const toggle = doc.getElementById('gr_onside_toggle');

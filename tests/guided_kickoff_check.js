@@ -21,6 +21,13 @@ async function startAndKickoff(h) {
   const kickerBtn = h.document.querySelector('.gk_kicker_pick');
   if (kickerBtn) click(h.window, kickerBtn);
   else typeInto(h.window, h.document.getElementById('gk_kicker_manual'), '3');
+  // A DIRECTION IS REQUIRED NOW. The guided kickoff panel gained
+  // "which way is <team> kicking" and refuses to save without it,
+  // so every helper that clicked straight through to Save has been
+  // stuck on the opening kickoff ever since -- which is why this
+  // walkthrough reported "0 plays in the log" rather than a failure
+  // anyone could act on. One click, before Save.
+  const _dir1 = h.document.querySelector('.gk_dir_btn'); if (_dir1) click(h.window, _dir1);
   click(h.window, h.document.getElementById('guidedKickoffSave'));
 }
 

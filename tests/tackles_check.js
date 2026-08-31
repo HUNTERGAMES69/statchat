@@ -206,7 +206,18 @@ async function run() {
   }
 
   // --- a gain is never a TFL --------------------------------------------
-  const totalTfl = Object.keys(def).reduce((t, k) => t + (def[k].tfl || 0), 0);
+  // TEAM IS EXCLUDED, the same way the tackle total below already
+  // excludes it. Team TFL is the CEILING -- every scrimmage play that
+  // lost yardage, tackler named or not -- and it lives in this same
+  // bucket map under the key 'TEAM'. Summing it in here made a
+  // per-player assertion count a team aggregate: three where the two
+  // named defenders hold two, and the ceiling-exceeds-floor check below
+  // then compared 3 against 3 and reported the ceiling had been lost.
+  // Neither was true; the engine is right and this sum was reading a row
+  // it was never meant to see.
+  const totalTfl = Object.keys(def)
+    .filter(k => k !== 'TEAM')
+    .reduce((t, k) => t + (def[k].tfl || 0), 0);
   if (totalTfl !== 2) {
     fail('tfl', 'expected 2 per-player TFL, got ' + totalTfl +
          ' — a positive gain must never count');

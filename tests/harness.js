@@ -293,10 +293,36 @@ function makeMockSupabase(db) {
           }
           else if (table === 'game_rosters') {
             if (db.games) {
-              const gid = this._filters.game_id;
-              const entry = db.games.find(g => String(g.game.id) === String(gid));
-              data = entry ? entry.roster : [];
-            } else data = db.roster;
+              // ONE GAME OR SEVERAL, the same as the plays table below.
+              // season_report.html fetches every game's rosters in a
+              // single .in('game_id', ids); reading _filters.game_id as a
+              // plain value compared an object to a uuid, matched no
+              // game, and handed the page an EMPTY roster for a whole
+              // season -- so every player in the report resolved to
+              // "#22" instead of his name.
+              const want = this._filters.game_id;
+              const ids = (want && typeof want === 'object' && Array.isArray(want.__in))
+                ? want.__in.map(String)
+                : [String(want)];
+              // game_id stamped on for the same reason as below: the
+              // fixtures group rosters under their game rather than
+              // repeating the id on every row, and the page groups the
+              // combined result by that field.
+              data = db.games
+                .filter(g => ids.includes(String(g.game.id)))
+                .flatMap(g => (g.roster || []).map(r =>
+                  Object.assign({}, r, { game_id: g.game.id })));
+            } else {
+              // Same stamping as the plays table below, for the same
+              // reason: season_report.html fetches every game's rosters
+              // in one .in('game_id', ids) and groups the result by
+              // row.game_id. Unstamped rows all landed under `undefined`,
+              // buildTeams got an empty roster, and every player in the
+              // season report resolved to "#22" instead of his name --
+              // which is what made the cross-surface comparison, keyed by
+              // display name, read every total as zero.
+              data = db.roster.map(r => Object.assign({ game_id: db.game.id }, r));
+            }
           }
           else if (table === 'teams') data = [db.branding];
           else if (table === 'players') {
@@ -326,12 +352,38 @@ function makeMockSupabase(db) {
               // game_id is STAMPED ON, because the fixtures group plays under
               // their game rather than repeating the id on every row -- and
               // the page groups the combined result by that field.
+              // THE FIXTURE'S OWN GAME ID WINS, and must: a fixture built
+              // by driving game.html (buildFinishedGame in
+              // season_stats_tile_check, and every test that copies it)
+              // gets rows already carrying game_id 'test-game-1' from
+              // that page's own inserts. Assigning the default FIRST let
+              // that stale id through, so all three fixtures' plays
+              // grouped under one game the season query had not asked
+              // for, every prior game came back empty, and the Season
+              // Stats tile read "No stats yet" with five assertions
+              // failing and nothing to say why. The play is under this
+              // game because the fixture put it there.
               data = db.games
                 .filter(g => ids.includes(String(g.game.id)))
                 .flatMap(g => (g.plays || []).map(p =>
-                  Object.assign({ game_id: g.game.id }, p)))
+                  Object.assign({}, p, { game_id: g.game.id })))
                 .sort((a, b) => (a.sequence_number || 0) - (b.sequence_number || 0));
-            } else data = db.existingPlays.concat(db.plays);
+            } else {
+              // game_id IS STAMPED ON HERE TOO, for exactly the reason it
+              // is stamped on the multi-game path above. A single-game
+              // fixture groups its plays under db.game and repeats no id
+              // on the rows -- which was invisible for as long as every
+              // consumer asked for one game and used everything it got
+              // back. season_report.html does NOT: it fetches with
+              // .in('game_id', ids) and then groups the combined result
+              // by row.game_id, so every row landed under `undefined`,
+              // every game got an empty play list, and the page reported
+              // a season of zeros. The page was right; the mock was
+              // handing it rows the real table could never produce.
+              // Assign game_id FIRST so a row that carries its own wins.
+              data = db.existingPlays.concat(db.plays)
+                       .map(p => Object.assign({ game_id: db.game.id }, p));
+            }
           }
         }
         // APPLY THE RANGE WINDOW, if one was set. The pager asks for
