@@ -52,7 +52,34 @@
   --sc-red:#ff8fa3;    --sc-red-tint:rgba(176,0,32,.16);
   --sc-link:#7cb518;
 }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); display:flex; align-items:center; justify-content:center; min-height:100vh; }
+/* A COLUMN, and the card centred by AUTO MARGINS rather than by
+     justify-content. Two reasons, and the second is the one that bites:
+       * the copyright is a flex item again (see .sc-copyright below), and
+         in a row it sat beside the card instead of under it;
+       * `justify-content:center` on an overflowing flex container pushes
+         content past the START edge, where it cannot be scrolled to --
+         so a card taller than the window loses its top for good. Auto
+         margins collapse to zero instead, which is the behaviour wanted.
+     box-sizing so the 24px padding does not add to 100vh and manufacture
+     a scrollbar on a page that fits. */
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background:var(--sc-page, #f4f3ef); margin:0; padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); display:flex; flex-direction:column; align-items:center; min-height:100vh; box-sizing:border-box; }
+  /* AND THE CARD'S WIDTH HAS TO BE STATED, because the column took away
+     the thing that was quietly supplying it.
+     ------------------------------------------------------------------
+     `.card` is width:100% with content-box sizing and 32px of side
+     padding, so its BORDER box is 66px wider than the width it declares.
+     In the old row-direction body that never showed: a flex item shrinks
+     along the main axis, and the main axis was horizontal, so the card
+     was squeezed back to the 327px that fits a 375px phone. In a column
+     the main axis is vertical, nothing shrinks sideways, and the card
+     spilled 9px past the body padding on each side -- edge to edge, with
+     its rounded corners cut off.
+     border-box plus 446px (= the old 380px of content + 64 padding + 2
+     border) reproduces the previous geometry exactly: 327px at 375px
+     wide, 446px on a laptop. Measured against the pre-change file at
+     both, not derived from the arithmetic alone. */
+  body > .card { margin-top:auto; margin-bottom:auto;
+                 box-sizing:border-box; max-width:446px; }
   .card { background:var(--sc-card); border:1px solid var(--sc-rule); color:var(--sc-ink); border-radius:12px; padding:28px 32px 32px; max-width:380px; width:100%; box-shadow:0 2px 12px rgba(0,0,0,0.08); position:relative; }
   /* THE SAME LOCKUP AS THE SITE HEADER: mark and wordmark side by side,
      top of the card, baseline-aligned. The logo used to be absolutely
@@ -140,21 +167,66 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
   .msg.error { background:#2a1519; color:#ff8fa3; border:1px solid #4a2028; }
   .msg.success { background:#16210f; color:#a3d93f; border:1px solid #2c3d18; }
   .hidden { display:none; }
-  /* The copyright line. Muted, small, and given its own top margin rather
-     than a bottom one, so adding it cannot push anything or change the
-     scroll height of a page that previously ended flush. */
-  /* OUT OF THE FLEX FLOW.
+  /* THE COPYRIGHT LINE: IN THE FLOW, AT THE FOOT, AND UNABLE TO OVERLAP.
      ------------------------------------------------------------------
-     `body` here is display:flex with justify-content:center, holding the
-     sign-in card. This paragraph became a SECOND flex item, so the two were
-     centred as a pair and the notice sat BESIDE the box rather than under
-     it. Same fault as view.html, reported the same way.
-     Absolute positioning puts it back at the foot of the page and leaves
-     the card centred on its own. */
-  .sc-copyright { position:absolute; left:0; right:0; bottom:14px;
-    margin:0 auto; padding:0 16px; font-size:12px; line-height:1.5;
-    color:var(--sc-ink-muted, #8d99a6); opacity:.75; text-align:center;
-    max-width:760px; box-sizing:border-box; }
+     It was `position:absolute; bottom:14px`. `body` is not positioned, so
+     that resolved against the INITIAL CONTAINING BLOCK -- the viewport --
+     and not against the document. Every page taller than the window
+     therefore painted this notice straight across whatever happened to be
+     sitting 14px above the fold.
+
+     With the two-factor block open that is the "Forgot your password?"
+     and "Have an invite code?" links: 54px of overlap on an iPhone SE,
+     54px again with the software keyboard up, 18px in landscape. Andy,
+     31 Aug 2026 -- "Login with 2FA is crowded and overlaps since
+     copyright". Measured, not guessed; see verify/loginmfa.js.
+
+     Going absolute was itself a fix for a real fault: as a plain flex
+     ITEM in a row-direction body, the notice was centred BESIDE the card.
+     The answer to that is a COLUMN, not removal from the flow. `auto`
+     top and bottom margins on the card centre it in whatever space is
+     left over and leave this at the bottom; when the content is taller
+     than the window both autos resolve to zero and the page simply
+     scrolls, with the notice below the card where it belongs.
+
+     A layout that CANNOT overlap is worth more than one that has to be
+     measured to prove it does not.
+
+     26px top and zero bottom is the app's standard for this notice, not a
+     number picked for this page. Back in the flow, login.html is held to
+     that standard for the first time -- tests/copyright_check.js derives
+     which pages get the standard rule by asking whether the body centres
+     with flex, and this page no longer does. */
+  .sc-copyright { margin:26px auto 0; padding:0 16px; font-size:12px;
+    line-height:1.5; color:var(--sc-ink-muted, #8d99a6); opacity:.75;
+    text-align:center; max-width:760px; box-sizing:border-box; }
+
+  /* THE TWO-FACTOR STEP REPLACES THE PASSWORD STEP.
+     ------------------------------------------------------------------
+     By the time this block is shown the password has already been
+     accepted -- the session exists at aal1 -- so the email box, the
+     password box and the Sign in button below them are finished work,
+     and "Forgot your password?" answers a question nobody is asking at
+     this point. Leaving all five on screen made the card 648px tall on a
+     667px phone. That is the "crowded", and it is also what the notice
+     had to overlap. Hiding them takes the card to roughly 300px.
+
+     Cancel puts them back, because Cancel means start over. */
+  #loginView.mfa-open .credStep { display:none; }
+
+  /* VERIFY AND CANCEL SHARE A LINE. Every button on this page is
+     width:100%, and Cancel additionally carried margin-left:8px -- so it
+     measured 100% + 8px and hung off the right edge of the card at
+     375px. Two equal flex children with a gap cannot do that. */
+  .mfaActions { display:flex; gap:8px; margin-top:12px; }
+  .mfaActions button { margin:0; flex:1; }
+
+  /* Cancel had class="secondary" and this page defined no such rule, so
+     it rendered as a second identical navy button. Side by side that is
+     actively misleading. Same declaration the dashboard already uses --
+     copied rather than invented, so the two pages agree. */
+  button.secondary { background:transparent; color:var(--sc-ink);
+    border:1px solid var(--sc-rule-strong); }
   @media print { .sc-copyright { color:#666 !important; opacity:1; } }
 </style>
 </head>
@@ -201,24 +273,34 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
   <div id="loginView" class="hidden">
     <h1 class="sr-only">Sign in to StatChat</h1>
     <div id="loginMsg"></div>
-    <label>Email<input type="email" id="loginEmail"></label>
-    <label>Password<input type="password" id="loginPassword"></label>
-    <button id="loginBtn">Sign in</button>
+    <!-- THE PASSWORD STEP. Marked as a group so the two-factor step can
+         take its place rather than pile on top of it -- see .credStep in
+         the stylesheet. Nothing here changed but the wrapper. -->
+    <div class="credStep">
+      <label>Email<input type="email" id="loginEmail"></label>
+      <label>Password<input type="password" id="loginPassword"></label>
+      <button id="loginBtn">Sign in</button>
+    </div>
 
     <!-- Shown only when the account has two-factor enabled. Supabase
          accepts the password first and returns a session at aal1; the
          code below raises it to aal2. Until that happens the session is
-         signed in but not fully authenticated. -->
-    <div id="mfaChallenge" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid var(--sc-rule);">
+         signed in but not fully authenticated.
+         The top border and margin that used to be here divided this from
+         the password fields above. Those fields are now hidden while this
+         is open, so the divider would be a rule under nothing. -->
+    <div id="mfaChallenge" style="display:none;">
       <p style="margin:0 0 10px; font-weight:600;">Two-factor code</p>
       <p class="sub" style="margin:0 0 10px;">Open your authenticator app and enter the six digits.</p>
       <label>Code<input type="text" id="mfaLoginCode" inputmode="numeric" maxlength="6"
              autocomplete="one-time-code" style="width:140px;"></label>
-      <button id="mfaLoginBtn" style="margin-top:10px;">Verify</button>
-      <button id="mfaCancelBtn" class="secondary" style="margin-top:10px; margin-left:8px;">Cancel</button>
+      <div class="mfaActions">
+        <button id="mfaLoginBtn">Verify</button>
+        <button id="mfaCancelBtn" class="secondary">Cancel</button>
+      </div>
     </div>
-    <p class="sub" style="margin-top:14px; margin-bottom:0;"><a href="#" id="forgotLink" style="color:var(--sc-link);">Forgot your password?</a></p>
-    <p class="sub" style="margin-top:6px; margin-bottom:0;"><a href="#" id="haveCodeLink" style="color:var(--sc-link);">Have an invite code?</a></p>
+    <p class="sub credStep" style="margin-top:14px; margin-bottom:0;"><a href="#" id="forgotLink" style="color:var(--sc-link);">Forgot your password?</a></p>
+    <p class="sub credStep" style="margin-top:6px; margin-bottom:0;"><a href="#" id="haveCodeLink" style="color:var(--sc-link);">Have an invite code?</a></p>
   </div>
 
   <div id="loggedInView" class="hidden">
@@ -348,7 +430,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
         if (totp){
           pendingFactorId = totp.id;
           showView('loginView');
-          document.getElementById('mfaChallenge').style.display = 'block';
+          setMfaChallenge(true);
           const box = document.getElementById('mfaLoginCode');
           box.value = '';
           box.focus();
@@ -587,6 +669,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
 
   // ---- the two-factor challenge ---------------------------------------
 
+  // ONE PLACE decides what this step looks like. There are three call
+  // sites -- opened, verified, cancelled -- and showing the block while
+  // forgetting to hide the password fields is exactly the kind of miss
+  // that three separate copies produce. One rule, one implementation.
+  function setMfaChallenge(on){
+    document.getElementById('mfaChallenge').style.display = on ? 'block' : 'none';
+    document.getElementById('loginView').classList.toggle('mfa-open', on);
+  }
+
   async function submitMfaCode(){
     const code = (document.getElementById('mfaLoginCode').value || '').trim();
     if (!/^\d{6}$/.test(code)){
@@ -603,7 +694,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
         factorId: pendingFactorId, challengeId: ch.id, code
       });
       if (error) throw error;
-      document.getElementById('mfaChallenge').style.display = 'none';
+      setMfaChallenge(false);
       document.getElementById('mfaLoginCode').value = '';
       showLoggedIn(data);
     } catch (e) {
@@ -624,7 +715,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
     // Half-signed-in is a confusing state to leave someone in, so drop
     // the session entirely rather than pretending nothing happened.
     await supabaseClient.auth.signOut();
-    document.getElementById('mfaChallenge').style.display = 'none';
+    setMfaChallenge(false);
     document.getElementById('mfaLoginCode').value = '';
     document.getElementById('mfaLoginBtn').disabled = false;
     showMsg('loginMsg', 'Signed out. Sign in again when you have your code.', 'info');
