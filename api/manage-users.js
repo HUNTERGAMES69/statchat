@@ -162,6 +162,21 @@ module.exports = async function handler(req, res) {
         // in yet, and a flag still set weeks later means they never did.
         mustChangePassword: !!(u.user_metadata && u.user_metadata.must_change_password),
         passwordSetAt: (u.user_metadata && u.user_metadata.password_set_at) || null,
+      // TWO-FACTOR, AND ONLY THE VERIFIED KIND.
+      // ------------------------------------------------------------------
+      // listUsers() already returns a `factors` array on every user, so this
+      // costs nothing -- no second call, and no per-user round trip, which
+      // admin.mfa.listFactors({ userId }) would have meant once per row.
+      //
+      // status === 'verified' is the whole test, and it is the same one the
+      // dashboard's Getting started card applies to the signed-in user. An
+      // enrollment that was started and abandoned sits at 'unverified'
+      // forever: it is a QR code somebody photographed and never confirmed,
+      // it protects nothing, and counting it would report an account as
+      // secured when it is not. That is the one direction this must never be
+      // wrong in.
+      mfaVerified: Array.isArray(u.factors) &&
+                   u.factors.some(f => f && f.status === 'verified'),
       // WHICH SCHOOL EACH USER BELONGS TO.
       // ------------------------------------------------------------------
       // A tenant admin never needs this: everyone they can see is in their
