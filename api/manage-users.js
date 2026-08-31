@@ -274,6 +274,103 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  // CHANGE THE ADDRESS ON AN INVITE THAT HAS NOT BEEN ACCEPTED.
+  // ---------------------------------------------------------------------
+  // Reported 31 Aug 2026: a tenant was created with a typo in its first
+  // admin's address. Everything else was correct -- the school, the
+  // profile row, the admin role -- and the only wrong thing was a string
+  // in auth.users that no screen could reach. Resend invite just sent the
+  // same invite to the same wrong inbox again.
+  //
+  // ONLY BEFORE THE INVITE IS ACCEPTED, which is not timidity: an
+  // unconfirmed row is a pending invitation and its address is
+  // administrative data. Once somebody has signed in, that address is
+  // their identity and their password-reset route, and an operator
+  // silently repointing it is account takeover with a friendly button on
+  // it. The error below says what to do instead.
+  //
+  // `profiles` carries no email column -- the address lives only in
+  // auth.users -- so this is the whole job. tenant_id and role sit on the
+  // profile row and are untouched, which is why the invite does not need
+  // re-stamping the way api/invite-user.js does for a new person.
+  if (action === 'changeEmail') {
+    const { userId } = body;
+    const next = String(body.email || '').trim();
+    if (!userId) { res.status(400).json({ error: 'A user id is required' }); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(next)) {
+      res.status(400).json({ error: 'That does not look like an email address.' });
+      return;
+    }
+    const emailWrongTenant = await refuseIfOtherTenant(userId);
+    if (emailWrongTenant) { res.status(403).json({ error: emailWrongTenant }); return; }
+
+    const { data: targetData, error: targetErr } =
+      await adminClient.auth.admin.getUserById(userId);
+    if (targetErr || !targetData || !targetData.user) {
+      res.status(404).json({ error: 'No such user.' });
+      return;
+    }
+    const target = targetData.user;
+    if (target.email_confirmed_at) {
+      res.status(400).json({ error:
+        'That invite has already been accepted, so the address cannot be changed here. ' +
+        'It is now the account\'s identity and its password-reset route. Disable the ' +
+        'account and invite the correct address as a new user instead.' });
+      return;
+    }
+    if ((target.email || '').toLowerCase() === next.toLowerCase()) {
+      res.status(400).json({ error:
+        'That is already the address on this invite — use Resend invite to send it again.' });
+      return;
+    }
+    // CHECKED BEFORE THE UPDATE, so a clash is a clean refusal rather
+    // than a half-applied change plus a database error.
+    const clash = await userIdForEmail(next);
+    if (clash) {
+      res.status(409).json({ error: 'Another account on this platform already uses ' + next + '.' });
+      return;
+    }
+
+    const { error: updErr } = await adminClient.auth.admin.updateUserById(userId, {
+      email: next,
+      // Left UNCONFIRMED on purpose. Confirming it here would mark the
+      // address verified without anybody having opened anything, and the
+      // row would stop showing "Invited" while still being an unaccepted
+      // invitation.
+      email_confirm: false
+    });
+    if (updErr) { res.status(400).json({ error: updErr.message }); return; }
+
+    // READ IT BACK rather than trusting the write. GoTrue has more than
+    // one way to treat an email change -- applied at once, or parked as a
+    // pending email_change -- and reporting "changed to X" when the row
+    // still says Y would send an operator away believing a thing that is
+    // not true.
+    const { data: afterData } = await adminClient.auth.admin.getUserById(userId);
+    const landed = afterData && afterData.user ? (afterData.user.email || '') : '';
+    if (landed.toLowerCase() !== next.toLowerCase()) {
+      res.status(500).json({ error:
+        'The change did not stick: the account still reads ' + (landed || 'unknown') +
+        '. Nothing was sent. This needs the Supabase dashboard.' });
+      return;
+    }
+
+    // THE SAME CALL "Resend invite" MAKES, deliberately -- one way of
+    // sending an invite, already proven against this project's GoTrue.
+    const { error: invErr } = await adminClient.auth.admin.inviteUserByEmail(next);
+    if (invErr) {
+      // The address IS changed at this point, so this is a partial
+      // success and has to be reported as one. Telling the operator it
+      // failed would have them repeat a change that already happened.
+      res.status(200).json({ success: true, email: next, invited: false,
+        error: 'The address was changed to ' + next + ', but the invite did not send: ' +
+               invErr.message + ' — use Resend invite on that row.' });
+      return;
+    }
+    res.status(200).json({ success: true, email: next, invited: true });
+    return;
+  }
+
   if (action === 'delete') {
     const { userId } = body;
     if (!userId) { res.status(400).json({ error: 'A user id is required' }); return; }
