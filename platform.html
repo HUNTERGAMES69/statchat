@@ -639,10 +639,19 @@
     // Counted in ONE query rather than one per tenant. Two tenants makes
     // no difference; twenty would, and this page is the one that has to
     // still work when there are twenty.
+    // is_sample IS SELECTED so it can be excluded below -- and an unselected
+    // column reads undefined, which would count every sample as a real game
+    // and be invisible while doing it. Same trap as deleted_at above.
     const { data: games } = await supabaseClient
-      .from('games').select('tenant_id, deleted_at, season_year');
+      .from('games').select('tenant_id, deleted_at, season_year, is_sample');
     const live = {}, gone = {};
     (games || []).forEach(g => {
+      // A SEEDED SAMPLE IS NOT ONE OF THEIR GAMES. 028 puts an example game
+      // in every new school, so counting it here would show "1" against a
+      // school that has done nothing -- and the Games column is read to
+      // answer exactly that question: has this school actually started?
+      // Every school would read the same, which makes the column useless.
+      if (g.is_sample === true) return;
       const bucket = g.deleted_at ? gone : live;
       bucket[g.tenant_id] = (bucket[g.tenant_id] || 0) + 1;
     });
@@ -1335,8 +1344,22 @@
     // to the rendering.
     const { data: games, error } = await supabaseClient
       .from('games')
-      .select('id, tenant_id, designator, game_date, home_team_name, away_team_name, status, is_broadcast, deleted_at')
+      .select('id, tenant_id, designator, game_date, home_team_name, away_team_name, status, is_broadcast, deleted_at, is_sample')
       .is('deleted_at', null)
+      // SEEDED SAMPLES ARE NOT LIVE GAMES, and they are the only rows here
+      // that NOBODY WILL EVER FINISH. 028 gives every new school an example
+      // game left in progress; each one would sit in this list permanently,
+      // dated in the current season so it sorts near the top, and the list
+      // caps at 60. Six demo schools is six rows; every school ever signed
+      // up is however many that becomes -- burying the two games that
+      // actually matter on a Friday night, which is the only reason this
+      // screen exists.
+      //
+      // `is not true` rather than `eq false`: the column is nullable and
+      // every game predating 028 is null, and NULL = false is NULL in SQL,
+      // not true -- so .eq('is_sample', false) would silently drop every
+      // one of them. Exactly the fault is_preseason hit in season_report.
+      .not('is_sample', 'is', true)
       .in('status', wanted)
       .order('game_date', { ascending: false })
       .limit(60);

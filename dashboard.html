@@ -966,7 +966,13 @@
       // is_preseason, added for the same reason: the badge below reads
       // g.is_preseason directly, and would silently never show without
       // it named here too.
-      .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status, final_score_us, final_score_opp, is_broadcast, is_preseason')
+      // is_sample, third time the same trap: the Getting started card counts
+      // it out of "create your first game" and counts the delete-the-sample
+      // step from it, and BOTH of those read false when the column is
+      // missing -- so an unnamed column here would tell a brand-new school
+      // it had already created a game and then never mention the sample
+      // again. Silent in both directions, which is the worst kind.
+      .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status, final_score_us, final_score_opp, is_broadcast, is_preseason, is_sample')
       .order('game_date', { ascending: false });
     if (error){
       showMsg('dashboardMsg', 'Could not load games: ' + error.message, 'error');
@@ -1033,11 +1039,22 @@
     // Uses allGames, not the season-filtered list: a school that played last
     // year has created a game, and being shown "create your first game"
     // because the season selector moved would be wrong.
+    // THE SAMPLE GAME IS NOT A GAME THEY CREATED, and counting it as one
+    // told a school on its first login that it had already done step three.
+    // `is distinct from true` rather than `!g.is_sample`, because the column
+    // is nullable: every game that predates it is null, and null must read
+    // as "not a sample" rather than falling through a truthiness test that
+    // happens to agree today.
+    const ownGames = allGames.filter(g => g.is_sample !== true);
     renderGettingStarted({
       customized: gsCustomized,
       hasRoster:  gsPlayerCount > 0,
       playerCount: gsPlayerCount,
-      hasGames:   allGames.length > 0,
+      hasGames:   ownGames.length > 0,
+      // Still there, still theirs to remove. Deleting it soft-deletes the
+      // row, and games_select stops returning it the moment that happens --
+      // so the step marks itself done with nothing to detect the deletion.
+      hasSample:  allGames.some(g => g.is_sample === true),
       isAdmin:    currentIsAdmin,
       hasMfa:     gsHasMfa
     });
@@ -1216,7 +1233,43 @@
         href:  'create_game.html', label: 'New game' }
     ];
 
-    // FOURTH STEP, ADMINS ONLY. An admin can change the roster, delete
+    // THE SAMPLE GAME, ONCE THEY HAVE ONE OF THEIR OWN.
+    // -------------------------------------------------------------------
+    // A school is given a finished (or part-played) example game so its
+    // first dashboard is not empty and every report has something behind
+    // it. It is theirs to delete, and it should go before the season
+    // starts -- but NOT before it has done its job.
+    //
+    // SHOWN ONLY ONCE THEY HAVE CREATED A REAL GAME. Andy's call, 31 Aug
+    // 2026. Pointing "delete this" at the only thing on a brand-new
+    // dashboard works directly against the reason it is there, and a step
+    // people are meant to leave undone is how a checklist trains them to
+    // ignore it. Creating their first game IS starting their season, so
+    // that is the moment the reminder means something -- step three ticks
+    // and this appears in its place, so the card never empties and refills.
+    //
+    // BEFORE the two-factor step, which stays last for the reason below.
+    if (state.hasSample && state.hasGames){
+      steps.push({
+        // NEVER DONE WHILE IT IS STILL THERE. There is no third state: the
+        // step exists because the sample exists, and deleting it removes
+        // both. `done` is false rather than derived, and the whole step is
+        // absent once hasSample goes false.
+        done: false,
+        title: 'Delete the sample game',
+        // NAMES THE CONTROL AND WHERE IT IS. The other four steps send you
+        // to another page; this one is done from the list directly below,
+        // so a "go" button would either point at the page you are on or at
+        // a screen that cannot do it.
+        desc:  'The example game we added so your dashboard was not empty on ' +
+               'day one. Open its \u22ee menu in the list below and choose ' +
+               'Delete game \u2014 it is only an example, and it should not ' +
+               'sit in your records once your season starts.',
+        doneDesc: 'Done.'
+      });
+    }
+
+    // ADMINS ONLY. An admin can change the roster, delete
     // games and invite people; a view or game-entry account cannot, so the
     // exposure is not the same and neither is the nagging.
     //
@@ -1249,7 +1302,11 @@
         '<span class="gs-num">' + (s.done ? '\u2713' : (i + 1)) + '</span>' +
         '<div><div class="gs-t">' + s.title + '</div>' +
              '<div class="gs-d">' + (s.done ? s.doneDesc : s.desc) + '</div></div>' +
-        (s.done ? '' : '<a class="gs-go" href="' + s.href + '">' + s.label + '</a>') +
+        // A STEP WITHOUT AN href RENDERS NO BUTTON. Every step used to have
+        // one, so this read s.href unconditionally and would emit
+        // href="undefined" -- a live link to a 404 -- for the sample step,
+        // whose action is on this page rather than another.
+        (s.done || !s.href ? '' : '<a class="gs-go" href="' + s.href + '">' + s.label + '</a>') +
       '</div>').join('');
     card.style.display = '';
   }
