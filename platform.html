@@ -413,6 +413,11 @@
   // is true today and is exactly the kind of ordering that breaks silently
   // when a listener is added above it later.
   let signedInUserId = null;
+  // Set from every users payload. See the 2FA column in the row renderer:
+  // false means "the lookup did not answer", which must NOT be drawn as an
+  // amber "No 2FA" -- that is a false finding wearing the same colour as a
+  // real one.
+  let mfaKnown = true;
 
     // A MESSAGE CLEARS ITSELF.
     // ------------------------------------------------------------------
@@ -1522,6 +1527,11 @@
       return;
     }
     const allUsers = payload.users || [];
+    // CAN THE SERVER ANSWER THE 2FA QUESTION AT ALL. Absent on an older
+    // deployment of api/manage-users.js, so `!== false` rather than a truth
+    // test: an endpoint that predates the flag was reading u.factors and its
+    // answer, right or wrong, is the only one there is.
+    mfaKnown = payload.mfaKnown !== false;
     if (!allUsers.length){ body.innerHTML = '<p class="empty">No users.</p>'; return; }
 
     // HIDDEN, BUT COUNTED. Disabled accounts are the minority and the least
@@ -1659,7 +1669,17 @@
         esc(heading(k)) +
         ' <span style="font-weight:400; color:#6b7680;">(' + n + ')</span></td></tr>';
 
-    body.innerHTML = '<table>' +
+    body.innerHTML =
+      // SAID IN WORDS, ONCE, when the column cannot be trusted. An empty 2FA
+      // column and a 2FA column that is genuinely all-quiet look identical,
+      // and quietly showing the second when it is the first is how somebody
+      // concludes their admins are covered.
+      (mfaKnown ? '' :
+        '<p class="empty" style="text-align:left; margin:0 0 10px;">' +
+        'Two-factor could not be read, so that column is blank for everyone ' +
+        'below \u2014 it does not mean nobody has it. Check that ' +
+        'sql/033_mfa_visibility.sql has been applied.</p>') +
+      '<table>' +
       '<tr><th>Name</th><th>Role</th><th>Last sign-in</th><th></th><th></th></tr>' +
       [...groups.keys()].sort().map(k => {
       const rows = groups.get(k).sort((a, b) =>
@@ -1709,8 +1729,16 @@
               // AND ONLY ONCE THEY HAVE ACCEPTED THE INVITE. Somebody who has
               // never signed in obviously has no second factor; flagging that
               // is not a finding, it is just the invite showing up twice.
-              (u.mfaVerified ? '<span class="pill live">2FA</span>' : '') +
-              (!u.mfaVerified && u.role === 'admin' && u.emailConfirmedAt
+              //
+              // AND NOTHING AT ALL IF THE LOOKUP DID NOT ANSWER. A failed
+              // 2FA read makes every mfaVerified false, which would paint an
+              // amber "No 2FA" across every admin on the platform -- a false
+              // finding indistinguishable from a real one, and the exact
+              // fault that sent this column back for a second attempt.
+              // Silence is the honest output for "not known"; the note above
+              // the table says so in words.
+              (mfaKnown && u.mfaVerified ? '<span class="pill live">2FA</span>' : '') +
+              (mfaKnown && !u.mfaVerified && u.role === 'admin' && u.emailConfirmedAt
                 ? '<span class="pill lapsed">No 2FA</span>' : '') +
             '</td>' +
             // ACTIONS, EACH SHOWN ONLY WHERE IT MEANS SOMETHING. A button
