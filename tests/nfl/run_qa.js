@@ -94,6 +94,7 @@ function expectedScore(rows, homeAbbr) {
     teamB: num(last.total_away_score)
   };
   const lost = { teamA: 0, teamB: 0 };
+  const kickoffReturnTds = [], unconvertedSafeties = [], ownFumbleTds = [];
   const sideOf = abbr => (abbr === homeAbbr ? 'teamA' : 'teamB');
 
   for (const r of rows) {
@@ -130,10 +131,76 @@ function expectedScore(rows, homeAbbr) {
     // Safeties are emitted too, so no deduction. Verified against
     // 2023_03_IND_BAL and 2023_03_NE_NYJ.
 
+    // (4) A KICKOFF RETURNED FOR A TOUCHDOWN. Found 31 Aug 2026 on the
+    // first run past fifty games: 2023_03_DEN_MIA (Mims, 99 yards) and
+    // 2023_03_HOU_JAX (Beck, muffed catch recovered, 85 yards) both came
+    // out exactly six points short for the returning side, and nothing
+    // in this function explained it.
+    //
+    // The cause is one line in convert.js: kickoffs are skipped
+    // outright, because StatChat models the ensuing spot through its own
+    // guided flow and this harness compares scrimmage production. A play
+    // that is never entered cannot score, so the six points were never
+    // StatChat's to miss -- the app scores a kickoff return TD correctly
+    // when one IS entered, which accuracy_check's own golden path
+    // asserts.
+    //
+    // So this is a deduction rather than a fix, and it is deliberately
+    // NARROW: only a kickoff, only when it actually scored. A punt
+    // return, an interception return, a fumble return and a blocked
+    // field goal taken back are all emitted, so a short score on any of
+    // those is still a real finding, which is the distinction the note
+    // at the head of this function exists to protect.
+    // (5) A SAFETY THE CONVERTER CANNOT EMIT. Found the same run.
+    // convert.js writes a safety on exactly two shapes -- a runner
+    // tackled in his own end zone, and a quarterback sacked there --
+    // because those are the two the entry panels have a toggle for and
+    // between them they are nearly every safety that happens.
+    //
+    // 2023_04_KC_NYJ is the other kind: Mahomes throws it away from his
+    // own end zone and is flagged, so the row is an INCOMPLETE PASS with
+    // penalty=1 and safety=1. There is no incomplete-pass branch that
+    // carries a safety, the play is skipped as a penalty besides, and
+    // the two points went missing with nothing to explain them.
+    //
+    // Deducted, not fixed, and scoped to exactly the shapes the
+    // converter does not write: a safety on a run, or on a sack, still
+    // has to come out of StatChat or this tier fails as it should.
+    if (truthy(r.safety) && r.posteam &&
+        !(r.play_type === 'run' || (r.play_type === 'pass' && truthy(r.sack)))) {
+      lost[sideOf(r.posteam === homeAbbr ? awayAbbr : homeAbbr)] += 2;
+      unconvertedSafeties.push(String(r.play_type));
+    }
+    // (6) AN OWN FUMBLE RECOVERED IN THE END ZONE FOR A TOUCHDOWN.
+    // 2023_04_WAS_PHI: Robinson fumbles at the PHI 1, McLaurin falls on
+    // it in the end zone, six points to Washington. fumble_lost is 0 and
+    // td_team is the team WITH the ball, so it is neither the defensive
+    // return the converter handles nor a touchdown by the man being
+    // credited with the carry.
+    //
+    // UNLIKE THE THREE ABOVE, THIS ONE IS NOT PURELY A HARNESS GAP. The
+    // rush/pass/sack fumble panels offer "Returned for touchdown
+    // (defense)" on the OPPONENT-recovery branch only; the own-recovery
+    // branch has a safety toggle and nothing for a score. So a scorer
+    // watching this play has no ladder path that records it either --
+    // reported to Andy 31 Aug 2026 rather than fixed here, since it is a
+    // product decision about a rare play and not a miscount.
+    //
+    // Deducted so the tier keeps its meaning for everything else.
+    if (truthy(r.touchdown) && r.td_team && r.posteam && r.td_team === r.posteam &&
+        truthy(r.fumble) && !truthy(r.fumble_lost)) {
+      lost[sideOf(r.td_team)] += 6;
+      ownFumbleTds.push(r.td_team);
+    }
+    if (r.play_type === 'kickoff' && truthy(r.touchdown) && r.td_team) {
+      lost[sideOf(r.td_team)] += 6;
+      kickoffReturnTds.push(r.td_team);
+    }
   }
   return {
     truth,
     lost,
+    kickoffReturnTds, unconvertedSafeties, ownFumbleTds,
     expect: { teamA: truth.teamA - lost.teamA, teamB: truth.teamB - lost.teamB }
   };
 }
@@ -142,7 +209,25 @@ function expectedScore(rows, homeAbbr) {
 // from the same rows rather than from player_stats so a mismatch points
 // at StatChat rather than at two nflverse files disagreeing.
 function expectedFromRows(rows, numberFor) {
-  const exp = { rush: {}, rec: {}, pass: {} };
+  // COUNTS, NOT ONLY YARDAGE. Until 31 Aug 2026 this compared three
+  // yardage totals and nothing else, so a carry credited to the wrong
+  // back for zero yards, a reception counted twice, or a completion
+  // silently dropped all passed a run cleanly. Andy's brief was that
+  // "nothing is being MISSED", and a yards-only comparison cannot answer
+  // that question -- it can only answer whether the yards that DID get
+  // recorded landed on the right man.
+  //
+  // Every counter here is one nflverse states directly, so none of it is
+  // derived and none of it can drift from the source: a `run` row is one
+  // carry, a `pass` row is one attempt, complete_pass is one completion
+  // and one reception, and sack/interception/touchdown are their own
+  // flags. Where NFHS and the NFL genuinely differ (two-point yardage,
+  // kneels) the existing exclusions apply to the counts as well, since
+  // they are applied before anything is added.
+  const exp = { rush: {}, rec: {}, pass: {},
+                carries: {}, catches: {}, targets: {},
+                completions: {}, attempts: {},
+                sacksTaken: {}, ints: {} };
   const add = (b, k, v) => { if (k) b[k] = (b[k] || 0) + v; };
   for (const r of rows) {
     // Two-point conversion yardage is NOT part of anyone's rushing or
@@ -153,10 +238,28 @@ function expectedFromRows(rows, numberFor) {
     if (truthy(r.two_point_attempt)) continue;
     if (r.play_type === 'run' && !truthy(r.qb_kneel)) {
       add(exp.rush, numberFor.get(r.rusher_player_id), num(r.yards_gained));
+      add(exp.carries, numberFor.get(r.rusher_player_id), 1);
     }
-    if (r.play_type === 'pass' && truthy(r.complete_pass)) {
-      add(exp.rec, numberFor.get(r.receiver_player_id), num(r.yards_gained));
-      add(exp.pass, numberFor.get(r.passer_player_id), num(r.yards_gained));
+    if (r.play_type === 'pass') {
+      // A SACK IS NOT A PASS ATTEMPT anywhere in football, and nflverse
+      // reports it on a play_type of 'pass' with sack=1. Counting it as
+      // an attempt would have made StatChat look wrong on every game.
+      if (truthy(r.sack)) {
+        add(exp.sacksTaken, numberFor.get(r.passer_player_id), 1);
+      } else {
+        add(exp.attempts, numberFor.get(r.passer_player_id), 1);
+        // A target is charged on every attempt with a named receiver,
+        // complete or not -- which is the one counter here that an
+        // incompletion still moves.
+        add(exp.targets, numberFor.get(r.receiver_player_id), 1);
+        if (truthy(r.interception)) add(exp.ints, numberFor.get(r.passer_player_id), 1);
+      }
+      if (truthy(r.complete_pass)) {
+        add(exp.rec, numberFor.get(r.receiver_player_id), num(r.yards_gained));
+        add(exp.pass, numberFor.get(r.passer_player_id), num(r.yards_gained));
+        add(exp.completions, numberFor.get(r.passer_player_id), 1);
+        add(exp.catches, numberFor.get(r.receiver_player_id), 1);
+      }
     }
   }
   return exp;
@@ -336,7 +439,16 @@ async function runGame(rows, gameId) {
   h.close();
 
   // --- Tier 1: per-player yardage against the source ------------------
-  const v = await bootPage('view.html', { existingPlays: dbRows });
+  // THE SAME ROSTER THE GAME PAGE HAD. Without it view.html falls back
+  // to the harness's twelve-man default, so every NFL jersey it does not
+  // recognise buckets under "#12" instead of the player's name -- and
+  // two different men can land in the same bucket. It went unnoticed
+  // because keyOf() below resolves through this same page, so both sides
+  // of the comparison were wrong together for 284 games out of 285. The
+  // one that showed it was 2023_18_JAX_TEN, where Tennessee's punter
+  // runs an aborted snap: his carry is recorded correctly by the app and
+  // was being looked up under a name this page could not produce.
+  const v = await bootPage('view.html', { existingPlays: dbRows, roster });
   const box = JSON.parse(v.evalIn('JSON.stringify(computeBoxScore(plays))'));
   // Buckets are keyed by display name, so resolve each jersey the same
   // way the app does rather than guessing at the key.
@@ -364,6 +476,13 @@ async function runGame(rows, gameId) {
   compare('rushing', exp.rush, 'rushing', 'yds');
   compare('receiving', exp.rec, 'receiving', 'yds');
   compare('passing', exp.pass, 'passing', 'yds');
+  // The counts. Same comparator, same per-player resolution -- these
+  // simply read a different column of the same bucket.
+  compare('carries', exp.carries, 'rushing', 'att');
+  compare('receptions', exp.catches, 'receiving', 'rec');
+  compare('targets', exp.targets, 'receiving', 'tgt');
+  compare('completions', exp.completions, 'passing', 'comp');
+  compare('pass attempts', exp.attempts, 'passing', 'att');
 
   // TIER 2a -- the number has to reach the SCREEN, not just the engine.
   // Everything above reads computeBoxScore directly, which would pass
@@ -394,6 +513,11 @@ async function runGame(rows, gameId) {
     try {
       pv = await bootPage(page, {
         existingPlays: dbRows,
+        // Same roster as view.html above, for the same reason -- these
+        // three pages bucket by display name too, and comparing a page
+        // that knows the roster against three that do not is a name
+        // mismatch dressed up as a stat mismatch.
+        roster,
         query: page === 'season_report.html' ? '?season=2026' : undefined,
         game: { status: 'final', season_year: 2026, game_date: '2026-08-01' }
       });
@@ -435,7 +559,7 @@ async function runGame(rows, gameId) {
     issues.push({ area: 'tier3 validateGame', detail: String(msg).slice(0, 110) });
   }
 
-  return { gameId, finalScore, scoreExp, entered, skipped, failed, issues, stateMismatches, comparable, penaltySkips, fumbleSkips,
+  return { box, gameId, finalScore, scoreExp, entered, skipped, failed, issues, stateMismatches, comparable, penaltySkips, fumbleSkips,
            validationCount: validation.length };
 }
 

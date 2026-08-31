@@ -47,7 +47,24 @@ function buildRoster(rows, teamAbbrForA) {
     note(r.passer_player_id, r.passer_player_name, r.posteam, 'QB');
     note(r.receiver_player_id, r.receiver_player_name, r.posteam, 'WR');
     note(r.punter_player_id, r.punter_player_name, r.posteam, 'P');
-    note(r.kicker_player_id, r.kicker_player_name, r.posteam, 'K');
+    // ON A KICKOFF, posteam IS THE RECEIVING TEAM. Verified against the
+    // 2023 file: Matt Prater kicks off for Arizona and every one of those
+    // rows carries posteam WAS. Since `note` fixes a player's team the
+    // first time it sees him, and the first thing a kicker does in a game
+    // is kick off, every kicker in every game was being filed with the
+    // OPPONENT -- invisible while kickoffs were the only plays he
+    // appeared in, and wrong the moment he did anything else.
+    //
+    // 2023_18_JAX_TEN is where it showed: Tennessee's punter takes an
+    // aborted snap and runs for seven. StatChat recorded the carry
+    // correctly; this file had him down as a Jacksonville player, so the
+    // comparison looked for it on the wrong roster and reported the app
+    // had missed a carry it had not missed.
+    //
+    // A field goal or an extra point keeps posteam, where the kicking
+    // team IS the team with the ball.
+    note(r.kicker_player_id, r.kicker_player_name,
+         r.play_type === 'kickoff' ? r.defteam : r.posteam, 'K');
     note(r.interception_player_id, r.interception_player_name, r.defteam, 'DB');
     note(r.sack_player_id, r.sack_player_name, r.defteam, 'DL');
   }
@@ -83,7 +100,17 @@ function convertRow(row, numberFor, teamAbbrForA) {
     // A kneel is still a play for StatChat -- a TEAM rush -- and it is
     // flagged on the row rather than given its own play_type.
     if (truthy(row.qb_kneel)) return { kind: 'kneel' };
-    return null;
+    // A TRY THAT WAS RUN TO A CONCLUSION IS NOT A NON-PLAY, whatever
+    // play_type says. A flag on the try -- 2023_07_BUF_NE, defensive
+    // holding enforced between downs -- turns play_type into 'no_play'
+    // while the two points stay on the board, so this skip was throwing
+    // away a real score. The two-point block below is the one thing
+    // allowed past it, and only when the result column says the try
+    // actually finished; a try wiped out before the snap leaves that
+    // column empty and is still skipped, so nothing is entered twice.
+    if (!(truthy(row.two_point_attempt) &&
+          (row.two_point_conv_result === 'success' ||
+           row.two_point_conv_result === 'failure'))) return null;
   }
 
   const jersey = id => (id && id !== 'NA') ? numberFor.get(id) : null;
@@ -112,14 +139,29 @@ function convertRow(row, numberFor, teamAbbrForA) {
     // the default, which is why this surfaced on the first failed try
     // rather than as a wrong number months later.
     const good = row.two_point_conv_result === 'success';
-    if (type === 'run') {
-      const carrier = jersey(row.rusher_player_id);
+    // A FLAG ON THE TRY MAKES play_type 'no_play', AND THE TRY STILL
+    // COUNTS. 2023_07_BUF_NE: Allen to Knox succeeds and New England is
+    // flagged for defensive holding "enforced between downs" -- the two
+    // points are on the board, but the row comes through as no_play, so
+    // neither branch below matched and Buffalo finished two short with
+    // nothing in the output to say why.
+    //
+    // WHAT DECIDES IT IS THE RESULT COLUMN, NOT play_type. nflverse
+    // fills two_point_conv_result only when a try was actually run to a
+    // conclusion; a try wiped out by a pre-snap flag leaves it empty and
+    // is followed by the re-try's own row, so keying on the result
+    // enters each try exactly once. The role columns are populated on a
+    // no_play row just as they are on any other, which is what makes
+    // this fixable here rather than another deduction in run_qa.
+    const ran = good || row.two_point_conv_result === 'failure';
+    const carrier = jersey(row.rusher_player_id);
+    const passer = jersey(row.passer_player_id);
+    const receiver = jersey(row.receiver_player_id);
+    if (type === 'run' || (ran && carrier && !passer)) {
       if (!carrier) return null;
       return { kind: 'play', spec: { type: 'twopt', sub: 'rush', carrier, result: good ? 'g' : 'x' } };
     }
-    if (type === 'pass') {
-      const passer = jersey(row.passer_player_id);
-      const receiver = jersey(row.receiver_player_id);
+    if (type === 'pass' || (ran && passer && receiver)) {
       if (!passer || !receiver) return null;
       return { kind: 'play', spec: { type: 'twopt', sub: 'pass', passer, receiver, result: good ? 'g' : 'x' } };
     }
@@ -164,11 +206,21 @@ function convertRow(row, numberFor, teamAbbrForA) {
     // A fumble taken back for a score. Entered as StatChat's own fumble
     // play so the six points reach the defence, rather than as a rush
     // with a `fumble: 'lost'` flag that loses them.
+    // ENTERED AS THE RUSH IT WAS, WITH THE FUMBLE HUNG OFF IT -- not as a
+    // bare `fumble` play. The bare form was what this emitted until 31
+    // Aug 2026, and it threw the carry away: no attempt, no rushing
+    // yards, nothing for the back who ran it. That is how a real scorer
+    // enters it too -- the Rush tree's own fumble toggle, recovered by
+    // the opponent, returned for a touchdown -- so this now exercises
+    // the panel a Friday-night scorer actually uses, and the rushing
+    // production the play produced is compared instead of skipped.
     if (truthy(row.fumble_lost) && defensiveTd) {
       return { kind: 'play', spec: {
-        type: 'fumble', carrier, fumrec: 'opp',
+        type: 'rush', carrier,
+        yards: String(Math.abs(gained)), loss: gained < 0,
+        fumbled: true, fumrec: 'opp',
         credit: jersey(row.fumble_recovery_1_player_id) || undefined,
-        td: true
+        fumTd: true
       } };
     }
     // A SAFETY on a run: tackled in his own end zone. The two points
@@ -230,14 +282,29 @@ function convertRow(row, numberFor, teamAbbrForA) {
         type: 'pass', passer, receiver, incomplete: true
       } };
     }
+    // CAUGHT, STRIPPED, TAKEN BACK -- entered as the COMPLETION it was,
+    // with the fumble hung off it.
+    //
+    // The old comment here said "the catch itself still counts as
+    // receiving yardage" and then emitted a bare `fumble` play, which
+    // counts no such thing. 2023_09_MIA_KC is the proof: Tagovailoa to
+    // Hill for -7, stripped by McDuffie, Kansas City recovers. nflverse
+    // has Hill at 8 catches on 10 targets for 62 and Tagovailoa at 21 of
+    // 34 for 193; StatChat had 7/9/69 and 20 of 33 for 200, because this
+    // branch dropped the whole completion and the comparison never saw
+    // it.
+    //
+    // The app has always had the right panel for it -- the Pass tree's
+    // fumble toggle, recovered by the opponent, returned for a
+    // touchdown -- so nothing in StatChat needed changing. Only this,
+    // which was entering a play no scorer would enter.
     if (truthy(row.fumble_lost) && defensiveTd) {
-      // Caught, stripped, taken back. The catch itself still counts as
-      // receiving yardage, but the score belongs to the defence, so the
-      // fumble is what gets entered.
       return { kind: 'play', spec: {
-        type: 'fumble', carrier: receiver, fumrec: 'opp',
+        type: 'pass', passer, receiver,
+        yards: String(Math.abs(gained)), loss: gained < 0,
+        fumbled: true, fumrec: 'opp',
         credit: jersey(row.fumble_recovery_1_player_id) || undefined,
-        td: true
+        fumTd: true
       } };
     }
     return { kind: 'play', spec: {
