@@ -50,6 +50,48 @@
   .row.lead .rank { opacity:0.9; }
   .row.lead { background:rgba(255,255,255,0.06); }
 
+  /* =====================================================================
+     ROTATION. Added 31 Aug 2026 -- one input that cycles the season cards
+     instead of a switcher input per category.
+
+     EVERY RULE HERE IS SCOPED TO body.rotating, deliberately. The six
+     single-view addresses are already pointed at by real switchers, and a
+     change that shifts a graphic already on air is not worth the tidiness
+     of unscoped CSS. Without ?views= this file renders exactly as before,
+     to the pixel.
+     ===================================================================== */
+
+  /* A CROSS-FADE, NOT A CUT. A hard swap under a director reads as a
+     glitch -- the eye catches the change before it can read what changed.
+     The 10px rise says "new card" rather than "the numbers just moved",
+     and is small enough not to compete with live pictures. */
+  body.rotating #panel { opacity:0; transform:translateY(10px);
+                         transition:opacity 420ms ease, transform 420ms ease; }
+  body.rotating #panel.shown { opacity:1; transform:translateY(0); }
+
+  /* THE BOX MUST NOT CHANGE SIZE BETWEEN CARDS.
+     --------------------------------------------------------------------
+     The panel is anchored BOTTOM-left, so a shorter card does not leave a
+     gap underneath -- it moves its own header up and down the picture.
+     Under a director that reads as the graphic twitching.
+
+     TWO things vary, and fixing only the obvious one leaves the fault in
+     place. The row COUNT (a school has one kicker) is handled by padding
+     to topN in the renderer. The row HEIGHT is handled here: a player with
+     no detail line -- a defensive back with tackles but no TFL and no
+     sacks -- has an empty detail string, and an omitted div makes that row
+     a whole line shorter than the one above it. */
+  body.rotating .who .det { min-height:23px; }
+  /* The held slot. Dimmed with a dash where the name would be, so it reads
+     as "there is no second one" rather than as a half-drawn graphic. */
+  body.rotating .row.blank .nm   { opacity:0.30; font-weight:600; }
+  body.rotating .row.blank .rank { opacity:0.22; }
+
+  @media (prefers-reduced-motion: reduce) {
+    body.rotating #panel { transition:opacity 200ms ease; transform:none; }
+    body.rotating #panel.shown { transform:none; }
+  }
+
   body.debug { background:#123 !important; }
 </style>
 </head>
@@ -153,7 +195,59 @@
 
   const viewKey = (params.get('view') || 'rushing').toLowerCase();
   const view = VIEWS[viewKey] || VIEWS.rushing;
-  const topN = Math.max(1, Math.min(8, parseInt(params.get('top'), 10) || 5));
+
+  // ROTATION, opted into by ?views= and by nothing else.
+  // ---------------------------------------------------------------------
+  //     /broadcast_leaders.html?views=rushing,passing,receiving&secs=8
+  //
+  // ONE PAGE, NOT A SECOND ONE. A rotating overlay is the same fetch: the
+  // whole season comes back from /api/seasondata in one payload and
+  // leaders() just reads a different bucket out of it, so cycling costs no
+  // extra network on air. A separate page would have meant a second copy
+  // of VIEWS, and two copies of a table like that eventually disagree.
+  //
+  // Unknown names are dropped rather than refused: ?views=rushing,punt
+  // rotates rushing alone rather than showing nothing, because an overlay
+  // that renders SOMETHING is better on air than one that renders nothing
+  // over a typo.
+  //
+  // SPECIAL TEAMS ARE NOT ROTATED. Andy's call, 31 Aug 2026.
+  // --------------------------------------------------------------------
+  // A school has one kicker, and more often than not he punts as well. So
+  // a special-teams leaderboard is one name and a held slot, every week,
+  // for almost every school -- which is fine on an input a director has
+  // deliberately cut to, and wrong in a loop that comes round unattended
+  // every few seconds whether it has anything to say or not.
+  //
+  // The two SINGLE-VIEW overlays are untouched: ?view=kicking and
+  // ?view=punting work exactly as they always have, and the setup page
+  // still hands them out. This excludes them from ?views= only.
+  const ROTATION_EXCLUDED = ['kicking', 'punting'];
+  const askedViews = (params.get('views') || '').toLowerCase()
+    .split(',').map(v => v.trim()).filter(Boolean);
+  const rotation = askedViews.filter(v =>
+    VIEWS[v] && ROTATION_EXCLUDED.indexOf(v) === -1);
+  // WAS A ROTATION ASKED FOR, as distinct from one being possible. The two
+  // differ exactly when every name given was unknown or excluded, and that
+  // difference matters: `rotating` alone would fall through to the ?view=
+  // path, which defaults to rushing -- so ?views=kicking would quietly put
+  // the Rushing card on an input somebody set up for kicking. Showing the
+  // wrong graphic is worse than showing none.
+  const rotationRequested = askedViews.length > 0;
+  const rotating = rotation.length > 0;
+  if (rotating) document.body.classList.add('rotating');
+
+  // Seconds per card. Long enough to read two names, short enough that a
+  // director is not waiting on it.
+  const DWELL_MS = Math.max(3, Math.min(60,
+    parseInt(params.get('secs'), 10) || 8)) * 1000;
+  const FADE_MS = 420;   // matches the transition in the stylesheet
+
+  // TWO on a rotating card, five on a static one. A rotating panel is read
+  // in a glance and sits under a score bug; a static one is on screen as
+  // long as the director wants it. ?top= still overrides either.
+  const topN = Math.max(1, Math.min(8,
+    parseInt(params.get('top'), 10) || (rotating ? 2 : 5)));
 
   function buildTeams(game, rosterRows, branding){
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
@@ -187,7 +281,9 @@
     });
   }
 
-  function leaders(payload){
+  // TAKES ITS VIEW rather than closing over the module-level one, because
+  // a rotation asks the same payload six different questions.
+  function leaders(payload, view){
     const totals = {};
     (payload.games || []).forEach(entry => {
       const gamePlays = (entry.plays || []).map(p => ({
@@ -218,8 +314,8 @@
       .slice(0, topN);
   }
 
-  function render(payload){
-    const list = leaders(payload);
+  function render(payload, view){
+    const list = leaders(payload, view);
     const panel = document.getElementById('panel');
     // Nothing to show is shown as NOTHING, not as an empty frame. A blank
     // panel sitting over the programme feed is worse than no panel.
@@ -230,7 +326,7 @@
           'No leaders to show.\n\nseason: ' + payload.season +
           '\nresolved by: ' + (payload.resolvedBy || '?') +
           '\ngames: ' + ((payload.games || []).length) +
-          '\nview: ' + viewKey +
+          '\nview: ' + view.title +
           (payload.reason ? '\nreason: ' + payload.reason : '') +
           '\n\nA season with no finalized games has no leaders. Add ' +
           '?season=YYYY to pick a different one.</pre>';
@@ -253,12 +349,28 @@
       (b.name ? b.name + ' \u00b7 ' : '') + payload.season + ' season \u00b7 ' +
       (payload.games || []).length + ' game' + ((payload.games || []).length === 1 ? '' : 's');
 
-    document.getElementById('rows').innerHTML = list.map((x, i) => {
+    // PADDED TO topN WHEN ROTATING, so every card is the same size -- see
+    // the note on body.rotating in the stylesheet. A static panel is not
+    // padded: it renders once and never moves, so a held slot there would
+    // be an empty row for no reason.
+    const slots = list.slice();
+    if (rotating) while (slots.length < topN) slots.push(null);
+
+    document.getElementById('rows').innerHTML = slots.map((x, i) => {
+      if (!x) return '<div class="row blank">' +
+        '<div class="rank">' + (i + 1) + '</div>' +
+        '<div class="who"><div class="nm">\u2014</div><div class="det"></div></div>' +
+        '<div class="val"></div></div>';
       const det = view.detail(x.d);
+      // The detail div is EMITTED EVEN WHEN EMPTY while rotating, because
+      // an omitted one makes that row a line shorter than its neighbour --
+      // see body.rotating .who .det. Left omitted on a static panel so
+      // those six addresses render exactly as they always have.
+      const detHtml = (rotating || det) ? '<div class="det">' + det + '</div>' : '';
       return '<div class="row' + (i === 0 ? ' lead' : '') + '">' +
         '<div class="rank">' + (i + 1) + '</div>' +
         '<div class="who"><div class="nm">' + x.name + '</div>' +
-          (det ? '<div class="det">' + det + '</div>' : '') + '</div>' +
+          detHtml + '</div>' +
         '<div class="val">' + view.value(x.d) +
           '<span class="unit">' + view.unit + '</span></div>' +
       '</div>';
@@ -267,6 +379,24 @@
   }
 
   async function load(){
+    // NOTHING ELIGIBLE TO ROTATE. Refused here rather than after the fetch,
+    // so a misconfigured input does not also pull a season down. Blank on
+    // air by design, with ?debug=1 saying why -- the same bargain the rest
+    // of this file makes.
+    if (rotationRequested && !rotating){
+      document.getElementById('panel').style.display = 'none';
+      if (params.get('debug') === '1'){
+        document.body.innerHTML = '<pre style="color:#fff; font:16px monospace; padding:24px;">' +
+          'Nothing to rotate.\n\nviews: ' + askedViews.join(', ') +
+          '\n\nEvery name given is either unknown or not available in a ' +
+          'rotation. Kicking and punting are single-view only -- a school ' +
+          'has one kicker, so that card is one name and a held slot.\n\n' +
+          'Use ?view=kicking for those, or choose from: ' +
+          Object.keys(VIEWS).filter(v => ROTATION_EXCLUDED.indexOf(v) === -1)
+            .join(', ') + '</pre>';
+      }
+      return;
+    }
     try {
       const season = params.get('season');
       // THE KEY TRAVELS IN THIS PAGE'S OWN URL. An overlay is a browser
@@ -284,7 +414,8 @@
       if (OVERLAY_KEY) sq.push('key=' + encodeURIComponent(OVERLAY_KEY));
       const r = await fetch('/api/seasondata' + (sq.length ? '?' + sq.join('&') : ''));
       if (!r.ok) throw new Error('seasondata ' + r.status);
-      render(await r.json());
+      const payload = await r.json();
+      if (rotating) startRotation(payload); else render(payload, view);
     } catch (e){
       // Silent ON AIR by design: an overlay that prints an error puts that
       // error on the broadcast. But a blank page with no way to find out
@@ -299,6 +430,51 @@
           'resolved and why.</pre>';
       }
     }
+  }
+
+  // =====================================================================
+  // THE ROTATION DRIVER. Only reached when ?views= is present.
+  // =====================================================================
+  function startRotation(payload){
+    const panel = document.getElementById('panel');
+
+    // SKIP THE EMPTY CARDS, decided ONCE here rather than at each step.
+    // A view with nobody in it is not a card that renders badly -- it is a
+    // card that must not appear, exactly as the static panel hides itself
+    // rather than showing an empty frame. Punting is the one that bites:
+    // its minimum is relative to the busiest punter, so early in a season
+    // nobody qualifies and that card is genuinely empty.
+    //
+    // Fixed at load because this reads FINISHED games only, which do not
+    // change while the overlay is up. Re-deriving it each step would cost
+    // a full box score per card, on a machine encoding video.
+    const cycle = rotation.filter(v => leaders(payload, VIEWS[v]).length > 0);
+
+    if (!cycle.length){ render(payload, VIEWS[rotation[0]]); return; }
+
+    let i = 0, timer = null, fadeTimer = null;
+
+    function show(n){
+      i = n;
+      render(payload, VIEWS[cycle[i]]);
+      panel.classList.add('shown');
+      clearTimeout(timer);
+      // ONE CARD IS NOT A ROTATION. If only one view survived, stop here --
+      // fading a card out and bringing the same card back is a flicker on
+      // air with nothing gained.
+      if (cycle.length < 2) return;
+      timer = setTimeout(() => {
+        panel.classList.remove('shown');
+        clearTimeout(fadeTimer);
+        // Swap only once it is invisible, so nobody sees numbers change.
+        fadeTimer = setTimeout(() => show((i + 1) % cycle.length), FADE_MS);
+      }, DWELL_MS);
+    }
+
+    // Start on the first card at once rather than after a dwell. An overlay
+    // that is blank for eight seconds after it loads reads as broken, and a
+    // director may well cut to it immediately.
+    show(0);
   }
 
   // LOADED ONCE. No polling.

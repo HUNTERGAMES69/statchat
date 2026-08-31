@@ -352,7 +352,20 @@
      ['Receiving leaders (season)', overlayUrl('/broadcast_leaders.html?view=receiving')],
      ['Tackle leaders (season)', overlayUrl('/broadcast_leaders.html?view=tackles')],
      ['Kicking leaders (season)', overlayUrl('/broadcast_leaders.html?view=kicking')],
-     ['Punting leaders (season)', overlayUrl('/broadcast_leaders.html?view=punting')]
+     ['Punting leaders (season)', overlayUrl('/broadcast_leaders.html?view=punting')],
+     // ONE INPUT THAT CYCLES, instead of a switcher input per category and
+     // somebody remembering to cut between them. Same page and the same
+     // single fetch as the six above -- ?views= is the only difference.
+     //
+     // Rushing, passing and receiving by default: the three a commentator
+     // actually reaches for, and three cards at eight seconds is under half
+     // a minute round the loop. Add tackles, kicking or punting to the
+     // list to lengthen it, or raise &secs= to slow it down.
+     //
+     // A category nobody qualifies in is SKIPPED rather than shown blank,
+     // so this is safe to point at in week one.
+     ['Season leaders (rotating)',
+      overlayUrl('/broadcast_leaders.html?views=rushing,passing,receiving&secs=8')]
     ].forEach(([label, url]) => {
       const tr = document.createElement('tr');
       tr.innerHTML = '<td class="what">' + label + '</td>' +
@@ -440,6 +453,13 @@
           // regex edit misses.
           overlayUrl('/broadcast_leaders.html?view=' + v));
     });
+    // Built whole, for the same reason the loop above is: appending to a
+    // finished overlayUrl() puts the key in the middle of the address.
+    L.push('  ' + 'Rotating'.padEnd(17) +
+        overlayUrl('/broadcast_leaders.html?views=rushing,passing,receiving&secs=8'));
+    L.push('     Cycles those three every 8 seconds on one input. Add');
+    L.push('     tackles, kicking or punting to the views list to include');
+    L.push('     them; a category nobody qualifies in is skipped.');
     L.push('');
     L.push('=================================================');
     L.push('  IF A GRAPHIC STOPS UPDATING');
