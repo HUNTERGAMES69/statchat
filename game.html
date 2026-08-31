@@ -9394,8 +9394,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     left = Math.min(left, window.scrollX + document.documentElement.clientWidth - w - 8);
     const fitsBelow = (r.bottom + h + 10) < window.innerHeight;
     el.style.left = Math.max(window.scrollX + 8, left) + 'px';
-    el.style.top = (fitsBelow ? (window.scrollY + r.bottom + 6)
-                              : (window.scrollY + r.top - h - 6)) + 'px';
+    // THE TOP IS CLAMPED, the same way the left edge already was.
+    // ------------------------------------------------------------------
+    // Reported 31 Aug 2026: "half the keypad is cut off at the top of the
+    // screen." When the pad does not fit below the field it is placed
+    // above it -- and if the field is near the top of the viewport,
+    // r.top - h is negative, so the pad was positioned off the top of the
+    // document with no clamp to stop it. The left edge has had exactly
+    // this guard since it was written; the top never got one.
+    //
+    // Clamping can leave the pad overlapping the field it belongs to.
+    // That is the right trade: a pad covering its own input is awkward,
+    // a pad with half its buttons off-screen is unusable.
+    let top = fitsBelow ? (window.scrollY + r.bottom + 6)
+                        : (window.scrollY + r.top - h - 6);
+    top = Math.max(window.scrollY + 8, top);
+    // And not off the BOTTOM either, which the same arithmetic allows on
+    // a short viewport where neither placement fits.
+    const maxTop = window.scrollY + window.innerHeight - h - 8;
+    if (maxTop > window.scrollY + 8) top = Math.min(top, maxTop);
+    el.style.top = top + 'px';
   }
 
 
@@ -14167,10 +14185,34 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // by Clear and by Save.
     const cpTree = document.getElementById('playPanel');
     if (cpTree) cpTree.style.display = 'none';
-    // Scrolling to it is pointless now that it is the only thing there,
-    // and it fights the rail layout: fitPanel() and the top-lock already
-    // put the stage where it should be.
-    void cc;
+    // SCROLLING BACK IS NOT POINTLESS ON A LONG TREE.
+    // ------------------------------------------------------------------
+    // The note that stood here said scrolling was pointless "now that it
+    // is the only thing there". That is true of the DOCUMENT and false of
+    // the WINDOW. A change-of-possession tree is long enough that the
+    // scorer is scrolled well down it by the time they reach Review --
+    // and collapsing the tree does not move the window, so they are left
+    // looking at empty space with the card above them.
+    //
+    // Reported 31 Aug 2026 on the longer trees: "it's not auto scrolling
+    // back up to the top for time clock entry."
+    //
+    // Only when the card is actually out of view, so the ordinary short
+    // trees -- where the old note was right -- are untouched.
+    //
+    // INSTANT, not smooth. raiseClockPad below positions the pad from the
+    // field's bounding rect, and a smooth scroll is still travelling when
+    // it fires: the pad would be placed against where the field WAS. This
+    // is the same class of fault as the clamp above, arriving by a
+    // different route.
+    try {
+      const rect = cc.getBoundingClientRect();
+      const outOfView = rect.top < 0 || rect.top > window.innerHeight * 0.6;
+      if (outOfView){
+        const target = Math.max(0, window.scrollY + rect.top - 12);
+        if (window.scrollTo) window.scrollTo({ top: target, behavior: 'auto' });
+      }
+    } catch (e) { /* positioning is a nicety; never let it block the save */ }
 
   }
 

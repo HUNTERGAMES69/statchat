@@ -3,7 +3,74 @@
      is prohibited. -->
 
 # StatChat — session handoff
-### Last updated 23 August 2026. Start with "WHERE TO PICK UP" at the foot of this file.
+### Last updated 30 August 2026. Everything above the first `---` is current; the rest is history kept for reference.
+
+## WHERE THINGS STAND — 30 August 2026, evening
+
+**The first live regular-season game has not happened yet.** Everything in
+the database up to now is development and demo data.
+
+### Closed today
+
+- **Item 8, series tiles.** Four tiles replaced the Previous Drive card on
+  the crew view. They survive a PAT — that took two goes, and the fix in
+  the end was dropping the tiles 110px → 96px, because the quad had been
+  fitting its contents in exactly 524px of 524px with zero slack.
+- **Item 2, tackler credit on the kicking trees.** Kickoff and punt
+  coverage tackles credit correctly on all three entry paths — panel,
+  picker and guided — and the log line now names the tackler.
+- **Item 4, time of possession.** Eight of nine decided lines shipped. The
+  possession-complete view was dropped; the reason is written into
+  `LIVE_GAME_FEEDBACK.md` and is worth reading before anyone rebuilds it.
+- **Print formatting.** Every label on the recap and stat package was below
+  the accessibility threshold; all now at 6.0:1. The stat package's scoring
+  summary could never break across pages — a rule three lines below its own
+  documented opt-out was silently overriding it.
+
+### Still open on the live list
+
+`LIVE_GAME_FEEDBACK.md` remains the live list. **1** needs a decision
+between the structural fix and the cheap pair; **3** is decided and not
+built; **5** and **6** are raised but not designed — though item 6 now
+names a bounded first slice, found while closing item 4.
+
+### The known gap
+
+A **completed pass with no receiver that is then fumbled** builds a code
+the parser refuses: "Unrecognized entry", and nothing saves. All three
+recovery choices are affected. It predates this session. Workaround: put a
+number in the receiver box before marking the fumble.
+
+### Tests
+
+Six repo tests were updated today. About ten in `tests/` still fail for
+reasons predating this session, and several of them are not tests at all
+(`convert.js`, `coverage_probe.js`, `RECOVER_STRANDED_PLAYS.js`).
+
+Eighteen verified suites live OUTSIDE the repo, in a scratch directory, and
+have no standing coverage — the series tiles surviving a PAT, NO RECEIVER
+SELECTED, the cover tackle reaching both the box score and the rendered
+package, the guided kickoff, the clock moments and prefill, the partition
+check, and the message checks that assert what a message must NOT say.
+**They pass and they are not in `tests/`.** Porting them is the single
+biggest piece of unbanked work.
+
+### What today should have taught
+
+- **A check can be green for the wrong reason.** Five times today. The tell
+  each time was printing the underlying value beside the verdict — a pass
+  with a suspicious value next to it is worth more than a pass alone.
+- **Shared DOM elements keep the last play's content.** Three separate bugs,
+  same shape: a label or note written for one play and not reset for the
+  next. Hidden is not reset — one display toggle away from visible.
+- **Specificity beats source order, and CSS does not warn you.** The stat
+  package's scoring summary carried a documented opt-out that had never once
+  taken effect, because an equally specific rule sat three lines below it.
+- **Say the facts; the scorer decides what they mean.** Four messages
+  written today guessed at causes or gave instructions. The people using
+  this know the game better than the app does.
+
+---
 
 ## The headline: the rail layout is now the live entry page
 
@@ -101,7 +168,7 @@ and the stranded mutant looked like a real engine bug.
 
 ---
 
-## THIS FILE IS STALE — read `TODO.md` first (noted 23 August 2026)
+## THIS SECTION IS STALE — kept as history (noted 23 August, still true of what follows)
 
 Everything above is the 22 August picture. Three items in it were already
 overtaken the next day:
@@ -397,11 +464,15 @@ watching a real game being scored or from a bug reported during one.
 `TACKLE_TYPES` is `['rush','pass','sack']`, so the credit would reach
 nothing. Item 2 in `LIVE_GAME_FEEDBACK.md` records the order of work.
 
-## Read this next
+## Read this next  (superseded — see WHERE THINGS STAND at the top)
 
-`LIVE_GAME_FEEDBACK.md` is new and is the live list. Eight items: one agreed
-and ready to build, four with decisions recorded, three raised but not
-designed. It supersedes anything in this file about what comes next.
+`LIVE_GAME_FEEDBACK.md` is the live list, and still is. The counts below
+were true on 23 August and have moved: items 2, 4, 7 and 8 are closed as of
+30 August. Kept as written rather than edited in place, because the top of
+this file carries the current position.
+
+> Eight items: one agreed and ready to build, four with decisions recorded,
+> three raised but not designed.
 
 ## What this session should have taught, and cost me time by not knowing
 

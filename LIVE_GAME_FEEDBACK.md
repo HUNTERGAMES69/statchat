@@ -109,6 +109,166 @@ spec that was built from.
 
 ---
 
+### 4. Time of possession — making the live number trustworthy
+
+**Complete, 30 August 2026**, except one line that was deliberately dropped
+— see below. Shipped in `game.html` and `engine.js`.
+
+| Decided | Shipped as |
+| --- | --- |
+| Backwards/negative time check at entry, warn not block | `confirmClockAdvances`, rewritten to show both times, their quarters and the difference |
+| Prefill the clock on every kickoff | `prefillKickoffClock`, on the ordinary panel **and** the guided flow |
+| Start of a half prefills the quarter length | falls out of the quarter-scoped source |
+| Quarter markers carry no possession change or time | **already true** — verified, no work needed |
+| Per-tree prompt wording | punt, interception and fumble; the kickoff is prefilled instead |
+| Count what the clamp swallows | `state.clockBackwards`, reported at entry |
+| The partition check | `state.clockAudit`, run after every clock entry |
+
+**THE POSSESSION-COMPLETE VIEW WAS DROPPED, and this is why** — recorded so
+it is not rediscovered later as an oversight.
+
+The spec asked for a view "showing that drive's total time with the start
+and end **correctable there and then**." The app cannot do the correctable
+part. Delete and Delete-&-re-enter appear in the play log only when
+`correctionMode` is on, and that is set in exactly one place: an admin
+reopening a **finalized** game. During live play the only correction is
+Undo last, which walks back everything since — so fixing a start clock from
+three plays later means destroying three plays.
+
+A view that reports a suspect duration to a scorer who cannot act on it is
+worse than no view: it says something is wrong at the moment they are
+busiest and offers no way out.
+
+What the spec actually wanted — catch a bad clock while it can still be
+fixed — is delivered by the two checks above. Immediately after entering a
+clock, before the next play, Undo IS surgical: it removes just that clock
+event. That is exactly when the backwards dialog fires (before saving) and
+the audit report fires (just after).
+
+**What is genuinely lost:** a plausible-but-wrong time that trips no check,
+and correcting a start clock later in the drive. Both need clock events to
+be editable in place first — a bounded slice of item 6, and the ideal case
+for it, because `computeState` derives everything from the plays, so
+rewriting one `absSec` re-derives correctly with no stored state to repair.
+If that ever gets built, this view is worth revisiting.
+
+Andy's call, 30 August 2026, after asking the question that exposed it:
+"the scorer cannot go back and correct the starting TOP even if he wanted
+to, so what good does this do?"
+
+**A punt is not prefilled, and cannot be.** The clock is RUNNING before a
+punt, so real time passes between the snap and the catch and the value is
+not derivable. A kickoff is prefillable only because the clock is stopped
+beforehand. Punts get the wording instead.
+
+<details>
+<summary>The original specification, kept for reference</summary>
+
+
+TOP is displayed live and goes to air, so checks have to be at entry. A
+post-game audit is too late.
+
+**Decided.**
+
+- **A backwards or negative time check at entry.** Time cannot run backwards
+  within a game. Warn rather than block: a correction to an earlier mistaken
+  entry is legitimate.
+- **A possession-complete view, always available**, showing that drive's
+  total time with the start and end correctable there and then.
+- **Prefill the clock on every kickoff, not just a touchback**, editable,
+  with text suggesting the prefilled value is usually right.
+- **Start of a half prefills the quarter length**, not the last value from
+  the previous period.
+- **Quarter markers carry no possession change** and no time attribution.
+  They are markers only.
+
+**Why the kickoff prefill is correct in general.** The clock stops on a
+score, does not run during a try, and restarts only when the ball is legally
+touched by the receiving team. So the clock at the catch IS the clock at the
+previous stoppage. The touchback prefill was never a special case -- it was
+the general case, noticed first.
+
+That also removes the entry that was causing the trouble. Every clock prompt
+in the app says only "Clock", which everywhere else means *after the play*.
+On a kickoff it has to mean *when the ball was fielded* -- the one place the
+natural reading is wrong, and the rule lives in the help file rather than at
+the point of entry. Prefilling removes the question instead of relabelling
+it.
+
+**Prefill source:** the last clock event **in the current quarter**. If
+there is none, the quarter length. That gives the opening kickoff 12:00, a
+second-half kickoff 12:00, and a kickoff after a mid-quarter score the clock
+at that score.
+
+**The accounting hole this closes.** A kickoff writes a `start` event for
+the receiving team at whatever clock is entered. Enter the catch time and
+the return's seconds fall inside their possession, correctly. Enter the
+tackle time and those seconds fall *before* the start and are attributed to
+nobody.
+
+**The clock on every change of possession names the moment.** Verified 27
+Aug: a punt writes a `transition` -- one clock value that both ends the
+kicking team's possession and starts the receiving team's. Interceptions and
+fumble recoveries use the same mechanism. In all three, possession changes
+PARTWAY THROUGH the play, not at the whistle:
+
+| Tree | Possession changes at |
+| --- | --- |
+| Punt or kickoff returned | the catch |
+| Interception returned | the interception |
+| Fumble returned | the recovery |
+| Turnover on downs | the whistle -- the same as the play's end |
+
+Only the last matches the natural reading of "Clock". On the other three,
+entering the clock after the play hands the whole return to the team that
+just lost the ball.
+
+So the prompt names the moment, per tree, from one rule -- *the clock when
+possession changed*:
+
+- punt: "when the punt was fielded"
+- kickoff: "when the ball was fielded"
+- interception: "when the ball was intercepted"
+- fumble: "when it was recovered"
+
+Same sentence, same underlying rule, and it reads as a fact about football
+rather than a quirk of the app. A punt-only note would fix a quarter of the
+problem and leave interception and fumble returns wrong in exactly the same
+way.
+
+The possession view then double-checks it: "Red Stick: fielded at 11:52 to
+7:23 = 4:29" shows a scorer who entered the tackle time a drive that is too
+short, and lets them fix it there. The label and the verification reinforce
+each other rather than the label carrying the whole burden.
+
+**Also worth doing:**
+
+- `possessionTime[team] += Math.max(0, absSec - pendingClockStart[team])`
+  silently contributes **zero** for a negative delta. A bad entry produces a
+  short drive rather than a loud error. Count what the clamp swallows and
+  report it.
+- **The partition check.** TOP(us) + TOP(them) must equal elapsed game time,
+  because every second belongs to exactly one team. Run it after every clock
+  entry, not at finalize: the moment a gap opens, the entry that caused it
+  is the one just made. Reported as "1:20 of game time is not attributed to
+  either team".
+
+**Open:**
+
+- Whether the possession view interrupts every time or only on a failed
+  check. A possession changes 20-25 times a game, and everything else this
+  session has been about removing taps.
+- Whether a punt should be prefilled as well. It cannot be: the clock is
+  RUNNING before a punt, so real time passes between the snap and the catch
+  and the value is not derivable. A kickoff is prefillable only because the
+  clock is stopped beforehand. Punts get the note instead.
+
+---
+
+</details>
+
+---
+
 ## Under discussion
 
 ### 1. Player identity is frozen at entry
@@ -254,108 +414,6 @@ which reads as "they made no tackles".
 
 ---
 
-### 4. Time of possession — making the live number trustworthy
-
-TOP is displayed live and goes to air, so checks have to be at entry. A
-post-game audit is too late.
-
-**Decided.**
-
-- **A backwards or negative time check at entry.** Time cannot run backwards
-  within a game. Warn rather than block: a correction to an earlier mistaken
-  entry is legitimate.
-- **A possession-complete view, always available**, showing that drive's
-  total time with the start and end correctable there and then.
-- **Prefill the clock on every kickoff, not just a touchback**, editable,
-  with text suggesting the prefilled value is usually right.
-- **Start of a half prefills the quarter length**, not the last value from
-  the previous period.
-- **Quarter markers carry no possession change** and no time attribution.
-  They are markers only.
-
-**Why the kickoff prefill is correct in general.** The clock stops on a
-score, does not run during a try, and restarts only when the ball is legally
-touched by the receiving team. So the clock at the catch IS the clock at the
-previous stoppage. The touchback prefill was never a special case -- it was
-the general case, noticed first.
-
-That also removes the entry that was causing the trouble. Every clock prompt
-in the app says only "Clock", which everywhere else means *after the play*.
-On a kickoff it has to mean *when the ball was fielded* -- the one place the
-natural reading is wrong, and the rule lives in the help file rather than at
-the point of entry. Prefilling removes the question instead of relabelling
-it.
-
-**Prefill source:** the last clock event **in the current quarter**. If
-there is none, the quarter length. That gives the opening kickoff 12:00, a
-second-half kickoff 12:00, and a kickoff after a mid-quarter score the clock
-at that score.
-
-**The accounting hole this closes.** A kickoff writes a `start` event for
-the receiving team at whatever clock is entered. Enter the catch time and
-the return's seconds fall inside their possession, correctly. Enter the
-tackle time and those seconds fall *before* the start and are attributed to
-nobody.
-
-**The clock on every change of possession names the moment.** Verified 27
-Aug: a punt writes a `transition` -- one clock value that both ends the
-kicking team's possession and starts the receiving team's. Interceptions and
-fumble recoveries use the same mechanism. In all three, possession changes
-PARTWAY THROUGH the play, not at the whistle:
-
-| Tree | Possession changes at |
-| --- | --- |
-| Punt or kickoff returned | the catch |
-| Interception returned | the interception |
-| Fumble returned | the recovery |
-| Turnover on downs | the whistle -- the same as the play's end |
-
-Only the last matches the natural reading of "Clock". On the other three,
-entering the clock after the play hands the whole return to the team that
-just lost the ball.
-
-So the prompt names the moment, per tree, from one rule -- *the clock when
-possession changed*:
-
-- punt: "when the punt was fielded"
-- kickoff: "when the ball was fielded"
-- interception: "when the ball was intercepted"
-- fumble: "when it was recovered"
-
-Same sentence, same underlying rule, and it reads as a fact about football
-rather than a quirk of the app. A punt-only note would fix a quarter of the
-problem and leave interception and fumble returns wrong in exactly the same
-way.
-
-The possession view then double-checks it: "Red Stick: fielded at 11:52 to
-7:23 = 4:29" shows a scorer who entered the tackle time a drive that is too
-short, and lets them fix it there. The label and the verification reinforce
-each other rather than the label carrying the whole burden.
-
-**Also worth doing:**
-
-- `possessionTime[team] += Math.max(0, absSec - pendingClockStart[team])`
-  silently contributes **zero** for a negative delta. A bad entry produces a
-  short drive rather than a loud error. Count what the clamp swallows and
-  report it.
-- **The partition check.** TOP(us) + TOP(them) must equal elapsed game time,
-  because every second belongs to exactly one team. Run it after every clock
-  entry, not at finalize: the moment a gap opens, the entry that caused it
-  is the one just made. Reported as "1:20 of game time is not attributed to
-  either team".
-
-**Open:**
-
-- Whether the possession view interrupts every time or only on a failed
-  check. A possession changes 20-25 times a game, and everything else this
-  session has been about removing taps.
-- Whether a punt should be prefilled as well. It cannot be: the clock is
-  RUNNING before a punt, so real time passes between the snap and the catch
-  and the value is not derivable. A kickoff is prefillable only because the
-  clock is stopped beforehand. Punts get the note instead.
-
----
-
 ## Raised, not yet discussed
 
 ### 5. Scorebug overlay — drop the Q1 version, adjust the score-only one
@@ -384,6 +442,20 @@ keeps its old shape and the only fixes are delete-and-re-enter or SQL.
 
 **Open:** whether editing is restricted to a finalized game or offered
 throughout; whether it re-runs the checks; whether it is admin-only.
+
+**A bounded first slice, identified 30 August 2026 while closing item 4:
+CLOCK EVENTS.** They are the ideal case for in-place editing and the one
+with a caller already waiting. A clock event carries no roles and nothing
+downstream stores a derived value from it -- `computeState` recomputes
+possession time from the plays on every call -- so rewriting one `absSec`
+on one row re-derives the whole game correctly with nothing to repair.
+Every other play type has roles, and roles are read back verbatim.
+
+That slice is also what item 4's possession-complete view was waiting on.
+It was dropped because a scorer cannot correct a possession's start clock
+mid-game at all: the log's Delete controls appear only in `correctionMode`,
+which is set only when an admin reopens a FINALIZED game. Make clock events
+editable and that view becomes worth building.
 
 ---
 
