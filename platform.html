@@ -1315,9 +1315,28 @@
     // that matter tonight.
     const wanted = includeFinal ? ['in_progress', 'final'] : ['in_progress'];
 
+    // DELETED GAMES ARE NOT LIVE GAMES.
+    // -------------------------------------------------------------------
+    // Reported by Andy, 31 Aug 2026: a game showed here that no longer
+    // exists inside its own tenant. 012 made deletion SOFT -- the row
+    // stays with deleted_at set -- and this query never mentioned the
+    // column, so a deleted in-progress game sat in this list forever and
+    // also appeared under Recovery tools, which is where it actually
+    // belongs.
+    //
+    // Exactly the fault the tenants list carried: 016 added deleted_at
+    // and loadTenants was not updated, so every tenant read as
+    // not-deleted. Same mistake, second list, and the note there is what
+    // named this one.
+    //
+    // FILTERED IN THE QUERY, not after it. `games_live_idx` is a partial
+    // index on `where deleted_at is null`, so this is the cheap read --
+    // and a filter the database applies cannot be skipped by a later edit
+    // to the rendering.
     const { data: games, error } = await supabaseClient
       .from('games')
-      .select('id, tenant_id, designator, game_date, home_team_name, away_team_name, status, is_broadcast')
+      .select('id, tenant_id, designator, game_date, home_team_name, away_team_name, status, is_broadcast, deleted_at')
+      .is('deleted_at', null)
       .in('status', wanted)
       .order('game_date', { ascending: false })
       .limit(60);
@@ -1327,6 +1346,14 @@
     }
 
     let rows = games || [];
+    // AND SELECTED, so this can check it. An unselected column and a null
+    // one are the same thing in JS -- which is how the bug above survived
+    // a reading of the code. If the shape ever changes, this says so
+    // instead of quietly listing deleted games again.
+    if (rows.length && !('deleted_at' in rows[0])){
+      showMsg('The live games list is missing deleted_at \u2014 deleted games ' +
+        'cannot be told apart from live ones. This is a bug; please report it.', 'error');
+    }
     // A game finished last month is not "finished today". Filtered here
     // rather than in the query because game_date is a date and the useful
     // window is "today", not "this season".
