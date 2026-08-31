@@ -638,7 +638,11 @@
     renderDeletedTenants(tenants);
 
     body.innerHTML =
-      '<table><tr><th>Tenant</th><th>Status</th><th>Renews</th>' +
+      // CREATED sits between Status and Renews: the tenant's own dates run
+      // left to right in the order they happen, and "created" is the one
+      // that is always there -- created_at is `not null default now()` in
+      // 006, where renews_on can be null on a trial.
+      '<table><tr><th>Tenant</th><th>Status</th><th>Created</th><th>Renews</th>' +
       '<th>Games</th><th>Deleted</th><th></th></tr>' +
       liveTenants.map(t => {
         // SUSPENDED OUTRANKS EVERYTHING. A tenant can be paid up and
@@ -689,6 +693,12 @@
           // functions refuse any tenant without the flag, so the badge is also
           // the honest indicator of which rows those controls can touch.
           '<td><span class="pill ' + pill + '">' + esc(label) + '</span></td>' +
+          // DAY PRECISION, via the same fmtDate as Renews. created_at is a
+          // timestamptz, so the hour is there to be shown -- but the
+          // question this column answers is "how long have they been a
+          // customer", and a time of day beside a renewal date reads as
+          // two different kinds of fact in adjacent columns.
+          '<td>' + fmtDate(t.created_at) + '</td>' +
           '<td>' + fmtDate(t.renews_on) + '</td>' +
           '<td>' + (live[t.id] || 0) + '</td>' +
           '<td>' + (gone[t.id] || 0) + '</td>' +
