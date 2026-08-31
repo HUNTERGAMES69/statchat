@@ -78,6 +78,16 @@ function buildViews(ctx) {
     return fp < 50 ? 'own ' + fp : 'opp ' + (100 - fp);
   };
 
+  // See the note on startedAt below. Walks forward from the drive's first
+  // index to the first position the drive establishes.
+  const driveStartFieldPos = (list, from) => {
+    for (let i = from; i < list.length; i++) {
+      const st = engine.computeState(list.slice(0, i + 1));
+      if (st.fieldPos !== null && st.fieldPos !== undefined) return st.fieldPos;
+    }
+    return null;
+  };
+
   const sumOf = (bucket, key) => Object.keys(bucket || {})
     .reduce((t, n) => t + ((bucket[n] || {})[key] || 0), 0);
 
@@ -181,7 +191,19 @@ function buildViews(ctx) {
         team: sideName(state.possession),
         plays: scrimmage.length,
         yards: scrimmage.reduce((t, p) => t + (p.effect.statYds || 0), 0),
-        startedAt: markerLabel(state.fieldPos)
+        // WHERE THE DRIVE STARTED. Was markerLabel(state.fieldPos), which is
+        // where the ball is NOW -- the identical expression the score view
+        // uses for ballOn, so the two fields were the same number under
+        // different names. Found 31 Aug 2026 and confirmed against real
+        // plays: a drive that began on own 34 and reached opp 40 reported
+        // startedAt "opp 40". Anyone who bound a title to it has had the
+        // wrong number on air, and it looked plausible because it moved.
+        //
+        // Nor is it the state BEFORE the drive's first play: a change of
+        // possession sets fieldPos to null, so the play before a drive has
+        // no position at all. The start is the first position the drive
+        // itself establishes.
+        startedAt: markerLabel(driveStartFieldPos(plays, from))
         // NO timeOfPossession HERE. It used to report
         // state.possessionTime[possession], which is the team's CUMULATIVE
         // total for the game -- the same figure the teamstats row carries,
