@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- Without this every page load logs a 404 for /favicon.ico.
+     Harmless, but a red console error should MEAN something. -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins -- that ordering is what lets a page be converted
+     a bit at a time without breaking on the way. -->
+<link rel="stylesheet" href="statchat.css">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StatChat — Play log</title>
+<style>
+  /* DARK, matching every other in-app report. Tokens defined here rather
+     than assumed, for the reason DARK_THEME_PLAN.md gives: a var(--x, #fff)
+     fallback chosen for a white page silently applies if the token is not
+     defined. */
+  :root{ color-scheme:dark; }
+  :root{
+    --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+    --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+    --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+    --sc-green:#a3d93f;  --sc-blue:#5aa9f0;   --sc-amber:#ffc72c;
+    --sc-red:#ff8fa3;    --sc-accent:#a3d93f;
+  }
+  body { font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+         background:var(--sc-page); color:var(--sc-ink); margin:0; padding:14px;
+         padding-top:calc(14px + env(safe-area-inset-top)); }
+  .wrap { max-width:1100px; margin:0 auto; }
+  .card { background:var(--sc-card); border:1px solid var(--sc-rule); border-radius:12px;
+          padding:18px 20px; margin-bottom:16px; }
+  h1 { font-size:22px; margin:0 0 3px; }
+  .sub { color:var(--sc-ink-muted); font-size:14px; margin:0; }
+  .hidden { display:none; }
+  .msg.error { background:rgba(176,0,32,.16); border:1px solid #c8455c; color:var(--sc-red);
+               padding:10px 12px; border-radius:8px; font-size:14px; }
+  .topbar { display:flex; justify-content:space-between; align-items:center;
+            flex-wrap:wrap; gap:10px; margin-bottom:14px; }
+  .topbar a { color:var(--sc-accent); text-decoration:none; font-weight:600; font-size:14px; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .actions button { padding:8px 14px; border-radius:6px; border:1px solid var(--sc-rule-strong);
+                    background:var(--sc-raise); color:var(--sc-ink); font-size:13px;
+                    font-weight:600; cursor:pointer; }
+  .actions button.primary { background:rgba(124,181,24,.20); color:var(--sc-green);
+                            border-color:#6f9f22; }
+
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th { text-align:left; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+       color:var(--sc-ink-muted); font-weight:700; padding:8px 8px;
+       border-bottom:1px solid var(--sc-rule-strong); white-space:nowrap;
+       position:sticky; top:0; background:var(--sc-card); }
+  td { padding:7px 8px; border-bottom:1px solid var(--sc-rule); vertical-align:top; }
+  td.num, td.q, td.clock, td.gain { white-space:nowrap; font-variant-numeric:tabular-nums; }
+  td.num { color:var(--sc-ink-muted); text-align:right; width:1%; }
+  td.gain { text-align:right; font-weight:600; }
+  td.gain.neg { color:var(--sc-red); }
+  td.play { width:99%; }
+
+  /* MARKERS ARE ROWS TOO, and they have to look like what they are.
+     Andy asked for "every entry that's logged", which includes the clock
+     events, the drive dividers and the down-and-distance corrections --
+     the same lines the drive log shows. Dimmed and italic so a person
+     scanning for actual plays can skip them, present so the log is a true
+     record of what was entered. */
+  tr.marker td { color:var(--sc-ink-muted); font-style:italic; }
+  tr.divider td { border-top:2px solid var(--sc-rule-strong); }
+  /* A play the scorer flagged as needing another look, and one entered as
+     an override. Both are facts about the entry rather than the football,
+     so they sit in their own column rather than colouring the text. */
+  .tag { display:inline-block; padding:1px 6px; border-radius:4px; font-size:10.5px;
+         font-weight:700; letter-spacing:.04em; margin-right:4px; white-space:nowrap; }
+  .tag.unres { background:rgba(255,199,44,.16); color:var(--sc-amber); }
+  .tag.over  { background:rgba(90,169,240,.16); color:var(--sc-blue); }
+  .tag.score { background:rgba(124,181,24,.18); color:var(--sc-green); }
+
+  .counts { color:var(--sc-ink-muted); font-size:13px; margin:0 0 10px; }
+
+  @media print {
+    :root{ color-scheme:light;
+      --sc-page:#fff; --sc-card:#fff; --sc-raise:#f4f6f8;
+      --sc-ink:#1a1a1a; --sc-ink-soft:#3a3a3a; --sc-ink-muted:#5a5a5a;
+      --sc-rule:#dddddd; --sc-rule-strong:#bbbbbb; --sc-accent:#1a4d2e; }
+    body { background:#fff !important; color:#1a1a1a !important; padding:0; }
+    .card { background:#fff !important; border:none !important; padding:0; }
+    .no-print { display:none !important; }
+    th { background:#fff !important; color:#1a4d2e !important; }
+    /* The header repeats on every page of a long log, which is most of
+       them -- a play log runs to several sheets. */
+    thead { display:table-header-group; }
+    tr { page-break-inside:avoid; break-inside:avoid; }
+    .tag { border:1px solid #bbb; color:#1a1a1a !important; background:#fff !important; }
+  }
+  .sc-copyright { margin:26px 0 0; padding:0 2px 4px; font-size:12px; line-height:1.5;
+    color:var(--sc-ink-muted); opacity:.75; text-align:center; max-width:760px;
+    margin-left:auto; margin-right:auto; }
+  @media print { .sc-copyright { color:#666 !important; opacity:1; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="loading">Loading&hellip;</div>
+    <div id="errorView" class="hidden"><p id="errorMsg" class="msg error"></p></div>
+
+    <div id="mainView" class="hidden">
+      <div class="topbar no-print">
+        <a id="backLink" href="dashboard.html">&larr; Back to dashboard</a>
+        <div class="actions">
+          <button class="primary" id="csvBtn" type="button">Download CSV</button>
+          <button id="printBtn" type="button">Print</button>
+        </div>
+      </div>
+      <div class="card">
+        <h1 id="title"></h1>
+        <p class="sub" id="subtitle"></p>
+      </div>
+      <div class="card">
+        <p class="counts" id="counts"></p>
+        <div id="logTable"></div>
+      </div>
+      <p class="sc-copyright">&copy; 2026 StatChat. All rights reserved.
+        Unauthorized copying, modification or distribution of this software or
+        its documentation is prohibited.</p>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="team-icon.js"></script>
+<script src="engine.js"></script>
+<script>
+  // FULL PLAY LOG -- every row in `plays` for one game, in order.
+  // =====================================================================
+  //     /play_log.html?id=<game id>
+  //
+  // Andy, 31 Aug 2026: "a way to export the full play log from any game,
+  // every play, basically every entry that's logged".
+  //
+  // NOT THE SAME THING AS Download backup. That produces a
+  // statchat-game-backup-v1 JSON file -- everything, in the shape the app
+  // stores it, for restoring a game. This is the same rows written for a
+  // person: the situation each play happened in, in a table you can read,
+  // print, or open in a spreadsheet.
+  //
+  // THE SITUATION IS DERIVED, NOT STORED. A play row carries its text and
+  // its effect; the down, the distance and the yard line are what the
+  // engine works out by replaying everything before it. So each row is
+  // computed against computeState(plays.slice(0, i)) -- the state BEFORE
+  // that play, which is the situation it was snapped in. Same walk
+  // game.html already does for its own log.
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  function showView(name){
+    ['loading','errorView','mainView'].forEach(v =>
+      document.getElementById(v).classList.toggle('hidden', v !== name));
+  }
+  function fail(msg){
+    showView('errorView');
+    document.getElementById('errorMsg').textContent = msg;
+  }
+
+  // engine.js needs these from the host page.
+  let plays = [], startingPossession = 'teamA', quarterLengthSec = 720;
+  const TEAMS = {};
+  function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+  const TIMEOUTS_PER_HALF = 3;
+  const TIMEOUTS_PER_OT = 1;
+
+  let GAME = null, ROWS = [];
+
+  function buildTeams(game, rosterRows, branding){
+    const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
+    const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    TEAMS.teamA = { name: ourName, bg: branding.primary_color || '#2b3440',
+      text: branding.secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{},
+      logo: branding.logo_url || null, isHome: !!game.our_team_is_home };
+    TEAMS.teamB = { name: oppName, bg: game.opponent_primary_color || '#6e7885',
+      text: game.opponent_secondary_color || '#ffffff',
+      rosterOffense:{}, rosterDefense:{}, rosterSpecialTeams:{}, posOffense:{},
+      logo: game.opponent_logo_url || null, isHome: !game.our_team_is_home };
+    (rosterRows || []).forEach(r => {
+      const t = TEAMS[r.team_side];
+      if (!t) return;
+      const bucket = r.unit === 'defense' ? 'rosterDefense'
+                   : r.unit === 'special' ? 'rosterSpecialTeams' : 'rosterOffense';
+      t[bucket][String(r.jersey_number)] = r.player_name;
+    });
+  }
+
+  const esc = (s) => String(s === null || s === undefined ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+
+  const spot = (fp) => (fp === null || fp === undefined) ? ''
+    : fp === 50 ? 'the 50' : fp < 50 ? 'own ' + fp : 'opp ' + (100 - fp);
+  const ord = (n) => n + (['th','st','nd','rd'][(n % 100 - 20) % 10]
+                          || ['th','st','nd','rd'][n] || 'th');
+
+  // ONE ROW OF THE LOG, as data. Built once and used by both the table and
+  // the CSV, so the two can never disagree about what a play said -- which
+  // is the whole risk of writing an export beside a view.
+  function buildRows(){
+    return plays.map((p, i) => {
+      const before = computeState(plays.slice(0, i));
+      const e = p.effect || {};
+      // WHAT COUNTS AS A PLAY HERE IS NOT WHAT COUNTS AS ONE IN THE ENGINE.
+      // isAdminMarker() answers a different question -- "can a drive start
+      // on this row" -- and deliberately says NO for a down-and-distance
+      // adjustment (effect.isReset), because a drive very often does start
+      // on one. For a log read by a person, a scorer correcting the
+      // situation is administrative by any ordinary meaning of the word:
+      // nobody snapped the ball. So this page adds isReset to the engine's
+      // answer rather than redefining it, and the difference is stated here
+      // rather than left as a surprise to whoever reads both.
+      const marker = ((typeof isAdminMarker === 'function') ? isAdminMarker(p) : false)
+                     || !!e.isReset;
+      const stamp = (typeof scoreStamp === 'function') ? scoreStamp(plays, p) : null;
+      const q = p.quarter >= 5 ? 'OT' + (p.quarter - 4) : 'Q' + p.quarter;
+      const dd = (!marker && before.down)
+        ? ord(before.down) + ' & ' +
+          (before.fieldPos !== null && before.fieldPos + before.distance >= 100
+            ? 'Goal' : before.distance)
+        : '';
+      const tags = [];
+      if (p.unresolved)  tags.push('NEEDS REVIEW');
+      if (p.isOverride)  tags.push('OVERRIDE');
+      if (e.score && e.score.points) tags.push(e.score.points + ' PTS');
+      return {
+        n: i + 1,
+        seq: p.seq,
+        quarter: q,
+        clock: (stamp && stamp.clock) || '',
+        team: p.team ? ((TEAMS[p.team] || {}).name || p.team) : '',
+        situation: dd,
+        ballOn: marker ? '' : spot(before.fieldPos),
+        text: p.text || '',
+        gain: (!marker && e.isStat) ? (e.statYds || 0) : '',
+        tags: tags,
+        marker: marker,
+        divider: !!p.isDivider
+      };
+    });
+  }
+
+  function renderTable(rows){
+    const head = '<tr><th>#</th><th>Qtr</th><th>Clock</th><th>Team</th>' +
+                 '<th>Situation</th><th>Ball on</th><th>Play</th><th>Gain</th><th>Flags</th></tr>';
+    const body = rows.map(r =>
+      '<tr class="' + (r.marker ? 'marker ' : '') + (r.divider ? 'divider' : '') + '">' +
+        '<td class="num">' + r.n + '</td>' +
+        '<td class="q">' + esc(r.quarter) + '</td>' +
+        '<td class="clock">' + esc(r.clock) + '</td>' +
+        '<td>' + esc(r.team) + '</td>' +
+        '<td>' + esc(r.situation) + '</td>' +
+        '<td>' + esc(r.ballOn) + '</td>' +
+        '<td class="play">' + esc(r.text) + '</td>' +
+        '<td class="gain' + (r.gain !== '' && r.gain < 0 ? ' neg' : '') + '">' +
+          (r.gain === '' ? '' : r.gain) + '</td>' +
+        '<td>' + r.tags.map(t =>
+          '<span class="tag ' + (t === 'NEEDS REVIEW' ? 'unres' : t === 'OVERRIDE' ? 'over' : 'score') +
+          '">' + esc(t) + '</span>').join('') + '</td>' +
+      '</tr>').join('');
+    return '<table><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
+  }
+
+  // CSV, from the same rows the table used.
+  // ---------------------------------------------------------------------
+  // EVERY FIELD IS QUOTED, not just the ones that look like they need it.
+  // A play's text routinely contains a comma ("rush for 6, tackled by...")
+  // and can contain a quotation mark; deciding per field which of those to
+  // escape is how a log opens in Excel one column short halfway down.
+  const csvCell = (v) => '"' + String(v === null || v === undefined ? '' : v)
+    .replace(/"/g, '""') + '"';
+
+  function toCsv(rows){
+    const head = ['#','Quarter','Clock','Team','Situation','Ball on','Play',
+                  'Gain','Flags','Entry type'];
+    const lines = [head.map(csvCell).join(',')];
+    rows.forEach(r => lines.push([
+      r.n, r.quarter, r.clock, r.team, r.situation, r.ballOn, r.text,
+      r.gain, r.tags.join(' '), r.marker ? 'marker' : 'play'
+    ].map(csvCell).join(',')));
+    // CRLF, which is what Excel expects, and a BOM so it opens UTF-8
+    // rather than mangling a name with an accent in it.
+    return '﻿' + lines.join('\r\n') + '\r\n';
+  }
+
+  function fileStem(){
+    const safe = (x) => String(x || '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const teams = [GAME.home_team_name, GAME.away_team_name].filter(Boolean).join('-vs-');
+    const stamp = GAME.game_date || new Date().toISOString().slice(0, 10);
+    return 'statchat-playlog-' + (safe(teams) || 'game') + '-' + stamp;
+  }
+
+  document.getElementById('csvBtn').addEventListener('click', () => {
+    const blob = new Blob([toCsv(ROWS)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileStem() + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+  document.getElementById('printBtn').addEventListener('click', () => window.print());
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'INITIAL_SESSION'){
+      if (session){ init(); } else { window.location.href = '/login.html'; }
+    }
+  });
+
+  async function init(){
+    const id = new URLSearchParams(window.location.search).get('id');
+    if (!id){ fail('No game specified.'); return; }
+
+    const { data: gameRows, error: gameErr } = await supabaseClient
+      .from('games').select('*').eq('id', id).limit(1);
+    if (gameErr || !gameRows || !gameRows.length){
+      fail(gameErr ? gameErr.message : 'That game could not be found.'); return;
+    }
+    GAME = gameRows[0];
+    startingPossession = GAME.starting_possession || 'teamA';
+    quarterLengthSec = GAME.quarter_length_seconds || 720;
+
+    const { data: rosterRows } = await supabaseClient
+      .from('game_rosters').select('*').eq('game_id', id);
+    // BY THE GAME'S OWN TENANT, not by is_our_team -- the flag is true for
+    // every tenant's team, so an unscoped limit(1) returns an arbitrary
+    // school's colours. Same reasoning as stat_package.html.
+    const { data: teamRows } = await supabaseClient
+      .from('teams').select('primary_color, secondary_color, logo_url')
+      .eq('tenant_id', GAME.tenant_id).limit(1);
+    buildTeams(GAME, rosterRows || [], (teamRows && teamRows[0]) || {});
+
+    const { data: playRows, error: playsErr } = await supabaseClient
+      .from('plays').select('*').eq('game_id', id)
+      .order('sequence_number', { ascending: true });
+    if (playsErr){ fail(playsErr.message); return; }
+
+    plays = (playRows || []).map(p => ({
+      seq: p.sequence_number, text: p.text, effect: p.effect || {},
+      team: p.team_side, quarter: p.quarter, roles: p.roles,
+      unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+    }));
+
+    const away = GAME.away_team_name || '', home = GAME.home_team_name || '';
+    document.getElementById('title').textContent = away + ' at ' + home;
+    document.getElementById('subtitle').textContent =
+      [GAME.designator, GAME.game_date, GAME.season_year + ' season',
+       GAME.status === 'final' ? 'Final' : 'In progress'].filter(Boolean).join(' · ');
+    document.title = 'Play log — ' + away + ' at ' + home;
+    const back = document.getElementById('backLink');
+    if (GAME.season_year) back.href = 'reports.html?season=' + encodeURIComponent(GAME.season_year);
+
+    ROWS = buildRows();
+    const realPlays = ROWS.filter(r => !r.marker).length;
+    document.getElementById('counts').textContent =
+      ROWS.length + ' entries logged · ' + realPlays + ' plays · ' +
+      (ROWS.length - realPlays) + ' clock and drive markers';
+    document.getElementById('logTable').innerHTML = renderTable(ROWS);
+    showView('mainView');
+  }
+</script>
+</body>
+</html>
