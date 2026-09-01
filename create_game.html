@@ -308,16 +308,26 @@
            nothing, and play entry is identical either way -- the entry
            pickers read seed_starters and never read this.
            Our team only. The opponent's lineup is not ours to publish. -->
-      <details id="bcStartersWrap" style="margin:14px 0 0; border-left:2px solid var(--sc-rule, #2b333d); padding-left:14px;">
-        <summary style="list-style:none; cursor:pointer; font-size:13px; color:var(--sc-ink-muted); display:flex; align-items:center; gap:8px; padding:3px 0;">
-          <span id="bcCaret" style="font-size:10px; opacity:.7;">&#9654;</span>
+      <details id="bcStartersWrap" style="margin:16px 0 0; border:1px solid var(--sc-rule-strong, #6b7d8f); border-left:3px solid var(--sc-amber, #ffc72c); border-radius:6px; background:var(--sc-raise, #20272f); padding:2px 14px;">
+        <summary style="list-style:none; cursor:pointer; font-size:14.5px; font-weight:700; color:var(--sc-ink, #eef1f4); display:flex; align-items:center; gap:9px; padding:9px 0;">
+          <span id="bcCaret" style="font-size:11px; color:var(--sc-amber, #ffc72c);">&#9654;</span>
           <span>Specify all game starters</span>
-          <span style="font-size:11px; text-transform:uppercase; letter-spacing:.07em; border:1px solid var(--sc-rule, #2b333d); border-radius:3px; padding:1px 6px;">broadcast only</span>
-          <span id="bcSummary" style="margin-left:auto; font-variant-numeric:tabular-nums;"></span>
+          <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--sc-amber, #ffc72c); border:1px solid var(--sc-amber, #ffc72c); background:var(--sc-amber-tint, rgba(255,199,44,.13)); border-radius:3px; padding:1px 6px;">broadcast only</span>
+          <span id="bcSummary" style="margin-left:auto; font-size:13px; font-weight:600; color:var(--sc-ink-soft, #c7d0da); font-variant-numeric:tabular-nums;"></span>
         </summary>
-        <div style="padding:10px 0 4px; font-size:13px;">
-          <p style="margin:0 0 10px; font-size:12.5px; color:var(--sc-ink-muted); font-style:italic;">
-            Read only by the three starter overlays. Play entry and the pickers above are unaffected.</p>
+        <div style="padding:4px 0 8px; font-size:13px;">
+          <!-- AMBER, NOT MUTED GREY. This sentence is the one that stops a
+               coach worrying that a broadcast lineup will move a statistic,
+               and in muted italic grey it was the least visible thing in the
+               section it governs. Andy asked for it in amber or green on
+               1 Sep 2026; amber matches the rule and badge above it, so the
+               whole section reads as one block. -->
+          <p style="margin:0 0 12px; padding:8px 11px; font-size:13px; line-height:1.5;
+                    color:var(--sc-amber-text, #ffc72c);
+                    background:var(--sc-amber-soft, rgba(255,199,44,.10));
+                    border:1px solid var(--sc-amber, #ffc72c); border-radius:5px;">
+            This data is used <strong>ONLY</strong> by the three starter overlays used by the
+            broadcast. Nothing entered here affects game play, player pickers, or stats.</p>
           <div id="bcGroups"></div>
           <div id="bcFillMsg" style="font-size:12.5px; margin-top:2px;"></div>
         </div>
@@ -878,55 +888,90 @@
   })();
 
   // What goes in the column. Empty units are omitted entirely rather than
-  // saved as {}, so "nothing entered" reads the same as it always has.
+  // saved as [], so "nothing entered" reads the same as it always has.
+  //
+  // AN ORDERED ARRAY, NOT AN OBJECT KEYED BY POSITION. The first version of
+  // this keyed each unit by position label -- unit[pos] = {num, name} -- and
+  // that is simply the wrong model for a lineup. Position labels are not
+  // unique on a football field: the default defensive set is DE, DT, DT, DE,
+  // WLB, MLB, SLB, CB, CB, FS, SS, so DE, DT and CB each appear twice and
+  // each overwrote the one before it. A coach filled all eleven slots, saw
+  // eleven on screen, and eight reached the database -- silently, with the
+  // overlay then showing an eight-man defence. Offense did the same thing
+  // with its three WR slots. Found 1 Sep 2026, before any real lineup had
+  // been entered.
+  //
+  // A lineup is ordered and repeats positions by nature, so an array is what
+  // it always should have been. Slot order is preserved, which is also the
+  // order the card reads down.
   function collectBroadcastStarters(){
     const out = {};
     Object.keys(BC_UNITS).forEach(function(u){
-      const unit = {}, seen = {};
+      const rows = [], seen = {};
       BC_UNITS[u].slots.forEach(function(sl,i){
         const num = bcVal(u,i);
         if (!num) return;
         if (u !== 'special'){ if (seen[num]) return; seen[num] = 1; }   // refused duplicate never saves
         const pos = bcPos(u,i);
         const name = bcChosen[bcK(u,i)] || '';
-        // Combined slots share one key on special teams, matching the card.
-        const key = (u === 'special' && unit[pos] === undefined) ? pos : pos;
+        // ONE PLAYER, COMBINED POSITIONS -- special teams only. A kicker who
+        // is also the punter is one row reading "PK/P", exactly as the card
+        // prints it. Matched on the NUMBER, which is what makes them the
+        // same person; two different numbers sharing a label stay separate
+        // rows, which is the whole point of the array.
         if (u === 'special'){
-          const existing = Object.keys(unit).find(function(k){ return unit[k].num === num; });
+          const existing = rows.find(function(r){ return r.num === num; });
           if (existing){
-            const merged = existing + '/' + pos;
-            unit[merged] = unit[existing];
-            delete unit[existing];
+            if (existing.pos.split('/').indexOf(pos) === -1) existing.pos += '/' + pos;
             return;
           }
         }
-        unit[key] = name ? { num:num, name:name } : { num:num };
+        rows.push(name ? { pos:pos, num:num, name:name } : { pos:pos, num:num });
       });
-      if (Object.keys(unit).length) out[u] = unit;
+      if (rows.length) out[u] = rows;
     });
     return Object.keys(out).length ? out : null;
   }
 
+  // ONE READER FOR BOTH SHAPES. Anything saved before 1 Sep 2026 is the old
+  // position-keyed object; everything after is an array. Normalising here
+  // means the rest of the page only ever sees rows, and the same three-line
+  // function appears in broadcast_starters.html and api/feed.js so all three
+  // readers agree about what a lineup is.
+  function bcRowsFromSaved(unitVal){
+    if (!unitVal) return [];
+    if (Array.isArray(unitVal)) return unitVal.map(function(e){
+      return { pos:String((e && e.pos) || ''), num:String((e && e.num) || ''),
+               name:String((e && e.name) || '') };
+    }).filter(function(r){ return r.num; });
+    return Object.keys(unitVal).map(function(pos){
+      const v = unitVal[pos], isObj = v && typeof v === 'object';
+      return { pos:String(pos), num: isObj ? String(v.num || '') : String(v || ''),
+               name: isObj ? String(v.name || '') : '' };
+    }).filter(function(r){ return r.num; });
+  }
 
-  // Puts a saved lineup back into the form. Positions are KEYS, so a slot
-  // whose label is not one of this unit's defaults gets its dropdown set to
-  // match -- a Wing-T card saved with FB comes back as FB, not as the WR the
-  // slot defaults to.
+
+  // Puts a saved lineup back into the form. A row's position is a LABEL, so
+  // a slot whose label is not one of this unit's defaults gets its dropdown
+  // set to match -- a Wing-T card saved with FB comes back as FB, not as the
+  // WR the slot defaults to. Rows are taken in saved order, and each one
+  // claims the first free slot that can carry its label, so a defence saved
+  // as DE, DT, DT, DE lands back in those four slots rather than collapsing
+  // into two.
   function loadBroadcastStarters(saved){
     if (!saved || typeof saved !== 'object') return;
     Object.keys(BC_UNITS).forEach(function(u){
-      const unit = saved[u]; if (!unit) return;
+      const rows = bcRowsFromSaved(saved[u]); if (!rows.length) return;
       const free = [];
       BC_UNITS[u].slots.forEach(function(sl,i){ free.push(i); });
-      Object.keys(unit).forEach(function(pos){
-        const v = unit[pos];
-        const num = (v && typeof v === 'object') ? String(v.num || '') : String(v || '');
-        const nm  = (v && typeof v === 'object') ? (v.name || '') : '';
+      rows.forEach(function(row){
+        const num = row.num, nm = row.name;
         if (!num) return;
-        // A combined special-teams key is "FG/PAT"; the first label is the
-        // slot it lands in and the rest are re-entered as the same number,
-        // which is what produced the combination in the first place.
-        const parts = String(pos).split('/');
+        // A combined special-teams position is "FG/PAT"; the first label is
+        // the slot it lands in and the rest are re-entered as the same
+        // number, which is what produced the combination in the first place.
+        const parts = String(row.pos).split('/');
         parts.forEach(function(label){
           let idx = -1;
           for (let k = 0; k < free.length; k++){

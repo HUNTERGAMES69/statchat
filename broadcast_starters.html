@@ -111,16 +111,30 @@
   const slotNum  = (v) => (v && typeof v === 'object') ? String(v.num || '') : String(v || '');
   const slotName = (v) => (v && typeof v === 'object') ? String(v.name || '') : '';
 
+  // A UNIT IS AN ORDERED LIST OF ROWS, whatever shape it was stored in.
+  // Since 1 Sep 2026 a unit is an array -- [{pos, num, name}] -- because
+  // position labels repeat in a real lineup (DE, DT, DT, DE) and the
+  // position-keyed object it replaced silently dropped the duplicates.
+  // Anything saved before that is still an object, and still renders.
+  function lineupRows(unitVal){
+    if (!unitVal) return [];
+    if (Array.isArray(unitVal)) return unitVal.map(e => ({
+      pos: String((e && e.pos) || ''), num: String((e && e.num) || ''),
+      name: String((e && e.name) || '') })).filter(r => r.num);
+    return Object.keys(unitVal).map(pos => ({
+      pos: String(pos), num: slotNum(unitVal[pos]), name: slotName(unitVal[pos])
+    })).filter(r => r.num);
+  }
+
   function render(game, branding){
     const panel = document.getElementById('panel');
     const all = game && game.broadcast_starters;
-    const lineup = all && all[UNIT.key];
-    const positions = lineup ? Object.keys(lineup) : [];
+    const rows = lineupRows(all && all[UNIT.key]);
 
     // NOTHING ENTERED IS NOT AN ERROR. Most games will never have a lineup
     // filled in, and this input may sit in a switcher bank all season. It
     // draws nothing rather than an empty frame or a row of dashes.
-    if (!positions.length){
+    if (!rows.length){
       panel.classList.remove('shown');
       panel.style.display = 'none';
       return;
@@ -139,16 +153,14 @@
     if (branding && branding.logo_url){ logo.src = branding.logo_url; logo.hidden = false; }
     else { logo.hidden = true; }
 
-    document.getElementById('rows').innerHTML = positions.map(pos => {
-      const v = lineup[pos];
-      const num = slotNum(v), nm = slotName(v);
+    document.getElementById('rows').innerHTML = rows.map(r => {
       // A NUMBER WITH NO NAME IS STILL WORTH SHOWING. It happens when the
       // jersey is shared and nobody picked which player, or when the number
       // is not on the roster loaded for this game. The number is the thing
       // a viewer matches to the field, so it goes up either way.
-      return '<div class="cell"><span class="pos">' + esc(pos) + '</span>' +
-             '<span class="num">' + esc(num) + '</span>' +
-             '<span class="nm">' + (nm ? esc(nm) : '') + '</span></div>';
+      return '<div class="cell"><span class="pos">' + esc(r.pos) + '</span>' +
+             '<span class="num">' + esc(r.num) + '</span>' +
+             '<span class="nm">' + (r.name ? esc(r.name) : '') + '</span></div>';
     }).join('');
 
     panel.style.display = 'block';
