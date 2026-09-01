@@ -136,12 +136,21 @@ module.exports = async function handler(req, res) {
     // Resolved in ONE query rather than one per user. Only for the
     // platform: a tenant admin's list is a single school by construction.
     let tenantNameById = {};
+    const tenantDeletedById = {};
     if (isSuper) {
       const tIds = [...new Set((profiles || []).map(p => p.tenant_id).filter(Boolean))];
       if (tIds.length) {
+        // deleted_at COMES BACK TOO. Without it a deleted school's staff
+        // group under a heading that looks exactly like a live school's,
+        // and the console has no way to tell the two apart -- it only ever
+        // sees the name. The service key has BYPASSRLS, so nothing filters
+        // this for us; it has to be asked for and passed on deliberately.
         const { data: tRows } = await adminClient
-          .from('tenants').select('id, name').in('id', tIds);
-        (tRows || []).forEach(t => { tenantNameById[t.id] = t.name; });
+          .from('tenants').select('id, name, deleted_at').in('id', tIds);
+        (tRows || []).forEach(t => {
+          tenantNameById[t.id] = t.name;
+          if (t.deleted_at) tenantDeletedById[t.id] = true;
+        });
       }
     }
 
@@ -207,6 +216,14 @@ module.exports = async function handler(req, res) {
       tenantName: isSuper
         ? ((profileById[u.id] && tenantNameById[profileById[u.id].tenant_id]) || null)
         : null,
+      // IS THAT SCHOOL STILL A SCHOOL. Platform-only, same as tenantName.
+      // Migration 018 locks these accounts out and 034 backfilled the ones
+      // deleted before 018 existed, so they arrive already disabled -- but
+      // "disabled" alone does not say WHY, and a deleted school's staff read
+      // identically to a coach someone switched off last week.
+      tenantDeleted: isSuper
+        ? !!(profileById[u.id] && tenantDeletedById[profileById[u.id].tenant_id])
+        : false,
       isSuperAdmin: !!(profileById[u.id] && profileById[u.id].is_super_admin)
     }));
     // mfaKnown travels with the list so the console can tell "nobody has 2FA"
