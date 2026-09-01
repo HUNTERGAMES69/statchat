@@ -9,7 +9,7 @@
 // short — none of them show up on screen, in a console, or in a build. They
 // show up as traffic that never arrives, months later.
 //
-// FIVE PUBLIC PAGES: the brochure, the broadcast page, and the three guides.
+// EIGHT PUBLIC PAGES: the brochure, the four split pages, and the three guides.
 // Everything else in this repo is behind a login or composited into a live
 // picture, and carries noindex plus a Disallow. Adding a public page means
 // adding it to PUBLIC here, to the sitemap, and to the brochure's links —
@@ -28,12 +28,13 @@ const chk = (l, ok, det) => { if (ok) { pass++; console.log('  ok   ' + l); }
 
 console.log('=== SEO foundation ===\n');
 
-const PUBLIC = ['index.html', 'broadcasting.html', 'help.html', 'tips.html', 'vmix.html'];
+const PUBLIC = ['index.html', 'broadcasting.html', 'stats.html', 'pricing.html',
+                'compare.html', 'help.html', 'tips.html', 'vmix.html'];
 const all = fs.readdirSync(ROOT).filter(f => f.endsWith('.html'));
 
 // ---- exactly five pages are indexable --------------------------------
 const indexable = all.filter(f => !/name="robots"/.test(read(f)));
-chk('exactly the five public pages are indexable',
+chk('exactly the eight public pages are indexable',
     indexable.length === PUBLIC.length && PUBLIC.every(p => indexable.includes(p)),
     JSON.stringify(indexable));
 // THE PREMISE. "Five" is only a filter if there are many more files than
@@ -175,7 +176,7 @@ shareable.forEach(f => {
 // ---- sitemap ---------------------------------------------------------
 const sm = read('sitemap.xml');
 const locs = [...sm.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
-chk('the sitemap lists the five public pages and nothing else',
+chk('the sitemap lists the eight public pages and nothing else',
     locs.length === PUBLIC.length && locs.includes('https://statchat.co/') &&
     PUBLIC.filter(f => f !== 'index.html')
       .every(f => locs.includes('https://statchat.co/' + f)),

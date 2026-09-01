@@ -58,9 +58,10 @@ const chk = (l, ok, det) => { if (ok) { pass++; console.log('  ok   ' + l); }
 
 // The pages that share index.html's sheet. Add a page here when it is built
 // the same way.
-const SHARED = ['broadcasting.html'];
+const SHARED = ['broadcasting.html', 'stats.html', 'pricing.html', 'compare.html'];
 // Every public page gets the dead-class sweep, shared sheet or its own.
-const PUBLIC = ['index.html', 'broadcasting.html', 'vmix.html', 'tips.html', 'help.html'];
+const PUBLIC = ['index.html', 'broadcasting.html', 'stats.html', 'pricing.html',
+                'compare.html', 'vmix.html', 'tips.html', 'help.html'];
 
 const styleOf = s => (s.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
 // Prose comments on these pages quote class names they no longer use.
@@ -86,10 +87,23 @@ console.log('=== Shared stylesheet ===\n');
 
     // <use href="#lg-a"> needs its <symbol> to travel with the markup. It
     // does not come from the stylesheet, so copying the sheet is not enough.
-    const uses = [...body.matchAll(/<use href="#([^"]+)"/g)].map(m => m[1]);
+    //
+    // A PAGE WITH NO <use> IS NOT A FAILURE. The first version required
+    // uses.length > 0, which failed pricing.html and compare.html for the
+    // crime of not drawing a scorebug -- a check reporting a fault where
+    // there is none, which is the same class of bug as missing a real one.
+    // Both directions are asserted instead: no orphan <use>, and no orphan
+    // <symbol> either, since a sprite nobody references is dead weight
+    // carried over from whichever page it was copied from.
+    const uses = [...new Set([...body.matchAll(/<use href="#([^"]+)"/g)].map(m => m[1]))];
+    const syms = [...new Set([...body.matchAll(/<symbol id="([^"]+)"/g)].map(m => m[1]))];
     chk(f + ': every <use> reference has its symbol on the page',
-        uses.length > 0 && uses.every(id => body.includes('<symbol id="' + id + '"')),
-        JSON.stringify([...new Set(uses)]));
+        uses.every(id => syms.includes(id)),
+        uses.length ? JSON.stringify(uses.filter(u => !syms.includes(u)))
+                    : 'no <use> on this page, which is fine');
+    chk('  ...and ' + f + ' carries no unreferenced <symbol>',
+        syms.every(id => uses.includes(id)),
+        JSON.stringify(syms.filter(x => !uses.includes(x))));
 
     const links = [...new Set([...body.matchAll(/href="([^"]+)"/g)].map(m => m[1]))]
       .filter(h => !/^(https?:|mailto:|#)/.test(h));
@@ -151,9 +165,13 @@ console.log('=== Shared stylesheet ===\n');
     // for being what they are.
     chk('  ...' + f + ' has a parsed stylesheet and classed elements',
         r.used >= 8 && r.sels >= 30, r.used + ' classes against ' + r.sels + ' selectors');
-    if (f === 'broadcasting.html')
-      chk('  ...and it exercises the brochure sheet broadly',
-          r.used >= 30 && r.sels > 200, r.used + ' classes against ' + r.sels + ' selectors');
+    // 200+ selectors is the brochure's sheet and nothing else. The class
+    // floor is 18, not the first draft's 30: pricing.html is a short page
+    // that is entirely correct with twenty-odd classes, and a threshold
+    // tuned to the longest page fails the others for being shorter.
+    if (SHARED.includes(f))
+      chk('  ...and ' + f + ' is really drawing on the brochure sheet',
+          r.used >= 18 && r.sels > 200, r.used + ' classes against ' + r.sels + ' selectors');
     await p.close();
   }
 
