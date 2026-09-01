@@ -235,6 +235,25 @@
   // wrong graphic is worse than showing none.
   const rotationRequested = askedViews.length > 0;
   const rotating = rotation.length > 0;
+
+  // SEASON OR THIS GAME. Andy's request, 31 Aug 2026.
+  // ---------------------------------------------------------------------
+  //     /broadcast_leaders.html?view=rushing               season to date
+  //     /broadcast_leaders.html?view=rushing&scope=game    this game only
+  //     /broadcast_leaders.html?views=rushing,passing&scope=game&secs=8
+  //
+  // ONE PAGE, NOT A SECOND ONE, for the same reason the rotation is here
+  // rather than in a file of its own: VIEWS is the thing that must not be
+  // duplicated. Every title, unit, value and detail line on a game board is
+  // the one already on the season board, and two copies of that table would
+  // drift into disagreeing about what "AVG" means.
+  //
+  // The only real differences are where the data comes from and how often.
+  // A GAME BOARD MUST POLL -- it is describing something happening now --
+  // where the season board deliberately does not, because it reads finished
+  // games and those do not change during a broadcast.
+  const SCOPE = params.get('scope') === 'game' ? 'game' : 'season';
+  const POLL_MS = 2000;
   if (rotating) document.body.classList.add('rotating');
 
   // Seconds per card. Long enough to read two names, short enough that a
@@ -318,9 +337,14 @@
       const box = computeBoxScore(gamePlays);
       const bucket = box.teamA[view.bucket] || {};
       Object.keys(bucket).forEach(n => {
-        // TEAM is the sentinel for a kneel or a bad snap. It is not a
-        // person and must never appear on a leaderboard.
-        if (n === 'TEAM') return;
+        // NEITHER OF THESE IS A PERSON, and neither may take a card.
+        // TEAM is the sentinel for a kneel, a bad snap or sack yardage.
+        // Unknown is a completion whose receiver was never recorded --
+        // broadcast_stats.html has excluded it from its leader cards since
+        // they were written, and this file never did, so a receiving board
+        // could put "Unknown" on air on exactly the play nobody
+        // identified. Found while adding the game scope, 31 Aug 2026.
+        if (n === 'TEAM' || n === 'Unknown') return;
         if (view.has && !view.has(bucket[n])) return;
         merge(totals, n, bucket[n]);
       });
@@ -362,8 +386,11 @@
           '\ngames: ' + ((payload.games || []).length) +
           '\nview: ' + view.title +
           (payload.reason ? '\nreason: ' + payload.reason : '') +
-          '\n\nA season with no finalized games has no leaders. Add ' +
-          '?season=YYYY to pick a different one.</pre>';
+          (SCOPE === 'game'
+            ? '\n\nNothing has been entered in this category yet. A game ' +
+              'board fills as plays are entered.</pre>'
+            : '\n\nA season with no finalized games has no leaders. Add ' +
+              '?season=YYYY to pick a different one.</pre>');
       }
       return;
     }
@@ -379,9 +406,21 @@
     else { logo.style.display = 'none'; }
 
     document.getElementById('headTitle').textContent = view.title;
-    document.getElementById('headSub').textContent =
-      (b.name ? b.name + ' \u00b7 ' : '') + payload.season + ' season \u00b7 ' +
-      (payload.games || []).length + ' game' + ((payload.games || []).length === 1 ? '' : 's');
+    // THE TEAM NAME ALONE ON A GAME CARD. Andy's call, 31 Aug 2026.
+    // ------------------------------------------------------------------
+    // It first read "Neville - this game - vs Ruston", on the reasoning
+    // that a game board and a season board are otherwise identical and
+    // confusing them on air would be expensive. That is still true, but
+    // the season card carries "2026 season - 3 games" and the game card
+    // now carries nothing after the name, which is difference enough to
+    // tell them apart -- and the opponent is already on the scoreboard
+    // bug, so repeating it here spent a line saying what the picture
+    // already said.
+    const n = (payload.games || []).length;
+    document.getElementById('headSub').textContent = (SCOPE === 'game')
+      ? (b.name || '')
+      : (b.name ? b.name + ' \u00b7 ' : '') + payload.season + ' season \u00b7 ' +
+        n + ' game' + (n === 1 ? '' : 's');
 
     // PADDED TO topN WHEN ROTATING, so every card is the same size -- see
     // the note on body.rotating in the stylesheet. A static panel is not
@@ -410,6 +449,49 @@
       '</div>';
     }).join('');
     panel.style.display = 'block';
+  }
+
+  // ONE SHAPE DOWNSTREAM, whichever endpoint answered.
+  // ---------------------------------------------------------------------
+  // leaders() walks payload.games and merges across them. A single game is
+  // that same walk over a list of one, so the game payload is reshaped here
+  // rather than teaching leaders() about two kinds of input -- which would
+  // have meant a branch inside the one function whose job is the counting.
+  async function fetchPayload(season){
+    const sq = [];
+    if (OVERLAY_KEY) sq.push('key=' + encodeURIComponent(OVERLAY_KEY));
+
+    if (SCOPE === 'game'){
+      // An id is optional: without one /api/gamedata resolves the game set
+      // ON AIR, which is the point of the flag and means this address never
+      // needs editing.
+      const id = params.get('id');
+      if (id) sq.push('id=' + encodeURIComponent(id));
+      const r = await fetch('/api/gamedata' + (sq.length ? '?' + sq.join('&') : ''),
+        { cache: 'no-store' });
+      if (!r.ok){
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error || ('gamedata ' + r.status));
+      }
+      const d = await r.json();
+      const g = d.game || {};
+      const us = g.our_team_is_home ? g.home_team_name : g.away_team_name;
+      const them = g.our_team_is_home ? g.away_team_name : g.home_team_name;
+      return {
+        season: g.season_year,
+        ourBranding: d.ourBranding || {},
+        games: [{ game: g, roster: d.roster || [], plays: d.plays || [] }],
+        // For the header line. "vs" or "at" from our side, the way a
+        // schedule reads, rather than the raw home/away pair.
+        opponent: them ? ((g.our_team_is_home ? 'vs ' : 'at ') + them) : '',
+        ourName: us
+      };
+    }
+
+    if (season) sq.unshift('season=' + encodeURIComponent(season));
+    const r = await fetch('/api/seasondata' + (sq.length ? '?' + sq.join('&') : ''));
+    if (!r.ok) throw new Error('seasondata ' + r.status);
+    return await r.json();
   }
 
   async function load(){
@@ -443,13 +525,13 @@
       // pages that CALL them were not, so every overlay returned 401 while
       // the feed URLs worked. Scoping an endpoint is half the job; finding
       // its callers is the other half.
-      const sq = [];
-      if (season)      sq.push('season=' + encodeURIComponent(season));
-      if (OVERLAY_KEY) sq.push('key=' + encodeURIComponent(OVERLAY_KEY));
-      const r = await fetch('/api/seasondata' + (sq.length ? '?' + sq.join('&') : ''));
-      if (!r.ok) throw new Error('seasondata ' + r.status);
-      const payload = await r.json();
+      const payload = await fetchPayload(season);
       if (rotating) startRotation(payload); else render(payload, view);
+      // A GAME BOARD POLLS; A SEASON BOARD DOES NOT. See the note at the
+      // foot of this file for why the season one is loaded once.
+      if (SCOPE === 'game'){
+        setInterval(() => { refresh().catch(() => {}); }, POLL_MS);
+      }
     } catch (e){
       // Silent ON AIR by design: an overlay that prints an error puts that
       // error on the broadcast. But a blank page with no way to find out
@@ -469,46 +551,107 @@
   // =====================================================================
   // THE ROTATION DRIVER. Only reached when ?views= is present.
   // =====================================================================
+  // THE PAYLOAD THE PANEL IS CURRENTLY DRAWING. A season board sets this
+  // once; a game board replaces it every poll.
+  let latest = null;
+  let currentView = null;
+
+  function eligible(){
+    return rotation.filter(v => leaders(latest, VIEWS[v]).length > 0);
+  }
+
   function startRotation(payload){
     const panel = document.getElementById('panel');
+    latest = payload;
 
-    // SKIP THE EMPTY CARDS, decided ONCE here rather than at each step.
-    // A view with nobody in it is not a card that renders badly -- it is a
-    // card that must not appear, exactly as the static panel hides itself
-    // rather than showing an empty frame. Punting is the one that bites:
-    // its minimum is relative to the busiest punter, so early in a season
-    // nobody qualifies and that card is genuinely empty.
+    // SKIP THE EMPTY CARDS. A view with nobody in it is not a card that
+    // renders badly -- it is a card that must not appear, exactly as the
+    // static panel hides itself rather than showing an empty frame.
     //
-    // Fixed at load because this reads FINISHED games only, which do not
-    // change while the overlay is up. Re-deriving it each step would cost
-    // a full box score per card, on a machine encoding video.
-    const cycle = rotation.filter(v => leaders(payload, VIEWS[v]).length > 0);
+    // RE-DERIVED EACH STEP ON A GAME BOARD, fixed at load on a season one.
+    // The season board reads FINISHED games, which do not change while the
+    // overlay is up, so re-deriving would cost a box score per card for an
+    // answer that cannot have moved. A GAME board is the opposite: at
+    // kickoff every category is empty, and passing fills before rushing
+    // does. A cycle fixed at load there would be fixed on "nothing", and
+    // the panel would stay dark for the rest of the night.
+    let cycle = eligible();
 
-    if (!cycle.length){ render(payload, VIEWS[rotation[0]]); return; }
-
-    let i = 0, timer = null, fadeTimer = null;
-
-    function show(n){
-      i = n;
-      render(payload, VIEWS[cycle[i]]);
-      panel.classList.add('shown');
-      clearTimeout(timer);
-      // ONE CARD IS NOT A ROTATION. If only one view survived, stop here --
-      // fading a card out and bringing the same card back is a flicker on
-      // air with nothing gained.
-      if (cycle.length < 2) return;
-      timer = setTimeout(() => {
-        panel.classList.remove('shown');
-        clearTimeout(fadeTimer);
-        // Swap only once it is invisible, so nobody sees numbers change.
-        fadeTimer = setTimeout(() => show((i + 1) % cycle.length), FADE_MS);
-      }, DWELL_MS);
+    // Nothing yet. On a season board that is final -- there are no leaders.
+    // On a game board it is simply early, so keep looking.
+    if (!cycle.length && SCOPE !== 'game'){
+      render(payload, VIEWS[rotation[0]]);
+      return;
     }
 
-    // Start on the first card at once rather than after a dwell. An overlay
-    // that is blank for eight seconds after it loads reads as broken, and a
-    // director may well cut to it immediately.
-    show(0);
+    let timer = null, fadeTimer = null;
+
+    function show(key){
+      currentView = key;
+      render(latest, VIEWS[key]);
+      panel.classList.add('shown');
+      clearTimeout(timer);
+      timer = setTimeout(advance, DWELL_MS);
+    }
+
+    function advance(){
+      const list = eligible();
+      if (!list.length){
+        // Everything went empty -- only reachable on a game board before
+        // anything has been entered. Hide and keep trying.
+        panel.classList.remove('shown');
+        currentView = null;
+        clearTimeout(timer);
+        timer = setTimeout(advance, DWELL_MS);
+        return;
+      }
+      // ONE CARD IS NOT A ROTATION. Fading a card out and bringing the same
+      // one back is a flicker on air with nothing gained -- but on a game
+      // board the list can grow, so this keeps checking rather than
+      // stopping for good the way it used to.
+      if (list.length < 2 && list[0] === currentView){
+        clearTimeout(timer);
+        timer = setTimeout(advance, DWELL_MS);
+        return;
+      }
+      // POSITION IS TRACKED BY VIEW, NOT BY INDEX. On a game board the list
+      // grows as categories fill, and an index into a list that changed
+      // length lands somewhere arbitrary -- it would skip a card or repeat
+      // one every time a new category appeared.
+      const at = list.indexOf(currentView);
+      const next = list[(at + 1) % list.length];
+      if (next === currentView){ clearTimeout(timer); timer = setTimeout(advance, DWELL_MS); return; }
+      panel.classList.remove('shown');
+      clearTimeout(fadeTimer);
+      // Swap only once it is invisible, so nobody sees numbers change.
+      fadeTimer = setTimeout(() => show(next), FADE_MS);
+    }
+
+    // NEW NUMBERS ON THE CARD ALREADY SHOWING. Without this a game board
+    // would only update when it rotated -- eight seconds of stale yardage
+    // on a live graphic, and on a single-card cycle it would never update
+    // at all.
+    rotation.refresh = () => {
+      if (currentView && eligible().indexOf(currentView) !== -1){
+        render(latest, VIEWS[currentView]);
+        document.getElementById('panel').classList.add('shown');
+      }
+    };
+
+    if (cycle.length) show(cycle[0]);
+    else { panel.classList.remove('shown'); timer = setTimeout(advance, DWELL_MS); }
+  }
+
+  // Called by the poll on a game board. Repaints in place: no fade, because
+  // this is the same card with newer numbers, not a new card.
+  async function refresh(){
+    const payload = await fetchPayload(params.get('season'));
+    latest = payload;
+    if (rotating){
+      if (typeof rotation.refresh === 'function') rotation.refresh();
+    } else {
+      render(payload, view);
+    }
   }
 
   // LOADED ONCE. No polling.
