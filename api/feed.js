@@ -23,6 +23,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const { tenantFromKey } = require('./_tenant');
 const engine = require('./_engine.js');
+const { seasonGames, aggregateSeason } = require('./_season.js');
 const { countPossessions, countTurnovers, quarterLabel } = engine;
 
 // ---------------------------------------------------------------- utils
@@ -237,13 +238,44 @@ function buildViews(ctx) {
     rushing: bothTeams('rushing', 'yds'),
     passing: bothTeams('passing', 'yds'),
     receiving: bothTeams('receiving', 'yds'),
-    defense: bothTeams('defense', 'tackles')
+    defense: bothTeams('defense', 'tackles'),
+
+    // KICKING AND PUNTING. Both overlays existed months before these views
+    // did: broadcast_leaders.html offers ?view=kicking and ?view=punting,
+    // and a crew building its own graphics had no way to get the same
+    // numbers. Added 1 Sep 2026 for parity with the overlay menu.
+    //
+    // ONE BUCKET, TWO VIEWS. computeBoxScore keeps kicking and punting in a
+    // single `specialTeams` bucket, so a placekicker and a punter sit in the
+    // same object -- and on most high-school teams they are the same boy.
+    // Splitting on who ATTEMPTED something, not on who is rostered where,
+    // is what the overlay does and what these mirror: a punter with no
+    // field-goal attempts must not appear on a kicking board with a row of
+    // zeros, because a title bound to it would put him on air as 0 for 0.
+    kicking: bothTeams('specialTeams', 'fgMade')
+      .filter(r => (r.fgAtt || 0) + (r.patAtt || 0) > 0),
+    punting: bothTeams('specialTeams', 'punts')
+      .filter(r => (r.punts || 0) > 0)
   };
 }
 
 const ROW_NAME = {
   score: 'game', drive: 'drive', lastplay: 'play', teamstats: 'team',
-  rushing: 'player', passing: 'player', receiving: 'player', defense: 'player'
+  rushing: 'player', passing: 'player', receiving: 'player', defense: 'player',
+  kicking: 'player', punting: 'player'
+};
+
+// THE VIEWS A SEASON CAN ANSWER. A season has no current drive, no last
+// play and no live scoreboard, so ?scope=season on those is a question with
+// no meaning -- refused by name rather than answered with a game's numbers
+// under a season label, which is how somebody puts one game's score on air
+// believing it is the year's.
+const SEASON_VIEWS = ['rushing', 'passing', 'receiving', 'defense', 'kicking', 'punting'];
+// The bucket each leader view reads, and the key it ranks on.
+const LEADER_BUCKET = {
+  rushing: ['rushing', 'yds'], passing: ['passing', 'yds'],
+  receiving: ['receiving', 'yds'], defense: ['defense', 'tackles'],
+  kicking: ['specialTeams', 'fgMade'], punting: ['specialTeams', 'punts']
 };
 
 // --------------------------------------------------------------- handler
@@ -262,6 +294,9 @@ module.exports = async (req, res) => {
 
   const q = (req.query) || {};
   const view = String(q.view || 'score').toLowerCase();
+  // Anything that is not exactly 'season' is a game, so a typo in the
+  // parameter cannot silently switch a graphic onto season totals.
+  const scope = String(q.scope || 'game').toLowerCase() === 'season' ? 'season' : 'game';
   const format = String(q.format || 'xml').toLowerCase();
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -287,6 +322,107 @@ module.exports = async (req, res) => {
   if (keyError) { res.status(keyStatus).json({ error: keyError }); return; }
 
   try {
+    // ================================================================
+    // ?scope=season -- the SAME numbers the season overlays put on air.
+    // ================================================================
+    // broadcast_leaders.html defaults to season scope, so every season
+    // leader board a crew could see had no feed behind it: build your own
+    // graphics and the one thing you could not have was the figure the
+    // shipped overlay was already showing.
+    //
+    // THE DEFINITION OF "THE SEASON" IS NOT REPEATED HERE. api/_season.js
+    // owns it, and api/seasondata.js -- which is what the overlay itself
+    // reads -- calls the same function. That is deliberate: this rule has
+    // been re-implemented three times in this repo and lost a clause every
+    // time. Two copies would disagree the first week somebody changed one,
+    // and the symptom is a feed and an overlay showing different totals for
+    // the same player on the same screen.
+    if (scope === 'season') {
+      if (SEASON_VIEWS.indexOf(view) === -1) {
+        res.status(400).json({
+          error: 'View "' + view + '" has no season equivalent',
+          reason: 'A season has no live scoreboard, current drive or last play.',
+          available: SEASON_VIEWS
+        });
+        return;
+      }
+
+      const teamRes = await db.from('teams')
+        .select('primary_color, secondary_color, logo_url, name, current_season_year')
+        .eq('tenant_id', tenantId).limit(1);
+      const ourTeam = (teamRes.data || [])[0] || {};
+
+      // An explicit season wins; otherwise the team's current one. Same
+      // resolution order as seasondata.js, so a crew that omits ?season on
+      // one address and not the other still gets one answer.
+      let season = parseInt(q.season, 10);
+      let seasonResolvedBy = 'query';
+      if (!Number.isFinite(season)) {
+        season = ourTeam.current_season_year;
+        seasonResolvedBy = 'team-current-season';
+      }
+      if (!season) {
+        res.status(404).json({ error: 'No season specified and no current season set' });
+        return;
+      }
+
+      const { data: games } = await seasonGames(db, tenantId, season);
+      const list = games || [];
+
+      // NO GAMES IS NOT AN ERROR. Preseason, or the first week. The overlay
+      // draws nothing; the feed answers with an empty row set and says why,
+      // so a title bound to it blanks rather than holding last week's
+      // numbers on screen.
+      let rows = [];
+      if (list.length) {
+        const ids = list.map(g => g.id);
+        // Two queries for the whole season, not two per game -- a nine-game
+        // season was eighteen round trips on a feed that polls.
+        const [rosterRes, playsRes] = await Promise.all([
+          db.from('game_rosters').select('*').in('game_id', ids),
+          db.from('plays').select('*').in('game_id', ids)
+            .order('sequence_number', { ascending: true })
+        ]);
+        const rostersBy = {}, playsBy = {};
+        (rosterRes.data || []).forEach(r => {
+          (rostersBy[r.game_id] = rostersBy[r.game_id] || []).push(r); });
+        (playsRes.data || []).forEach(p2 => {
+          (playsBy[p2.game_id] = playsBy[p2.game_id] || []).push(p2); });
+
+        const boxes = list.map(g => engine.buildContext(
+          g, rostersBy[g.id] || [], playsBy[g.id] || [], ourTeam).box);
+        const agg = aggregateSeason(boxes);
+
+        const [bucket, sortKey] = LEADER_BUCKET[view];
+        const teamName = ourTeam.name ||
+          (list[0].our_team_is_home ? list[0].home_team_name : list[0].away_team_name) || '';
+        rows = Object.keys(agg[bucket] || {})
+          .map(name => Object.assign({ player: name, team: teamName }, agg[bucket][name]))
+          // Same split as the game-scoped views: who ATTEMPTED something,
+          // not who is rostered where. See the note on those.
+          .filter(r => view === 'kicking' ? (r.fgAtt || 0) + (r.patAtt || 0) > 0
+                     : view === 'punting' ? (r.punts || 0) > 0
+                     : true)
+          .sort((a, b) => (b[sortKey] || 0) - (a[sortKey] || 0));
+      }
+
+      const seasonMeta = {
+        view, scope: 'season', season: String(season),
+        games: String(list.length),
+        team: ourTeam.name || '',
+        onAir: 'n/a',
+        resolvedBy: seasonResolvedBy,
+        updated: new Date().toISOString()
+      };
+      if (format === 'json') {
+        res.status(200).json(Object.assign({}, seasonMeta, { rows }));
+        return;
+      }
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.status(200).send(toXml('player', rows, seasonMeta));
+      return;
+    }
+
     // Which game? THE FLAG, and only the flag.
     // SCOPED TO THE TENANT THE KEY NAMES. Without this the endpoint
     // serves whichever school happens to be on air — and after 010 the

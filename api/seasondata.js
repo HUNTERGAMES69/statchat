@@ -18,6 +18,7 @@
 // waits for the whistle.
 
 const { createClient } = require('@supabase/supabase-js');
+const { seasonGames } = require('./_season.js');
 const { tenantFromKey } = require('./_tenant');
 
 module.exports = async (req, res) => {
@@ -74,35 +75,18 @@ module.exports = async (req, res) => {
       // deleted. Same shape as the tenant scoping this file already spells
       // out one line above -- RLS would have caught it in the app, and here
       // nothing does.
-    const { data: games, error: gamesErr } = await db.from('games')
-      .select('*').eq('season_year', season).eq('status', 'final')
-      .is('deleted_at', null)
-      // AND NOT PRESEASON. A third season-wide surface that never picked up
-      // the rule the other two follow.
-      //
-      // is_preseason arrived with season_report.html and player_report.html
-      // -- "both season-wide aggregation surfaces", as its own suite still
-      // calls them. This endpoint became a third one when the broadcast
-      // overlays were built, and nothing here excluded a scrimmage from a
-      // school's season leaders.
-      //
-      // IT ALSO LET THE SAMPLE GAME THROUGH. 028 marks the sample
-      // is_preseason on the stated grounds that "every season-wide aggregate
-      // already excludes preseason games" -- true of the two that existed,
-      // not of this one. So every school seeded with a sample has had an
-      // invented game in its broadcast season leaders.
-      //
-      // .or() RATHER THAN .eq('is_preseason', false), and this is the whole
-      // trap: the column is NULL on every game saved before it existed, and
-      // NULL = false is NULL in SQL rather than true. A plain equality
-      // filter would silently drop every pre-existing game out of every
-      // season leader board. Same form player_report.html uses, for the
-      // same reason.
-      .or('is_preseason.is.null,is_preseason.eq.false')
-      // SCOPED. Without this the endpoint returns every school's season
-      // for that year, not just the one whose key was presented.
-      .eq('tenant_id', tenantId)
-      .order('game_date', { ascending: true });
+    // THE QUERY MOVED TO api/_season.js on 1 Sep 2026, unchanged, when
+    // api/feed.js grew a season scope and would otherwise have become the
+    // FOURTH copy of this rule. Every comment explaining every clause --
+    // the deleted_at trap, the nullable-boolean .or(), the tenant scoping,
+    // why the sample game is excluded -- moved with it, so none of that
+    // reasoning was lost, only relocated.
+    //
+    // NOTHING ABOUT WHICH GAMES COUNT HAS CHANGED. If it had, the overlay
+    // reading this endpoint and the feed reading that module would disagree
+    // about the same player's season total, on two graphics in the same
+    // show. That is the failure this consolidation exists to prevent.
+    const { data: games, error: gamesErr } = await seasonGames(db, tenantId, season);
     if (gamesErr) throw gamesErr;
 
     if (!games || !games.length) {
