@@ -657,7 +657,6 @@
       ['FG','PAT','KO','P'].map(function(d){ return { c:BC_KICK, d:d }; }) }
   };
   const bcChosen = {};   // unit:index -> chosen name, for shared numbers
-  const bcTwoWay = {};   // jersey number -> confirmed as a two-way starter
   const bcK = function(u,i){ return u + ':' + i; };
   const bcInput = function(u,i){
     return document.querySelector('input.bcNum[data-unit="'+u+'"][data-i="'+i+'"]'); };
@@ -703,17 +702,10 @@
     }).join('');
   }
 
-  // The first slot in a unit holding a number is the one that counts.
-  function bcFirstSlotWith(u, num){
-    for (let i = 0; i < BC_UNITS[u].slots.length; i++) if (bcVal(u,i) === num) return i;
-    return -1;
-  }
-  function bcNameForNumber(u, num){
-    const i = bcFirstSlotWith(u, num);
-    if (i < 0) return '';
-    const c = candidatesForNumber('our', num);
-    return bcChosen[bcK(u,i)] || (c.length === 1 ? c[0] : '');
-  }
+  // bcFirstSlotWith() and bcNameForNumber() lived here until 1 Sep 2026.
+  // Their only caller was the two-way starter prompt, removed the same day;
+  // leaving them behind would be two functions nothing calls, which read as
+  // something a later edit is safe to rely on.
 
   // ONE PERSON, ONE LINE, on special teams. Slots holding the same player
   // collapse into a single row whose position is the slots joined by "/",
@@ -804,30 +796,18 @@
         }
       });
 
-      // ACROSS offence and defence is allowed and asked about once. A team
-      // without the roster to two-platoon plays its best athletes both ways;
-      // refusing that would make the card wrong for exactly the schools most
-      // likely to want one. But a typo and a two-way starter look identical
-      // to software, so only the coach can say which this is.
-      if (u !== 'special'){
-        const other = (u === 'offense') ? 'defense' : 'offense';
-        Object.keys(dupes).forEach(function(num){
-          const there = [];
-          BC_UNITS[other].slots.forEach(function(s2,j){ if (bcVal(other,j) === num) there.push(bcPos(other,j)); });
-          if (!there.length) return;
-          const nm = bcNameForNumber(u, num);
-          if (bcTwoWay[num]){
-            lines.push('<div style="color:var(--sc-blue,#5aa9f0); margin-bottom:3px;">⇄ #' + num +
-              (nm ? ' ' + nm : '') + ' — two-way starter, also at <b>' + there.join('/') + '</b> on ' +
-              other + '. On both cards.</div>');
-          } else {
-            lines.push('<div style="background:var(--sc-amber-tint); border-left:3px solid var(--sc-amber); padding:6px 9px; border-radius:0 4px 4px 0; margin:4px 0;">⇄ #' +
-              num + (nm ? ' ' + nm : '') + ' is also in the ' + other + ' lineup at <b>' + there.join('/') +
-              '</b>.<div><button type="button" class="bcTwoWay" data-num="' + num +
-              '" style="margin-top:4px; background:var(--sc-raise,#20272f); color:var(--sc-ink,#eef1f4); border:1px solid var(--sc-rule,#2b333d); border-radius:4px; padding:3px 9px; font-size:12.5px; cursor:pointer;">Yes — two-way starter</button></div></div>');
-          }
-        });
-      }
+      // NOTHING IS SAID ABOUT A NUMBER APPEARING ON BOTH UNITS. This used to
+      // flag it and ask "two-way starter?", on the reasoning that a typo and
+      // a two-way starter look identical to software. In practice they do
+      // not: offence and defence draw from different number ranges, and #0
+      // on offence is almost always a different boy from #0 on defence.
+      // Andy, 1 Sep 2026: "0 on offense and 0 on defense are TWO different
+      // players, not a two way player. Remove the two way warning."
+      //
+      // A question asked on every lineup and answered "no, different boys"
+      // every time is not a safeguard, it is noise -- and noise next to the
+      // duplicate warning that DOES matter (same number twice on one unit,
+      // which the rules forbid) makes the real one easier to skip past.
       const box = document.getElementById('bcRes_' + u);
       if (box) box.innerHTML = lines.join('');
     });
@@ -937,8 +917,6 @@
   document.addEventListener('click', function(e){
     const fill = e.target.closest ? e.target.closest('button.bcFill') : null;
     if (fill){ bcFillFromSeeds(); return; }
-    const tw = e.target.closest ? e.target.closest('button.bcTwoWay') : null;
-    if (tw){ bcTwoWay[tw.dataset.num] = true; bcRender(); return; }
     const pick = e.target.closest ? e.target.closest('button.bcPick') : null;
     if (pick){ bcChosen[pick.dataset.k] = pick.dataset.name; bcRender(); return; }
   });
@@ -1051,16 +1029,6 @@
           if (el) el.value = num;
           if (nm) bcChosen[bcK(u, idx)] = nm;
         });
-      });
-    });
-    // A saved two-way starter has already been confirmed once; asking again
-    // every time the game is opened would be nagging about a settled answer.
-    Object.keys(BC_UNITS).forEach(function(u){
-      if (u === 'special') return;
-      BC_UNITS[u].slots.forEach(function(sl,i){
-        const num = bcVal(u,i); if (!num) return;
-        const other = (u === 'offense') ? 'defense' : 'offense';
-        BC_UNITS[other].slots.forEach(function(s2,j){ if (bcVal(other,j) === num) bcTwoWay[num] = true; });
       });
     });
     // STAYS COLLAPSED, even with a lineup saved. This used to open itself
@@ -2343,6 +2311,46 @@
     // when creating a new game, or when actively replacing it.
     if (Object.keys(oppResolved).length === 0 && !oppRosterSkipped && (!editGameId || oppRosterTouched)){
       showMsg('setupMsg', 'Upload the opponent roster, or click "Skip roster" to continue with manual entry.', 'error');
+      return;
+    }
+
+    // A REFUSED DUPLICATE MUST NOT BE SAVED QUIETLY. Reported 1 Sep 2026:
+    // eleven defenders on screen, ten in the database, SS blank on the next
+    // visit and nothing to say why.
+    //
+    // The warning was already drawn and the box already outlined red -- but
+    // only collectBroadcastStarters() acted on it, by dropping the row. The
+    // duplicate rule is enforced on `change`, which a coach who types the
+    // last number and clicks straight on Save can skip entirely. So the
+    // screen said eleven, the tally said eleven, and ten were stored.
+    //
+    // Refusing the save is the honest end of that rule: a number can only
+    // start once per unit, so a lineup that breaks it is not a lineup we can
+    // store a truthful version of. Named down to the slot, because "there is
+    // a duplicate somewhere in eleven boxes" is not an instruction.
+    const bcClash = (function(){
+      const out = [];
+      Object.keys(BC_UNITS).forEach(function(u){
+        if (u === 'special') return;      // special teams COMBINES, by design
+        const seen = {};
+        BC_UNITS[u].slots.forEach(function(sl,i){
+          const num = bcVal(u,i); if (!num) return;
+          if (seen[num] !== undefined){
+            out.push('#' + num + ' is in two ' + u + ' slots (' +
+                     bcPos(u, seen[num]) + ' and ' + bcPos(u,i) + ')');
+          } else seen[num] = i;
+        });
+      });
+      return out;
+    })();
+    if (bcClash.length){
+      const w = document.getElementById('bcStartersWrap');
+      if (w) w.open = true;                       // it is no use hidden
+      const g = document.getElementById('bcGroups');
+      if (g && g.scrollIntoView) g.scrollIntoView({ block:'center' });
+      showMsg('setupMsg', 'Starting lineups: ' + bcClash.join('; ') +
+        '. A number can only start once on a unit, so clear one of them before saving. ' +
+        'Everything else on this page is fine.', 'error');
       return;
     }
 
