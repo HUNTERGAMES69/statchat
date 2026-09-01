@@ -1,0 +1,80 @@
+# StatChat — robots.txt
+# ============================================================================
+# THE APP IS NOT CONTENT. Everything under a login is a page a crawler cannot
+# render and a stranger cannot use: to Google it is thin or empty, and every
+# request spent on it is a request not spent on the four pages that are meant
+# to be found. Blocked here, and each of those files also carries its own
+# noindex meta tag -- robots.txt stops the crawl, the meta tag stops the
+# indexing, and the two are not the same thing. A URL that is linked from
+# elsewhere can be indexed WITHOUT being crawled, which is exactly when a
+# disallow alone leaves a bare title in the results.
+#
+# THE FIVE PAGES THAT ARE MEANT TO BE FOUND are the brochure, the broadcast
+# page and the three guides. They are public, need no account, and are listed
+# in the sitemap.
+
+User-agent: *
+
+# --- the app ---------------------------------------------------------------
+Disallow: /account.html
+Disallow: /create_game.html
+Disallow: /customize.html
+Disallow: /dashboard.html
+Disallow: /game.html
+Disallow: /game_legacy.html
+Disallow: /gamedark.html
+Disallow: /login.html
+Disallow: /platform.html
+Disallow: /play_log.html
+Disallow: /player_report.html
+Disallow: /reports.html
+Disallow: /roster.html
+Disallow: /scoresummary.html
+Disallow: /scoring_summary.html
+Disallow: /season_report.html
+Disallow: /stat_package.html
+Disallow: /view.html
+
+# --- NOT recap.html --------------------------------------------------------
+# A GAME RECAP IS MEANT TO BE SHARED. It is the public link a school sends to
+# local media, it needs no account, and it carries og:title, og:description
+# and og:image because somebody built it to preview properly when it is
+# posted. Facebook's and Twitter's preview crawlers honor robots.txt, so a
+# Disallow here does not stop the page being read by a person -- it stops the
+# PREVIEW CARD being built, and the link renders on a school's page as a bare
+# URL. That is a product feature quietly breaking with nothing on screen.
+#
+# It still must not turn up in search results, and it does not: recap.html
+# carries noindex. That is the right tool for it, and it is the tool that
+# only works if the crawler is ALLOWED IN to read the tag. A Disallow with
+# no crawl behind it is how a URL gets indexed as a bare title anyway.
+#   crawl allowed + noindex  = shareable, never in search   <- what we want
+#   crawl blocked + noindex  = no preview card, and the noindex is unread
+# tests/seo_check.js asserts no page carrying Open Graph tags is disallowed.
+
+# --- broadcast overlays and the setup page ---------------------------------
+# These are composited into a live picture or hand out per-tenant keys.
+# Neither is anything a search result should ever contain.
+Disallow: /broadcast.html
+Disallow: /broadcast_drive.html
+Disallow: /broadcast_leaders.html
+Disallow: /broadcast_stats.html
+Disallow: /broadcast_setup.html
+# NOT /broadcasting.html. These rules are prefix matches, and the closest one
+# above is "/broadcast.html" -- the character after "broadcast" is a dot, so it
+# cannot match "broadcasting". The marketing page is meant to be crawled, and
+# tests/robots_check.js asserts that it still is.
+
+# --- prototypes and mocks --------------------------------------------------
+# Not deleted, because they are how a screen gets designed. Not indexed,
+# because a half-finished copy of a real page outranking the real one is a
+# genuine way to lose a customer.
+Disallow: /*_mock.html
+Disallow: /gamemock.html
+Disallow: /viewmock.html
+Disallow: /logo-concepts.html
+
+# --- the API ---------------------------------------------------------------
+Disallow: /api/
+
+Sitemap: https://statchat.co/sitemap.xml
