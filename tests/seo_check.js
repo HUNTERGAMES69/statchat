@@ -155,8 +155,9 @@ if (fs.existsSync(path.join(ROOT, 'og-image.png'))) {
 // Nothing on screen says so, which is why this is asserted rather than
 // remembered. Keeping it out of SEARCH is the noindex meta tag's job, and
 // that tag only works if the crawler is let in to read it.
-// Mocks excluded: a prototype has no sharing role, and recap_mock.html
-// carries og: tags only because it is a copy of the page that does.
+// Mocks excluded: a prototype has no sharing role. The mock files were
+// deleted on 1 Sep 2026 so this currently excludes nothing, and it stays
+// because the exclusion is the rule, not a workaround for one old file.
 const shareable = all.filter(f => !/_?mock/.test(f) &&
   /<meta property="og:title"/.test(read(f)));
 chk('some page carries Open Graph tags, so this check is testing something',

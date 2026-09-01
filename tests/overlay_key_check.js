@@ -50,7 +50,29 @@ function run() {
     for (let i = s.indexOf(needle); i !== -1; i = s.indexOf(needle, i + 1)) idxs.push(i);
     if (!idxs.length) bad(file, 'no fetch of /api/' + endpoint + ' found — has it moved?');
     idxs.forEach(i => {
-      const window = s.slice(Math.max(0, i - 500), i + 220);
+      // THE WINDOW IS THE ENCLOSING FUNCTION, not a fixed number of
+      // characters. It was `i - 500`, and on 31 Aug 2026 that reported
+      // broadcast_leaders.html as fetching without a key when it plainly
+      // does: the query string is still assembled at the top of the
+      // function, but a branch for the game-scoped boards was added
+      // between the two, and the distance grew to 1,285 characters.
+      //
+      // The key was on the wire the whole time -- proved by driving the
+      // page against a real server and reading the request URL. Only the
+      // check was wrong, which is the failure this file's own note above
+      // warns about: a check that only passes when the code is written the
+      // way the check imagined is worse than no check.
+      //
+      // A function boundary is the honest limit. `sq` cannot be built in
+      // one function and used in another, so anything outside it could not
+      // have contributed to this fetch anyway.
+      const before = s.slice(0, i);
+      const fnStart = Math.max(
+        before.lastIndexOf('\n  function '),
+        before.lastIndexOf('\n  async function '),
+        before.lastIndexOf('\n    function '),
+        before.lastIndexOf('\n    async function '));
+      const window = s.slice(fnStart === -1 ? Math.max(0, i - 500) : fnStart, i + 220);
       if (!/OVERLAY_KEY/.test(window)) {
         bad(file, 'fetches /api/' + endpoint + ' WITHOUT the key. That request returns 401 ' +
                   'since migration 010 and the overlay stays blank.');
