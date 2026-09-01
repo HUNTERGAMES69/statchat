@@ -141,6 +141,64 @@
      depth where a border alone only draws a rectangle. */
   input:not([type="radio"]):not([type="checkbox"]), select { padding:8px; border:1px solid #3d4854; background-color:#10141a; color:var(--sc-ink); border-radius:6px; font-size:14px; box-sizing:border-box; box-shadow:inset 0 1px 3px rgba(0,0,0,.55); }
   input[type="color"] { width:64px; height:40px; padding:2px; cursor:pointer; }
+
+  /* ---- THE BROADCAST LINEUP SLOTS -------------------------------------
+     Reported 1 Sep 2026: "fields are very hard to see". Two faults, and
+     the second was the worse one.
+
+     1. The jersey boxes inherited the page's sunk-well fill (#10141a on a
+        #191f27 card). That reads as depth on a full-width field, but at
+        38px square with a hairline border it reads as a shadow, not a
+        place to type. They are lighter than the panel now, not darker,
+        with a real border and the number set bold -- a jersey number is
+        the content here, so it gets the weight.
+
+     2. The POSITION SELECTS were the thing actually drawing boxes. Their
+        inline background and border were transparent, but the page's
+        global `select` rule also sets an inset box-shadow, which is NOT
+        a background or a border and so survived -- painting a rectangle
+        around every label. The result was backwards: the label looked
+        like a field and the field looked like nothing. A select is a
+        LABEL you can change, so it is drawn as one, with a caret to say
+        it opens and a dotted rule to say it is not fixed. */
+  /* SPECIFICITY, NOT PREFERENCE. The global field rule is
+     `input:not([type="radio"]):not([type="checkbox"])` -- 0,2,1 -- so a
+     bare `.bcNum` at 0,1,0 lost every declaration it made and the slots
+     kept the sunk-well fill this block exists to replace. Matching on the
+     type as well brings it to 0,2,1, and this block is later in the file,
+     so it wins the tie. Checked with getComputedStyle, not by eye. */
+  input[type="text"].bcNum {
+    width:40px; text-align:center; padding:6px 2px;
+    background-color:var(--sc-raise, #20272f); color:var(--sc-ink, #eef1f4);
+    border:1px solid var(--sc-rule-strong, #6b7d8f); border-radius:5px;
+    font-size:14.5px; font-weight:700; font-family:inherit;
+    box-shadow:none; font-variant-numeric:tabular-nums;
+  }
+  input[type="text"].bcNum:hover { border-color:var(--sc-ink-muted, #8d99a6); }
+  input[type="text"].bcNum:focus {
+    outline:none; border-color:var(--sc-amber, #ffc72c);
+    box-shadow:0 0 0 2px rgba(255,199,44,.28);
+  }
+  /* A FILLED SLOT SHOULD READ ACROSS THE ROW. Twenty-six boxes is a lot to
+     scan for the three that have something in them. */
+  input[type="text"].bcNum:not(:placeholder-shown) { border-color:var(--sc-green, #a3d93f); }
+
+  select.bcPos {
+    appearance:none; -webkit-appearance:none;
+    background-color:transparent; box-shadow:none;
+    border:0; border-bottom:1px dotted var(--sc-rule-strong, #6b7d8f);
+    border-radius:0; color:var(--sc-ink-soft, #c7d0da);
+    font-size:12.5px; font-family:inherit; cursor:pointer;
+    padding:1px 13px 2px 2px; min-width:46px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='9' height='6'><path d='M0 0h9L4.5 6z' fill='%238d99a6'/></svg>");
+    background-repeat:no-repeat; background-position:right 1px center;
+  }
+  select.bcPos:hover { color:var(--sc-ink, #eef1f4); border-bottom-color:var(--sc-amber, #ffc72c); }
+  select.bcPos:focus { outline:none; border-bottom-color:var(--sc-amber, #ffc72c); }
+  /* A FIXED label -- QB, LT, C -- is not changeable, so it carries no
+     caret and no rule. Same size and color as a select's text so the two
+     rows line up. */
+  .bcFixed { font-size:12.5px; color:var(--sc-ink-soft, #c7d0da); min-width:26px; }
   /* STACKS ON A PHONE. Two columns of inputs at 380px gives each field
      about 160px, which is not enough for a date picker or a designator, and
      the labels wrap to two lines while the inputs stay short.
@@ -626,11 +684,16 @@
         cfg.slots.map(function(sl,i){
           return '<label style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:var(--sc-ink-soft,#c7d0da);">' +
             (sl.f
-              ? '<span style="font-size:12.5px; color:var(--sc-ink-muted); min-width:22px;">'+sl.f+'</span>'
-              : '<select class="bcPos" data-unit="'+u+'" data-i="'+i+'" style="background:transparent; color:var(--sc-ink-soft,#c7d0da); border:1px solid transparent; border-radius:3px; font-size:12.5px; padding:1px 2px; cursor:pointer; font-family:inherit;">' +
+              ? '<span class="bcFixed">'+sl.f+'</span>'
+              : '<select class="bcPos" data-unit="'+u+'" data-i="'+i+'">' +
                 sl.c.map(function(o){ return '<option'+(o===sl.d?' selected':'')+'>'+o+'</option>'; }).join('') +
                 '</select>') +
-            '<input type="text" class="bcNum" inputmode="numeric" maxlength="2" data-unit="'+u+'" data-i="'+i+'" style="width:38px; text-align:center;"></label>';
+            // placeholder=" " is load-bearing: :not(:placeholder-shown) is
+            // what greens the border of a filled slot, and an input with no
+            // placeholder attribute never matches it.
+            '<input type="text" class="bcNum" inputmode="numeric" maxlength="2" placeholder=" " ' +
+              'aria-label="'+(sl.f || sl.d)+' jersey number" ' +
+              'data-unit="'+u+'" data-i="'+i+'"></label>';
         }).join('') + '</div>' +
         (u==='special'
           ? '<p style="font-size:12.5px; color:var(--sc-ink-muted); margin:6px 0 0; font-style:italic;">One player in more than one slot is combined on the card &mdash; a boy in the FG and PAT slots appears once as <b>FG/PAT</b>, not twice.</p>'
@@ -1000,8 +1063,13 @@
         BC_UNITS[other].slots.forEach(function(s2,j){ if (bcVal(other,j) === num) bcTwoWay[num] = true; });
       });
     });
-    const w = document.getElementById('bcStartersWrap');
-    if (w) w.open = true;      // it has content, so show that it does
+    // STAYS COLLAPSED, even with a lineup saved. This used to open itself
+    // on the theory that a section with content should show it -- but the
+    // section a coach came to the page for is the seeded six above, and
+    // opening 26 slots underneath them pushed the opponent roster off the
+    // screen. The tally in the summary line ("3 / 26") already says there
+    // is something inside, which is the whole job that auto-opening was
+    // doing. Andy, 1 Sep 2026.
     bcRender();
   }
 
