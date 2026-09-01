@@ -108,6 +108,44 @@ chk('...while still blocking the /broadcast.html overlay beside it',
 chk('...and the other overlays', ['/broadcast_drive.html', '/broadcast_leaders.html',
     '/broadcast_stats.html', '/broadcast_setup.html'].every(u => blockedBy(u).length > 0));
 
+// ---- THE SHARE CARD --------------------------------------------------
+// og:image was logo.png, a 512x512 square, on every page that had one. The
+// platforms crop to 1.91:1, so a square is letterboxed or cut through the
+// middle and some scrapers drop it entirely. Worse, recap.html and its mock
+// pointed at https://nevillestatchat.vercel.app/logo.png -- one tenant's
+// deployment serving the preview image for every other tenant's shared game
+// recap, and a dead card for all of them the day that deployment moves.
+// Both are asserted here because neither shows on the page itself: you find
+// out when somebody posts a link and it looks broken.
+const OG = 'https://statchat.co/og-image.png';
+const withOg = all.filter(f => /<meta property="og:image"/.test(read(f)));
+withOg.forEach(f => {
+  const img = (read(f).match(/<meta property="og:image" content="([^"]*)"/) || [])[1];
+  chk(f + ' points og:image at the shared card on statchat.co', img === OG, img);
+  const tw = (read(f).match(/<meta name="twitter:image" content="([^"]*)"/) || [])[1];
+  if (tw) chk('  ...and twitter:image with it', tw === OG, tw);
+});
+// NO TENANT DOMAIN ANYWHERE IN A SOCIAL TAG. Stated as its own check so a
+// new page copied from an old one cannot reintroduce it quietly.
+const leaks = all.filter(f =>
+  (read(f).match(/<meta (?:property="og:|name="twitter:)[^>]*>/g) || [])
+    .some(t => /vercel\.app/.test(t)));
+chk('no og: or twitter: tag anywhere names a tenant Vercel domain',
+    leaks.length === 0, JSON.stringify(leaks));
+
+// The file has to exist, and be the shape the platforms crop to.
+chk('og-image.png exists in the repo', fs.existsSync(path.join(ROOT, 'og-image.png')));
+if (fs.existsSync(path.join(ROOT, 'og-image.png'))) {
+  // PNG header: width and height are big-endian uint32 at bytes 16 and 20.
+  const buf = fs.readFileSync(path.join(ROOT, 'og-image.png'));
+  const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20);
+  chk('og-image.png is 1200x630, the 1.91:1 the platforms crop to',
+      w === 1200 && h === 630, w + 'x' + h);
+  // Twitter drops images over 5MB; Facebook is slower above about 1MB.
+  chk('og-image.png is small enough to be fetched quickly',
+      buf.length < 1024 * 1024, Math.round(buf.length / 1024) + ' KB');
+}
+
 // ---- SHAREABLE PAGES MUST STAY CRAWLABLE -----------------------------
 // A page carrying Open Graph tags was built to be posted somewhere: the
 // game recap is the public link a school sends to local media. Facebook's
