@@ -36,7 +36,14 @@ const chk = (l, ok, det) => { if (ok) { pass++; console.log('  ok   ' + l); }
 console.log('=== Deleted games and the on-air flag ===\n');
 
 // ---- the migration says what it does ----------------------------------
-const mig = read('sql/035_delete_game_clears_broadcast.sql');
+// COMMENTS STRIPPED FIRST, ALWAYS. The header of 035 quotes the backfill
+// statement verbatim to spell out its write footprint, so counting
+// "update public.games" across the raw file finds three and the file is
+// failed for documenting itself. Two earlier checks in this repo tripped
+// on their own prose the same way; the rule is to read the SQL, not the
+// explanation of it.
+const migRaw = read('sql/035_delete_game_clears_broadcast.sql');
+const mig = migRaw.replace(/^\s*--.*$/gm, '');
 chk('035 clears is_broadcast inside delete_game',
     /update public\.games\s*\n\s*set deleted_at\s*=\s*now\(\),\s*\n\s*is_broadcast\s*=\s*false/.test(mig));
 chk('...in the SAME statement as the delete, so it cannot half-apply',
@@ -49,6 +56,11 @@ chk('035 backfills the rows that were already in that state',
 ['public.is_super_admin()', 'public.current_tenant_id()', 'public.current_user_role()',
  "array['admin','game_entry']", 'Not permitted to delete that game.'].forEach(needle =>
   chk('035 keeps 012\'s guard: ' + needle, mig.includes(needle)));
+// The transaction wrapper is what makes a part-way failure leave the data
+// untouched. Asserted because it was missing from the first cut of this file.
+chk('035 runs in one transaction', /^\s*begin;\s*$/m.test(mig) && /^\s*commit;\s*$/m.test(mig));
+chk('...and reports the row count it will change before changing it',
+    /will_be_cleared/.test(migRaw) && /still_wrong_should_be_0/.test(migRaw));
 chk('035 is still SECURITY DEFINER with a pinned search_path',
     /security definer set search_path to 'public'/.test(mig));
 chk('035 leaves the broadcast audit columns alone',
