@@ -508,6 +508,83 @@
     loadRoster();
   });
 
+
+  // ===================================================================
+  // CASE-ONLY DUPLICATE NAMES
+  // ===================================================================
+  // Two spellings of one player split every stat he has. The engine keys
+  // its buckets by DISPLAY NAME and does so deliberately -- see the note
+  // at engine.js:1195, where keying on jersey number instead merged two
+  // players who shared a number and credited Powell's carries to Reddick.
+  // Name-keying is right; it just means the spelling is load-bearing.
+  //
+  // season_report.html and broadcast_leaders.html already merge case
+  // variants when they DISPLAY a season. That is a safety net over data
+  // that is already wrong, and it cannot fix a stat package, a CSV export
+  // or anything written later. This catches it at the only point where a
+  // person can still say which spelling was meant.
+  //
+  // THE UPLOAD PATH ALREADY DOES THIS -- it lowercases before comparing,
+  // so re-uploading a roster in different caps skips rather than
+  // duplicates. Only the two manual paths, add and edit, had no check.
+  //
+  // WHITESPACE IS NORMALISED TOO. "Van  Dyke" and "Van Dyke" are the same
+  // trap wearing a different hat, and a double space is invisible on
+  // screen -- which makes it worse, not better.
+  const nameKey = (n) => String(n || '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+  // A player's name goes into innerHTML below, so it gets escaped first.
+  // NOTE: renderRoster() above interpolates p.name straight into innerHTML
+  // without this, and has since it was written. Not changed here because it
+  // is not what this edit is about -- reported separately.
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  // Returns the existing player whose name differs ONLY by case or spacing,
+  // or null. An EXACT match is not returned: two players really can share a
+  // name, and a scorer typing the same one twice is a different question
+  // from a scorer typing it differently.
+  async function findCaseOnlyTwin(name, exceptId){
+    const { data, error } = await supabaseClient
+      .from('players').select('id, name')
+      .eq('team_id', ourTeamId).eq('season_year', currentSeasonYear);
+    // A FAILED CHECK MUST NEVER BLOCK A SAVE. This runs on a sideline,
+    // possibly on a phone, possibly seconds before kickoff. If the lookup
+    // cannot answer, the save proceeds -- the safety nets downstream still
+    // catch the display, and a coach who cannot add a player is a worse
+    // outcome than a duplicate spelling.
+    if (error) return null;
+    const want = nameKey(name);
+    return (data || []).find(p =>
+      p.id !== exceptId && nameKey(p.name) === want && p.name.trim() !== name.trim()) || null;
+  }
+
+  // Renders the warning and hands back what the person chose. Resolves
+  // 'existing' (use the spelling already on the roster), 'anyway' (keep
+  // what was typed) or 'cancel'.
+  function askAboutTwin(elId, typed, twin){
+    return new Promise(resolve => {
+      document.getElementById(elId).innerHTML =
+        '<div class="msg warn" id="twinWarn">' +
+          '<strong>' + esc(twin.name) + '</strong> is already on this season\'s roster. ' +
+          'You typed <strong>' + esc(typed) + '</strong> — the same name, spelled differently.' +
+          '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">' +
+            '<button id="twinUseExisting">Use “' + esc(twin.name) + '”</button>' +
+            '<button class="secondary" id="twinAnyway">They are different players</button>' +
+            '<button class="secondary" id="twinCancel">Cancel</button>' +
+          '</div>' +
+          '<div style="margin-top:8px; font-size:13px; color:#666;">' +
+            'Two spellings split a player\'s stats across the season.' +
+          '</div>' +
+        '</div>';
+      const pick = (v) => { document.getElementById(elId).innerHTML = ''; resolve(v); };
+      document.getElementById('twinUseExisting').addEventListener('click', () => pick('existing'));
+      document.getElementById('twinAnyway').addEventListener('click', () => pick('anyway'));
+      document.getElementById('twinCancel').addEventListener('click', () => pick('cancel'));
+    });
+  }
+
   async function loadRoster(){
     clearMsg('rosterMsg');
     await refreshSeasonPicker();
@@ -590,9 +667,18 @@
       const newNumber = row.querySelector('.editNumber').value.trim();
       const newName = row.querySelector('.editName').value.trim();
       const newPosition = row.querySelector('.editPosition').value.trim().toUpperCase();
+      // exceptId = the row being edited, so renaming a player does not
+      // report him as a duplicate of himself.
+      let editName = newName;
+      const editTwin = await findCaseOnlyTwin(newName, id);
+      if (editTwin){
+        const choice = await askAboutTwin('rosterMsg', newName, editTwin);
+        if (choice === 'cancel') return;
+        if (choice === 'existing') editName = editTwin.name;
+      }
       const { error } = await supabaseClient
         .from('players')
-        .update({ name: newName, primary_position: newPosition, default_jersey_number: newNumber })
+        .update({ name: editName, primary_position: newPosition, default_jersey_number: newNumber })
         .eq('id', id);
       if (error){
         showMsg('rosterMsg', error.message, 'error');
@@ -625,9 +711,17 @@
       showMsg('rosterMsg', 'Enter a name before adding a player.', 'error');
       return;
     }
+    // Same spelling, different case? Ask before creating a second player.
+    let nameToSave = name;
+    const twin = await findCaseOnlyTwin(name, null);
+    if (twin){
+      const choice = await askAboutTwin('rosterMsg', name, twin);
+      if (choice === 'cancel') return;
+      if (choice === 'existing') nameToSave = twin.name;
+    }
     const { error } = await supabaseClient
       .from('players')
-      .insert({ team_id: ourTeamId, name, primary_position: position || null, default_jersey_number: number || null, season_year: currentSeasonYear });
+      .insert({ team_id: ourTeamId, name: nameToSave, primary_position: position || null, default_jersey_number: number || null, season_year: currentSeasonYear });
     if (error){
       showMsg('rosterMsg', error.message, 'error');
       return;
