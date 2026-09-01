@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<!-- NOT A PAGE FOR SEARCH. Behind a login, or a prototype, or an
+     overlay composited into a live picture. robots.txt disallows it too;
+     the two do different jobs, and a URL linked from anywhere can be
+     indexed without ever being crawled. -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>StatChat — platform</title>
 <link rel="icon" href="favicon.ico" sizes="any">
@@ -1591,17 +1596,30 @@
     const K_PLATFORM = 'grp:platform';
     const K_UNASSIGNED = 'grp:unassigned';
     const K_ALL = 'grp:all';
+    // A DELETED SCHOOL IS NOT A SCHOOL. Its key is prefixed so it cannot
+    // collide with a live tenant of the same name -- which is a real case,
+    // because deleting one and recreating it is how a school gets moved
+    // between plans, and two groups both reading "Neville High" with no way
+    // to tell which is which is worse than either one alone.
+    const K_GONE = 'grp:deleted:';
     function groupKeyFor(u){
       return u.isSuperAdmin ? K_PLATFORM
            : !u.tenantId    ? K_UNASSIGNED
+           : u.tenantDeleted ? K_GONE + (u.tenantName || u.tenantId)
            : u.tenantName || u.tenantId;
     }
     const heading = k => k === K_PLATFORM ? 'StatChat platform'
                        : k === K_UNASSIGNED ? 'No tenant assigned'
-                       : k;
-    // Platform first, unassigned last, everything else alphabetical.
+                       : k.indexOf(K_GONE) === 0
+                         ? k.slice(K_GONE.length) + ' \u2014 deleted school'
+                         : k;
+    // Platform first, then live schools, then unassigned, then the deleted
+    // ones last. They are the least likely thing to be looking for and the
+    // most confusing to meet among live ones.
     const groupOrder = (a, b) => {
-      const rank = k => k === K_PLATFORM ? 0 : k === K_UNASSIGNED ? 2 : 1;
+      const rank = k => k === K_PLATFORM ? 0
+                      : k.indexOf(K_GONE) === 0 ? 3
+                      : k === K_UNASSIGNED ? 2 : 1;
       return rank(a) - rank(b) || a.localeCompare(b);
     };
 
@@ -1622,7 +1640,15 @@
       const keys = [...new Set(visible.map(groupKeyFor))].sort(groupOrder);
       const current = pick.value;
       pick.innerHTML = '<option value="">Select a tenant\u2026</option>' +
-        '<option value="' + K_ALL + '">All tenants (' + visible.length + ')</option>' +
+        // TWO NUMBERS, BOTH NAMED. This read "All tenants (21)" while 21 was
+        // the number of ACCOUNTS -- the label named one thing and the figure
+        // counted another, so it was read as a tenant count and reported as
+        // one. Saying which is which also makes a mismatch legible: schools
+        // far below accounts is normal, schools ABOVE accounts is not.
+        '<option value="' + K_ALL + '">All tenants (' +
+          keys.filter(k => k !== K_PLATFORM && k !== K_UNASSIGNED).length +
+          ' schools \u00b7 ' + visible.length +
+          (visible.length === 1 ? ' account' : ' accounts') + ')</option>' +
         keys.map(k => '<option value="' + esc(k) + '">' + esc(heading(k)) +
           ' (' + visible.filter(u => groupKeyFor(u) === k).length + ')</option>').join('');
       // A tenant that has gone away between refreshes must not leave the
