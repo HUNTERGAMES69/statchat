@@ -290,8 +290,15 @@ async function typeInto(w, u, i, v){
         'QB=' + inp(w,'offense',0).value + ' RB=' + inp(w,'offense',1).value);
     chk('...including a combined special-teams slot',
         inp(w,'special',0).value === '3', inp(w,'special',0).value);
-    chk('...and the section opens itself, because it has something in it',
-        !!w.document.getElementById('bcStartersWrap').open);
+    // COLLAPSED EVEN WITH A LINEUP SAVED. It used to open itself, and that
+    // pushed the opponent roster off the screen on the page a coach opened
+    // to change a kickoff time. The summary tally says there is something
+    // inside without spending 26 rows to say it. Andy, 1 Sep 2026.
+    chk('...and the section stays collapsed, letting the tally say it has content',
+        !w.document.getElementById('bcStartersWrap').open);
+    chk('...with the tally actually showing a count, or nothing says it at all',
+        /\d+\s*\/\s*26/.test(w.document.getElementById('bcSummary').textContent),
+        JSON.stringify(w.document.getElementById('bcSummary').textContent));
     chk('...and a two-way starter already confirmed is not asked about again',
         !w.document.querySelector('#bcRes_offense button.bcTwoWay'));
     // A stored duplicate must not survive a re-save.
