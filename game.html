@@ -4652,12 +4652,43 @@ function pickerHtml(list, groupClass, statLabelFn, emptyMsg, stackLayout){
   }).join('');
 }
 const PICKED_BG = 'var(--bg-accent, #e6f1fb)';
+// ONE RULE FOR THE SPOT BOX, SHARED BY EVERYTHING THAT WRITES IT.
+// ======================================================================
+// The app may replace a value the APP put there, or an empty box. A value
+// the SCORER typed is theirs and is never overwritten.
+//
+// `fromCalc` is what tells the two apart, and it is already the flag the
+// return calculators use -- see the listener that deletes it the moment
+// somebody types in the box. The only thing missing was that the two
+// prefills below never SET it, so everything they wrote looked like a
+// scorer's own entry to every calculator that ran afterwards.
+//
+// REPORTED 31 Aug 2026, from a real entry: tap Touchback by accident, tap
+// it off again, then enter the return properly. The 20 the touchback left
+// behind stayed in the spot box, the return calculator saw a value it had
+// not written and refused to touch it, and the drive started on the wrong
+// yard line. The kick was right, the return was right, the takeover spot
+// was wrong -- and nothing on screen said so.
+function spotIsOursToWrite(yl){
+  if (!yl) return false;
+  return yl.dataset.fromCalc === '1' || !String(yl.value || '').trim();
+}
+
 // NFHS spots a touchback at the receiving team's own 20. The spot widget
 // is already labeled from their point of view, so "own" is their side.
-// Pre-filled rather than forced -- the coach can still change it.
+// Pre-filled rather than forced -- the scorer can still change it, and
+// once they do, `fromCalc` is gone and this stops writing.
+//
+// WAS `if (!yl.value)`, which meant a touchback could not correct a spot
+// the calculator had already written either -- enter a return, then
+// realise it was a touchback, and the returned-to spot stayed. Same bug
+// in the other direction.
 function prefillTouchbackSpot(panel, idPrefix){
   const yl = document.getElementById(idPrefix + '_yardline');
-  if (yl && !yl.value) yl.value = '20';
+  if (spotIsOursToWrite(yl)){
+    yl.value = '20';
+    yl.dataset.fromCalc = '1';
+  }
   const own = panel.querySelector('.' + idPrefix + '_side[data-side="own"]');
   if (own) own.click();
 }
@@ -4666,13 +4697,20 @@ function prefillTouchbackSpot(panel, idPrefix){
 // on a kickoff is labeled for the team taking over, so own 35 is the
 // receiving team's 35, which is what the rule says and what a coach means.
 //
-// Overwrites an existing value, unlike the touchback prefill. The two are
-// mutually exclusive outcomes, so switching from Touchback to Out of
-// bounds must move the 20 to a 35 -- leaving the 20 in place would save a
-// spot the scorer did not choose and could not see was wrong.
+// Switching from Touchback to Out of bounds must move the 20 to a 35 --
+// leaving the 20 in place would save a spot the scorer did not choose and
+// could not see was wrong. It still does: the touchback's 20 now carries
+// `fromCalc`, so it is the app's to replace.
+//
+// WAS AN UNCONDITIONAL OVERWRITE, which also clobbered a spot the scorer
+// had typed themselves. Now it follows the same rule as everything else
+// that writes this box.
 function prefillOobSpot(panel, idPrefix){
   const yl = document.getElementById(idPrefix + '_yardline');
-  if (yl) yl.value = '35';
+  if (spotIsOursToWrite(yl)){
+    yl.value = '35';
+    yl.dataset.fromCalc = '1';
+  }
   const own = panel.querySelector('.' + idPrefix + '_side[data-side="own"]');
   if (own) own.click();
 }
