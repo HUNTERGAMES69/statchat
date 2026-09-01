@@ -142,6 +142,49 @@
   .scopeTag { font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
     background: var(--sc-raise, #20272f); border: 1px solid var(--sc-rule, #2b333d);
     border-radius: 3px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+
+  /* ---- THE TWO THINGS YOU PASTE INTO vMIX, IN ORDER ------------------
+     Reported 1 Sep 2026: "the XPath value for each of the different data
+     options is not apparent for end users." It was documented -- in a
+     table on vmix.html -- which is the wrong page. The crew is standing
+     HERE, copying an address, and the next thing vMix asks them for was
+     one click away somewhere else. Worse, that table listed eight views
+     while the API served eleven, so kicking, punting and starters had no
+     XPath published anywhere at all.
+
+     Both values now sit in the row you copy from, numbered 1 and 2 in the
+     order the Data Sources Manager asks for them. Nobody has to know the
+     rule that the element name changes with the view. */
+  .step { display:flex; align-items:flex-start; gap:8px; }
+  .step + .step { margin-top:7px; }
+  .stepNo { flex:none; width:17px; height:17px; margin-top:2px; border-radius:50%;
+    background:var(--sc-raise, #20272f); border:1px solid var(--sc-rule-strong, #6b7d8f);
+    color:var(--sc-ink, #eef1f4); font-size:10.5px; font-weight:700;
+    line-height:16px; text-align:center; }
+  .stepBody { flex:1 1 auto; min-width:0; }
+  .stepLabel { font-size:10.5px; text-transform:uppercase; letter-spacing:.07em;
+    color:var(--muted); font-weight:700; margin-bottom:2px; }
+  .step code { display:inline-block; max-width:100%; }
+  /* The XPath is short and exact -- given its own weight so it does not
+     read as a footnote to the address above it. */
+  /* FILL AND INK WRITTEN TOGETHER, and neither borrowed from a token this
+     page does not define. First pass used var(--sc-amber-tint, <dark rgba>)
+     -- and the fallback never fired, because statchat.css DOES define
+     --sc-amber-tint, as the LIGHT theme's #fff3cd. The result was a cream
+     chip carrying near-white text: invisible.
+     This page overrides --sc-amber and --sc-amber-soft in its own :root but
+     not --sc-amber-tint, so reading that token reaches across to the shared
+     light palette. Same class of fault as the one create_game.html's
+     shared-number box hit with --sc-amber-soft, one token over. Both values
+     below come from tokens this page owns. */
+  .xpath code { background:var(--sc-amber-soft, rgba(255,199,44,.10));
+    color:var(--sc-amber-text, #ffc72c);
+    border:1px solid var(--sc-amber, #ffc72c); font-size:12px; font-weight:700;
+    word-break:normal; }
+  .copy.mini { padding:3px 8px; font-size:11px; }
+  /* JSON has no XPath. Saying so beats hiding the step and leaving a
+     reader to wonder whether the page forgot it. */
+  .noxpath { font-size:11.5px; color:var(--muted); font-style:italic; }
 </style>
 </head>
 <body>
@@ -185,7 +228,7 @@
         <button class="send" id="emailBtn">Email to the crew</button>
       </div>
       <table>
-        <thead><tr><th>Graphic</th><th>What it gives you</th><th>Address</th><th></th></tr></thead>
+        <thead><tr><th>Graphic</th><th style="width:47%;">Paste into vMix</th><th>Columns you can bind</th></tr></thead>
         <tbody id="feedRows"></tbody>
       </table>
     </div>
@@ -209,9 +252,11 @@
       </p>
       <p class="hint">
         <strong>vMix, in short:</strong> the menu icon at the bottom right of the
-        main window &rarr; Data Sources Manager &rarr; add &rarr; XML, paste the
-        address, update interval 1&ndash;2 seconds, and set the XPath for that
-        feed. Then map each column onto a field in your title.<br>
+        main window &rarr; Data Sources Manager &rarr; add &rarr; XML. Then paste
+        <strong>1 Address</strong> and <strong>2 XPath</strong> from the row below
+        &mdash; they are numbered in the order vMix asks for them &mdash; set the
+        update interval to 1&ndash;2 seconds, and map each column onto a field in
+        your title.<br>
         <strong>Anything else:</strong> the feed is a plain web address returning XML
         or JSON, so any software that can poll a URL will read it. Switch the format
         above to whichever your package prefers.
@@ -368,9 +413,22 @@ const SEASON_CAPABLE = ['rushing', 'passing', 'receiving', 'defense', 'kicking',
   // takes the format explicitly.
   const feedUrl = (view, extra) => feedUrlFor(view, format, extra);
 
-  function copyBtn(url){
+  // THE ELEMENT NAME CHANGES WITH THE VIEW, which is the whole reason one
+  // XPath does not work for all of them and the whole reason this was hard
+  // to guess. Mirrors ROW_NAME in api/feed.js; tests/feed_xpath_check.js
+  // parses both and fails if they ever disagree, so a twelfth view cannot
+  // ship with this table quietly stale -- which is exactly how kicking,
+  // punting and starters ended up with no published XPath.
+  const ROW_NAME = {
+    score:'game', drive:'drive', lastplay:'play', teamstats:'team',
+    rushing:'player', passing:'player', receiving:'player', defense:'player',
+    kicking:'player', punting:'player', starters:'starter'
+  };
+  const xpathFor = view => '/feed/' + (ROW_NAME[view] || 'row');
+
+  function copyBtn(url, mini){
     const b = document.createElement('button');
-    b.className = 'copy'; b.textContent = 'Copy';
+    b.className = 'copy' + (mini ? ' mini' : ''); b.textContent = 'Copy';
     b.addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(url); }
       catch (e) {
@@ -384,21 +442,56 @@ const SEASON_CAPABLE = ['rushing', 'passing', 'receiving', 'defense', 'kicking',
     return b;
   }
 
+  // ONE CELL, TWO NUMBERED STEPS, in the order the Data Sources Manager
+  // asks for them: paste the address, then set the XPath. Each carries its
+  // own Copy button, because a value you can see but have to retype is a
+  // value somebody will mistype -- and /feed/player against /feed/starter
+  // is a one-word error that produces an empty source with no message.
+  function stepCell(url, view){
+    const wrap = document.createElement('div');
+
+    const s1 = document.createElement('div');
+    s1.className = 'step';
+    s1.innerHTML = '<span class="stepNo">1</span>' +
+      '<div class="stepBody"><div class="stepLabel">Address</div>' +
+      '<code></code></div>';
+    s1.querySelector('code').textContent = url;
+    s1.querySelector('.stepBody').appendChild(copyBtn(url, true));
+    wrap.appendChild(s1);
+
+    const s2 = document.createElement('div');
+    s2.className = 'step xpath';
+    if (format === 'xml'){
+      s2.innerHTML = '<span class="stepNo">2</span>' +
+        '<div class="stepBody"><div class="stepLabel">XPath</div><code></code></div>';
+      const xp = xpathFor(view);
+      s2.querySelector('code').textContent = xp;
+      s2.querySelector('.stepBody').appendChild(copyBtn(xp, true));
+    } else {
+      // NOT HIDDEN. A step that vanishes reads as a page that forgot it;
+      // vMix cannot bind the JSON shape at all, and saying which format to
+      // switch to is more use than silence.
+      s2.innerHTML = '<span class="stepNo">2</span>' +
+        '<div class="stepBody"><div class="stepLabel">XPath</div>' +
+        '<span class="noxpath">JSON has no XPath &mdash; switch the format to XML for vMix.</span></div>';
+    }
+    wrap.appendChild(s2);
+    return wrap;
+  }
+
   function renderFeeds(){
     const body = document.getElementById('feedRows');
     body.innerHTML = '';
     FEEDS.forEach(([view, label, shape, fields, extra]) => {
       const url = feedUrl(view, extra);
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td class="what">' + label + '</td>' +
-                     '<td class="desc">' + shape +
-                       '<div class="fields">' +
-                       fields.split(' ').map(f => '<code>' + f + '</code>').join('') +
-                       '</div></td>' +
-                     '<td><code>' + url + '</code></td>';
-      const td = document.createElement('td');
-      td.appendChild(copyBtn(url));
-      tr.appendChild(td);
+      tr.innerHTML =
+        '<td class="what">' + label + '<div class="stepLabel" style="margin-top:4px; font-weight:600; text-transform:none; letter-spacing:0;">' + shape + '</div></td>' +
+        '<td class="desc"></td>' +
+        '<td class="desc"><div class="fields">' +
+          fields.split(' ').map(f => '<code>' + f + '</code>').join('') +
+        '</div></td>';
+      tr.children[1].appendChild(stepCell(url, view));
       body.appendChild(tr);
 
       // THE SEASON ADDRESS SITS UNDER ITS GAME ONE, not in a separate
@@ -410,13 +503,15 @@ const SEASON_CAPABLE = ['rushing', 'passing', 'receiving', 'defense', 'kicking',
         const sTr = document.createElement('tr');
         sTr.className = 'seasonRow';
         sTr.innerHTML =
-          '<td class="what">' + label + ' <span class="scopeTag">season</span></td>' +
-          '<td class="desc">Same rows, totalled across the season' +
-            '<div class="fields">Own team only &middot; completed games only</div></td>' +
-          '<td><code>' + sUrl + '</code></td>';
-        const sTd = document.createElement('td');
-        sTd.appendChild(copyBtn(sUrl));
-        sTr.appendChild(sTd);
+          '<td class="what">' + label + ' <span class="scopeTag">season</span>' +
+            '<div class="stepLabel" style="margin-top:4px; font-weight:600; text-transform:none; letter-spacing:0;">Totalled across the season</div></td>' +
+          '<td class="desc"></td>' +
+          '<td class="desc"><div class="fields">Own team only &middot; completed games only</div></td>';
+        // SAME XPath AS ITS GAME ROW. A season feed is the same view with a
+        // wider scope, so the element name does not change -- and a crew
+        // that had to work that out for themselves would reasonably guess
+        // it did.
+        sTr.children[1].appendChild(stepCell(sUrl, view));
         body.appendChild(sTr);
       }
     });
@@ -543,6 +638,17 @@ const SEASON_CAPABLE = ['rushing', 'passing', 'receiving', 'defense', 'kicking',
       L.push('  Add Input > Data Sources > ' + F + ', paste an address,');
       L.push('  set the refresh interval to 1-2 seconds, then map the');
       L.push('  columns onto the text fields in your title.');
+      if (fmt === 'xml'){
+        // THE XPATH GOES IN THE EMAIL TOO. This list is what a crew
+        // actually builds vMix from -- an XPath that is only on the web
+        // page is an XPath the person doing the work never sees. Same
+        // fault the page itself had until 1 Sep 2026.
+        L.push('  Each feed below has its own XPath. It is NOT the same for');
+        L.push('  all of them: the element name changes with the view, and a');
+        L.push('  wrong one gives an empty source with no error message.');
+      } else {
+        L.push('  vMix cannot bind the JSON shape \u2014 use the XML set above.');
+      }
       L.push('');
       L.push('OTHER SOFTWARE');
       L.push('  It is a plain web address returning ' + F + ', so anything');
@@ -552,12 +658,17 @@ const SEASON_CAPABLE = ['rushing', 'passing', 'receiving', 'defense', 'kicking',
         L.push(label);
         L.push('  ' + String(desc).replace(/&amp;/g, '&'));
         L.push('  ' + feedUrlFor(view, fmt, extra));
+        if (fmt === 'xml') L.push('  XPath: ' + xpathFor(view));
+        L.push('  columns: ' + fields);
         // The emailed list is what a crew actually sets vMix up from, so a
         // season address missing here is a season address that never gets
         // used -- see the note on the overlay switches, same fault.
         if (SEASON_CAPABLE.indexOf(view) > -1 && !extra){
           L.push('  season totals:');
           L.push('  ' + feedUrlFor(view, fmt) + '&scope=season');
+          // Same view, wider scope -- so the same element name. Stated
+          // rather than left to be inferred.
+          if (fmt === 'xml') L.push('  XPath: ' + xpathFor(view) + '  (same as above)');
         }
         L.push('');
       });
