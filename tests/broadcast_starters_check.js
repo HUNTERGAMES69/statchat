@@ -198,8 +198,11 @@ async function typeInto(w, u, i, v){
     const st = saved && saved.broadcast_starters && saved.broadcast_starters.special;
     chk('the game actually saved, so the payload below means something',
         !!saved, (w.document.getElementById('setupMsg')||{}).textContent);
-    chk('the saved lineup carries the COMBINED position key',
-        !!st && Object.keys(st).some(k => k === 'FG/PAT'),
+    // A unit is an ORDERED ARRAY of { pos, num, name } since 1 Sep 2026.
+    // The combined man is ONE row whose pos carries both labels -- not two
+    // rows, and not a bare FG with the PAT slot quietly dropped.
+    chk('the saved lineup carries the COMBINED position label on one row',
+        Array.isArray(st) && st.length === 1 && st[0].pos === 'FG/PAT',
         JSON.stringify(st) + '  (a bare FG means the PAT slot was dropped, not combined)');
     w.close();
   }
@@ -301,9 +304,126 @@ async function typeInto(w, u, i, v){
     const ins = (w.db.inserted || []).filter(r => r.table === 'games').pop();
     const rec = (up && up.fields) || (ins && ins.row) || null;
     const off = rec && rec.broadcast_starters && rec.broadcast_starters.offense;
-    const nums = off ? Object.keys(off).map(k => off[k].num) : [];
+    const nums = (off || []).map(r => r.num);
     chk('a duplicate held in stored data is not written back',
         nums.length > 0 && new Set(nums).size === nums.length,
+        JSON.stringify(off));
+    w.close();
+  }
+
+  // ---- REPEATED POSITION LABELS ---------------------------------------
+  // THE BUG THIS BLOCK EXISTS FOR, found 1 Sep 2026. A unit used to be an
+  // object keyed by position label, and position labels are not unique on a
+  // football field: the DEFAULT defensive set is DE, DT, DT, DE, WLB, MLB,
+  // SLB, CB, CB, FS, SS. Each repeat overwrote the one before it, so a coach
+  // who filled all eleven slots saw eleven on screen and stored EIGHT -- with
+  // no warning, and an eight-man defence on the overlay. Offense lost two of
+  // its three WRs the same way.
+  //
+  // COUNT-BASED, DELIBERATELY. An assertion that named the eight surviving
+  // keys would have passed against the broken build. The only thing that
+  // catches this class of fault is: put eleven in, get eleven out.
+  {
+    const w = await boot(); await settle(200);
+    const d = w.document;
+    const set = (id,v) => { const e = d.getElementById(id); if (e) e.value = v; };
+    set('designator','DUP-1'); set('seasonYear','2026'); set('gameDate','2026-09-04');
+    set('opponentName','Northgate'); set('quarterLen','12');
+    d.getElementById('skipOpponentBtn').click(); await settle(120);
+
+    // All eleven defensive slots, every label left on its default.
+    for (let i = 0; i < 11; i++) await typeInto(w, 'defense', i, String(60 + i));
+    // All three WR slots (2,3,4) left on their default 'WR' label.
+    for (const [i,n] of [[2,'11'],[3,'12'],[4,'13']]) await typeInto(w, 'offense', i, n);
+
+    const labels = [0,1,2,3].map(i => {
+      const sel = d.querySelector('select.bcPos[data-unit="defense"][data-i="'+i+'"]');
+      return sel ? sel.value : ''; });
+    chk('the default defensive labels really do repeat, or this proves nothing',
+        new Set(labels).size < labels.length, JSON.stringify(labels));
+
+    d.getElementById('createGameBtn').click(); await settle(500);
+    const row = (w.db.inserted || []).filter(r => r.table === 'games').pop();
+    const bs  = row && row.row.broadcast_starters;
+    const def = bs && bs.defense, offn = bs && bs.offense;
+
+    chk('a unit is stored as an ORDERED ARRAY, not keyed by position',
+        Array.isArray(def), JSON.stringify(def && Object.keys(def)).slice(0,80));
+    chk('eleven defenders entered, eleven defenders saved',
+        (def || []).length === 11, ((def||[]).length) + ' saved: ' + JSON.stringify(def));
+    chk('...and every jersey number survived, none overwritten',
+        new Set((def||[]).map(r => r.num)).size === 11,
+        JSON.stringify((def||[]).map(r => r.num)));
+    chk('...with both DEs, both DTs and both CBs kept as separate men',
+        ['DE','DT','CB'].every(p => (def||[]).filter(r => r.pos === p).length === 2),
+        JSON.stringify((def||[]).map(r => r.pos)));
+    chk('...in the slot order the card reads down',
+        JSON.stringify((def||[]).map(r => r.pos)) ===
+        JSON.stringify(['DE','DT','DT','DE','WLB','MLB','SLB','CB','CB','FS','SS']),
+        JSON.stringify((def||[]).map(r => r.pos)));
+    chk('three receivers entered, three receivers saved',
+        (offn||[]).filter(r => r.pos === 'WR').length === 3,
+        JSON.stringify(offn));
+    w.close();
+  }
+
+  // ---- and the round trip, which is where a lossy shape bites twice ----
+  // Opening a game to change its kickoff time re-saves the lineup. If load
+  // could not place two DEs back into two slots, the second edit would write
+  // the loss to disk permanently.
+  {
+    const saved = { defense: [
+      {pos:'DE',num:'91',name:'Zane Okoro'}, {pos:'DT',num:'55'},
+      {pos:'DT',num:'77'}, {pos:'DE',num:'44'}, {pos:'WLB',num:'54'},
+      {pos:'MLB',num:'52'}, {pos:'SLB',num:'56'}, {pos:'CB',num:'4'},
+      {pos:'CB',num:'24'}, {pos:'FS',num:'9'}, {pos:'SS',num:'31'} ] };
+    const w = await bootPage('create_game.html', {
+      query:'?edit=test-game-1', players:PLAYERS,
+      branding:{ current_season_year:2026, team_id:'test-team-1' },
+      game: { id:'test-game-1', tenant_id:'t1', designator:'DUP-2', season_year:2026,
+              game_date:'2026-09-04', home_team_name:'Us', away_team_name:'Northgate',
+              our_team_is_home:true, quarter_length_seconds:720, status:'setup',
+              seed_starters:{ teamA:{}, teamB:{} }, broadcast_starters: saved } });
+    await settle(500);
+    const filled = [...w.document.querySelectorAll('input.bcNum[data-unit="defense"]')]
+      .filter(i => i.value.trim()).length;
+    chk('all eleven come back into the form when the game is reopened',
+        filled === 11, filled + ' slots filled');
+    w.document.getElementById('createGameBtn').click(); await settle(500);
+    const up = (w.db.updated || []).filter(r => r.table === 'games').pop();
+    const back = up && up.fields.broadcast_starters && up.fields.broadcast_starters.defense;
+    chk('...and re-saving an untouched lineup loses nobody',
+        (back || []).length === 11, JSON.stringify((back||[]).map(r => r.num)));
+    chk('...with the same men in the same order',
+        JSON.stringify((back||[]).map(r => r.pos + r.num)) ===
+        JSON.stringify(saved.defense.map(r => r.pos + r.num)),
+        JSON.stringify((back||[]).map(r => r.pos + r.num)));
+    w.close();
+  }
+
+  // ---- a lineup saved in the OLD object shape still reads -------------
+  // Nothing is known to have been saved before the correction, but a reader
+  // that cannot open the shape it shipped with is a reader that loses data
+  // it was handed.
+  {
+    const w = await bootPage('create_game.html', {
+      query:'?edit=test-game-2', players:PLAYERS,
+      branding:{ current_season_year:2026, team_id:'test-team-1' },
+      game: { id:'test-game-2', tenant_id:'t1', designator:'LEG-1', season_year:2026,
+              game_date:'2026-09-04', home_team_name:'Us', away_team_name:'Northgate',
+              our_team_is_home:true, quarter_length_seconds:720, status:'setup',
+              seed_starters:{ teamA:{}, teamB:{} },
+              broadcast_starters: { offense:{ QB:{num:'7',name:'Devin Whitfield'},
+                                              RB:{num:'22'} } } } });
+    await settle(500);
+    chk('a legacy position-keyed lineup still loads into the form',
+        inp(w,'offense',0).value === '7' && inp(w,'offense',1).value === '22',
+        'QB=' + inp(w,'offense',0).value + ' RB=' + inp(w,'offense',1).value);
+    w.document.getElementById('createGameBtn').click(); await settle(500);
+    const up = (w.db.updated || []).filter(r => r.table === 'games').pop();
+    const off = up && up.fields.broadcast_starters && up.fields.broadcast_starters.offense;
+    chk('...and is written back in the array shape, migrating itself on save',
+        Array.isArray(off) && off.length === 2 && off[0].num === '7',
         JSON.stringify(off));
     w.close();
   }
