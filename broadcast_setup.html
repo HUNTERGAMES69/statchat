@@ -380,7 +380,23 @@
      // A category nobody qualifies in is SKIPPED rather than shown blank,
      // so this is safe to point at in week one.
      ['Season leaders (rotating)',
-      overlayUrl('/broadcast_leaders.html?views=rushing,passing,receiving&secs=8')]
+      overlayUrl('/broadcast_leaders.html?views=rushing,passing,receiving&secs=8')],
+
+     // THIS GAME'S leaders, the same four boards scoped to the game on air.
+     // Live: they poll and fill as plays are entered, where the season
+     // boards above load once because finished games do not change.
+     //
+     // The card says "this game" on its own subtitle rather than a count of
+     // games -- 113 yards means a very different thing on a Friday than it
+     // does across nine weeks, and the two graphics are otherwise identical.
+     ['Rushing leaders (this game)',   overlayUrl('/broadcast_leaders.html?view=rushing&scope=game')],
+     ['Passing leaders (this game)',   overlayUrl('/broadcast_leaders.html?view=passing&scope=game')],
+     ['Receiving leaders (this game)', overlayUrl('/broadcast_leaders.html?view=receiving&scope=game')],
+     ['Tackle leaders (this game)',    overlayUrl('/broadcast_leaders.html?view=tackles&scope=game')],
+     // Kicking and punting are not offered here for the same reason they
+     // are not in a rotation: one kicker, one punter, one name on the card.
+     ['Game leaders (rotating)',
+      overlayUrl('/broadcast_leaders.html?views=rushing,passing,receiving,tackles&scope=game&secs=8')]
     ].forEach(([label, url]) => {
       const tr = document.createElement('tr');
       tr.innerHTML = '<td class="what">' + label + '</td>' +
@@ -476,6 +492,14 @@
     L.push('     Cycles those three every 8 seconds on one input. Add');
     L.push('     tackles, kicking or punting to the views list to include');
     L.push('     them; a category nobody qualifies in is skipped.');
+    L.push('');
+    L.push('THIS GAME\'S LEADERS (live, they fill as plays are entered)');
+    ['rushing','passing','receiving','tackles'].forEach(v => {
+      L.push('  ' + (v.charAt(0).toUpperCase() + v.slice(1) + ' leaders').padEnd(17) +
+          overlayUrl('/broadcast_leaders.html?view=' + v + '&scope=game'));
+    });
+    L.push('  ' + 'Rotating'.padEnd(17) +
+        overlayUrl('/broadcast_leaders.html?views=rushing,passing,receiving,tackles&scope=game&secs=8'));
     L.push('');
     L.push('=================================================');
     L.push('  IF A GRAPHIC STOPS UPDATING');
