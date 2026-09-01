@@ -266,19 +266,29 @@ function buildViews(ctx, unitParam) {
     starters: (() => {
       const all = (game && game.broadcast_starters) || {};
       const want = ['offense','defense','special'].indexOf(unitParam) > -1 ? unitParam : 'offense';
-      const lineup = all[want] || {};
       const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
-      return Object.keys(lineup).map(pos => {
-        const v = lineup[pos];
-        const isObj = v && typeof v === 'object';
-        return {
-          position: pos,
-          number: isObj ? String(v.num || '') : String(v || ''),
-          player: isObj ? String(v.name || '') : '',
-          unit: want,
-          team: ourName || ''
-        };
-      });
+      // TWO STORED SHAPES, ONE FEED. A unit has been an ordered array --
+      // [{pos, num, name}] -- since 1 Sep 2026, because position labels
+      // repeat in a real lineup (DE, DT, DT, DE) and the position-keyed
+      // object it replaced overwrote its own duplicates. Lineups saved
+      // before that are still objects and still publish. Row ORDER is the
+      // order the card reads down, and the feed preserves it.
+      const unitVal = all[want];
+      const rows = !unitVal ? []
+        : Array.isArray(unitVal)
+          ? unitVal.map(e => ({ pos: String((e && e.pos) || ''),
+                                num: String((e && e.num) || ''),
+                                name: String((e && e.name) || '') }))
+          : Object.keys(unitVal).map(pos => {
+              const v = unitVal[pos], isObj = v && typeof v === 'object';
+              return { pos: String(pos),
+                       num: isObj ? String(v.num || '') : String(v || ''),
+                       name: isObj ? String(v.name || '') : '' };
+            });
+      return rows.filter(r => r.num).map(r => ({
+        position: r.pos, number: r.num, player: r.name,
+        unit: want, team: ourName || ''
+      }));
     })(),
 
     kicking: bothTeams('specialTeams', 'fgMade')
