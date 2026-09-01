@@ -529,6 +529,78 @@ async function typeInto(w, u, i, v){
     w.close();
   }
 
+  // ---- A RESTORED CHOICE MUST SURVIVE A LATE ROSTER ------------------
+  // Andy, 1 Sep 2026: "Typing a number into the empty field makes ALL the
+  // previously selected fields go back to the conflict screen."
+  //
+  // They were already gone. loadBroadcastStarters() restores the saved names
+  // into bcChosen and calls bcRender(); it runs on the GAME-load path while
+  // the master roster loads on its own, and when the roster lost that race
+  // candidatesForNumber() returned nothing for every slot -- so bcRender's
+  // "not on the roster" branch deleted every name, milliseconds after they
+  // were restored. Nothing on screen moved until the next render, which is
+  // why typing one number looked like it reset the lot.
+  //
+  // An empty roster is not evidence that a stored name is wrong.
+  {
+    const SAVED = { offense: [
+      { pos:'QB', num:'15', name:'Kayden Jones' },
+      { pos:'RB', num:'7',  name:'Devin Whitfield' },
+      { pos:'WR', num:'21', name:'Lamar Wilson' } ] };
+    const w = await bootPage('create_game.html', {
+      query:'?edit=test-game-9', players:PLAYERS,
+      branding:{ current_season_year:2026, team_id:'test-team-1' },
+      game:{ id:'test-game-9', tenant_id:'t1', designator:'LATE-1', season_year:2026,
+             game_date:'2026-09-04', home_team_name:'Us', away_team_name:'Northgate',
+             our_team_is_home:true, quarter_length_seconds:720, status:'setup',
+             seed_starters:{ teamA:{}, teamB:{} }, broadcast_starters: SAVED } });
+    await settle(700);
+    const d = w.document;
+
+    // NOT VACUOUS: #7 and #21 must really be shared in this fixture, or the
+    // picker never appears and every assertion below passes against nothing.
+    chk('the fixture really does hold shared numbers',
+        (w.window.candidatesForNumber('our','7')  || []).length === 2 &&
+        (w.window.candidatesForNumber('our','21') || []).length === 2);
+
+    // The chosen candidate is the one painted with the green fill's ink.
+    // Matched on that rather than on the fill, because the harness resolves
+    // var(--sc-green) to a literal and picks the light palette's value.
+    const chosen = () => [...d.querySelectorAll('#bcRes_offense button.bcPick')]
+      .filter(b => /color:#0e1408/.test(b.getAttribute('style') || ''))
+      .map(b => b.dataset.name);
+
+    chk('a saved name survives the reopen', chosen().length === 2,
+        JSON.stringify(chosen()));
+    chk('...and it is the man who was picked, not the first candidate',
+        chosen().indexOf('Devin Whitfield') > -1 && chosen().indexOf('Lamar Wilson') > -1,
+        JSON.stringify(chosen()));
+    chk('...and an answered picker stops asking "Which one?"',
+        !/Which one\?/.test(d.getElementById('bcRes_offense').textContent),
+        d.getElementById('bcRes_offense').textContent.slice(0,140));
+
+    // The reported trigger: type into an EMPTY slot, which re-renders.
+    const empty = [...d.querySelectorAll('input.bcNum[data-unit="offense"]')]
+      .find(x => !x.value.trim());
+    empty.value = '55';
+    empty.dispatchEvent(new w.window.Event('input', { bubbles:true }));
+    await settle(250);
+    chk('...and typing into an empty slot does not reset the others',
+        chosen().length === 2, JSON.stringify(chosen()));
+
+    // And the names must still reach the database.
+    const set = (id,v) => { const e = d.getElementById(id); if (e) e.value = v; };
+    set('designator','LATE-1'); set('quarterLen','12');
+    d.getElementById('createGameBtn').click(); await settle(600);
+    const up = (w.db.updated || []).filter(r => r.table === 'games').pop();
+    const off = up && up.fields.broadcast_starters && up.fields.broadcast_starters.offense;
+    const named = (off || []).filter(r => r.name).map(r => r.name);
+    chk('...and the picked names are written back, not dropped',
+        named.indexOf('Devin Whitfield') > -1 && named.indexOf('Lamar Wilson') > -1,
+        JSON.stringify(off));
+    w.close();
+  }
+
   console.log('\n' + pass + '/' + (pass + fail) + ' checks pass');
   if (fail) console.log('\n' + fail + ' FAILURES');
   process.exitCode = fail ? 1 : 0;
