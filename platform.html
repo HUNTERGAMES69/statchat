@@ -1470,17 +1470,52 @@
       const today = new Date().toISOString().slice(0, 10);
       rows = rows.filter(g => g.status === 'in_progress' || g.game_date === today);
     }
+    // A DELETED SCHOOL HAS NO LIVE GAMES.
+    // -------------------------------------------------------------------
+    // Reported 31 Aug 2026: games from deleted tenants showing here.
+    //
+    // set_tenant_deleted() (016) marks the TENANT and deliberately leaves
+    // its games alone -- the deletion is soft and restorable, so nothing
+    // underneath is touched. The filter above asks whether the GAME was
+    // deleted, which it was not, so an in-progress game inside a deleted
+    // school sat in this list looking entirely ordinary. The school's name
+    // even rendered normally, because the lookup below fetched every
+    // tenant including the deleted ones.
+    //
+    // Third time this shape has appeared: 012 added games.deleted_at and
+    // this query missed it, 016 added tenants.deleted_at and loadTenants
+    // missed it, and now the JOIN between the two misses it. A row is only
+    // live if it is live all the way up.
+    //
+    // FETCHED BEFORE the empty check below, not after, so a list made
+    // entirely of deleted schools' games reads as "no games in progress"
+    // rather than as an empty table with headings.
+    const { data: tenants } = await supabaseClient
+      .from('tenants').select('id, name, deleted_at');
+    // SELECTED SO IT CAN BE CHECKED, same guard the tenants list carries:
+    // an unselected column and a null one are identical in JS, which is
+    // exactly how that bug survived a reading of the code.
+    if (tenants && tenants.length && !('deleted_at' in tenants[0])){
+      showMsg('The live games list is missing tenants.deleted_at \u2014 games ' +
+        'from deleted schools cannot be told apart. This is a bug; please report it.', 'error');
+    }
+    const nameOf = {};
+    const liveTenant = {};
+    (tenants || []).forEach(t => {
+      nameOf[t.id] = t.name;
+      if (!t.deleted_at) liveTenant[t.id] = true;
+    });
+    // A game whose tenant is not in the list at all is dropped too. That is
+    // a row with no school, which is not something to show on a Friday
+    // night; Recovery tools is where an orphan belongs.
+    rows = rows.filter(g => liveTenant[g.tenant_id]);
+
     if (!rows.length){
       body.innerHTML = '<p class="empty">' +
         (includeFinal ? 'No games in progress, and none finished today.'
                       : 'No games in progress right now.') + '</p>';
       return;
     }
-
-    // Tenant names, so the list reads as schools rather than uuids.
-    const { data: tenants } = await supabaseClient.from('tenants').select('id, name');
-    const nameOf = {};
-    (tenants || []).forEach(t => { nameOf[t.id] = t.name; });
 
     const groups = new Map();
     rows.forEach(g => {
