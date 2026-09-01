@@ -16,10 +16,15 @@
 //   * a rejected duplicate gets no shared-number picker. Offering "which of
 //     the two #7s is this?" against a slot that cannot legally exist invites
 //     configuring something the rules forbid.
-//   * the same number on offence AND defence is allowed -- a team without
-//     the roster to two-platoon plays its best athletes both ways -- but is
-//     confirmed once, because a typo and a two-way starter are identical to
-//     software.
+//   * the same number on offence AND defence is allowed and NOT remarked on.
+//     It was questioned once ("two-way starter?") until 1 Sep 2026; offence
+//     and defence draw from different number ranges, so #0 on each is
+//     almost always two different boys and the prompt was noise beside the
+//     duplicate warning that matters.
+//   * a lineup the page has already refused is not SAVED anyway. The rule is
+//     enforced on `change`; typing the last number and clicking Save skips
+//     it, and the save used to drop the row quietly -- eleven on screen, ten
+//     stored, blank on the next visit.
 //   * special teams combines: one boy in FG and PAT is one line, FG/PAT.
 //   * eleven slots is not eleven men, so the tally counts PEOPLE.
 //   * prefill from the seeded six matches by POSITION and never overwrites.
@@ -207,21 +212,90 @@ async function typeInto(w, u, i, v){
     w.close();
   }
 
-  // ---- two-way starters ----------------------------------------------
+  // ---- the same number on both units is not remarked on ---------------
+  // It used to be: the page flagged it and asked "two-way starter?", on the
+  // reasoning that a typo and a two-way starter look identical to software.
+  // They do not -- offence and defence draw from different number ranges,
+  // and #0 on offence is almost always a different boy from #0 on defence.
+  // Andy, 1 Sep 2026: "0 on offense and 0 on defense are TWO different
+  // players, not a two way player. Remove the two way warning."
+  //
+  // ASSERTED AS AN ABSENCE, deliberately. A question answered "no, different
+  // boys" on every lineup is not a safeguard, and sitting beside the
+  // duplicate warning that DOES matter it made the real one easier to skip.
   {
     const w = await boot(); await settle(150);
     await typeInto(w, 'offense', 1, '22');
     await typeInto(w, 'defense', 5, '22');
     chk('the same number on offence AND defence is allowed',
         inp(w,'defense',5).value === '22');
-    chk('...and asks once, rather than assuming',
-        !!w.document.querySelector('#bcRes_offense button.bcTwoWay'),
-        w.document.getElementById('bcRes_offense').textContent.slice(0,120));
-    w.document.querySelector('#bcRes_offense button.bcTwoWay').click();
-    await settle();
-    chk('...and settles once confirmed',
-        !w.document.querySelector('#bcRes_offense button.bcTwoWay') &&
-        /two-way starter/.test(w.document.getElementById('bcRes_offense').innerHTML));
+    chk('...and is not questioned, on either unit',
+        !w.document.querySelector('button.bcTwoWay') &&
+        !/two-way|both cards/i.test(w.document.getElementById('bcRes_offense').textContent +
+                                   w.document.getElementById('bcRes_defense').textContent),
+        w.document.getElementById('bcRes_offense').textContent.slice(0,140));
+    chk('...and neither slot is marked as a fault',
+        inp(w,'offense',1).style.borderColor === '' &&
+        inp(w,'defense',5).style.borderColor === '',
+        'off=' + inp(w,'offense',1).style.borderColor + ' def=' + inp(w,'defense',5).style.borderColor);
+    w.close();
+  }
+
+  // ---- A REFUSED DUPLICATE MUST NOT SAVE QUIETLY ----------------------
+  // Reported 1 Sep 2026: eleven defenders on screen, ten in the database, SS
+  // blank on the next visit and nothing to say why.
+  //
+  // The duplicate rule is enforced on `change`. A coach who types the last
+  // number and clicks straight on Save never fires one -- so the screen said
+  // eleven, the tally said eleven, and collectBroadcastStarters() dropped the
+  // row on the way past. The warning was drawn and the box outlined red; only
+  // the save ignored both.
+  {
+    const w = await boot(); await settle(200);
+    const d = w.document;
+    const set = (id,v) => { const e = d.getElementById(id); if (e) e.value = v; };
+    set('designator','DUP-SAVE'); set('seasonYear','2026'); set('gameDate','2026-09-04');
+    set('opponentName','Northgate'); set('quarterLen','12');
+    d.getElementById('skipOpponentBtn').click(); await settle(140);
+
+    const DEF = ['90','94','96','2','7','42','6','4','3','5','5'];   // SS repeats FS
+    for (let i = 0; i < 11; i++){
+      const el = inp(w,'defense',i);
+      el.value = DEF[i];
+      el.dispatchEvent(new w.window.Event('input', { bubbles:true }));
+      // NO change event on the last slot: that is the reported path.
+      if (i < 10) el.dispatchEvent(new w.window.Event('change', { bubbles:true }));
+      await settle(60);
+    }
+    const onScreen = [...d.querySelectorAll('input.bcNum[data-unit="defense"]')]
+      .filter(x => x.value.trim()).length;
+    chk('the duplicate is still on screen, which is what makes this dangerous',
+        onScreen === 11, onScreen + ' filled');
+
+    d.getElementById('createGameBtn').click(); await settle(600);
+    const saved = (w.db.inserted || []).filter(r => r.table === 'games').pop();
+    chk('the game is NOT saved with a lineup the page already refused',
+        !saved, saved && JSON.stringify(saved.row.broadcast_starters));
+    const msg = (d.getElementById('setupMsg') || {}).textContent || '';
+    chk('...and the message names the number and BOTH slots',
+        /#5/.test(msg) && /FS/.test(msg) && /SS/.test(msg), msg);
+    chk('...and says the rest of the page is fine, so nothing else is hunted for',
+        /Everything else/i.test(msg), msg);
+    chk('...and opens the section, since a refusal points at nothing when hidden',
+        !!d.getElementById('bcStartersWrap').open);
+
+    // Clearing it lets the save through -- the guard must not be a wall.
+    const last = inp(w,'defense',10);
+    last.value = '';
+    last.dispatchEvent(new w.window.Event('input', { bubbles:true }));
+    await settle(140);
+    d.getElementById('createGameBtn').click(); await settle(600);
+    const after = (w.db.inserted || []).filter(r => r.table === 'games').pop();
+    chk('...and once cleared the game saves',
+        !!after, (d.getElementById('setupMsg')||{}).textContent);
+    chk('...storing exactly what is on screen, ten men',
+        after && (after.row.broadcast_starters.defense || []).length === 10,
+        after && JSON.stringify((after.row.broadcast_starters.defense||[]).map(r => r.num)));
     w.close();
   }
 
@@ -299,12 +373,31 @@ async function typeInto(w, u, i, v){
     chk('...with the tally actually showing a count, or nothing says it at all',
         /\d+\s*\/\s*26/.test(w.document.getElementById('bcSummary').textContent),
         JSON.stringify(w.document.getElementById('bcSummary').textContent));
-    chk('...and a two-way starter already confirmed is not asked about again',
-        !w.document.querySelector('#bcRes_offense button.bcTwoWay'));
-    // A stored duplicate must not survive a re-save.
-    const before = (w.db.inserted || []).length + (w.db.updated || []).length;
+    // A STORED DUPLICATE IS REFUSED LIKE A TYPED ONE, not quietly dropped.
+    // Until 1 Sep 2026 re-saving this game wrote one WR row and discarded the
+    // other with no message -- the same silent loss Andy hit on defence. It
+    // cannot be typed any more, but a row saved before the rule existed can
+    // hold one, and the honest answer is to say so rather than to choose a
+    // survivor on the coach's behalf.
     w.document.getElementById('createGameBtn').click();
-    await settle(400);
+    await settle(500);
+    const up1  = (w.db.updated  || []).filter(r => r.table === 'games').pop();
+    const ins1 = (w.db.inserted || []).filter(r => r.table === 'games').pop();
+    chk('a duplicate held in stored data is refused, not silently dropped',
+        !up1 && !ins1,
+        JSON.stringify((up1 && up1.fields || ins1 && ins1.row || {}).broadcast_starters));
+    const m = (w.document.getElementById('setupMsg') || {}).textContent || '';
+    chk('...naming the number and both slots it sits in',
+        /#22/.test(m) && /RB/.test(m) && /WR/.test(m), m);
+
+    // And clearing it lets the save through, with the survivors intact.
+    const dupSlot = [...w.document.querySelectorAll('input.bcNum[data-unit="offense"]')]
+      .filter(x => x.value.trim() === '22')[1];
+    dupSlot.value = '';
+    dupSlot.dispatchEvent(new w.window.Event('input', { bubbles:true }));
+    await settle(160);
+    w.document.getElementById('createGameBtn').click();
+    await settle(500);
     // An edit UPDATEs rather than inserts, and the harness records the two
     // differently: inserts as { table, row }, updates as { table, fields }.
     const up  = (w.db.updated  || []).filter(r => r.table === 'games').pop();
@@ -312,9 +405,10 @@ async function typeInto(w, u, i, v){
     const rec = (up && up.fields) || (ins && ins.row) || null;
     const off = rec && rec.broadcast_starters && rec.broadcast_starters.offense;
     const nums = (off || []).map(r => r.num);
-    chk('a duplicate held in stored data is not written back',
-        nums.length > 0 && new Set(nums).size === nums.length,
-        JSON.stringify(off));
+    chk('...and once cleared it saves, with no duplicate written back',
+        nums.length > 0 && new Set(nums).size === nums.length, JSON.stringify(off));
+    chk('...keeping the slot the coach left alone',
+        nums.indexOf('7') > -1 && nums.indexOf('22') > -1, JSON.stringify(nums));
     w.close();
   }
 
