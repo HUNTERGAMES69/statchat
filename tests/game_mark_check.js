@@ -30,7 +30,11 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 
-const FILES = ['game.html', 'gamemock.html']
+// gamemock.html was deleted with the rest of the mocks on 1 Sep 2026.
+// The existsSync filter below meant its removal cost no failure and no
+// message -- the check simply started testing one file instead of two,
+// silently. Naming only what exists keeps the list honest.
+const FILES = ['game.html']
   .map(f => ({ name: f, full: path.join(__dirname, '..', f) }))
   .filter(f => fs.existsSync(f.full));
 
