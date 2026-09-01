@@ -132,6 +132,12 @@
     line-height:1.5; color:var(--sc-ink-muted, #8d99a6); opacity:.75;
     text-align:center; max-width:760px; margin-left:auto; margin-right:auto; }
   @media print { .sc-copyright { color:#666 !important; opacity:1; } }
+  /* The season variant of a feed row: same table, visibly subordinate to
+     the game row it sits under. */
+  .seasonRow td.what { padding-left: 18px; color: var(--sc-ink-soft, #3a3a3a); }
+  .scopeTag { font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+    background: var(--sc-raise, #eef1f4); border: 1px solid var(--sc-rule, #ddd);
+    border-radius: 3px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
 </style>
 </head>
 <body>
@@ -290,8 +296,35 @@
     ['receiving', 'Receiving leaders', 'One row per player, most yards first',
      'player team rec tgt yds long td fum'],
     ['defense',   'Defensive leaders', 'One row per player, most tackles first',
-     'player team tackles tfl sacks int fumRec']
+     'player team tackles tfl sacks int fumRec'],
+    // KICKING AND PUNTING. Both had overlays on this very page months
+    // before they had feeds -- ?view=kicking and ?view=punting under
+    // Leaders -- so a crew building its own graphics could see the board
+    // and not get the numbers. Added 1 Sep 2026.
+    //
+    // ONE BUCKET, TWO ROWS. computeBoxScore keeps both in `specialTeams`,
+    // and on most high-school teams the kicker and the punter are the same
+    // boy. Each view lists only players who ATTEMPTED that thing, so a
+    // punter never appears on the kicking board as 0 for 0.
+    ['kicking',   'Kicking leaders',   'One row per player who attempted a kick',
+     'player team fgMade fgAtt fgLong fgBlocked patMade patAtt patBlocked'],
+    ['punting',   'Punting leaders',   'One row per player who punted',
+     'player team punts puntYds puntLong']
   ];
+
+  // SEASON TOTALS. Adding &scope=season to any of these six turns a
+  // single-game board into the season one -- the same figures the season
+  // overlays show, from the same definition of which games count
+  // (api/_season.js, shared with the endpoint the overlays read, so the
+  // two cannot drift).
+  //
+  // Own team only, and final games only: an opponent's players are
+  // recorded per game and never carried across a season, and a game still
+  // being played has no final numbers. The four game-only views are absent
+  // from this list because a season has no live scoreboard, no current
+  // drive and no last play -- asking for one is refused by name rather
+  // than answered with a single game's numbers under a season label.
+  const SEASON_CAPABLE = ['rushing', 'passing', 'receiving', 'defense', 'kicking', 'punting'];
 
   // OVERLAY PAGES NEED THE KEY TOO, and this was missed when 010 landed:
   // the API was scoped, the raw feed addresses were given a key, and the
@@ -344,6 +377,25 @@
       td.appendChild(copyBtn(url));
       tr.appendChild(td);
       body.appendChild(tr);
+
+      // THE SEASON ADDRESS SITS UNDER ITS GAME ONE, not in a separate
+      // block further down. A crew comparing "rushing leaders" to "rushing
+      // leaders, season" wants them adjacent; a second table halfway down
+      // the page is how somebody copies the wrong one.
+      if (SEASON_CAPABLE.indexOf(view) > -1){
+        const sUrl = url + '&scope=season';
+        const sTr = document.createElement('tr');
+        sTr.className = 'seasonRow';
+        sTr.innerHTML =
+          '<td class="what">' + label + ' <span class="scopeTag">season</span></td>' +
+          '<td class="desc">Same rows, totalled across the season' +
+            '<div class="fields">Own team only &middot; completed games only</div></td>' +
+          '<td><code>' + sUrl + '</code></td>';
+        const sTd = document.createElement('td');
+        sTd.appendChild(copyBtn(sUrl));
+        sTr.appendChild(sTd);
+        body.appendChild(sTr);
+      }
     });
 
     const ov = document.getElementById('overlayRows');
@@ -460,6 +512,13 @@
         L.push(label);
         L.push('  ' + String(desc).replace(/&amp;/g, '&'));
         L.push('  ' + feedUrlFor(view, fmt));
+        // The emailed list is what a crew actually sets vMix up from, so a
+        // season address missing here is a season address that never gets
+        // used -- see the note on the overlay switches, same fault.
+        if (SEASON_CAPABLE.indexOf(view) > -1){
+          L.push('  season totals:');
+          L.push('  ' + feedUrlFor(view, fmt) + '&scope=season');
+        }
         L.push('');
       });
     };
