@@ -30,13 +30,40 @@
 -- resolver in create_game.html fills both. Readers accept a bare string too,
 -- exactly as seedNum()/seedName() already do, so one reader handles both.
 --
--- POSITIONS ARE KEYS, NOT A FIXED LIST. A slot's label is chosen per game
--- from a dropdown, so a Wing-T team stores FB where a spread team stores WR3,
--- and neither needs a schema change. `unit` says which card it belongs on.
+-- POSITIONS ARE LABELS ON ROWS, NOT KEYS. A slot's label is chosen per game
+-- from a dropdown, so a Wing-T team stores FB where a spread team stores SB,
+-- and neither needs a schema change.
 --
---   { "offense": { "QB": {...}, "RB": {...} },
---     "defense": { "DE1": {...} },
---     "special": { "FG": {...} } }
+--   { "offense": [ { "pos": "QB", "num": "7", "name": "Devin Whitfield" },
+--                  { "pos": "RB", "num": "22" } ],
+--     "defense": [ { "pos": "DE", "num": "91" }, { "pos": "DT", "num": "55" },
+--                  { "pos": "DT", "num": "77" }, { "pos": "DE", "num": "44" } ],
+--     "special": [ { "pos": "PK/P", "num": "12", "name": "Jake Smith" } ] }
+--
+-- ============================================================================
+-- WHY AN ARRAY AND NOT AN OBJECT  (corrected 1 Sep 2026)
+--
+-- This column shipped keyed by position label -- { "DE": {...} } -- and that
+-- is the wrong model for a lineup. Position labels are NOT unique on a
+-- football field. The default defensive set is
+--
+--     DE  DT  DT  DE  WLB  MLB  SLB  CB  CB  FS  SS
+--
+-- so DE, DT and CB each appear twice, and each one overwrote the one before
+-- it. A coach who filled all eleven slots saw eleven on screen and stored
+-- EIGHT -- silently, with the overlay then showing an eight-man defence.
+-- Offense did the same with its three WR slots, keeping one receiver.
+--
+-- A lineup is ordered and repeats positions by nature, so the array is what
+-- this always should have been. Row order is the order the card reads down.
+-- No schema change was needed: jsonb holds either shape, and all three
+-- readers (create_game.html, broadcast_starters.html, api/feed.js) still
+-- accept the old object form so anything stored before the correction
+-- renders unchanged.
+--
+-- `unit` says which card a list belongs on. A special-teams player filling
+-- more than one job is ONE row with a combined label -- "PK/P" -- matched on
+-- his NUMBER, since that is what makes them the same person.
 --
 -- ============================================================================
 -- NO CONSTRAINT ON THE CONTENTS, AND THAT IS NOT AN OVERSIGHT
