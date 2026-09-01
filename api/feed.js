@@ -65,7 +65,7 @@ const mmss = (secs) => {
 // Andy uses full names, so they were removed rather than faked. If short
 // codes are ever wanted they need a STORED field per team -- deriving
 // them guesses badly ("St. Aloysius" -> "St.").
-function buildViews(ctx) {
+function buildViews(ctx, unitParam) {
   const { state, box, teams, plays, game } = ctx;
 
   const sideName = k => (teams[k] || {}).name || '';
@@ -252,6 +252,35 @@ function buildViews(ctx) {
     // is what the overlay does and what these mirror: a punter with no
     // field-goal attempts must not appear on a kicking board with a row of
     // zeros, because a title bound to it would put him on air as 0 for 0.
+    // THE STARTING LINEUP, for crews building their own lineup cards.
+    // ?unit=offense|defense|special picks which; offense if unsaid.
+    //
+    // NOT COMPUTED FROM PLAYS. Every other view here is derived from what
+    // happened; this one is a thing a coach typed on the setup screen before
+    // kickoff, and it is the only view that can legitimately be empty all
+    // night. An empty row set is the honest answer -- a title bound to it
+    // blanks, rather than holding a lineup from a previous game.
+    //
+    // BOTH SHAPES ACCEPTED, as everywhere else that reads a starters column:
+    // {"QB":"7"} and {"QB":{num,name}}. See game.html's seedNum/seedName.
+    starters: (() => {
+      const all = (game && game.broadcast_starters) || {};
+      const want = ['offense','defense','special'].indexOf(unitParam) > -1 ? unitParam : 'offense';
+      const lineup = all[want] || {};
+      const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
+      return Object.keys(lineup).map(pos => {
+        const v = lineup[pos];
+        const isObj = v && typeof v === 'object';
+        return {
+          position: pos,
+          number: isObj ? String(v.num || '') : String(v || ''),
+          player: isObj ? String(v.name || '') : '',
+          unit: want,
+          team: ourName || ''
+        };
+      });
+    })(),
+
     kicking: bothTeams('specialTeams', 'fgMade')
       .filter(r => (r.fgAtt || 0) + (r.patAtt || 0) > 0),
     punting: bothTeams('specialTeams', 'punts')
@@ -262,7 +291,10 @@ function buildViews(ctx) {
 const ROW_NAME = {
   score: 'game', drive: 'drive', lastplay: 'play', teamstats: 'team',
   rushing: 'player', passing: 'player', receiving: 'player', defense: 'player',
-  kicking: 'player', punting: 'player'
+  kicking: 'player', punting: 'player',
+  // ROW NAME `starter`, not `player`: a vMix operator binding this is
+  // building a lineup card, and <starter> reads as what it is in the XPath.
+  starters: 'starter'
 };
 
 // THE VIEWS A SEASON CAN ANSWER. A season has no current drive, no last
@@ -270,6 +302,9 @@ const ROW_NAME = {
 // no meaning -- refused by name rather than answered with a game's numbers
 // under a season label, which is how somebody puts one game's score on air
 // believing it is the year's.
+// `starters` is absent on purpose: a starting lineup belongs to one game.
+// "The season's starters" is not a thing, and answering it with the most
+// recent game's card under a season label is how a stale lineup goes on air.
 const SEASON_VIEWS = ['rushing', 'passing', 'receiving', 'defense', 'kicking', 'punting'];
 // The bucket each leader view reads, and the key it ranks on.
 const LEADER_BUCKET = {
@@ -467,7 +502,7 @@ module.exports = async (req, res) => {
     const ctx = engine.buildContext(game, rosterRes.data || [],
                                     playsRes.data || [],
                                     (teamRes.data || [])[0] || {});
-    const views = buildViews(ctx);
+    const views = buildViews(ctx, String(q.unit || 'offense').toLowerCase());
     const rows = views[view];
     if (!rows) {
       res.status(400).json({
