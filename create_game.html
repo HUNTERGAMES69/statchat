@@ -746,7 +746,22 @@
         dupSeen[num] = 1;
         const c = candidatesForNumber('our', num);
         if (c.length === 0){
-          delete bcChosen[bcK(u,i)];
+          // ONLY FORGET A CHOICE ONCE THE ROSTER HAS ACTUALLY ANSWERED.
+          //
+          // THE BUG THIS GUARD EXISTS FOR, reported 1 Sep 2026: "Typing a
+          // number into the empty field makes ALL the previously selected
+          // fields go back to the conflict screen." They were already gone.
+          // loadBroadcastStarters() restores the saved names into bcChosen
+          // and then calls bcRender(); it runs on the game-load path while
+          // the master roster loads on its own, and when the roster lost
+          // that race candidatesForNumber() returned nothing for every
+          // slot -- so this branch deleted every name the coach had picked,
+          // milliseconds after restoring them. Nothing on screen changed
+          // until the next render, which is why typing one number appeared
+          // to reset the lot.
+          //
+          // An empty roster is not evidence that a stored name is wrong.
+          if (ourRosterReady) delete bcChosen[bcK(u,i)];
           if (isAwaitingAssignment('our', num)){
             lines.push('<div style="color:var(--sc-amber); margin-bottom:3px;">' + bcPos(u,i) +
               ' #' + num + ' — on the roster, but needs a unit picked above before it can be named.</div>');
@@ -760,8 +775,15 @@
           // SHARED NUMBER. Nothing is chosen for the coach: an arbitrary
           // default is indistinguishable from a decision. Same rule as the
           // seeded-starter resolver above.
+          // ONCE ANSWERED, STOP ASKING. The chosen candidate is painted
+          // green either way, but a box still headed "Which one?" reads as
+          // an open question -- which is exactly how Andy described the
+          // symptom of the bug above ("back to the conflict screen"). The
+          // buttons stay, so the answer can still be changed.
+          const answered = !!bcChosen[bcK(u,i)];
           lines.push('<div style="background:var(--sc-amber-tint); border-left:3px solid var(--sc-amber); padding:6px 9px; border-radius:0 4px 4px 0; margin:4px 0;">' +
-            bcPos(u,i) + ' #' + num + ' — two players wear this number. Which one?<div>' +
+            bcPos(u,i) + ' #' + num + ' — two players wear this number.' +
+            (answered ? '' : ' Which one?') + '<div>' +
             c.map(function(nm){
               // FILL AND INK WRITTEN TOGETHER, in that order, as one pair.
               // Built by concatenation the two ended up separated, and
@@ -777,7 +799,8 @@
                 : 'background:var(--sc-raise,#20272f); color:var(--sc-ink,#eef1f4);';
               return '<button type="button" class="bcPick" data-k="' + bcK(u,i) + '" data-name="' + nm +
                 '" style="margin:3px 5px 0 0; ' + paint +
-                ' border:1px solid var(--sc-rule,#2b333d); border-radius:4px; padding:3px 9px; font-size:12.5px; cursor:pointer;">' + nm + '</button>';
+                ' border:1px solid var(--sc-rule,#2b333d); border-radius:4px; padding:3px 9px; font-size:12.5px; cursor:pointer;">' +
+                (on ? '\u2713 ' : '') + nm + '</button>';
             }).join('') + '</div></div>');
           if (bcChosen[bcK(u,i)] && c.indexOf(bcChosen[bcK(u,i)]) === -1) delete bcChosen[bcK(u,i)];
         }
@@ -1481,6 +1504,10 @@
   let ourFreshResolved = null;
   let ourFreshEntries = null;
   let oppRosterTouched = false;
+  // HAS THE MASTER ROSTER ANSWERED YET? Not the same question as "is
+  // ourResolved empty", and the difference cost a coach every name he had
+  // picked. See the guard in bcRender().
+  let ourRosterReady = false;
   let ourResolved = {}, ourConflictsList = [];
   let oppRosterSkipped = false;
   let oppResolved = {}, oppConflictsList = [];
@@ -1776,8 +1803,14 @@
       }
 
       ourResolved = resolved;
+      ourRosterReady = true;
       ourConflictsList = conflicts;
       ourNeedsAssignment = needsAssignment;
+      // REDRAW THE LINEUP NOW THE NAMES CAN BE RESOLVED. loadBroadcastStarters()
+      // may well have run already -- it is on the game-load path, this is on
+      // the roster-load path, and they race -- so the section was last drawn
+      // against an empty roster and shows every shared number as unanswered.
+      bcRender();
       document.getElementById('ourRosterStatus').innerHTML =
         '<div class="roster-summary">' + entries.length + ' players loaded from your roster' +
         (conflicts.length > 0 ? ' — ' + conflicts.length + ' number(s) need a quick check below' : '') + '</div>' +
