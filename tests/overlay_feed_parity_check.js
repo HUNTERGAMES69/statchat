@@ -58,6 +58,33 @@ for (const m of setup.matchAll(/broadcast_starters\.html\?unit=([a-z]+)/g)) star
 chk('the overlay section offers the three lineup cards',
     ['offense','defense','special'].every(u => starterUnits.has(u)),
     JSON.stringify([...starterUnits]));
+
+// A TEXT GREP CANNOT SEE A BROKEN ARRAY, and that is exactly how these six
+// lines shipped missing. The entries were inserted INSIDE the Season-leaders
+// entry rather than beside it -- one malformed element instead of seven rows
+// -- so every string this file looks for was present, the page still parsed,
+// and nothing rendered. Andy found it by opening the page.
+//
+// So the array is parsed as an array: every entry must be a two-element
+// [label, url] pair. A structural break shows up as an element that is not.
+const ovArray = setup.match(/const ov = document\.getElementById\('overlayRows'\);[\s\S]*?\n\s*\]\.forEach/);
+chk('the overlay list is a well-formed array of [label, url] pairs', !!ovArray);
+if (ovArray) {
+  const body = ovArray[0].replace(/\/\/[^\n]*/g, '');
+  // Count entry openers against overlayUrl() calls: every row has exactly
+  // one of each, so a mismatch means an entry lost its label or its URL.
+  // NOT newline-anchored: the first entry shares its line with the array
+  // opener (`[['Full scoreboard'`), so requiring a newline before it under-
+  // counts by exactly one and reports a healthy file as broken.
+  const opens = (body.match(/\['/g) || []).length;
+  const urls  = (body.match(/overlayUrl\(/g) || []).length;
+  chk('  ...every row has one label and one address', opens === urls,
+      opens + ' labels vs ' + urls + ' addresses — a mismatch means an entry ' +
+      'swallowed another, which renders as a missing row rather than an error');
+  chk('  ...and the lineup rows are siblings, not nested inside another entry',
+      !/\['[^']*',\s*\n\s*(?:\/\/[^\n]*\n\s*)*\['/.test(body),
+      'an entry opening immediately before another entry means one contains the other');
+}
 // Both column layouts, as separate lines rather than a parameter a crew has
 // to know about -- the ?dd=0 lesson: an option described only in source is
 // an option nobody uses.
