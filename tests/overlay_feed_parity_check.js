@@ -47,6 +47,37 @@ for (const m of setup.matchAll(/broadcast_leaders\.html\?views=([a-z,]+)/g))
 chk('the overlay section offers leader views at all', overlayViews.size >= 4,
     JSON.stringify([...overlayViews]));
 
+// ---- THE LINEUP OVERLAYS ---------------------------------------------
+// broadcast_starters.html arrived after this file did, and its units are a
+// different parameter from the leaders' views -- so the sweep above cannot
+// see it and the parity rule would have silently stopped covering the newest
+// overlay. Which is precisely the failure this file exists to prevent, in
+// the file that exists to prevent it.
+const starterUnits = new Set();
+for (const m of setup.matchAll(/broadcast_starters\.html\?unit=([a-z]+)/g)) starterUnits.add(m[1]);
+chk('the overlay section offers the three lineup cards',
+    ['offense','defense','special'].every(u => starterUnits.has(u)),
+    JSON.stringify([...starterUnits]));
+// Both column layouts, as separate lines rather than a parameter a crew has
+// to know about -- the ?dd=0 lesson: an option described only in source is
+// an option nobody uses.
+['1','2'].forEach(c => chk('  ...each offered in ' + c + '-column form',
+    ['offense','defense','special'].every(u =>
+      setup.indexOf('unit=' + u + '&cols=' + c) > -1),
+    'a layout nobody is shown is a layout nobody uses'));
+chk('every lineup overlay has the starters feed behind it',
+    /^\s{4}starters:/m.test(feed), 'api/feed.js must serve view=starters');
+chk('  ...and the setup page publishes it for each unit',
+    ['offense','defense','special'].every(u => setup.indexOf("'unit=" + u + "'") > -1),
+    'the FEEDS table must carry a row per unit');
+chk('  ...with a row name of its own in the XML',
+    /starters:\s*'starter'/.test(feed), "ROW_NAME.starters should read 'starter'");
+// A lineup belongs to ONE game. Offering ?scope=season on it would answer
+// with a card that means nothing, so it must stay out of SEASON_VIEWS.
+chk('starters is NOT offered as a season view',
+    !/SEASON_VIEWS = \[[^\]]*'starters'/.test(feed),
+    'a season has no starting lineup');
+
 // ---- what the feed serves ---------------------------------------------
 const feedViews = new Set();
 const feedsTable = setup.match(/const FEEDS = \[([\s\S]*?)\n  \];/);

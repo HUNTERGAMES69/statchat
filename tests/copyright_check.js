@@ -30,8 +30,9 @@ console.log('=== Copyright notices ===\n');
 // is the reason the check has to be edited whenever an overlay is added: an
 // overlay carries its notice in a source comment, because a visible one would
 // be burnt into the picture.
+// broadcast_starters.html added 1 Sep 2026 with the three lineup cards.
 const OVERLAYS = ['broadcast.html', 'broadcast_stats.html', 'broadcast_leaders.html',
-                  'broadcast_drive.html'];
+                  'broadcast_drive.html', 'broadcast_starters.html'];
 
 const pages = fs.readdirSync(root)
   .filter(f => f.endsWith('.html'))
