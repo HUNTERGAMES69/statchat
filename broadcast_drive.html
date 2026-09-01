@@ -70,6 +70,23 @@
   #foot .at { opacity:.55; font-weight:600; font-size:18px; }
   body.nodd #foot { display:none; }
 
+  /* COMPACT: the drive and nothing else. Andy's request, 31 Aug 2026.
+     ------------------------------------------------------------------
+     Plays and yards, with no down and distance and no field position of
+     any kind -- which means dropping the Started tile as well as the foot
+     line, because "own 28" is a field position wherever it sits.
+     &dd=0 already took the foot line, and it carried the CURRENT spot with
+     it; this takes the drive's start too.
+     ------------------------------------------------------------------
+     NARROWER, because two tiles at the full 700px is a lot of empty panel
+     either side of "6" and "46". The tracks stay equal, so both cards are
+     still the same size as each other -- the property the whole panel is
+     built around. */
+  body.compact #foot,
+  body.compact #tileStart { display:none; }
+  body.compact #tiles { grid-template-columns:1fr 1fr; }
+  body.compact #panel { width:460px; }
+
   body.debug { background:#123 !important; }
 </style>
 </head>
@@ -86,7 +103,7 @@
       <div id="tiles">
         <div class="tile"><div class="k">Plays</div><div class="v" id="vPlays"></div></div>
         <div class="tile"><div class="k">Yards</div><div class="v" id="vYards"></div></div>
-        <div class="tile"><div class="k">Started</div><div class="v" id="vStart"></div></div>
+        <div class="tile" id="tileStart"><div class="k">Started</div><div class="v" id="vStart"></div></div>
       </div>
       <div id="foot"><span id="fDD"></span><span class="at" id="fAt"></span></div>
     </div>
@@ -99,6 +116,7 @@
   // ---------------------------------------------------------------------
   //     /broadcast_drive.html
   //     /broadcast_drive.html?dd=0        without the down & distance line
+  //     /broadcast_drive.html?compact=1   plays and yards only
   //
   // Data comes from /api/gamedata, which reads server-side with the service
   // key. A browser input is unauthenticated and every RLS policy on plays
@@ -115,6 +133,10 @@
   const DEBUG = params.get('debug') === '1';
   if (DEBUG) document.body.classList.add('debug');
   if (params.get('dd') === '0') document.body.classList.add('nodd');
+  // compact IMPLIES dd=0 -- it is the same foot line plus the Started tile,
+  // so the two are not independent and offering them as if they were would
+  // invite ?compact=1&dd=1, which cannot mean anything.
+  if (params.get('compact') === '1') document.body.classList.add('compact');
 
   const POLL_MS = 2000;
   let currentGameId = '';
