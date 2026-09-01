@@ -43,11 +43,53 @@
 -- silently pushing a game onto a live broadcast is a worse surprise than
 -- having to click "Set as ON AIR" once.
 --
+-- ============================================================================
+-- WHAT THIS WRITES TO YOUR DATA, EXHAUSTIVELY
+--
+-- ONE column, on rows that are ALREADY DELETED:
+--     update public.games set is_broadcast = false
+--      where is_broadcast and deleted_at is not null;
+--
+-- Nothing is deleted. No row is removed. No other column is written. A game
+-- that is currently on air has deleted_at null and is therefore not matched
+-- -- running this mid-broadcast does not take anything off air.
+--
+-- THE CEILING IS ONE ROW PER SCHOOL. 010's partial unique index,
+-- (tenant_id) WHERE is_broadcast, means at most one game per tenant can hold
+-- the flag at all. So the backfill can touch at most one row per school, and
+-- only where that school's flag-holder is a deleted game.
+--
+-- WHAT IS LOST: which deleted game last held the flag. Very little, and not
+-- silently -- broadcast_set_at and broadcast_set_by are deliberately left
+-- alone, so the record of when it went on air and who put it there survives
+-- on the row itself.
+--
+-- ============================================================================
 -- THE PERMISSION CHECKS ARE COPIED VERBATIM FROM 012. This replaces a
 -- SECURITY DEFINER function, which is exactly where a rewrite quietly drops
 -- a guard. Diff this against 012 before applying: the only changes below the
 -- header are the two added lines in the UPDATE.
 -- ============================================================================
+
+-- ============================================================================
+-- ONE TRANSACTION. Function replacement is DDL and DDL is transactional in
+-- PostgreSQL, so the new definition, the backfill and the bookkeeping row
+-- either all land or none do. Nothing can be left half-migrated.
+-- ============================================================================
+
+begin;
+
+-- WHAT IS ABOUT TO CHANGE, BEFORE IT CHANGES.
+-- Read this row first. `will_be_cleared` is the exact number of rows the
+-- backfill below will touch; if it is 0, this migration alters no data at
+-- all and only replaces the function. `live_on_air` must be unaffected --
+-- it is listed here so you can confirm the same figure afterwards.
+select
+  count(*) filter (where is_broadcast and deleted_at is not null) as will_be_cleared,
+  count(*) filter (where is_broadcast and deleted_at is null)     as live_on_air_untouched,
+  count(*) filter (where deleted_at is not null)                  as deleted_games_total,
+  count(*)                                                        as games_total
+from public.games;
 
 create or replace function public.delete_game(p_game_id uuid)
  returns boolean language plpgsql security definer set search_path to 'public'
@@ -109,3 +151,14 @@ update public.games
 
 insert into public.schema_migrations (version, name)
 values (35, '035_delete_game_clears_broadcast') on conflict (version) do nothing;
+
+-- AND WHAT CHANGED. still_wrong must be 0, and live_on_air must match the
+-- figure from the first select exactly -- that is the check that this
+-- touched no game anybody is currently broadcasting.
+select
+  count(*) filter (where is_broadcast and deleted_at is not null) as still_wrong_should_be_0,
+  count(*) filter (where is_broadcast and deleted_at is null)     as live_on_air_untouched,
+  count(*)                                                        as games_total
+from public.games;
+
+commit;
