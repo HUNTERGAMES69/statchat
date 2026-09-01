@@ -298,6 +298,30 @@
         <label style="display:inline-flex; align-items:center; gap:4px; font-size:13px;">WR3<input type="text" id="ourStarterWR3" style="width:36px;"></label>
       </div>
       <div id="ourStarterResolve" style="margin-top:8px;"></div>
+
+      <!-- ================================================================
+           THE FULL LINEUP, FOR GRAPHICS ONLY.
+           ================================================================
+           Collapsed, hairline-indented and in muted type on purpose: this
+           is a footnote to the six seeded starters above, not a second
+           feature competing with them. A coach who never opens it loses
+           nothing, and play entry is identical either way -- the entry
+           pickers read seed_starters and never read this.
+           Our team only. The opponent's lineup is not ours to publish. -->
+      <details id="bcStartersWrap" style="margin:14px 0 0; border-left:2px solid var(--sc-rule, #2b333d); padding-left:14px;">
+        <summary style="list-style:none; cursor:pointer; font-size:13px; color:var(--sc-ink-muted); display:flex; align-items:center; gap:8px; padding:3px 0;">
+          <span id="bcCaret" style="font-size:10px; opacity:.7;">&#9654;</span>
+          <span>Specify all game starters</span>
+          <span style="font-size:11px; text-transform:uppercase; letter-spacing:.07em; border:1px solid var(--sc-rule, #2b333d); border-radius:3px; padding:1px 6px;">broadcast only</span>
+          <span id="bcSummary" style="margin-left:auto; font-variant-numeric:tabular-nums;"></span>
+        </summary>
+        <div style="padding:10px 0 4px; font-size:13px;">
+          <p style="margin:0 0 10px; font-size:12.5px; color:var(--sc-ink-muted); font-style:italic;">
+            Read only by the three starter overlays. Play entry and the pickers above are unaffected.</p>
+          <div id="bcGroups"></div>
+          <div id="bcFillMsg" style="font-size:12.5px; margin-top:2px;"></div>
+        </div>
+      </details>
     </div>
 
     <div class="card">
@@ -526,6 +550,418 @@
     if (!bucket) return false;
     return bucket.offense.length === 0 && bucket.defense.length === 0 && bucket.special.length === 0;
   }
+
+
+  // ===================================================================
+  // ALL GAME STARTERS -- BROADCAST ONLY
+  // ===================================================================
+  // Feeds the three starter overlays and nothing else. Stored in its own
+  // column, broadcast_starters, because seed_starters decides what the
+  // OFFENSE PICKER opens with during entry -- putting a defence and five
+  // linemen in there would change what a scorer meets on every play, to
+  // serve a graphic.
+  //
+  // It reuses candidatesForNumber() and isAwaitingAssignment() above: a
+  // coach meets the same shared-number control here as in the six seeded
+  // slots and in the entry app, which is the point of having written it
+  // once.
+  const BC_SKILL = ['RB','FB','WR','TE','SB','QB2'];
+  const BC_DL    = ['DE','DT','NT','EDGE'];
+  const BC_LB    = ['MLB','WLB','SLB','ILB','OLB'];
+  const BC_DB    = ['CB','FS','SS','NB'];
+  const BC_KICK  = ['FG','PAT','PK','KO','P','LS','H','KR','PR'];
+  // A slot is FIXED (its label is a label) or CHOOSABLE (its label is the
+  // selector). Defaults are the commonest high-school set; every choosable
+  // one can be changed, so a Wing-T team edits the two or three it needs.
+  //
+  // NO FORMATION PRESET. "11 / 21 personnel" is pro and college shorthand
+  // and this is a high-school setup screen -- the same reason this codebase
+  // follows NFHS conventions rather than NFL ones throughout.
+  const BC_UNITS = {
+    offense: { title:'Offense', slots:[
+      {f:'QB'}, {c:BC_SKILL,d:'RB'}, {c:BC_SKILL,d:'WR'}, {c:BC_SKILL,d:'WR'},
+      {c:BC_SKILL,d:'WR'}, {c:BC_SKILL,d:'TE'},
+      {f:'LT'}, {f:'LG'}, {f:'C'}, {f:'RG'}, {f:'RT'} ] },
+    defense: { title:'Defense', slots:
+      ['DE','DT','DT','DE','WLB','MLB','SLB','CB','CB','FS','SS']
+        .map(function(d){ return { c:BC_DL.concat(BC_LB, BC_DB), d:d }; }) },
+    special: { title:'Special teams', slots:
+      ['FG','PAT','KO','P'].map(function(d){ return { c:BC_KICK, d:d }; }) }
+  };
+  const bcChosen = {};   // unit:index -> chosen name, for shared numbers
+  const bcTwoWay = {};   // jersey number -> confirmed as a two-way starter
+  const bcK = function(u,i){ return u + ':' + i; };
+  const bcInput = function(u,i){
+    return document.querySelector('input.bcNum[data-unit="'+u+'"][data-i="'+i+'"]'); };
+  const bcPos = function(u,i){
+    const sl = BC_UNITS[u].slots[i];
+    if (sl.f) return sl.f;
+    const el = document.querySelector('select.bcPos[data-unit="'+u+'"][data-i="'+i+'"]');
+    return el ? el.value : '';
+  };
+  const bcVal = function(u,i){ const el = bcInput(u,i); return el ? (el.value||'').trim() : ''; };
+
+  function bcBuild(){
+    const host = document.getElementById('bcGroups');
+    if (!host) return;
+    host.innerHTML = Object.keys(BC_UNITS).map(function(u){
+      const cfg = BC_UNITS[u];
+      return '<div style="margin:0 0 12px;" data-bcunit="'+u+'">' +
+        '<div style="display:flex; align-items:center; gap:10px; font-size:11.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--sc-ink-muted); margin:0 0 6px;">' +
+          '<span>'+cfg.title+' &mdash; '+cfg.slots.length+'</span>' +
+          (u==='offense' ? '<button type="button" class="bcFill" style="background:var(--sc-raise,#20272f); color:var(--sc-ink-soft,#c7d0da); border:1px solid var(--sc-rule,#2b333d); border-radius:4px; font-size:11.5px; padding:2px 8px; cursor:pointer; text-transform:none; letter-spacing:0;">Fill from likely starters</button>' : '') +
+          '<span class="bcTally" id="bcTally_'+u+'" style="margin-left:auto; font-variant-numeric:tabular-nums; text-transform:none; letter-spacing:0;"></span>' +
+        '</div>' +
+        '<div style="display:flex; flex-wrap:wrap; gap:7px 11px;">' +
+        cfg.slots.map(function(sl,i){
+          return '<label style="display:inline-flex; align-items:center; gap:5px; font-size:13px; color:var(--sc-ink-soft,#c7d0da);">' +
+            (sl.f
+              ? '<span style="font-size:12.5px; color:var(--sc-ink-muted); min-width:22px;">'+sl.f+'</span>'
+              : '<select class="bcPos" data-unit="'+u+'" data-i="'+i+'" style="background:transparent; color:var(--sc-ink-soft,#c7d0da); border:1px solid transparent; border-radius:3px; font-size:12.5px; padding:1px 2px; cursor:pointer; font-family:inherit;">' +
+                sl.c.map(function(o){ return '<option'+(o===sl.d?' selected':'')+'>'+o+'</option>'; }).join('') +
+                '</select>') +
+            '<input type="text" class="bcNum" inputmode="numeric" maxlength="2" data-unit="'+u+'" data-i="'+i+'" style="width:38px; text-align:center;"></label>';
+        }).join('') + '</div>' +
+        (u==='special'
+          ? '<p style="font-size:12.5px; color:var(--sc-ink-muted); margin:6px 0 0; font-style:italic;">One player in more than one slot is combined on the card &mdash; a boy in the FG and PAT slots appears once as <b>FG/PAT</b>, not twice.</p>'
+          : '') +
+        '<div class="bcRes" id="bcRes_'+u+'" style="margin-top:7px; font-size:12.5px;"></div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // The first slot in a unit holding a number is the one that counts.
+  function bcFirstSlotWith(u, num){
+    for (let i = 0; i < BC_UNITS[u].slots.length; i++) if (bcVal(u,i) === num) return i;
+    return -1;
+  }
+  function bcNameForNumber(u, num){
+    const i = bcFirstSlotWith(u, num);
+    if (i < 0) return '';
+    const c = candidatesForNumber('our', num);
+    return bcChosen[bcK(u,i)] || (c.length === 1 ? c[0] : '');
+  }
+
+  // ONE PERSON, ONE LINE, on special teams. Slots holding the same player
+  // collapse into a single row whose position is the slots joined by "/",
+  // keyed on the resolved NAME where there is one so two different boys who
+  // share a jersey are never merged. Offence and defence never combine --
+  // a number starts once there, and the duplicate is refused outright.
+  function bcRows(u){
+    const out = [], byKey = {}, seen = {};
+    BC_UNITS[u].slots.forEach(function(sl,i){
+      const num = bcVal(u,i);
+      if (!num) return;
+      if (u !== 'special'){ if (seen[num]) return; seen[num] = 1; }
+      const c = candidatesForNumber('our', num);
+      const name = bcChosen[bcK(u,i)] || (c.length === 1 ? c[0] : '');
+      const key = (u === 'special') ? (name ? 'n:'+name : '#:'+num) : 'slot:'+i;
+      if (byKey[key] !== undefined){ out[byKey[key]].pos.push(bcPos(u,i)); return; }
+      byKey[key] = out.length;
+      out.push({ pos:[bcPos(u,i)], num:num, name:name });
+    });
+    return out;
+  }
+
+  function bcRender(){
+    if (!document.getElementById('bcGroups')) return;
+    let filled = 0, total = 0;
+    Object.keys(BC_UNITS).forEach(function(u){
+      const lines = [], dupes = {}, dupSeen = {};
+      BC_UNITS[u].slots.forEach(function(sl,i){
+        total++;
+        const num = bcVal(u,i);
+        if (!num){ delete bcChosen[bcK(u,i)]; return; }
+        filled++;
+        (dupes[num] = dupes[num] || []).push(bcPos(u,i));
+        // A REJECTED DUPLICATE GETS NO SHARED-NUMBER PICKER. Asking "which
+        // of the two #7s is this?" against a slot that cannot legally exist
+        // invites configuring something the rules forbid.
+        if (u !== 'special' && dupSeen[num]){ delete bcChosen[bcK(u,i)]; return; }
+        dupSeen[num] = 1;
+        const c = candidatesForNumber('our', num);
+        if (c.length === 0){
+          delete bcChosen[bcK(u,i)];
+          if (isAwaitingAssignment('our', num)){
+            lines.push('<div style="color:var(--sc-amber); margin-bottom:3px;">' + bcPos(u,i) +
+              ' #' + num + ' — on the roster, but needs a unit picked above before it can be named.</div>');
+          } else {
+            lines.push('<div style="color:var(--sc-ink-muted); margin-bottom:3px;">' + bcPos(u,i) +
+              ' #' + num + ' — not on the roster loaded here; the number will be used on its own.</div>');
+          }
+        } else if (c.length === 1){
+          bcChosen[bcK(u,i)] = c[0];
+        } else {
+          // SHARED NUMBER. Nothing is chosen for the coach: an arbitrary
+          // default is indistinguishable from a decision. Same rule as the
+          // seeded-starter resolver above.
+          lines.push('<div style="background:var(--sc-amber-tint); border-left:3px solid var(--sc-amber); padding:6px 9px; border-radius:0 4px 4px 0; margin:4px 0;">' +
+            bcPos(u,i) + ' #' + num + ' — two players wear this number. Which one?<div>' +
+            c.map(function(nm){
+              // FILL AND INK WRITTEN TOGETHER, in that order, as one pair.
+              // Built by concatenation the two ended up separated, and
+              // tests/contrast_check.js read the dark ink on its own against
+              // the card -- 1.13:1, reported as unreadable. It never was:
+              // #0e1408 only ever appears on the bright green fill on the
+              // same element. The check was right to complain, because a
+              // colour whose safety depends on a fill written elsewhere is
+              // one edit away from being exactly the bug it looks for.
+              const on = bcChosen[bcK(u,i)] === nm;
+              const paint = on
+                ? 'background:var(--sc-green,#a3d93f); color:#0e1408;'
+                : 'background:var(--sc-raise,#20272f); color:var(--sc-ink,#eef1f4);';
+              return '<button type="button" class="bcPick" data-k="' + bcK(u,i) + '" data-name="' + nm +
+                '" style="margin:3px 5px 0 0; ' + paint +
+                ' border:1px solid var(--sc-rule,#2b333d); border-radius:4px; padding:3px 9px; font-size:12.5px; cursor:pointer;">' + nm + '</button>';
+            }).join('') + '</div></div>');
+          if (bcChosen[bcK(u,i)] && c.indexOf(bcChosen[bcK(u,i)]) === -1) delete bcChosen[bcK(u,i)];
+        }
+      });
+
+      Object.keys(dupes).forEach(function(num){
+        if (dupes[num].length < 2) return;
+        if (u === 'special'){
+          lines.push('<div style="color:var(--sc-green,#a3d93f); margin-bottom:3px;">✓ #' + num +
+            ' covers ' + dupes[num].join(' and ') + ' — one line on the card, <b>' +
+            dupes[num].join('/') + '</b>.</div>');
+        } else {
+          lines.push('<div style="color:var(--sc-red,#ff8fa3); margin-bottom:3px;">✗ #' + num +
+            ' is in ' + dupes[num].length + ' slots (' + dupes[num].join(', ') +
+            '). A number can only start once on ' + u + '.</div>');
+        }
+      });
+
+      // ACROSS offence and defence is allowed and asked about once. A team
+      // without the roster to two-platoon plays its best athletes both ways;
+      // refusing that would make the card wrong for exactly the schools most
+      // likely to want one. But a typo and a two-way starter look identical
+      // to software, so only the coach can say which this is.
+      if (u !== 'special'){
+        const other = (u === 'offense') ? 'defense' : 'offense';
+        Object.keys(dupes).forEach(function(num){
+          const there = [];
+          BC_UNITS[other].slots.forEach(function(s2,j){ if (bcVal(other,j) === num) there.push(bcPos(other,j)); });
+          if (!there.length) return;
+          const nm = bcNameForNumber(u, num);
+          if (bcTwoWay[num]){
+            lines.push('<div style="color:var(--sc-blue,#5aa9f0); margin-bottom:3px;">⇄ #' + num +
+              (nm ? ' ' + nm : '') + ' — two-way starter, also at <b>' + there.join('/') + '</b> on ' +
+              other + '. On both cards.</div>');
+          } else {
+            lines.push('<div style="background:var(--sc-amber-tint); border-left:3px solid var(--sc-amber); padding:6px 9px; border-radius:0 4px 4px 0; margin:4px 0;">⇄ #' +
+              num + (nm ? ' ' + nm : '') + ' is also in the ' + other + ' lineup at <b>' + there.join('/') +
+              '</b>.<div><button type="button" class="bcTwoWay" data-num="' + num +
+              '" style="margin-top:4px; background:var(--sc-raise,#20272f); color:var(--sc-ink,#eef1f4); border:1px solid var(--sc-rule,#2b333d); border-radius:4px; padding:3px 9px; font-size:12.5px; cursor:pointer;">Yes — two-way starter</button></div></div>');
+          }
+        });
+      }
+      const box = document.getElementById('bcRes_' + u);
+      if (box) box.innerHTML = lines.join('');
+    });
+
+    // ELEVEN SLOTS IS NOT ELEVEN MEN. The grid caps the count -- there is no
+    // twelfth box -- but the same boy in two of them gives eleven filled
+    // slots and ten players. Distinct PEOPLE is the number that matters.
+    Object.keys(BC_UNITS).forEach(function(u){
+      const t = document.getElementById('bcTally_' + u);
+      if (!t) return;
+      const slots = BC_UNITS[u].slots.length;
+      let used = 0;
+      BC_UNITS[u].slots.forEach(function(sl,i){ if (bcVal(u,i)) used++; });
+      const men = bcRows(u).length;
+      const short = (u !== 'special') && used === slots && men < slots;
+      const done = used === slots && men === slots;
+      t.style.color = short ? 'var(--sc-amber)' : done ? 'var(--sc-green,#a3d93f)' : 'var(--sc-ink-muted)';
+      t.textContent = (done ? '✓ ' : '') + used + '/' + slots + ' slots · ' + men +
+        (men === 1 ? ' player' : ' players') + (short ? '  — ' + (slots - men) + ' short' : '');
+    });
+    // Red boxes on the refused duplicates, and only those.
+    Object.keys(BC_UNITS).forEach(function(u){
+      const seen = {};
+      BC_UNITS[u].slots.forEach(function(sl,i){
+        const el = bcInput(u,i); if (!el) return;
+        const num = (el.value||'').trim();
+        const bad = u !== 'special' && num && seen[num];
+        if (num) seen[num] = 1;
+        el.style.borderColor = bad ? 'var(--sc-red, #ff8fa3)' : '';
+      });
+    });
+    const sum = document.getElementById('bcSummary');
+    if (sum) sum.textContent = filled ? filled + ' / ' + total : '';
+  }
+
+  // PREFILL BY POSITION, NOT BY ORDER, and never over the top of anything.
+  function bcFillFromSeeds(){
+    const seeds = {};
+    ['QB','RB1','RB2','WR1','WR2','WR3'].forEach(function(r){
+      const el = document.getElementById('ourStarter' + r);
+      const v = el ? (el.value||'').trim() : '';
+      if (v) seeds[r] = v;
+    });
+    const want = [['QB',['QB']], ['RB1',['RB']], ['RB2',['RB','FB']],
+                  ['WR1',['WR']], ['WR2',['WR']], ['WR3',['WR','SB']]];
+    const usedSlot = {}, placed = [], skipped = [], nowhere = [];
+    want.forEach(function(pair){
+      const role = pair[0], labels = pair[1], num = seeds[role];
+      if (!num) return;
+      let done = false;
+      for (let li = 0; li < labels.length && !done; li++){
+        for (let i = 0; i < BC_UNITS.offense.slots.length; i++){
+          if (usedSlot[i] || bcPos('offense', i) !== labels[li]) continue;
+          const el = bcInput('offense', i);
+          if (!el) continue;
+          if ((el.value||'').trim()){ usedSlot[i] = 1; continue; }   // never overwrite
+          el.value = num; usedSlot[i] = 1; placed.push(role + ' → ' + labels[li]); done = true; break;
+        }
+      }
+      if (!done){
+        // Two different failures needing two different sentences: "there is
+        // no WR slot in this lineup" says change a position; "the WR slots
+        // are full" says nothing is wrong.
+        const existsAtAll = BC_UNITS.offense.slots.some(function(s2,i){
+          return labels.indexOf(bcPos('offense', i)) > -1; });
+        (existsAtAll ? skipped : nowhere).push(role + ' (#' + num + ')');
+      }
+    });
+    const msg = [];
+    if (placed.length) msg.push('<div style="color:var(--sc-green,#a3d93f);">✓ Filled ' + placed.length + ': ' + placed.join(', ') + '</div>');
+    if (nowhere.length) msg.push('<div style="color:var(--sc-amber);">No slot for ' + nowhere.join(', ') + ' — set a slot’s position to match.</div>');
+    if (skipped.length) msg.push('<div style="color:var(--sc-ink-muted);">Left alone (already filled): ' + skipped.join(', ') + '</div>');
+    const box = document.getElementById('bcFillMsg');
+    if (box) box.innerHTML = msg.join('');
+    bcRender();
+  }
+
+  // REFUSED, NOT MERELY FLAGGED. A red box still leaves a duplicate in the
+  // form. The check runs on `change` -- blur or Enter -- rather than every
+  // keystroke, which would fight anyone typing 22 while a 2 exists elsewhere.
+  // The OTHER slot is never touched: silently moving a number out of a slot
+  // the person cannot see is worse than refusing the one they can.
+  document.addEventListener('change', function(e){
+    const el = e.target;
+    if (!el.classList || !el.classList.contains('bcNum')) return;
+    const u = el.dataset.unit, num = (el.value||'').trim();
+    if (!num || u === 'special') return;
+    let clash = -1;
+    BC_UNITS[u].slots.forEach(function(s2,i){
+      if (clash > -1 || String(i) === el.dataset.i) return;
+      if (bcVal(u,i) === num) clash = i;
+    });
+    if (clash === -1) return;
+    const where = bcPos(u, clash);
+    el.value = '';
+    bcRender();
+    const box = document.getElementById('bcRes_' + u);
+    if (box) box.insertAdjacentHTML('afterbegin',
+      '<div style="color:var(--sc-red,#ff8fa3); margin-bottom:3px;">✗ #' + num +
+      ' is already the ' + where + ' on ' + u + '. A number can only start once per unit — ' +
+      'two players may share it on the roster, but never on the field together, so the entry was removed.</div>');
+  });
+
+  document.addEventListener('input', function(e){
+    if (e.target.classList && (e.target.classList.contains('bcNum') || e.target.classList.contains('bcPos'))) bcRender();
+  });
+  document.addEventListener('click', function(e){
+    const fill = e.target.closest ? e.target.closest('button.bcFill') : null;
+    if (fill){ bcFillFromSeeds(); return; }
+    const tw = e.target.closest ? e.target.closest('button.bcTwoWay') : null;
+    if (tw){ bcTwoWay[tw.dataset.num] = true; bcRender(); return; }
+    const pick = e.target.closest ? e.target.closest('button.bcPick') : null;
+    if (pick){ bcChosen[pick.dataset.k] = pick.dataset.name; bcRender(); return; }
+  });
+  (function(){
+    const w = document.getElementById('bcStartersWrap');
+    if (w) w.addEventListener('toggle', function(){
+      const c = document.getElementById('bcCaret');
+      if (c) c.style.transform = w.open ? 'rotate(90deg)' : '';
+    });
+  })();
+
+  // What goes in the column. Empty units are omitted entirely rather than
+  // saved as {}, so "nothing entered" reads the same as it always has.
+  function collectBroadcastStarters(){
+    const out = {};
+    Object.keys(BC_UNITS).forEach(function(u){
+      const unit = {}, seen = {};
+      BC_UNITS[u].slots.forEach(function(sl,i){
+        const num = bcVal(u,i);
+        if (!num) return;
+        if (u !== 'special'){ if (seen[num]) return; seen[num] = 1; }   // refused duplicate never saves
+        const pos = bcPos(u,i);
+        const name = bcChosen[bcK(u,i)] || '';
+        // Combined slots share one key on special teams, matching the card.
+        const key = (u === 'special' && unit[pos] === undefined) ? pos : pos;
+        if (u === 'special'){
+          const existing = Object.keys(unit).find(function(k){ return unit[k].num === num; });
+          if (existing){
+            const merged = existing + '/' + pos;
+            unit[merged] = unit[existing];
+            delete unit[existing];
+            return;
+          }
+        }
+        unit[key] = name ? { num:num, name:name } : { num:num };
+      });
+      if (Object.keys(unit).length) out[u] = unit;
+    });
+    return Object.keys(out).length ? out : null;
+  }
+
+
+  // Puts a saved lineup back into the form. Positions are KEYS, so a slot
+  // whose label is not one of this unit's defaults gets its dropdown set to
+  // match -- a Wing-T card saved with FB comes back as FB, not as the WR the
+  // slot defaults to.
+  function loadBroadcastStarters(saved){
+    if (!saved || typeof saved !== 'object') return;
+    Object.keys(BC_UNITS).forEach(function(u){
+      const unit = saved[u]; if (!unit) return;
+      const free = [];
+      BC_UNITS[u].slots.forEach(function(sl,i){ free.push(i); });
+      Object.keys(unit).forEach(function(pos){
+        const v = unit[pos];
+        const num = (v && typeof v === 'object') ? String(v.num || '') : String(v || '');
+        const nm  = (v && typeof v === 'object') ? (v.name || '') : '';
+        if (!num) return;
+        // A combined special-teams key is "FG/PAT"; the first label is the
+        // slot it lands in and the rest are re-entered as the same number,
+        // which is what produced the combination in the first place.
+        const parts = String(pos).split('/');
+        parts.forEach(function(label){
+          let idx = -1;
+          for (let k = 0; k < free.length; k++){
+            const i = free[k];
+            const sl = BC_UNITS[u].slots[i];
+            if (sl.f){ if (sl.f === label){ idx = i; break; } continue; }
+            if (sl.c.indexOf(label) > -1){ idx = i; break; }
+          }
+          if (idx === -1) return;                    // no slot can hold it
+          free.splice(free.indexOf(idx), 1);
+          const sel = document.querySelector('select.bcPos[data-unit="'+u+'"][data-i="'+idx+'"]');
+          if (sel && label) sel.value = label;
+          const el = bcInput(u, idx);
+          if (el) el.value = num;
+          if (nm) bcChosen[bcK(u, idx)] = nm;
+        });
+      });
+    });
+    // A saved two-way starter has already been confirmed once; asking again
+    // every time the game is opened would be nagging about a settled answer.
+    Object.keys(BC_UNITS).forEach(function(u){
+      if (u === 'special') return;
+      BC_UNITS[u].slots.forEach(function(sl,i){
+        const num = bcVal(u,i); if (!num) return;
+        const other = (u === 'offense') ? 'defense' : 'offense';
+        BC_UNITS[other].slots.forEach(function(s2,j){ if (bcVal(other,j) === num) bcTwoWay[num] = true; });
+      });
+    });
+    const w = document.getElementById('bcStartersWrap');
+    if (w) w.open = true;      // it has content, so show that it does
+    bcRender();
+  }
+
+  bcBuild();
+  bcRender();
 
   function renderStarterResolve(side){
     const box = document.getElementById(side + 'StarterResolve');
@@ -1063,6 +1499,12 @@
       updatePreseasonWarning();
       if (eg.opponent_primary_color) document.getElementById('oppPrimaryColorInput').value = eg.opponent_primary_color;
       if (eg.opponent_secondary_color) document.getElementById('oppSecondaryColorInput').value = eg.opponent_secondary_color;
+      // THE LINEUP COMES BACK TOO. Without this, opening a saved game for
+      // any reason -- changing a kickoff time -- would redraw the section
+      // empty and save that emptiness over a lineup the coach had entered.
+      // Silent, and it would look like the data was never stored.
+      if (eg.broadcast_starters) loadBroadcastStarters(eg.broadcast_starters);
+
       const seeds = eg.seed_starters || {};
       ['QB','RB1','RB2','WR1','WR2','WR3'].forEach(role => {
         // Both shapes: a bare number from before 13 Aug 2026, or
@@ -1818,6 +2260,7 @@
       opponent_primary_color: document.getElementById('oppPrimaryColorInput').value,
       opponent_secondary_color: document.getElementById('oppSecondaryColorInput').value,
       seed_starters: seedStarters,
+      broadcast_starters: collectBroadcastStarters(),
       is_preseason: document.getElementById('isPreseason').checked
     };
 

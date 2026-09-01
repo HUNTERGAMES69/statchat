@@ -135,8 +135,12 @@
   /* The season variant of a feed row: same table, visibly subordinate to
      the game row it sits under. */
   .seasonRow td.what { padding-left: 18px; color: var(--sc-ink-soft, #3a3a3a); }
+  /* NO NEAR-WHITE FALLBACKS. `var(--sc-rule, #ddd)` is invisible on a white
+     page by design and the brightest thing in the tile on a dark one -- the
+     fallback only ever renders when the token is missing, which is exactly
+     when it will be wrong. Falls back to the dark-theme value instead. */
   .scopeTag { font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
-    background: var(--sc-raise, #eef1f4); border: 1px solid var(--sc-rule, #ddd);
+    background: var(--sc-raise, #20272f); border: 1px solid var(--sc-rule, #2b333d);
     border-radius: 3px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
 </style>
 </head>
@@ -309,7 +313,24 @@
     ['kicking',   'Kicking leaders',   'One row per player who attempted a kick',
      'player team fgMade fgAtt fgLong fgBlocked patMade patAtt patBlocked'],
     ['punting',   'Punting leaders',   'One row per player who punted',
-     'player team punts puntYds puntLong']
+     'player team punts puntYds puntLong'],
+    // THE STARTING LINEUP. One view, three addresses -- the shape is
+    // identical and only `unit` differs, so three view names would have been
+    // three copies of one thing. Empty until a coach fills the lineup in on
+    // the game setup screen, and empty is the honest answer: a title bound
+    // to it blanks rather than holding last week's card.
+    // FIFTH ELEMENT: extra query parameters. The three lineup rows are one
+    // view with a different `unit`, not three views -- the row shape is
+    // identical and three names would have been three copies of one thing.
+    // Kept as its own field rather than smuggled into the view name, which
+    // works by string concatenation and quietly breaks anything that parses
+    // the table for view names (tests/overlay_feed_parity_check.js does).
+    ['starters', 'Offensive starters', 'One row per position',
+     'position number player unit team', 'unit=offense'],
+    ['starters', 'Defensive starters', 'One row per position',
+     'position number player unit team', 'unit=defense'],
+    ['starters', 'Special teams starters', 'One row per position',
+     'position number player unit team', 'unit=special']
   ];
 
   // SEASON TOTALS. Adding &scope=season to any of these six turns a
@@ -324,7 +345,9 @@
   // from this list because a season has no live scoreboard, no current
   // drive and no last play -- asking for one is refused by name rather
   // than answered with a single game's numbers under a season label.
-  const SEASON_CAPABLE = ['rushing', 'passing', 'receiving', 'defense', 'kicking', 'punting'];
+  // `starters` is deliberately absent: a lineup belongs to one game, and
+// "the season's starters" is not a thing anybody can put on air.
+const SEASON_CAPABLE = ['rushing', 'passing', 'receiving', 'defense', 'kicking', 'punting'];
 
   // OVERLAY PAGES NEED THE KEY TOO, and this was missed when 010 landed:
   // the API was scoped, the raw feed addresses were given a key, and the
@@ -338,12 +361,12 @@
       ? (path.indexOf('?') === -1 ? '?' : '&') + 'key=' + encodeURIComponent(feedKey)
       : '');
 
-  const feedUrlFor = (view, fmt) =>
-    ORIGIN + '/api/feed?view=' + view + '&format=' + fmt +
+  const feedUrlFor = (view, fmt, extra) =>
+    ORIGIN + '/api/feed?view=' + view + (extra ? '&' + extra : '') + '&format=' + fmt +
     (feedKey ? '&key=' + encodeURIComponent(feedKey) : '');
   // The on-screen table follows the toggle; the email does not, so it
   // takes the format explicitly.
-  const feedUrl = (view) => feedUrlFor(view, format);
+  const feedUrl = (view, extra) => feedUrlFor(view, format, extra);
 
   function copyBtn(url){
     const b = document.createElement('button');
@@ -364,8 +387,8 @@
   function renderFeeds(){
     const body = document.getElementById('feedRows');
     body.innerHTML = '';
-    FEEDS.forEach(([view, label, shape, fields]) => {
-      const url = feedUrl(view);
+    FEEDS.forEach(([view, label, shape, fields, extra]) => {
+      const url = feedUrl(view, extra);
       const tr = document.createElement('tr');
       tr.innerHTML = '<td class="what">' + label + '</td>' +
                      '<td class="desc">' + shape +
@@ -382,7 +405,7 @@
       // block further down. A crew comparing "rushing leaders" to "rushing
       // leaders, season" wants them adjacent; a second table halfway down
       // the page is how somebody copies the wrong one.
-      if (SEASON_CAPABLE.indexOf(view) > -1){
+      if (SEASON_CAPABLE.indexOf(view) > -1 && !extra){
         const sUrl = url + '&scope=season';
         const sTr = document.createElement('tr');
         sTr.className = 'seasonRow';
@@ -453,7 +476,23 @@
      // A category nobody qualifies in is SKIPPED rather than shown blank,
      // so this is safe to point at in week one.
      ['Season leaders (rotating)',
-      overlayUrl('/broadcast_leaders.html?views=rushing,passing,receiving&secs=8')],
+
+     // THE STARTING LINEUP, three cards, each offered in both shapes rather
+     // than behind a parameter the crew has to know to add. Six lines is
+     // longer than one line and a footnote, and it is the difference between
+     // a layout being used and a layout being undiscoverable -- the same
+     // lesson as ?dd=0 on the drive overlay, which existed for weeks
+     // described only in a source comment.
+     //
+     // TWO COLUMNS FIRST for the eleven-man units: one-per-row is 579px tall
+     // and pushes into the picture, two-up is 354. Special teams is four
+     // rows either way, so the narrow card leads there.
+     ['Offensive starters (2 columns)', overlayUrl('/broadcast_starters.html?unit=offense&cols=2')],
+     ['Offensive starters (1 column)',  overlayUrl('/broadcast_starters.html?unit=offense&cols=1')],
+     ['Defensive starters (2 columns)', overlayUrl('/broadcast_starters.html?unit=defense&cols=2')],
+     ['Defensive starters (1 column)',  overlayUrl('/broadcast_starters.html?unit=defense&cols=1')],
+     ['Special teams starters (1 column)',  overlayUrl('/broadcast_starters.html?unit=special&cols=1')],
+     ['Special teams starters (2 columns)', overlayUrl('/broadcast_starters.html?unit=special&cols=2')],      overlayUrl('/broadcast_leaders.html?views=rushing,passing,receiving&secs=8')],
 
      // THIS GAME'S leaders, the same four boards scoped to the game on air.
      // Live: they poll and fill as plays are entered, where the season
@@ -508,14 +547,14 @@
       L.push('  It is a plain web address returning ' + F + ', so anything');
       L.push('  that can poll a URL will read it.');
       L.push('');
-      FEEDS.forEach(([view, label, desc]) => {
+      FEEDS.forEach(([view, label, desc, fields, extra]) => {
         L.push(label);
         L.push('  ' + String(desc).replace(/&amp;/g, '&'));
-        L.push('  ' + feedUrlFor(view, fmt));
+        L.push('  ' + feedUrlFor(view, fmt, extra));
         // The emailed list is what a crew actually sets vMix up from, so a
         // season address missing here is a season address that never gets
         // used -- see the note on the overlay switches, same fault.
-        if (SEASON_CAPABLE.indexOf(view) > -1){
+        if (SEASON_CAPABLE.indexOf(view) > -1 && !extra){
           L.push('  season totals:');
           L.push('  ' + feedUrlFor(view, fmt) + '&scope=season');
         }
