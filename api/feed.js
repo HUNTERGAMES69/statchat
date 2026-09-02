@@ -65,7 +65,7 @@ const mmss = (secs) => {
 // Andy uses full names, so they were removed rather than faked. If short
 // codes are ever wanted they need a STORED field per team -- deriving
 // them guesses badly ("St. Aloysius" -> "St.").
-function buildViews(ctx, unitParam) {
+function buildViews(ctx, unitParam, teamParam) {
   const { state, box, teams, plays, game } = ctx;
 
   const sideName = k => (teams[k] || {}).name || '';
@@ -264,9 +264,31 @@ function buildViews(ctx, unitParam) {
     // BOTH SHAPES ACCEPTED, as everywhere else that reads a starters column:
     // {"QB":"7"} and {"QB":{num,name}}. See game.html's seedNum/seedName.
     starters: (() => {
-      const all = (game && game.broadcast_starters) || {};
+      // WHOSE LINEUP. ?team=opp publishes the visitors' starters; anything
+      // else, including no parameter, publishes ours -- so every feed
+      // address already bound in a switcher keeps returning exactly what it
+      // returned before this parameter existed.
+      const side = teamParam === 'opp' ? 'opp' : 'our';
+      // ONE SHAPE RULE, THREE READERS -- identical to sideOf() in
+      // broadcast_starters.html and bcSideOf() in create_game.html. The
+      // column is nested by side, { teamA, teamB }, matching seed_starters.
+      // A lineup saved before 2 Sep 2026 is a bare
+      // { offense, defense, special } object and was ours by definition, so
+      // it answers for 'our' and the opponent feed is empty for that game.
+      const sideOf = (a, sd) => {
+        if (!a || typeof a !== 'object') return null;
+        if (a.teamA || a.teamB) return (sd === 'our' ? a.teamA : a.teamB) || null;
+        if (a.offense || a.defense || a.special) return sd === 'our' ? a : null;
+        return null;
+      };
+      const all = sideOf(game && game.broadcast_starters, side) || {};
       const want = ['offense','defense','special'].indexOf(unitParam) > -1 ? unitParam : 'offense';
       const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
+      const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+      // The team column names the team the lineup BELONGS to, which is the
+      // whole point of the parameter -- a crew binding an opponent card to
+      // this feed needs the visitors' name in it, not ours.
+      const lineupTeam = side === 'opp' ? oppName : ourName;
       // TWO STORED SHAPES, ONE FEED. A unit has been an ordered array --
       // [{pos, num, name}] -- since 1 Sep 2026, because position labels
       // repeat in a real lineup (DE, DT, DT, DE) and the position-keyed
@@ -287,7 +309,7 @@ function buildViews(ctx, unitParam) {
             });
       return rows.filter(r => r.num).map(r => ({
         position: r.pos, number: r.num, player: r.name,
-        unit: want, team: ourName || ''
+        unit: want, team: lineupTeam || ''
       }));
     })(),
 
@@ -512,7 +534,8 @@ module.exports = async (req, res) => {
     const ctx = engine.buildContext(game, rosterRes.data || [],
                                     playsRes.data || [],
                                     (teamRes.data || [])[0] || {});
-    const views = buildViews(ctx, String(q.unit || 'offense').toLowerCase());
+    const views = buildViews(ctx, String(q.unit || 'offense').toLowerCase(),
+                             String(q.team || 'our').toLowerCase());
     const rows = views[view];
     if (!rows) {
       res.status(400).json({
