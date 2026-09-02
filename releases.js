@@ -42,6 +42,36 @@
 
 window.STATCHAT_RELEASES = [
   {
+    id: '2026-09-02-opponent-overlays',
+    date: '2026-09-02',
+    title: "Six more overlay addresses for the opponent's lineup cards",
+    body: "The opponent's offense, defense and special teams each have their own " +
+          'overlay address in one column or two, sitting alongside the six for your ' +
+          "own lineups. Each card draws in the opponent's colours and reads their " +
+          'name first. They publish through the feeds too — add team=opp to a ' +
+          'starters address — and an address already saved in vMix needs no edit, ' +
+          'because leaving the parameter off still returns your own starters. ' +
+          'Nothing draws until an opponent lineup is entered, so they are safe to ' +
+          'leave in a switcher bank all season.',
+    where: 'Broadcast setup → Overlays, and Feeds',
+    link: 'broadcast_setup.html',
+    audience: ['admin', 'game_entry'],
+    email: false
+  },
+  {
+    id: '2026-09-02-fill-message-placement',
+    date: '2026-09-02',
+    title: 'The "Fill from likely starters" result now sits under offense',
+    body: 'It used to print at the bottom of the whole lineup section, below defense ' +
+          'and special teams, so a message about four offensive slots read as though ' +
+          'it were about the defense you were filling in. It now appears directly ' +
+          'under the button that produced it, and says which unit it filled.',
+    where: 'Game setup → Specify all game starters → Offense',
+    link: 'create_game.html',
+    audience: ['admin'],
+    email: false
+  },
+  {
     id: '2026-09-02-opponent-starters',
     date: '2026-09-02',
     title: "Put the opponent's starting lineups on the broadcast too",
