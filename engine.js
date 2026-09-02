@@ -660,8 +660,9 @@ function scoringSummary(playsList){
     // Reading it off the score breaks the moment the DEFENSE scores on a
     // try: that is two points whether the try was a kick or a run, so a
     // blocked PAT returned by the other team described itself as a failed
-    // TWO-POINT attempt. Plays stored before playType was written carry no
-    // roles, and for those the points are still the only evidence there is.
+    // TWO-POINT attempt. The points remain the fallback for a play with no
+    // playType; nothing reaches here that way today, because the fold below
+    // requires roles.playType -- it is a guard, not a live path.
     const two = (p.roles && p.roles.playType)
       ? p.roles.playType === 'twopt'
       : (p.effect.score && p.effect.score.points === 2);
