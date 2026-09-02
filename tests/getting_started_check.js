@@ -38,7 +38,11 @@ chk(/id="gettingStarted"[^>]*display:none/.test(raw),
     'fully set-up dashboard');
 
 // ---- the order Andy asked for -------------------------------------------
-const fn = /function renderGettingStarted[\s\S]*?\n  \}/.exec(code)[0];
+// ANCHORED ON THE SIGNATURE, not the name. `/function renderGettingStarted/`
+// also matches a helper called renderGettingStartedIfReady -- and did, on
+// 2 Sep 2026, silently handing this check the wrong function's body so it
+// reported the step order was wrong when it was fine.
+const fn = /function renderGettingStarted\(state\)\{[\s\S]*?\n  \}/.exec(code)[0];
 const order = ['customize.html', 'roster.html', 'create_game.html']
   .map(h => fn.indexOf(h));
 chk(order.every(i => i > -1) && order[0] < order[1] && order[1] < order[2],
@@ -89,7 +93,14 @@ chk(/count: 'exact', head: true/.test(code),
 // A school that played last year HAS created a game, and being told to create
 // their first one because the season selector moved would be wrong.
 {
-  const call = /renderGettingStarted\(\{[\s\S]*?\}\);/.exec(code)[0];
+  // FOUND BY ITS CONTENTS, not by the call syntax. This used to match
+  // `renderGettingStarted({ ... });` literally, which broke the moment the
+  // state object was hoisted into a variable so the MFA check and the
+  // dashboard load could both feed it. What is being asserted is where
+  // hasGames comes from, and that does not depend on how the object reaches
+  // the renderer.
+  const call = (/(?:gsState\s*=|renderGettingStarted\()\s*\{[\s\S]*?hasGames:[\s\S]*?\n    \}/.exec(code) || [])[0];
+  chk(!!call, 'found the getting-started state object');
   chk(/const ownGames = allGames\.filter\(/.test(code),
       'the games that count as theirs are derived from allGames');
   chk(/hasGames:\s+ownGames\.length > 0/.test(call) && !/\bgames\.length > 0/.test(call),
