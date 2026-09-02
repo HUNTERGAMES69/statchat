@@ -641,7 +641,7 @@ function scoringSummary(playsList){
   // would give it whatever the surrounding plays say.
   let walkQuarter = 1;
 
-  const tryText = (p, defensive) => {
+  const tryText = (p) => {
     // What goes in the brackets. A missed try is worth saying: a 6 in the
     // quarter line with no explanation reads like a mistake.
     //
@@ -656,20 +656,15 @@ function scoringSummary(playsList){
     const failed = t.indexOf('NO GOOD') !== -1 || t.indexOf('FAILED') !== -1 ||
                    t.indexOf('MISSED') !== -1 || t.indexOf('BLOCKED') !== -1;
     const good = !failed && (t.indexOf('GOOD') !== -1 || t.indexOf('CONVERSION') !== -1);
-    const two = (p.effect.score && p.effect.score.points === 2);
-    // A DEFENSIVE CONVERSION IS NOT A FAILED TRY, and read by the two
-    // tests above it looks exactly like one: the text carries BLOCKED or
-    // INTERCEPTED, so `failed` is true, while the score is two points --
-    // which together said "two-point failed" over a play that put two
-    // points on the board for the other team.
-    //
-    // The caller knows what this function cannot: whether the points went
-    // to the team that scored the touchdown or to the team defending it.
-    // Restored to the app 2 Sep 2026 for Texas, which plays the NCAA book
-    // (see the note on the PAT panel in game.html).
-    if (defensive) return (p.roles && p.roles.playType === 'pat')
-      ? 'blocked, returned for 2'
-      : 'turnover returned for 2';
+    // WHICH KIND OF TRY, FROM THE PLAY TYPE -- not from the points.
+    // Reading it off the score breaks the moment the DEFENSE scores on a
+    // try: that is two points whether the try was a kick or a run, so a
+    // blocked PAT returned by the other team described itself as a failed
+    // TWO-POINT attempt. Plays stored before playType was written carry no
+    // roles, and for those the points are still the only evidence there is.
+    const two = (p.roles && p.roles.playType)
+      ? p.roles.playType === 'twopt'
+      : (p.effect.score && p.effect.score.points === 2);
     if (!good) return two ? 'two-point failed' : 'kick failed';
     return two ? 'two-point good' : 'kick good';
   };
@@ -689,15 +684,48 @@ function scoringSummary(playsList){
     if (isTry && out.length && out[out.length - 1].isTouchdown){
       const prev = out[out.length - 1];
       // WHOSE TWO POINTS. On an ordinary try the points belong to the team
-      // that scored the touchdown; on a defensive conversion they belong
-      // to the other one. The running score has always been credited from
-      // sc.team and so was already right -- it is the WORDING that read as
-      // a failed try, which is what this tells tryText.
+      // that scored the touchdown, and the try is FOLDED into its row as a
+      // parenthetical. On a defensive conversion they belong to the other
+      // team, and folding it is wrong in three ways at once: the summary
+      // counts one score where two happened, the parenthetical hangs off a
+      // row labelled with the team that did NOT score it, and the reader is
+      // given no way to tell who those two points went to.
+      //
+      // Reported from a real game, 2 Sep 2026: Neville returned an
+      // interception for a touchdown, Ruston took the two-point try back
+      // the other way, and the summary read
+      //   Neville  ...TOUCHDOWN NEVILLE (turnover returned for 2)  6-8
+      // as a single Neville score, with Ruston's two points visible only
+      // in the running total beside it.
       const defensive = !!(sc && sc.team && sc.points && sc.team !== prev.team);
       if (sc && sc.team && sc.points) running[sc.team] += sc.points;
-      prev.detail = tryText(p, defensive);
-      prev.teamA = running.teamA;
-      prev.teamB = running.teamB;
+
+      // Either way the touchdown's own row says what happened to ITS try,
+      // and from that team's point of view a try taken away by the defense
+      // is simply a try that failed.
+      prev.detail = tryText(p);
+
+      if (!defensive){
+        prev.teamA = running.teamA;
+        prev.teamB = running.teamB;
+        continue;
+      }
+      // The touchdown row keeps the running score it was pushed with: those
+      // two points were not on the board when it was scored.
+      out.push({
+        idx: i,
+        quarter: p.quarter || walkQuarter,
+        team: sc.team,
+        points: sc.points,
+        text: stripTeamNames(resolveNumbersInText(p.text, sc.team)),
+        // NOT a touchdown, so the next try does not try to fold itself into
+        // this row -- there is no try after a defensive conversion, but a
+        // row claiming six points it did not score would be wrong anyway.
+        isTouchdown: false,
+        detail: '',
+        teamA: running.teamA,
+        teamB: running.teamB
+      });
       continue;
     }
 
