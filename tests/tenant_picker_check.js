@@ -157,6 +157,16 @@ let PAYLOAD_EXTRA = {};
     const gone = opts().filter(t => t.indexOf('Old Gone High') === 0);
     chk('...and the live school of the same name stays a separate entry',
         gone.length === 2, JSON.stringify(gone));
+    // THE COUNT, WITH DISABLED SHOWN. The school figure excluded the two
+    // pseudo-groups but not the deleted schools -- and deleted schools are
+    // only ever in `keys` when this toggle is on, which is exactly why the
+    // first pass of this file did not catch it. A school that has been
+    // deleted is not one of your schools in either view.
+    chk('showing disabled does NOT inflate the school count with deleted schools',
+        /\b3 schools/.test(allOpt()), allOpt());
+    chk('...while the account figure DOES grow, because those accounts are real',
+        /8 accounts/.test(allOpt()), allOpt());
+
     chk('...with the deleted one sorted below the live schools',
         opts().findIndex(t => /deleted school/.test(t)) >
         opts().findIndex(t => /^Riverside High/.test(t)), JSON.stringify(opts()));
