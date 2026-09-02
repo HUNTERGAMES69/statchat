@@ -103,9 +103,13 @@ console.log('=== Dashboard boot chain ===\n');
   chk(/const start = \(q\) => Promise\.resolve\(q\);/.test(code),
       'start() exists — Promise.resolve adopts the thenable, which is what sends the request');
 
-  ['teamsP', 'playersP'].forEach(v =>
-    chk(new RegExp('const ' + v + ' = start\\(').test(code),
-        v + ' is started, not merely built'));
+  chk(/const teamsP = start\(/.test(code), 'teamsP is started, not merely built');
+  // playersP is CONDITIONAL now -- only an admin ever needs it -- but when it
+  // does run it must still be started rather than merely built.
+  chk(/const playersP = currentIsAdmin\s*\n?\s*\?\s*start\(/.test(code),
+      'playersP is started when it runs, and only runs for an admin');
+  chk(/:\s*null;/.test(code),
+      'and is null otherwise — a non-admin makes no players request at all');
 
   chk(/_gamesP = start\(gamesQuery\(\)\)/.test(code), 'the games query is started');
   chk(/_releaseStateP = start\(/.test(code),          'the release-state query is started');

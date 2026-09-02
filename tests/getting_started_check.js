@@ -55,9 +55,13 @@ chk(!/localStorage|sessionStorage|seen_?getting|has_?seen/i.test(fn),
     'it asks for');
 chk(/if \(left === 0\)\{[\s\S]{0,60}display = 'none'/.test(fn),
     'and hides itself when all three are done');
-chk(/customized: gsCustomized/.test(code) && /hasRoster:\s+gsPlayerCount > 0/.test(code) &&
+chk(/customized: gsCustomized/.test(code) && /hasRoster:\s+gsHasRoster === true/.test(code) &&
     /hasGames:\s+ownGames\.length > 0/.test(code),
-    'the three states come from the team row, a player count and the games list');
+    'the three states come from the team row, a roster existence check and the games list');
+// `=== true` explicitly: gsHasRoster is NULL until asked, and null must not
+// read as "no roster" for a non-admin who was never asked.
+chk(/let gsHasRoster = null;/.test(code),
+    'and the roster answer starts as null, not false — "not asked" is not "none"');
 
 // ---- a seeded sample is not a game THEY created --------------------------
 // 028 puts an example game in a new school's dashboard so the first screen is
@@ -84,8 +88,21 @@ chk(/gsCustomized = !!\(team\.primary_color \|\| team\.logo_url\)/.test(code),
     'CUSTOMIZED means a color or logo was chosen — create_tenant() writes the ' +
     'team row with a name but neither, so a null primary_color is an honest ' +
     '"nobody has been to that page"');
-chk(/count: 'exact', head: true/.test(code),
-    'the player count is a HEAD count — the number without fetching rows');
+// WAS "the player count is a HEAD count". It is no longer a count at all.
+// An exact count asks "how many players may I see", which forces a full
+// pass over the table; this card only asks "is there a roster yet", which
+// limit(1) answers from the first row found. Andy, 2 Sep 2026: "why are we
+// reading all players on a dashboard refresh?"
+chk(/\.from\('players'\)\.select\('id'\)\.limit\(1\)/.test(code),
+    'the roster question is an EXISTENCE check, not a count of the table');
+chk(!/count: 'exact'[^)]*\)[\s\S]{0,80}from\('players'\)/.test(code) &&
+    !/from\('players'\)[\s\S]{0,80}count: 'exact'/.test(code),
+    'and nothing counts the players table on a dashboard load');
+// AND NOT AT ALL FOR SOMEBODY WHO CANNOT SEE THE CARD. renderGettingStarted
+// returns immediately for a non-admin, so asking was pure waste for every
+// scorer and view account.
+chk(/const playersP = currentIsAdmin\s*\n?\s*\?/.test(code),
+    'and it is only asked for an admin — the only person the card renders for');
 // FROM allGames, VIA ownGames -- not from the season-filtered `games`.
 // The derivation gained a step on 31 Aug 2026 (the sample game is filtered
 // out of it), so this no longer looks for `allGames.length > 0` literally.
