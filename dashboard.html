@@ -641,6 +641,27 @@
   }
 
   let currentUserId = null, currentUserEmail = null, currentIsAdmin = false, currentCanEnterGames = false;
+  // The one `profiles` row for this person, read once at boot. Everything
+  // that used to query for a column of it reads this instead.
+  let bootProfile = null;
+
+  // A SUPABASE QUERY DOES NOT START WHEN YOU BUILD IT.
+  // ---------------------------------------------------------------------
+  // PostgrestBuilder is a THENABLE, not a promise: nothing is sent until
+  // something calls .then() on it. So
+  //
+  //     const a = supabaseClient.from('teams').select('*');   // sends nothing
+  //     const b = supabaseClient.from('players').select('*'); // sends nothing
+  //     await a; await b;                                     // two round trips, in series
+  //
+  // reads like parallel code and is not. The first attempt at this fix made
+  // exactly that mistake, and the measurement caught it -- the two calls
+  // were still 200ms apart in the log.
+  //
+  // Promise.resolve() on a thenable adopts it, which calls .then(), which
+  // is what actually puts the request on the wire. Everything that wants to
+  // run beside something else goes through here.
+  const start = (q) => Promise.resolve(q);
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION'){
@@ -682,21 +703,58 @@
         // must add both before it ships. Nothing links here with ?as= yet.
         (async () => {
           const viewingAs = new URLSearchParams(location.search).get('as');
-          if (!viewingAs){
-            const { data: me } = await supabaseClient
-              .from('profiles').select('is_super_admin').eq('id', session.user.id).limit(1);
-            if (me && me[0] && me[0].is_super_admin){
-              window.location.replace('platform.html');
-              return;
-            }
+
+          // ONE READ OF `profiles`, NOT THREE.
+          // ---------------------------------------------------------------
+          // This page used to fetch the same row three times before it drew
+          // anything: is_super_admin here, then role in loadIsAdmin(), then
+          // display_name and avatar_url in loadAccountMenu() -- and a fourth
+          // time for last_seen_release when the release card was added. Same
+          // table, same primary key, same row, four round trips, two of them
+          // one after another on the critical path.
+          //
+          // Measured 2 Sep 2026 with a fixed-latency stub: the dashboard's
+          // boot was a chain NINE round trips deep and stopped changing at
+          // 1827ms per 200ms of latency, against 1010ms on 25 Aug. On a
+          // phone at 350ms a call that is the 2-4 second pause Andy reported.
+          //
+          // Every column any of them wanted, once. The others read this.
+          const { data: pr } = await supabaseClient
+            .from('profiles')
+            .select('role, is_super_admin, display_name, avatar_url, last_seen_release, ' +
+                    'mfa_prompt_first_shown_at')
+            .eq('id', session.user.id).limit(1);
+          bootProfile = (pr && pr[0]) || {};
+
+          if (!viewingAs && bootProfile.is_super_admin){
+            window.location.replace('platform.html');
+            return;
           }
+
+          // Role is known NOW, so nothing below has to wait on a query for
+          // it. The ordering rule that mattered still holds -- the
+          // subscription notice and the release card both read
+          // currentIsAdmin, and it is set before either runs -- but it is
+          // satisfied by having the answer rather than by serializing.
+          applyRole(bootProfile.role);
           showView('dashboardView');
-          // AFTER loadIsAdmin, not beside it: the notice's wording depends
-          // on whether this person can actually pay, and currentIsAdmin is
-          // not set until that resolves. Running them in parallel showed a
-          // scorer the admin's copy about half the time.
-          loadIsAdmin().then(() => { loadDashboard(); renderSubscriptionNotice(); });
+
+          // EVERY REMAINING READ AT ONCE. None of them depends on another:
+          // the team row, the player count, the game list, the tenant's
+          // subscription and the published release notes are five separate
+          // questions that used to be asked one after another. Started
+          // here, awaited where they were always awaited.
+          gamesP();
+          releaseStateP();
+
           loadAccountMenu();
+          loadDashboard();
+          renderSubscriptionNotice();
+          // OFF THE CRITICAL PATH. listFactors decides one tick on the
+          // getting-started checklist and nothing else; it used to block
+          // the entire dashboard behind an auth round trip. It now runs
+          // beside everything and redraws that one card when it lands.
+          loadMfaState();
         })();
       } else {
         window.location.href = '/login.html';
@@ -706,27 +764,12 @@
     }
   });
 
-  async function loadIsAdmin(){
-    const { data, error } = await supabaseClient
-      .from('profiles').select('role, is_super_admin').eq('id', currentUserId).limit(1);
-    const role = (!error && data && data.length > 0 && data[0].role) || 'view';
+  // WAS loadIsAdmin(), which queried for the role and then awaited the MFA
+  // check before anything else could start. The role now arrives with the
+  // single boot profile read, so this is pure DOM work and costs nothing.
+  function applyRole(rawRole){
+    const role = rawRole || 'view';
     currentIsAdmin = role === 'admin';
-
-    // IS TWO-FACTOR ALREADY ON? Same call account.html uses. A 'verified'
-    // TOTP factor is the only thing that counts -- an enrollment that was
-    // started and abandoned sits at 'unverified' and protects nothing.
-    if (currentIsAdmin){
-      try {
-        const { data: mfaData } = await supabaseClient.auth.mfa.listFactors();
-        gsHasMfa = !!((mfaData && mfaData.totp || []).find(f => f.status === 'verified'));
-      } catch (e) {
-        // Unreachable check reads as "not on", which shows a step that may
-        // not be needed. The other way round would hide a security step from
-        // somebody who has not done it.
-        gsHasMfa = false;
-      }
-    }
-
     currentCanEnterGames = role === 'admin' || role === 'game_entry';
     // Broadcast setup shows the static feed key, so it is not for view
     // accounts. Scorers get it because the crew sets up the day before.
@@ -735,6 +778,31 @@
     document.getElementById('newGameLink').classList.toggle('hidden', !currentIsAdmin);
     document.getElementById('rosterLink').classList.toggle('hidden', !currentIsAdmin);
     document.getElementById('customizeLink').classList.toggle('hidden', !currentIsAdmin);
+  }
+
+  // IS TWO-FACTOR ALREADY ON? Same call account.html uses. A 'verified'
+  // TOTP factor is the only thing that counts -- an enrollment that was
+  // started and abandoned sits at 'unverified' and protects nothing.
+  //
+  // ONE REDRAW WHEN IT LANDS, not a race. The getting-started card is drawn
+  // by loadDashboard whenever that finishes; this may land before or after.
+  // Rather than each path drawing when it happens to finish -- the exact
+  // shape that produced three separate bugs in the starters section -- both
+  // record what they know and call the same redraw, which draws only once
+  // the things it needs are in.
+  async function loadMfaState(){
+    if (!currentIsAdmin){ gsMfaResolved = true; drawGettingStartedWhenReady(); return; }
+    try {
+      const { data: mfaData } = await supabaseClient.auth.mfa.listFactors();
+      gsHasMfa = !!((mfaData && mfaData.totp || []).find(f => f.status === 'verified'));
+    } catch (e) {
+      // Unreachable check reads as "not on", which shows a step that may
+      // not be needed. The other way round would hide a security step from
+      // somebody who has not done it.
+      gsHasMfa = false;
+    }
+    gsMfaResolved = true;
+    drawGettingStartedWhenReady();
   }
 
   document.getElementById('signOutBtn').addEventListener('click', async () => {
@@ -762,10 +830,9 @@
     document.getElementById('accountMenuEmail').textContent = currentUserEmail;
     document.getElementById('accountInitial').textContent = initialsFrom(null, currentUserEmail);
 
-    const { data, error } = await supabaseClient
-      .from('profiles').select('display_name, avatar_url').eq('id', currentUserId).limit(1);
-    if (error || !data || data.length === 0) return;
-    const profile = data[0];
+    // FROM THE BOOT READ. This was a fourth query for a row already in hand.
+    const profile = bootProfile || {};
+    if (!profile || (!profile.display_name && !profile.avatar_url)) return;
     document.getElementById('accountInitial').textContent = initialsFrom(profile.display_name, currentUserEmail);
     if (profile.avatar_url){
       const img = document.getElementById('accountAvatarImg');
@@ -781,6 +848,68 @@
   let gsCustomized = false;
   let gsPlayerCount = 0;
   let gsHasMfa = false;
+  // THE ONE "everything this card needs is in" SIGNAL. The getting-started
+  // card is fed by two paths that finish in either order -- the dashboard
+  // load and the MFA check -- and the rule learned from the starters section
+  // is that a section redrawn by whichever path happens to finish is a bug
+  // waiting for its third variant. Both set their flag and call the same
+  // function; it draws when both are true.
+  let gsMfaResolved = false;
+  let gsDataResolved = false;
+  let gsState = null;
+
+  // THE TWO-FACTOR STEP EXPIRES. Andy, 2 Sep 2026: no admin is going to set
+  // it up, it cannot be forced, and a permanent unsatisfiable item at the
+  // top of the dashboard is a notice nobody reads any more.
+  //
+  // TEN DAYS FROM FIRST SIGHT, on a timestamp rather than a dismissal --
+  // the pattern this project settled on after is_broadcast and
+  // status='in_progress': prefer a condition that expires on its own over
+  // one that waits on a human act. There is nothing to press and nothing to
+  // remember.
+  //
+  // NOT a decision about two-factor. account.html's Two-factor section is
+  // untouched and always there; sql/033 still tells the platform who has a
+  // verified factor. Only the repeated prompt stops.
+  const MFA_PROMPT_DAYS = 10;
+
+  function mfaPromptExpired(){
+    const first = bootProfile && bootProfile.mfa_prompt_first_shown_at;
+    if (!first) return false;              // never shown: the clock has not started
+    const t = Date.parse(first);
+    if (!Number.isFinite(t)) return false; // unreadable stamp shows the step
+    return (Date.now() - t) > MFA_PROMPT_DAYS * 86400000;
+  }
+
+  // START THE CLOCK THE FIRST TIME THE STEP IS ACTUALLY SHOWN, and only
+  // then -- an admin who already has two-factor never sees it and must not
+  // have a clock started against a prompt they were never given.
+  //
+  // One write, once per person, ever. Failure is ignored on purpose: the
+  // worst case is the step shows for another day, and a dashboard that will
+  // not load is far worse than a notice that overstays.
+  async function stampMfaPromptShown(){
+    if (!bootProfile || bootProfile.mfa_prompt_first_shown_at || !currentUserId) return;
+    const now = new Date().toISOString();
+    bootProfile.mfa_prompt_first_shown_at = now;   // so this run does not write twice
+    try {
+      await supabaseClient.from('profiles')
+        .update({ mfa_prompt_first_shown_at: now }).eq('id', currentUserId);
+    } catch (e) { /* see above */ }
+  }
+
+  function drawGettingStartedWhenReady(){
+    if (!gsDataResolved || !gsMfaResolved || !gsState) return;
+    // The two-factor step is live unless this person has been looking at it
+    // for more than MFA_PROMPT_DAYS. Decided here, not in the renderer.
+    const showMfaStep = gsHasMfa || !mfaPromptExpired();
+    // Shown now, so start the clock if it has not started. Only for an
+    // admin who does NOT have two-factor -- somebody who already has it is
+    // never given the prompt and must not have a clock run against it.
+    if (gsState.isAdmin && !gsHasMfa && showMfaStep) stampMfaPromptShown();
+    renderGettingStarted(Object.assign({}, gsState,
+      { hasMfa: gsHasMfa, showMfaStep: showMfaStep }));
+  }
 
   // THE SUBSCRIPTION NOTICE.
   // =====================================================================
@@ -832,6 +961,18 @@
   // screen -- a coach who opens it at halftime is one keystroke from
   // ignoring a card at the top of the page, and that is a far smaller
   // cost than a feature that switches itself off and says nothing.
+  // STARTED AT BOOT, READ WHEN THE CARD DRAWS. The query does not depend on
+  // anything the dashboard loads, so there is no reason for it to queue
+  // behind the games list. Memoized: called once, awaited once.
+  let _releaseStateP = null;
+  function releaseStateP(){
+    if (!_releaseStateP){
+      _releaseStateP = start(
+        supabaseClient.from('release_state').select('release_id, published_at'));
+    }
+    return _releaseStateP;
+  }
+
   async function renderReleaseCard(){
     const card = document.getElementById('releaseCard');
     if (!card || !window.STATCHAT_RELEASES) return;
@@ -846,17 +987,17 @@
 
     let seen = null, published = {};
     try {
-      const { data } = await supabaseClient
-        .from('profiles').select('last_seen_release').eq('id', currentUserId).limit(1);
-      seen = (data && data[0] && data[0].last_seen_release) || null;
+      // FROM THE BOOT READ, not a fifth query for the same row. This one
+      // was the worst of them: it ran AFTER the games list, so the newest
+      // thing on the page was also the last thing to arrive.
+      seen = (bootProfile && bootProfile.last_seen_release) || null;
       // WRITTEN IS NOT PUBLISHED. A note in releases.js reaches nobody
       // until a platform admin presses Publish, which is what puts a row
       // here with a published_at. Uploading the file does not do it --
       // uploading is how the app is deployed, for bug fixes and stylesheet
       // tweaks and everything else, and that must not be the same act as
       // speaking to every customer.
-      const { data: st } = await supabaseClient
-        .from('release_state').select('release_id, published_at');
+      const { data: st } = await releaseStateP();
       (st || []).forEach(r => { if (r.published_at) published[r.release_id] = true; });
     } catch (e) {
       // A COLUMN OR TABLE THAT IS NOT THERE YET IS NOT AN ERROR WORTH
@@ -1039,7 +1180,11 @@
   }
 
   async function loadDashboard(){
-    const { data, error } = await supabaseClient
+    // TEAMS AND THE PLAYER COUNT HAVE NOTHING TO SAY TO EACH OTHER, and
+    // used to run one after the other anyway -- two round trips deep where
+    // one would do. Fired together; both are awaited below exactly where
+    // they were before, so nothing downstream changes shape.
+    const teamsP = start(supabaseClient
       .from('teams')
       // EXACTLY ONE ROW, OR AN ERROR. maybeSingle() rather than limit(1):
       // migration 009 scopes `teams` to the caller's tenant, so a tenant
@@ -1052,7 +1197,11 @@
       // A page that cannot tell which tenant it is showing should not
       // show one.
       .select('name, full_name, logo_url, primary_color, secondary_color, current_season_year')
-      .maybeSingle();
+      .maybeSingle());
+    const playersP = start(supabaseClient
+      .from('players').select('id', { count: 'exact', head: true }));
+
+    const { data, error } = await teamsP;
     let seasonYear = new Date().getFullYear();
 
     // THE ONE EXTRA QUERY. The dashboard already knows the team and the
@@ -1060,8 +1209,7 @@
     // exact count returns the number without fetching a single row.
     let playerCount = 0;
     try {
-      const { count } = await supabaseClient
-        .from('players').select('id', { count: 'exact', head: true });
+      const { count } = await playersP;
       playerCount = count || 0;
       gsPlayerCount = playerCount;
     } catch (e) {
@@ -1127,13 +1275,17 @@
 
   document.getElementById('refreshGamesBtn').addEventListener('click', refreshGames);
 
-  async function fetchGames(){
-    // Fetches every game regardless of season, rather than filtering by
-    // one fixed year server-side -- a game moved to a different season
-    // was previously just invisible with no way back to it. Filtering
-    // happens client-side instead, so switching seasons in the picker
-    // is instant and never requires a fresh query.
-    const { data, error } = await supabaseClient
+  // STARTED AT BOOT. The game list is the thing people came to look at and
+  // it used to be the sixth round trip in a chain -- behind the profile, the
+  // MFA check, the team row and the player count, none of which it needs.
+  // Memoized so the boot kick-off and loadGames await the same request.
+  let _gamesP = null;
+  function gamesP(){
+    if (!_gamesP) _gamesP = start(gamesQuery());
+    return _gamesP;
+  }
+  function gamesQuery(){
+    return supabaseClient
       .from('games')
       // is_broadcast IS REQUIRED HERE. This is an explicit column list,
       // not select('*'), so a new column is invisible until it is named.
@@ -1152,6 +1304,18 @@
       // again. Silent in both directions, which is the worst kind.
       .select('id, designator, season_year, game_date, home_team_name, away_team_name, our_team_is_home, status, final_score_us, final_score_opp, is_broadcast, is_preseason, is_sample')
       .order('game_date', { ascending: false });
+  }
+
+  // Fetches every game regardless of season, rather than filtering by
+  // one fixed year server-side -- a game moved to a different season
+  // was previously just invisible with no way back to it. Filtering
+  // happens client-side instead, so switching seasons in the picker
+  // is instant and never requires a fresh query.
+  //
+  // `fresh` is for the Refresh button, which must go to the database
+  // rather than hand back the request made when the page loaded.
+  async function fetchGames(fresh){
+    const { data, error } = fresh ? await start(gamesQuery()) : await gamesP();
     if (error){
       showMsg('dashboardMsg', 'Could not load games: ' + error.message, 'error');
       return false;
@@ -1194,7 +1358,10 @@
     // duplicate handlers over time.
     const btn = document.getElementById('refreshGamesBtn');
     if (btn){ btn.disabled = true; btn.textContent = 'Refreshing…'; }
-    const ok = await fetchGames();
+    // fresh:true. The memoized boot request is the games as they were when
+    // the page opened; handing it back here would make the Refresh button
+    // do nothing at all, for ever, and look like it had worked.
+    const ok = await fetchGames(true);
     if (ok){
       const picker = document.getElementById('seasonPicker');
       const selectedYear = parseInt(picker.value);
@@ -1228,7 +1395,7 @@
     // as "not a sample" rather than falling through a truthiness test that
     // happens to agree today.
     const ownGames = allGames.filter(g => g.is_sample !== true);
-    renderGettingStarted({
+    gsState = {
       customized: gsCustomized,
       hasRoster:  gsPlayerCount > 0,
       playerCount: gsPlayerCount,
@@ -1237,9 +1404,10 @@
       // row, and games_select stops returning it the moment that happens --
       // so the step marks itself done with nothing to detect the deletion.
       hasSample:  allGames.some(g => g.is_sample === true),
-      isAdmin:    currentIsAdmin,
-      hasMfa:     gsHasMfa
-    });
+      isAdmin:    currentIsAdmin
+    };
+    gsDataResolved = true;
+    drawGettingStartedWhenReady();
   }
 
   // A STANDING NOTICE WHENEVER THIS IS NOT THE CURRENT SEASON.
@@ -1458,7 +1626,15 @@
     // LAST, not first. The three above are needed before a game can be
     // scored at all -- this is not, and putting security ahead of the thing
     // somebody signed in to do is how a checklist gets ignored wholesale.
-    if (state.isAdmin){
+    // AND ONLY WHILE THE PROMPT IS STILL LIVE. `showMfaStep` is decided by
+    // the caller and arrives in `state` like every other input: this
+    // function renders, it does not consult module scope and it does not
+    // write to the database. It was briefly doing both, and the two tests
+    // that eval it in isolation caught it immediately.
+    //
+    // Once the ten days are up the step is not pushed at all -- so if it was
+    // the last one outstanding the whole card goes, which is the point.
+    if (state.isAdmin && state.showMfaStep !== false){
       steps.push({
         done: state.hasMfa,
         title: 'Turn on two-factor sign-in',
