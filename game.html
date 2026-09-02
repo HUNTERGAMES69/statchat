@@ -6885,6 +6885,40 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     try { await guidedBackStep(); } finally { guidedBackInProgress = false; }
   }
   async function guidedBackStep(){
+    // OVERTIME, added 2 Sep 2026. Reported directly: once Start overtime
+    // was pressed there was no way out of the flow at all.
+    //
+    // Three steps, and only ONE of them has written anything. otFormat and
+    // otPickTeam are pure questions -- the divider and the overtime marker
+    // are not pushed until a team is chosen -- so backing out of those is
+    // just a change of step. otSpot is the one that has to undo, and it
+    // undoes exactly the two plays pickTeam wrote.
+    if (guided.step === 'otFormat'){
+      guided = { active: false, quarter: null, kickingTeam: null,
+                 receivingTeam: null, step: null, targetPhase: null };
+      await persistUiState(); renderAll(); renderGuided(); updatePhaseUI();
+      return;
+    }
+    if (guided.step === 'otPickTeam'){
+      guided.step = 'otFormat';
+      guided.otRules = null;
+      await persistUiState(); renderAll(); renderGuided();
+      return;
+    }
+    if (guided.step === 'otSpot'){
+      // Through the real Undo, twice, for the same reason the kickoff
+      // flow does it: it already handles the server delete, the redo
+      // stack and the row bookkeeping, and a second quieter copy of that
+      // is how the two drift apart.
+      const btn = document.getElementById('undoBtn');
+      for (let i = 0; i < 2 && plays.length; i++){
+        btn.click();
+        await new Promise(r => setTimeout(r, 0));
+      }
+      guided.step = 'otPickTeam';
+      await persistUiState(); renderAll(); renderGuided(); updatePhaseUI();
+      return;
+    }
     if (guided.step === 'return'){
       // Through the real undo, twice -- it already handles the server
       // delete, the redo stack and the row bookkeeping. Reimplementing
@@ -7041,7 +7075,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         'field.</p>' +
         fbtn('ot_fmt_nfhs', 'NFHS &mdash; most states', 'Each side starts at the opponent\u2019s 10.') +
         fbtn('ot_fmt_ncaa', 'NCAA &mdash; colleges and Texas', 'Each side starts at the opponent\u2019s 25.') +
-        fbtn('ot_fmt_cust', 'Something else', 'Set the spot yourself. Your state\u2019s adoption may differ.');
+        fbtn('ot_fmt_cust', 'Something else', 'Set the spot yourself. Your state\u2019s adoption may differ.') +
+        // NOT "Back" here -- this is the first step and the only thing
+        // behind it is regulation. Cancel says what it does: nothing has
+        // been written yet, so leaving costs nothing.
+        '<div class="row" style="margin-top:6px;">' + guidedBackBtn('Cancel overtime') + '</div>';
       const choose = function(book, side, yardline){
         guided.otRules = { book: book, side: side, yardline: yardline };
         guided.step = 'otPickTeam';
@@ -7060,7 +7098,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       content.innerHTML =
         '<p class="hint">Overtime — no kickoff. Who gets the ball first? Possession will keep alternating from here as normal (turnovers, New Drive after each score) until someone\'s actually ahead.</p>' +
         '<button type="button" id="ot_pickA">' + TEAMS.teamA.name + '</button> ' +
-        '<button type="button" id="ot_pickB">' + TEAMS.teamB.name + '</button>';
+        '<button type="button" id="ot_pickB">' + TEAMS.teamB.name + '</button>' +
+        '<div class="row" style="margin-top:10px;">' + guidedBackBtn() + '</div>';
       function pickTeam(team){
         // END OF REGULATION, written as a divider before the overtime
         // marker. The log jumped straight from a Q4 play to an overtime
@@ -7107,6 +7146,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         startingSpotFieldsHtml('ot_spot', 'Starting spot', team) +
         '<div class="row" style="margin-top:12px;">' +
           '<button class="primary" id="ot_review">Set drive</button>' +
+          // BACK ONLY ON THE OPENING SERIES. By a later series the two
+          // plays behind this panel belong to overtime itself, and undoing
+          // them would unwind the PREVIOUS series rather than this panel.
+          // The route back there is Undo last, which names what it removes.
+          (opener ? guidedBackBtn('\u2190 Back \u2014 undo starting overtime') : '') +
           // END THE GAME FROM HERE. Between series is exactly when an
           // overtime finishes -- one side is ahead after both have had
           // the ball -- and this panel disables the rest of the page while
