@@ -12032,6 +12032,26 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     wireLossToggles(panel);
     wireQuickYardageButtons(panel);
     currentSpotGetter = (type === 'kickoff' || type === 'punt' || type === 'int' || type === 'fumble' || type === 'fg') ? wireStartingSpot(panel, 'pp_spot') : null;
+    // A FIELD THAT IS OPTIONAL HAS TO SAY SO. Without this the row looks
+    // exactly as it does in regulation, where leaving it empty is refused
+    // -- and a scorer who has been refused once fills it in every time.
+    //
+    // Written against every spot row in the panel rather than per tree:
+    // the fumble rows live inside wrappers that are hidden until an
+    // outcome is chosen, and the note rides with the row when it appears.
+    if (computeState().quarter >= 5){
+      panel.querySelectorAll('.spot-row').forEach(function(row){
+        if (row.dataset.otNoted) return;
+        row.dataset.otNoted = '1';
+        const note = document.createElement('div');
+        note.className = 'ot-spot-note';
+        note.style.cssText = 'font-size:12px; color:var(--sc-ink-muted,#8d99a6); ' +
+          'margin:4px 0 0; line-height:1.45;';
+        note.textContent = 'Overtime — optional. This series ends here; ' +
+          'the next series is spotted on its own.';
+        row.insertAdjacentElement('afterend', note);
+      });
+    }
     // An interception downed in the end zone is a touchback: the defense
     // takes over at their own 20 and there is no return. The spot is
     // supplied rather than collected, through the same currentSpotGetter
@@ -14324,6 +14344,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // would otherwise refuse a kickoff returned for a touchdown.
     const tdChecked = !!(document.getElementById('pp_td') || {}).checked;
     if (tdChecked) return false;
+    // OPTIONAL IN OVERTIME, and left on screen rather than hidden.
+    // ------------------------------------------------------------------
+    // A turnover in overtime ends that team's series. The other team does
+    // not take over where the ball stopped -- their own series begins at
+    // the format spot, which the guided panel asks for immediately after
+    // and which overwrites whatever was typed here. So the field was
+    // demanding a number that is discarded seconds later.
+    //
+    // VISIBLE BUT OPTIONAL was Andy's call, 2 Sep 2026, over hiding it:
+    // a turnover returned for a touchdown, or any case neither of us has
+    // thought of, keeps somewhere to put a real field position. It simply
+    // stops being a refusal.
+    //
+    // Every turnover path -- interception, rush, pass and sack fumbles,
+    // the kickoff muffs -- funnels through currentSpotGetter, so this one
+    // test covers all of them.
+    if (computeState().quarter >= 5) return false;
     if (!currentSpotGetter || typeof currentSpotGetter.state !== 'function') return false;
     const spotState = currentSpotGetter.state();
     if (spotState !== 'noSide' && spotState !== 'noYardline' && spotState !== 'empty') return false;
