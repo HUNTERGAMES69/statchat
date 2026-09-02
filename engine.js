@@ -1810,6 +1810,34 @@ if (typeof globalThis !== 'undefined' && globalThis.RECEIVE_POS === undefined){
   globalThis.RECEIVE_POS = new Set(['WR','TE','SE','FL','SLOT']);
 }
 
+// THE TIMEOUT CONSTANTS, for exactly the same reason and found exactly the
+// same way -- by a page going blank, not by reading the code.
+//
+// computeState reads these only when a setQuarter crosses into the second
+// half or into OVERTIME, so a page that never declared them worked
+// perfectly for four quarters and threw the instant a game went to
+// overtime. Reproduced 2 Sep 2026: scoresummary.html rendered an empty
+// list, because render() threw before it could write one.
+//
+// Thirteen pages load engine.js. TWELVE declare TIMEOUTS_PER_OT for
+// themselves; scoresummary.html is the one that does not. The guards for
+// these already existed but sat inside the CommonJS block below, so Node
+// had them and no browser did -- which is why every test passed and only
+// a real overtime found it.
+//
+// globalThis, NOT a const: the block below explains what happened when
+// these were declared unconditionally -- "SyntaxError: Identifier
+// 'TIMEOUTS_PER_HALF' has already been declared", fatal to the whole page.
+// A page's own `const` shadows a globalThis property harmlessly, exactly
+// as it does for RECEIVE_POS above, so the twelve existing declarations
+// keep working untouched.
+if (typeof globalThis !== 'undefined' && globalThis.TIMEOUTS_PER_HALF === undefined){
+  globalThis.TIMEOUTS_PER_HALF = 3;
+}
+if (typeof globalThis !== 'undefined' && globalThis.TIMEOUTS_PER_OT === undefined){
+  globalThis.TIMEOUTS_PER_OT = 1;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   // POINTS AT THE CANONICAL FUNCTION. It used to re-type the rule here,
   // which is how the file that owns "one rule, one implementation" came
