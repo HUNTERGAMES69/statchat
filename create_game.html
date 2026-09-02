@@ -393,7 +393,6 @@
             This data is used <strong>ONLY</strong> by the three starter overlays used by the
             broadcast. Nothing entered here affects game play, player pickers, or stats.</p>
           <div id="bcGroups_our"></div>
-          <div id="bcFillMsg_our" style="font-size:12.5px; margin-top:2px;"></div>
         </div>
       </details>
     </div>
@@ -480,7 +479,6 @@
             This data is used <strong>ONLY</strong> by the three starter overlays used by the
             broadcast. Nothing entered here affects game play, player pickers, or stats.</p>
           <div id="bcGroups_opp"></div>
-          <div id="bcFillMsg_opp" style="font-size:12.5px; margin-top:2px;"></div>
         </div>
       </details>
 
@@ -741,6 +739,14 @@
               'aria-label="'+(sl.f || sl.d)+' jersey number" ' +
               'data-side="'+side+'" data-unit="'+u+'" data-i="'+i+'"></label>';
         }).join('') + '</div>' +
+        // THE FILL RESULT BELONGS TO THE GROUP IT DESCRIBES. It used to be
+        // one box at the foot of the whole panel, below defence and special
+        // teams -- so "Filled 4: QB, RB1, WR1, WR2" was read as the result
+        // of filling the DEFENCE, which is what Andy reported on 2 Sep 2026.
+        // Only offence has a Fill button, so only offence gets the box.
+        (u==='offense'
+          ? '<div id="bcFillMsg_'+side+'" style="font-size:12.5px; margin-top:4px;"></div>'
+          : '') +
         (u==='special'
           ? '<p style="font-size:12.5px; color:var(--sc-ink-muted); margin:6px 0 0; font-style:italic;">One player in more than one slot is combined on the card &mdash; a boy in the FG and PAT slots appears once as <b>FG/PAT</b>, not twice.</p>'
           : '') +
@@ -947,9 +953,10 @@
       }
     });
     const msg = [];
-    if (placed.length) msg.push('<div style="color:var(--sc-green,#a3d93f);">✓ Filled ' + placed.length + ': ' + placed.join(', ') + '</div>');
+    if (placed.length) msg.push('<div style="color:var(--sc-green,#a3d93f);">✓ Filled ' + placed.length +
+      (placed.length === 1 ? ' offense slot: ' : ' offense slots: ') + placed.join(', ') + '</div>');
     if (nowhere.length) msg.push('<div style="color:var(--sc-amber);">No slot for ' + nowhere.join(', ') + ' — set a slot’s position to match.</div>');
-    if (skipped.length) msg.push('<div style="color:var(--sc-ink-muted);">Left alone (already filled): ' + skipped.join(', ') + '</div>');
+    if (skipped.length) msg.push('<div style="color:var(--sc-ink-muted);">Left alone (offense slot already filled): ' + skipped.join(', ') + '</div>');
     const box = document.getElementById('bcFillMsg_' + side);
     if (box) box.innerHTML = msg.join('');
     bcRender(side);
