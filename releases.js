@@ -42,6 +42,22 @@
 
 window.STATCHAT_RELEASES = [
   {
+    id: '2026-09-02-defensive-try-score',
+    date: '2026-09-02',
+    title: 'The defense can score on a PAT or two-point try again',
+    body: 'A blocked PAT or a turnover on a two-point try can now be recorded as a ' +
+          'return for two points to the defense. This is an NCAA rule, which in high ' +
+          'school football means Texas — everywhere else the try ends the instant the ' +
+          'defense gains possession, so the officials kill the play and there is ' +
+          'nothing to record. The panels say so where you choose it. Naming the ' +
+          'defender is required on a return, and nothing else about entering a try ' +
+          'has changed.',
+    where: 'Enter a play → PAT (Blocked), or 2PT → the turnover outcome',
+    link: 'game.html',
+    audience: ['admin', 'game_entry'],
+    email: false
+  },
+  {
     id: '2026-09-02-opponent-overlays',
     date: '2026-09-02',
     title: "Six more overlay addresses for the opponent's lineup cards",

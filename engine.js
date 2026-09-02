@@ -641,7 +641,7 @@ function scoringSummary(playsList){
   // would give it whatever the surrounding plays say.
   let walkQuarter = 1;
 
-  const tryText = (p) => {
+  const tryText = (p, defensive) => {
     // What goes in the brackets. A missed try is worth saying: a 6 in the
     // quarter line with no explanation reads like a mistake.
     //
@@ -657,6 +657,19 @@ function scoringSummary(playsList){
                    t.indexOf('MISSED') !== -1 || t.indexOf('BLOCKED') !== -1;
     const good = !failed && (t.indexOf('GOOD') !== -1 || t.indexOf('CONVERSION') !== -1);
     const two = (p.effect.score && p.effect.score.points === 2);
+    // A DEFENSIVE CONVERSION IS NOT A FAILED TRY, and read by the two
+    // tests above it looks exactly like one: the text carries BLOCKED or
+    // INTERCEPTED, so `failed` is true, while the score is two points --
+    // which together said "two-point failed" over a play that put two
+    // points on the board for the other team.
+    //
+    // The caller knows what this function cannot: whether the points went
+    // to the team that scored the touchdown or to the team defending it.
+    // Restored to the app 2 Sep 2026 for Texas, which plays the NCAA book
+    // (see the note on the PAT panel in game.html).
+    if (defensive) return (p.roles && p.roles.playType === 'pat')
+      ? 'blocked, returned for 2'
+      : 'turnover returned for 2';
     if (!good) return two ? 'two-point failed' : 'kick failed';
     return two ? 'two-point good' : 'kick good';
   };
@@ -674,9 +687,15 @@ function scoringSummary(playsList){
     // "the kick was missed", and those are different facts.
     const isTry = (p.roles && (p.roles.playType === 'pat' || p.roles.playType === 'twopt'));
     if (isTry && out.length && out[out.length - 1].isTouchdown){
-      if (sc && sc.team && sc.points) running[sc.team] += sc.points;
       const prev = out[out.length - 1];
-      prev.detail = tryText(p);
+      // WHOSE TWO POINTS. On an ordinary try the points belong to the team
+      // that scored the touchdown; on a defensive conversion they belong
+      // to the other one. The running score has always been credited from
+      // sc.team and so was already right -- it is the WORDING that read as
+      // a failed try, which is what this tells tryText.
+      const defensive = !!(sc && sc.team && sc.points && sc.team !== prev.team);
+      if (sc && sc.team && sc.points) running[sc.team] += sc.points;
+      prev.detail = tryText(p, defensive);
       prev.teamA = running.teamA;
       prev.teamB = running.teamB;
       continue;

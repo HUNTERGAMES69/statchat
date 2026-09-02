@@ -11024,36 +11024,71 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '</div>' +
         '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_patres" value="g" checked> Good</label>' +
         '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_patres" value="x"> Missed</label></div>' +
-        // NFHS ends the try the instant the defense gains possession, so a
-        // blocked PAT has no return and cannot be scored on. NCAA and the
-        // NFL allow a defensive two, which is where these controls came
-        // from -- they simply do not apply to high-school football.
+        // THE DEFENSE CAN SCORE ON A TRY AGAIN, 2 Sep 2026.
+        //
+        // These controls were removed on 23 Aug because NFHS ends the try
+        // the instant the defense gains possession -- no return, no score.
+        // That is still true in 49 states. It is NOT true in Texas, whose
+        // UIL publishes its rule book as exceptions to the NCAA book, and
+        // none of those exceptions touch the defensive conversion. So a
+        // blocked PAT taken to the other end zone is two points there.
+        //
+        // NO SETTING GATES THIS. Andy's call, 2 Sep 2026, and the reasoning
+        // holds: under NFHS the officials kill the play the moment the
+        // defense has it, so a scorer never SEES a return to describe --
+        // they would have to invent one. The note below tells them which
+        // book they are working under rather than the app deciding for
+        // them from a flag nobody would remember to set.
+        //
+        // The parser has understood this the whole time: `pa b <rec> [yds]
+        // td` already scores { team: def, points: 2 }. Only the way in was
+        // taken out.
         '<div id="pp_pat_blocked" style="display:none;">' + defBlock('Blocked by (optional)') +
-        '<p style="font-size:12px; color:#8d99a6; margin:6px 0 0;">NFHS: the try ends when the defense gains possession — no return, and the defense cannot score.</p></div>';
+        '<div style="margin-top:8px;">' +
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pat_bres" value="n" checked> Defense recovered &mdash; no score</label>' +
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pat_bres" value="d"> Returned for two &mdash; the defense scores</label>' +
+        '</div>' +
+        '<div id="pp_pat_ret_wrap" style="display:none; margin-top:8px;">' +
+          '<label>Return yards (optional)</label>' +
+          '<input autocomplete="off" type="text" inputmode="numeric" id="pp_pat_retyds" placeholder="yds" style="width:96px;">' +
+        '</div>' +
+        '<p style="font-size:12px; color:#8d99a6; margin:8px 0 0; line-height:1.45;">Most states play NFHS rules, where the try ends the moment the defense gains possession &mdash; no return and no score. Texas plays NCAA rules, where the defense may return it for two. Record a return only if the officials let the play continue.</p>' + '</div>';
     else if (type === 'twopt') html =
         '<div style="margin-bottom:10px;"><label>Play type</label><div class="row">' +
         '<button type="button" class="secondary" id="pp_2pt_rush_btn">Rush</button>' +
         '<button type="button" class="secondary" id="pp_2pt_pass_btn">Pass</button>' +
         '</div></div>' +
-        // TURNOVER REMOVED, 23 Aug. Andy's call, and it follows the NFHS
-        // rule the note above already states: a try ends the moment the
-        // defense gains possession -- no return, no score, no change of
-        // possession. There is nothing to record beyond "no good", so a
-        // third outcome invited a scorer to describe something the rule
-        // book says does not happen.
-        //
-        // The PARSER still understands value 'b'. Games already stored
-        // with it must keep rendering; only the way in is gone.
+        // TURNOVER RESTORED, 2 Sep 2026 -- removed 23 Aug on the NFHS rule,
+        // put back because Texas plays the NCAA book, where the defense may
+        // return a try for two. See the long note on the PAT panel above.
+        // Value 'b' is unchanged, so games stored with it before either
+        // change still parse and still render.
         '<div id="pp_2pt_rush_fields">' +
           offBlock('carrier','Ball carrier') +
           '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_rush_res" value="g" checked> Good (scored)</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_rush_res" value="x"> No good, stopped short</label>' +
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_rush_res" value="b"> Fumbled, defense took it</label>' +
+          '</div>' +
+          '<div id="pp_2pt_rush_to" style="display:none; margin-top:8px;">' +
+            defBlock('Recovered by (optional)') +
+            '<div style="margin-top:8px;">' +
+              '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_rush_bres" value="n" checked> No score</label>' +
+              '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_rush_bres" value="d"> Returned for two &mdash; the defense scores</label>' +
+            '</div>' + '<p style="font-size:12px; color:#8d99a6; margin:8px 0 0; line-height:1.45;">Most states play NFHS rules, where the try ends the moment the defense gains possession &mdash; no return and no score. Texas plays NCAA rules, where the defense may return it for two. Record a return only if the officials let the play continue.</p>' +
           '</div>' +
         '</div>' +
         '<div id="pp_2pt_pass_fields" style="display:none;">' +
           offBlock('passer','Passer') + offBlock('receiver','Receiver') +
           '<div style="margin-top:8px;"><label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_pass_res" value="g" checked> Good (caught for the score)</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_pass_res" value="x"> Incomplete</label>' +
+          '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_pass_res" value="b"> Intercepted</label>' +
+          '</div>' +
+          '<div id="pp_2pt_pass_to" style="display:none; margin-top:8px;">' +
+            defBlock('Intercepted by (optional)') +
+            '<div style="margin-top:8px;">' +
+              '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_pass_bres" value="n" checked> No score</label>' +
+              '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_2pt_pass_bres" value="d"> Returned for two &mdash; the defense scores</label>' +
+            '</div>' + '<p style="font-size:12px; color:#8d99a6; margin:8px 0 0; line-height:1.45;">Most states play NFHS rules, where the try ends the moment the defense gains possession &mdash; no return and no score. Texas plays NCAA rules, where the defense may return it for two. Record a return only if the officials let the play continue.</p>' +
           '</div>' +
         '</div>';
 
@@ -13080,6 +13115,21 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // more. Leaving "Good" selected and clickable invited a
         // contradiction the panel would then have to silently resolve.
         setKickResultLocked('pp_patres', e.target.checked || isChecked('pp_pat_muffhold'));
+        // A hidden selection is a lie waiting to be saved. Unchecking
+        // Blocked puts the outcome back to "no score" so a return chosen
+        // and then abandoned cannot survive out of sight.
+        if (!e.target.checked){
+          const back = document.querySelector('input[name=pp_pat_bres][value="n"]');
+          if (back) back.checked = true;
+          document.getElementById('pp_pat_ret_wrap').style.display = 'none';
+        }
+      });
+      // Return yardage only means something on a return.
+      [...document.querySelectorAll('input[name=pp_pat_bres]')].forEach(r => {
+        r.addEventListener('change', () => {
+          const scored = (document.querySelector('input[name=pp_pat_bres]:checked') || {}).value === 'd';
+          document.getElementById('pp_pat_ret_wrap').style.display = scored ? 'block' : 'none';
+        });
       });
     }
     if (type === 'twopt'){
@@ -13105,6 +13155,23 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       rushBtn.addEventListener('click', () => setSubType('rush'));
       passBtn.addEventListener('click', () => setSubType('pass'));
       setSubType('rush');
+      // THE TURNOVER BLOCK, one per sub-type. These two handlers are the
+      // ones the 23 Aug removal deleted; they are back with the outcome
+      // they revealed. Written as a loop over the pair rather than twice,
+      // because the previous version drifted between rush and pass.
+      ['rush','pass'].forEach(function(sub){
+        const wrap = document.getElementById('pp_2pt_' + sub + '_to');
+        [...document.querySelectorAll('input[name=pp_2pt_' + sub + '_res]')].forEach(r => {
+          r.addEventListener('change', () => {
+            const val = (document.querySelector('input[name=pp_2pt_' + sub + '_res]:checked') || {}).value;
+            wrap.style.display = val === 'b' ? 'block' : 'none';
+            if (val !== 'b'){
+              const back = document.querySelector('input[name=pp_2pt_' + sub + '_bres][value="n"]');
+              if (back) back.checked = true;
+            }
+          });
+        });
+      });
       // The two show/hide handlers that lived here are gone with the
       // turnover options they revealed. Left in place they would have
       // thrown on every outcome change -- getElementById returns null
@@ -13930,9 +13997,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const blocked = document.getElementById('pp_pat_blocked_cb').checked;
       const res = blocked ? 'b' : document.querySelector('input[name=pp_patres]:checked').value;
       if (res === 'b'){
-        // No return yardage and no ' td' token: under NFHS the try is dead
-        // as soon as the defense has the ball, so neither can happen.
-        code = sel.kicker + 'pa b' + (sel.credit ? ' ' + sel.credit : '');
+        const bres = (document.querySelector('input[name=pp_pat_bres]:checked') || {}).value || 'n';
+        // A RETURN NEEDS A RETURNER. The parser reads the token after 'b'
+        // as the defender and the one after that as the yardage, so a
+        // return recorded with yardage and no player would file the yards
+        // as a jersey number. Refused rather than silently mangled, and
+        // the block is optional in every other case exactly as before.
+        if (bres === 'd' && !sel.credit){
+          showReviewMsg('Nothing has been saved — still needed: the defender who returned it.');
+          return;
+        }
+        const retyds = bres === 'd'
+          ? (document.getElementById('pp_pat_retyds').value || '').trim() : '';
+        // ' td' LAST. parseInput reads it as rest[rest.length - 1], so any
+        // token appended after it would stop the score registering.
+        code = sel.kicker + 'pa b' + (sel.credit ? ' ' + sel.credit : '') +
+               (retyds ? ' ' + retyds : '') + (bres === 'd' ? ' td' : '');
       } else {
         code = sel.kicker + 'pa ' + res;
       }
@@ -13944,7 +14024,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (missingPlayer('carrier', sel.carrier)) return;
         const res = document.querySelector('input[name=pp_2pt_rush_res]:checked').value;
         if (res === 'b'){
-          code = sel.carrier + 'tpr b' + (sel.credit ? ' ' + sel.credit : '');
+          const bres = (document.querySelector('input[name=pp_2pt_rush_bres]:checked') || {}).value || 'n';
+          if (bres === 'd' && !sel.credit){
+            showReviewMsg('Nothing has been saved — still needed: the defender who returned it.');
+            return;
+          }
+          code = sel.carrier + 'tpr b' + (sel.credit ? ' ' + sel.credit : '') +
+                 (bres === 'd' ? ' td' : '');
         } else {
           code = sel.carrier + 'tpr ' + res;
         }
@@ -13955,7 +14041,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const recTok2 = sel.receiver || '?';
         const res = document.querySelector('input[name=pp_2pt_pass_res]:checked').value;
         if (res === 'b'){
-          code = sel.passer + 'tpp ' + recTok2 + ' b' + (sel.credit ? ' ' + sel.credit : '');
+          const bres = (document.querySelector('input[name=pp_2pt_pass_bres]:checked') || {}).value || 'n';
+          if (bres === 'd' && !sel.credit){
+            showReviewMsg('Nothing has been saved — still needed: the defender who returned it.');
+            return;
+          }
+          code = sel.passer + 'tpp ' + recTok2 + ' b' + (sel.credit ? ' ' + sel.credit : '') +
+                 (bres === 'd' ? ' td' : '');
         } else {
           code = sel.passer + 'tpp ' + recTok2 + ' ' + res;
         }
