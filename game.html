@@ -1618,6 +1618,17 @@
   // slow query never disables entry on a paid account.
   let seasonLocked = false;
   let clockPrompt = null, clockPromptCallback = null;
+  // WHICH TOUCHDOWN'S TRY PROMPT HAS BEEN ANSWERED.
+  // ---------------------------------------------------------------------
+  // The overtime try prompt is raised from awaitingTry, which stays TRUE
+  // until a try is actually entered -- so choosing Kick closed the panel
+  // and the very next render put it straight back up, on top of the PAT
+  // panel it had just opened. Keyed to the touchdown's own play id so a
+  // second touchdown later in the same overtime asks again.
+  //
+  // Deliberately NOT persisted. On a reload with a try still outstanding,
+  // asking again is the right behaviour -- nothing has been entered yet.
+  let otTryAnsweredFor = null;
   let currentGameStatus = 'setup';
   const ROLE_RANK = { view: 0, game_entry: 1, admin: 2 };
 
@@ -6126,7 +6137,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // ask whether a try happened rather than working out whether one was
     // allowed. Kick and Two-point just open the panels that already exist.
     // "No try" is the answer that had nowhere to go.
+    const otTryPlayId = lastReal ? lastReal.id : null;
     const awaitingOtTry = st0.quarter >= 5 && awaitingTry && !disable &&
+      otTryAnsweredFor !== otTryPlayId &&
       (gamePhase === 'firstHalf' || gamePhase === 'secondHalf');
     if (awaitingOtTry && !guided.active){
       guided = { active: true, quarter: 5, kickingTeam: null, receivingTeam: null,
@@ -6134,7 +6147,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
                  // Named here, where lastReal is already in hand, rather
                  // than re-derived in the panel from a different rule.
                  scoredBy: (lastReal && lastReal.effect && lastReal.effect.score &&
-                            lastReal.effect.score.team) || null };
+                            lastReal.effect.score.team) || null,
+                 scoredPlayId: otTryPlayId };
       persistUiState();
       renderGuided();
     }
@@ -6169,7 +6183,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // is how most overtime series end, and graying it would make the
       // commonest overtime play unrecordable.
       const otKickBanned = st0.quarter >= 5 && (t === 'kickoff' || t === 'punt');
-      b.disabled = disable || otKickBanned ||
+      // AND EVERYTHING IS DARK WHILE THE TRY PROMPT IS UP. `disable` is
+      // computed before this pass knows the prompt is opening, so
+      // guided.active alone was still false here and PAT and 2PT stayed
+      // live underneath the panel asking which of them you wanted.
+      b.disabled = disable || otKickBanned || awaitingOtTry ||
         (awaitingTry && t !== 'pat' && t !== 'twopt') ||
         (awaitingKickoff && t !== 'kickoff');
     });
@@ -6975,7 +6993,11 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<p style="font-size:12px; color:var(--sc-ink-muted,#8d99a6); margin:10px 0 0; line-height:1.5;">' +
         'Whether a kick is allowed in this overtime is the officials\u2019 call. Record what ' +
         'they let happen.</p>';
-      const closeGuided = function(){
+      const closeGuided = function(answered){
+        // Remember WHICH touchdown was answered before guided is cleared,
+        // or the next render raises this panel again over the try panel it
+        // just opened.
+        if (answered) otTryAnsweredFor = guided.scoredPlayId || null;
         guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null,
                    step: null, targetPhase: null };
         persistUiState();
@@ -6984,10 +7006,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // This only decides which one opens, so nothing about entering a PAT
       // or a two-point conversion changes.
       document.getElementById('ot_try_kick').addEventListener('click', function(){
-        closeGuided(); renderAll(); renderGuided(); renderPlayPanel('pat');
+        closeGuided(true); renderAll(); renderGuided(); renderPlayPanel('pat');
       });
       document.getElementById('ot_try_two').addEventListener('click', function(){
-        closeGuided(); renderAll(); renderGuided(); renderPlayPanel('twopt');
+        closeGuided(true); renderAll(); renderGuided(); renderPlayPanel('twopt');
       });
       // A REAL PLAY, not a divider. scoredSix reads the last REAL play, so
       // a divider would leave the app still waiting for a try. It carries
@@ -6997,7 +7019,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           text: (guided.scoredBy && TEAMS[guided.scoredBy] ? TEAMS[guided.scoredBy].name + ' — ' : '') +
                 'no try attempted',
           effect: { endsDrive: true }, quarter: 5 });
-        closeGuided();
+        // No flag needed: the new play becomes the last real one, so
+        // scoredSix is false and awaitingTry falls on its own.
+        closeGuided(false);
         renderAll(); renderGuided(); updatePhaseUI();
       });
       return;
