@@ -157,7 +157,7 @@ module.exports = async function handler(req, res) {
   if (action === 'status') {
     const { data, error } = await admin
       .from('release_state')
-      .select('release_id, published_at, emailed_at, recipient_count');
+      .select('release_id, published_at, emailed_at, recipient_count, archived_at');
     if (error) { res.status(500).json({ error: error.message }); return; }
     res.status(200).json({ state: data || [] });
     return;
@@ -184,6 +184,62 @@ module.exports = async function handler(req, res) {
     }
   }
   const entry = entries[0];
+
+  // ---- ARCHIVE / UNARCHIVE ---------------------------------------------
+  // Shelving a notice you are done with: already sent, or decided against.
+  // It changes THIS CONSOLE and nothing else -- not releases.js, not a
+  // dashboard, not who has dismissed what. The note keeps its id, because
+  // profiles.last_seen_release points at ids and an id that stops existing
+  // orphans every one of them.
+  //
+  // A LIVE NOTE CANNOT BE ARCHIVED. Andy's call, 2 Sep 2026, and the reason
+  // is the lesson from is_broadcast and status='in_progress': archiving a
+  // published note would leave it on every dashboard it was aimed at while
+  // removing it from the only page that can see that it is there. A feature
+  // nobody can tell is on is the failure this project keeps meeting. Take it
+  // down first -- two visible acts instead of one silent one.
+  if (action === 'archive' || action === 'unarchive') {
+    if (entries.length !== 1) {
+      res.status(400).json({ error: 'Archive and restore act on one note at a time.' });
+      return;
+    }
+    const { data: existing } = await admin
+      .from('release_state').select('release_id, published_at')
+      .eq('release_id', entry.id).limit(1);
+    const row = (existing || [])[0];
+
+    if (action === 'archive' && row && row.published_at) {
+      res.status(409).json({
+        error: 'That note is still live on dashboards. Take it down first, then archive it ' +
+               '-- otherwise it would keep showing to every ' + entry.audience.join(' and ') +
+               ' while disappearing from this page.'
+      });
+      return;
+    }
+
+    const fields = action === 'archive'
+      ? { archived_at: new Date().toISOString(), archived_by: callerId }
+      : { archived_at: null, archived_by: null };
+    let error;
+    if (row) {
+      ({ error } = await admin.from('release_state')
+        .update(fields).eq('release_id', entry.id));
+    } else {
+      // A pure draft has no row yet. Archiving one is the common case: a
+      // note written, thought better of, and never published.
+      ({ error } = await admin.from('release_state')
+        .insert(Object.assign({ release_id: entry.id }, fields)));
+    }
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.status(200).json({
+      archived: action === 'archive',
+      message: action === 'archive'
+        ? 'Archived. It is off this list unless you tick "Show archived". Nothing changed ' +
+          'for anyone else.'
+        : 'Back on the list.'
+    });
+    return;
+  }
 
   // ---- PUBLISH / UNPUBLISH ---------------------------------------------
   // The switch between "written" and "live on every dashboard". Reversible
@@ -228,7 +284,7 @@ module.exports = async function handler(req, res) {
   // The email links people INTO the app. Mailing a note that is not live
   // sends them to a dashboard that says nothing about it.
   const { data: allState } = await admin
-    .from('release_state').select('release_id, published_at, emailed_at, recipient_count');
+    .from('release_state').select('release_id, published_at, emailed_at, recipient_count, archived_at');
   const stateById = {};
   (allState || []).forEach(r => { stateById[r.release_id] = r; });
 
@@ -362,7 +418,10 @@ module.exports = async function handler(req, res) {
     return;
   }
   const from = process.env.RELEASE_NOTIFY_FROM || 'StatChat <noreply@statchat.co>';
-  const origin = 'https://statchat.co';
+  // www, not the apex. The apex 308s to www in Vercel's domain config, so an
+  // apex link in an email costs every recipient a redirect and names a host
+  // the site does not serve from. Matches the canonical tags.
+  const origin = 'https://www.statchat.co';
   // The bare address out of "Name <addr>", for the unsubscribe header and
   // for the to: field below.
   const fromAddr = (from.match(/<([^>]+)>/) || [null, from])[1].trim();
