@@ -11048,10 +11048,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pat_bres" value="n" checked> Defense recovered &mdash; no score</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_pat_bres" value="d"> Returned for two &mdash; the defense scores</label>' +
         '</div>' +
-        '<div id="pp_pat_ret_wrap" style="display:none; margin-top:8px;">' +
-          '<label>Return yards (optional)</label>' +
-          '<input autocomplete="off" type="text" inputmode="numeric" id="pp_pat_retyds" placeholder="yds" style="width:96px;">' +
-        '</div>' +
         '<p style="font-size:12px; color:#8d99a6; margin:8px 0 0; line-height:1.45;">Most states play NFHS rules, where the try ends the moment the defense gains possession &mdash; no return and no score. Texas plays NCAA rules, where the defense may return it for two. Record a return only if the officials let the play continue.</p>' + '</div>';
     else if (type === 'twopt') html =
         '<div style="margin-bottom:10px;"><label>Play type</label><div class="row">' +
@@ -13121,15 +13117,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         if (!e.target.checked){
           const back = document.querySelector('input[name=pp_pat_bres][value="n"]');
           if (back) back.checked = true;
-          document.getElementById('pp_pat_ret_wrap').style.display = 'none';
         }
-      });
-      // Return yardage only means something on a return.
-      [...document.querySelectorAll('input[name=pp_pat_bres]')].forEach(r => {
-        r.addEventListener('change', () => {
-          const scored = (document.querySelector('input[name=pp_pat_bres]:checked') || {}).value === 'd';
-          document.getElementById('pp_pat_ret_wrap').style.display = scored ? 'block' : 'none';
-        });
       });
     }
     if (type === 'twopt'){
@@ -13998,21 +13986,27 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const res = blocked ? 'b' : document.querySelector('input[name=pp_patres]:checked').value;
       if (res === 'b'){
         const bres = (document.querySelector('input[name=pp_pat_bres]:checked') || {}).value || 'n';
-        // A RETURN NEEDS A RETURNER. The parser reads the token after 'b'
-        // as the defender and the one after that as the yardage, so a
-        // return recorded with yardage and no player would file the yards
-        // as a jersey number. Refused rather than silently mangled, and
-        // the block is optional in every other case exactly as before.
-        if (bres === 'd' && !sel.credit){
-          showReviewMsg('Nothing has been saved — still needed: the defender who returned it.');
-          return;
-        }
-        const retyds = bres === 'd'
-          ? (document.getElementById('pp_pat_retyds').value || '').trim() : '';
+        // THE DEFENDER IS OPTIONAL, and no return yardage is collected.
+        //
+        // Both were briefly required here and neither earned its place.
+        // Nothing credits a defender on a try: DEFENSIVE_CREDIT_TYPES is
+        // rush, pass, sack, int, fumble, kickoff, kickoff_return, punt --
+        // 'pat' and 'twopt' are not in it. patBlocked is charged to the
+        // KICKER, not to whoever blocked it. And there is no statistic
+        // anywhere that try return yardage belongs to: both rule books
+        // keep try plays out of the box score entirely, so the number
+        // would have been decoration that only made the code ambiguous.
+        //
+        // Same call and the same reasoning as the field-goal panel, whose
+        // return-yards input was removed on 25 Aug 2026.
+        //
+        // With no yardage token there is no position to hold, so the '?'
+        // placeholder that fg needs is not needed here either.
+        //
         // ' td' LAST. parseInput reads it as rest[rest.length - 1], so any
         // token appended after it would stop the score registering.
         code = sel.kicker + 'pa b' + (sel.credit ? ' ' + sel.credit : '') +
-               (retyds ? ' ' + retyds : '') + (bres === 'd' ? ' td' : '');
+               (bres === 'd' ? ' td' : '');
       } else {
         code = sel.kicker + 'pa ' + res;
       }
@@ -14025,10 +14019,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const res = document.querySelector('input[name=pp_2pt_rush_res]:checked').value;
         if (res === 'b'){
           const bres = (document.querySelector('input[name=pp_2pt_rush_bres]:checked') || {}).value || 'n';
-          if (bres === 'd' && !sel.credit){
-            showReviewMsg('Nothing has been saved — still needed: the defender who returned it.');
-            return;
-          }
           code = sel.carrier + 'tpr b' + (sel.credit ? ' ' + sel.credit : '') +
                  (bres === 'd' ? ' td' : '');
         } else {
@@ -14042,10 +14032,6 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const res = document.querySelector('input[name=pp_2pt_pass_res]:checked').value;
         if (res === 'b'){
           const bres = (document.querySelector('input[name=pp_2pt_pass_bres]:checked') || {}).value || 'n';
-          if (bres === 'd' && !sel.credit){
-            showReviewMsg('Nothing has been saved — still needed: the defender who returned it.');
-            return;
-          }
           code = sel.passer + 'tpp ' + recTok2 + ' b' + (sel.credit ? ' ' + sel.credit : '') +
                  (bres === 'd' ? ' td' : '');
         } else {
