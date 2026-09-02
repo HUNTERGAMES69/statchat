@@ -6111,6 +6111,34 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // begins.
     const otSeriesOver = !!st0.otSeriesTeam &&
       (st0.possession !== st0.otSeriesTeam || st0.down === null);
+    // WAS A TRY EVEN ATTEMPTED? Added 2 Sep 2026.
+    // ------------------------------------------------------------------
+    // awaitingTry is deliberately not limited to regulation -- tries
+    // happen in overtime too -- so after an overtime touchdown every
+    // button but PAT and 2PT goes dark, and awaitingOtSeries below refuses
+    // to raise the next series until a try is entered.
+    //
+    // WHICH TRAPS THE WALK-OFF. The second team scores to win, the game is
+    // over, no try is taken, and the app sits asking for a play nobody
+    // ran. End game is the only way past it.
+    //
+    // Andy's call, and it keeps the app out of the rule book entirely:
+    // ask whether a try happened rather than working out whether one was
+    // allowed. Kick and Two-point just open the panels that already exist.
+    // "No try" is the answer that had nowhere to go.
+    const awaitingOtTry = st0.quarter >= 5 && awaitingTry && !disable &&
+      (gamePhase === 'firstHalf' || gamePhase === 'secondHalf');
+    if (awaitingOtTry && !guided.active){
+      guided = { active: true, quarter: 5, kickingTeam: null, receivingTeam: null,
+                 step: 'otTry', targetPhase: 'overtime',
+                 // Named here, where lastReal is already in hand, rather
+                 // than re-derived in the panel from a different rule.
+                 scoredBy: (lastReal && lastReal.effect && lastReal.effect.score &&
+                            lastReal.effect.score.team) || null };
+      persistUiState();
+      renderGuided();
+    }
+
     const awaitingOtSeries = st0.quarter >= 5 && otSeriesOver &&
       !awaitingTry && !disable &&
       (gamePhase === 'firstHalf' || gamePhase === 'secondHalf');
@@ -6897,11 +6925,112 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     return out;
   }
 
+  // THE OVERTIME FORMAT, read back off the log.
+  // ---------------------------------------------------------------------
+  // Written once onto the overtime marker and read by every series after
+  // it, so the question is asked once and the answer cannot drift. Walks
+  // backwards because the marker is near the end of a game that reached
+  // overtime, and returns null for every game played before this existed
+  // -- those simply get no prefill, which is the same as a scorer who
+  // chose "something else".
+  function otRulesFromLog(){
+    for (let i = plays.length - 1; i >= 0; i--){
+      const e = plays[i] && plays[i].effect;
+      if (e && e.otRules) return e.otRules;
+    }
+    return null;
+  }
+
   function renderGuidedInner(){
     const panel = document.getElementById('guidedPanel');
     const content = document.getElementById('guidedContent');
     if (!guided.active){ panel.style.display = 'none'; return; }
     panel.style.display = 'block';
+
+    // WHICH OVERTIME, ASKED ONCE. Added 2 Sep 2026.
+    // ------------------------------------------------------------------
+    // Overtime is the one place the books genuinely disagree about
+    // something the app asserts: NFHS starts a series at the opponent's
+    // 10, NCAA at the 25, and Texas high schools play the NCAA book. NFHS
+    // itself is a STATE ADOPTION, so even "high school" is not one answer.
+    //
+    // Asked here rather than set on the tenant, and that was Andy's call:
+    // a setting somebody chose months ago can be wrong and nobody notices,
+    // while a question asked at the moment of use cannot be stale. It also
+    // costs nothing -- most games never reach overtime at all.
+    //
+    // IT SETS THE SPOT AND NOTHING ELSE. Whether a kick try is allowed in
+    // a later overtime is the officials' business; the scorer records what
+    // they let happen. See the try prompt further down.
+    if (guided.step === 'otTry'){
+      const who = guided.scoredBy && TEAMS[guided.scoredBy]
+        ? TEAMS[guided.scoredBy].name : 'That team';
+      content.innerHTML =
+        '<p class="hint"><strong>' + who + ' scored.</strong> Try attempted?</p>' +
+        '<div class="row">' +
+          '<button type="button" id="ot_try_kick">Kick</button> ' +
+          '<button type="button" id="ot_try_two">Two-point</button> ' +
+          '<button type="button" class="secondary" id="ot_try_none">No try &mdash; series over</button>' +
+        '</div>' +
+        '<p style="font-size:12px; color:var(--sc-ink-muted,#8d99a6); margin:10px 0 0; line-height:1.5;">' +
+        'Whether a kick is allowed in this overtime is the officials\u2019 call. Record what ' +
+        'they let happen.</p>';
+      const closeGuided = function(){
+        guided = { active: false, quarter: null, kickingTeam: null, receivingTeam: null,
+                   step: null, targetPhase: null };
+        persistUiState();
+      };
+      // The two try panels already exist and already know what a try is.
+      // This only decides which one opens, so nothing about entering a PAT
+      // or a two-point conversion changes.
+      document.getElementById('ot_try_kick').addEventListener('click', function(){
+        closeGuided(); renderAll(); renderGuided(); renderPlayPanel('pat');
+      });
+      document.getElementById('ot_try_two').addEventListener('click', function(){
+        closeGuided(); renderAll(); renderGuided(); renderPlayPanel('twopt');
+      });
+      // A REAL PLAY, not a divider. scoredSix reads the last REAL play, so
+      // a divider would leave the app still waiting for a try. It carries
+      // endsDrive so the series closes and the next one is raised.
+      document.getElementById('ot_try_none').addEventListener('click', function(){
+        pushAndPersist({ id: nextId++,
+          text: (guided.scoredBy && TEAMS[guided.scoredBy] ? TEAMS[guided.scoredBy].name + ' — ' : '') +
+                'no try attempted',
+          effect: { endsDrive: true }, quarter: 5 });
+        closeGuided();
+        renderAll(); renderGuided(); updatePhaseUI();
+      });
+      return;
+    }
+
+    if (guided.step === 'otFormat'){
+      const fbtn = function(id, title, sub){
+        return '<button type="button" class="secondary" id="' + id + '" ' +
+          'style="display:block; width:100%; text-align:left; margin-bottom:8px; ' +
+          'padding:11px 13px; font-weight:600;">' + title +
+          '<span style="display:block; font-weight:500; font-size:12px; margin-top:3px; ' +
+          'color:var(--sc-ink-muted,#8d99a6);">' + sub + '</span></button>';
+      };
+      content.innerHTML =
+        '<p class="hint">Which overtime is this crew playing? This sets where each series ' +
+        'starts. It does not decide what you may enter &mdash; record what happens on the ' +
+        'field.</p>' +
+        fbtn('ot_fmt_nfhs', 'NFHS &mdash; most states', 'Each side starts at the opponent\u2019s 10.') +
+        fbtn('ot_fmt_ncaa', 'NCAA &mdash; colleges and Texas', 'Each side starts at the opponent\u2019s 25.') +
+        fbtn('ot_fmt_cust', 'Something else', 'Set the spot yourself. Your state\u2019s adoption may differ.');
+      const choose = function(book, side, yardline){
+        guided.otRules = { book: book, side: side, yardline: yardline };
+        guided.step = 'otPickTeam';
+        persistUiState();
+        renderGuided();
+      };
+      document.getElementById('ot_fmt_nfhs').addEventListener('click', function(){ choose('nfhs','opp','10'); });
+      document.getElementById('ot_fmt_ncaa').addEventListener('click', function(){ choose('ncaa','opp','25'); });
+      // NOTHING PREFILLED on custom. A number the app guessed is an
+      // assertion, and an assertion is what put the old panel wrong.
+      document.getElementById('ot_fmt_cust').addEventListener('click', function(){ choose('custom', null, ''); });
+      return;
+    }
 
     if (guided.step === 'otPickTeam'){
       content.innerHTML =
@@ -6918,7 +7047,12 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // Same shape as "End of 1st half": a divider, no effect, so it
         // carries no state of its own and undo removes it cleanly.
         pushAndPersist({ id: nextId++, text: 'End of regulation', effect: {}, isDivider: true, quarter: 4 });
-        pushAndPersist({ id: nextId++, text: 'Quarter marker — start of overtime', effect: { setQuarter: 5 }, quarter: 5 });
+        // THE ANSWER RIDES ON THE MARKER, not on a column. It travels with
+        // the game, undo removes it with the marker it belongs to, and a
+        // game finalized under one format keeps reading that way forever.
+        pushAndPersist({ id: nextId++, text: 'Quarter marker — start of overtime',
+          effect: Object.assign({ setQuarter: 5 },
+            guided.otRules ? { otRules: guided.otRules } : {}), quarter: 5 });
         guided.receivingTeam = team;
         guided.step = 'otSpot';
         persistUiState();
@@ -6939,7 +7073,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       content.innerHTML =
         '<p class="hint">' + TEAMS[team].name +
           (opener ? ' starts overtime.' : ' starts their series.') +
-          ' Starting spot (most rule sets: opponent\'s 10 — adjust to your association\'s format):</p>' +
+          ' Starting spot' + (function(){
+            const r = otRulesFromLog() || (guided && guided.otRules) || null;
+            if (!r) return '';
+            if (r.book === 'ncaa')  return ' (NCAA — opponent\'s 25):';
+            if (r.book === 'nfhs')  return ' (NFHS — opponent\'s 10):';
+            return ' (set it yourself):';
+          })() + '</p>' +
         startingSpotFieldsHtml('ot_spot', 'Starting spot', team) +
         '<div class="row" style="margin-top:12px;">' +
           '<button class="primary" id="ot_review">Set drive</button>' +
@@ -6987,10 +7127,19 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // Editable, like every other prefill: associations vary, which is
       // what the hint above already says. Filled rather than forced.
       {
+        // PREFILLED FROM THE FORMAT, not from a hardcoded 10.
+        //
+        // This used to write opponent's 10 every time, under a hint that
+        // told the scorer to "adjust to your association's format" -- so
+        // the sentence said one thing and the field asserted another.
+        // Custom leaves both blank on purpose.
+        const rules = otRulesFromLog() || (guided && guided.otRules) || null;
         const yl = document.getElementById('ot_spot_yardline');
-        if (yl && !yl.value) yl.value = '10';
-        const oppBtn = content.querySelector('.ot_spot_side[data-side="opp"]');
-        if (oppBtn && !content.querySelector('.ot_spot_side.picked')) oppBtn.click();
+        if (yl && !yl.value && rules && rules.yardline) yl.value = rules.yardline;
+        if (rules && rules.side){
+          const sideBtn = content.querySelector('.ot_spot_side[data-side="' + rules.side + '"]');
+          if (sideBtn && !content.querySelector('.ot_spot_side.picked')) sideBtn.click();
+        }
       }
       document.getElementById('ot_review').addEventListener('click', () => {
         const reset = getReset();
@@ -7997,7 +8146,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // 'overtime' for the same reason as the automatic series trigger: the
     // secondHalf self-heal would cancel this flow in any game that has no
     // half divider yet.
-    guided = { active: true, quarter: 5, kickingTeam: null, receivingTeam: null, step: 'otPickTeam', targetPhase: 'overtime' };
+    guided = { active: true, quarter: 5, kickingTeam: null, receivingTeam: null, step: 'otFormat', targetPhase: 'overtime' };
     persistUiState();
     renderGuided();
   });
