@@ -487,6 +487,12 @@
           <input type="text" id="shareLink" readonly
                  style="width:100%; font-size:12px; padding:7px 8px; margin-bottom:8px;">
           <button type="button" id="copyShareLink" class="secondary">Copy link</button>
+          <!-- REVOKING IS ITS OWN ACT, not a side effect of the toggle.
+               Turning sharing off used to destroy the link outright, so a
+               coach flipping it to test something killed every copy already
+               sent to parents. Killing a link is now deliberate. -->
+          <button type="button" id="revokeShareLink" class="secondary"
+                  style="margin-left:6px;">Revoke link</button>
         </div>
         <p id="shareMsg" style="font-size:12px; color:#666; margin:8px 0 0;"></p>
       </div>
@@ -1324,10 +1330,21 @@ const TIMEOUTS_PER_OT = 1;
     //
     // recap.html?id= keeps working for anyone who was already sent one;
     // this only changes what new links look like.
-    // A TOKEN, minted when sharing is switched on. The url therefore
-    // carries no database key, and "stop sharing" clears the token so an
-    // old link stays dead even if the game is shared again later -- a new
-    // token is minted, and the one somebody kept no longer resolves.
+    // A TOKEN, minted the FIRST time a game is shared and kept from then
+    // on. The url therefore carries no database key.
+    //
+    // It used to be re-minted on every toggle, and "stop sharing" nulled
+    // it. That was written as revocation, but it made the toggle itself
+    // destructive: a coach turning sharing off and on again -- the single
+    // most likely thing to try when a parent says the link is broken --
+    // silently destroyed every copy already sent, and the page said
+    // nothing about it until after the damage was done.
+    //
+    // Revocation is now the Revoke link button, which is the only thing
+    // that mints a replacement. is_public alone decides whether the link
+    // resolves: api/share.js requires final AND is_public AND not deleted,
+    // so a retained token on a private game is inert, and anon cannot read
+    // the column in the first place.
     const shareUrl = () => game.share_token
       ? window.location.origin + '/g/' + game.share_token
       : '';
@@ -1357,12 +1374,17 @@ const TIMEOUTS_PER_OT = 1;
       radio.addEventListener('change', async () => {
         const wantPublic = radio.value === 'public';
         msg.textContent = 'Saving…';
-        // A fresh token every time sharing is turned on, and null when it
-        // is turned off. That is what makes revoking real: re-sharing
-        // does not resurrect the previous link.
-        const nextToken = wantPublic ? mintToken() : null;
+        // THE TOKEN IS NOT TOUCHED unless the game has never been shared.
+        // Turning sharing off leaves it in place so the same link comes
+        // back when sharing is turned on again. share_token is left OUT of
+        // the patch entirely in that case rather than written back
+        // unchanged -- there is no value it could be set to here that is
+        // not already there, and not writing it means this path can never
+        // be the thing that loses a link.
+        const patch = { is_public: wantPublic };
+        if (wantPublic && !game.share_token) patch.share_token = mintToken();
         const { error } = await supabaseClient
-          .from('games').update({ is_public: wantPublic, share_token: nextToken })
+          .from('games').update(patch)
           .eq('id', game.id);
         if (error){
           // Say it failed and put the switch back. Leaving it showing the
@@ -1374,13 +1396,14 @@ const TIMEOUTS_PER_OT = 1;
           return;
         }
         game.is_public = wantPublic;
-        game.share_token = nextToken;
+        if (patch.share_token) game.share_token = patch.share_token;
         paint(wantPublic);
         msg.textContent = wantPublic
-          ? 'Anyone with this link can now read this recap. Turning sharing off kills this ' +
-            'link for good — sharing again creates a new one. Neither can retract a copy ' +
-            'somebody has already taken.'
-          : 'Sharing is off and that link is dead. Sharing again will create a new one.';
+          ? 'Anyone with this link can now read this recap. The link does not change — ' +
+            'turning sharing off and back on brings the same one back. Use Revoke link to ' +
+            'kill it for good. Nothing can retract a copy somebody has already taken.'
+          : 'Sharing is off, so the link stops working for everyone. Turn sharing back on ' +
+            'and the same link works again. Use Revoke link to destroy it permanently.';
       });
     });
     document.getElementById('copyShareLink').addEventListener('click', async () => {
@@ -1391,6 +1414,42 @@ const TIMEOUTS_PER_OT = 1;
         linkEl.select();
         msg.textContent = 'Press and hold to copy the link above.';
       }
+    });
+
+    // REVOKE -- the only thing in the app that destroys a share link.
+    //
+    // It mints a replacement rather than clearing the column, so the recap
+    // stays shared and the coach is holding a working link the moment the
+    // old one dies. Clearing it would have left the game public with no
+    // way to reach it, which reads as a broken feature.
+    //
+    // Asked with window.confirm, the same as taking a game on or off air
+    // in dashboard.html and game.html -- destructive, irreversible, and
+    // not something to discover after the fact.
+    //
+    // The button lives inside shareLinkRow, which is hidden while the game
+    // is private, so there is no revoking a link that is not live.
+    document.getElementById('revokeShareLink').addEventListener('click', async () => {
+      if (!window.confirm(
+            'Revoke this link?\n\n' +
+            'Every copy already sent — texts, emails, Facebook posts — stops ' +
+            'working immediately, and this cannot be undone.\n\n' +
+            'A new link is created in its place for you to share instead.')) return;
+      msg.textContent = 'Revoking…';
+      const fresh = mintToken();
+      const { error } = await supabaseClient
+        .from('games').update({ share_token: fresh })
+        .eq('id', game.id);
+      if (error){
+        // Same rule as the toggle: never report a revocation that did not
+        // happen. A coach who believes a link is dead will not chase it.
+        msg.innerHTML = '<span style="color:#a32d2d;">Could not revoke the link: ' +
+          error.message + '</span>';
+        return;
+      }
+      game.share_token = fresh;
+      paint(!!game.is_public);
+      msg.textContent = 'The old link is dead. This is the new one — share this instead.';
     });
   }
 
