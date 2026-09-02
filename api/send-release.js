@@ -61,20 +61,33 @@ const esc = (v) => String(v == null ? '' : v)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
 
-function emailHtml(entry, origin) {
-  const link = entry.link ? origin + '/' + entry.link : '';
+// ONE MESSAGE, HOWEVER MANY NOTES. Four things shipping together must not
+// be four emails to the same people -- that is how a product-news address
+// gets filtered, and the second message is the one that does it.
+function emailHtml(entries, origin) {
+  const items = entries.map(entry => {
+    const link = entry.link ? origin + '/' + entry.link : '';
+    return '<div style="margin:0 0 26px;">' +
+      '<h2 style="font-size:18px; line-height:1.3; margin:0 0 8px;">' + esc(entry.title) + '</h2>' +
+      '<p style="font-size:15px; line-height:1.6; margin:0 0 10px;">' + esc(entry.body) + '</p>' +
+      (entry.where
+        ? '<p style="font-size:14px; line-height:1.6; margin:0 0 10px; color:#444;">Where: <strong>' +
+          esc(entry.where) + '</strong></p>' : '') +
+      (link
+        ? '<p style="margin:0;"><a href="' + esc(link) +
+          '" style="color:#1a7a4c; font-weight:700; font-size:14px;">Take me there &rarr;</a></p>'
+        : '') +
+    '</div>';
+  }).join('');
+  const first = entries[0] || {};
+  const cta = first.link ? origin + '/' + first.link : origin + '/dashboard.html';
   return '<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif; max-width:560px; margin:0 auto; padding:24px; color:#1a1a1a;">' +
-    '<div style="font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:#7a7a7a; font-weight:700;">New in StatChat</div>' +
-    '<h1 style="font-size:21px; line-height:1.3; margin:8px 0 12px;">' + esc(entry.title) + '</h1>' +
-    '<p style="font-size:15px; line-height:1.6; margin:0 0 14px;">' + esc(entry.body) + '</p>' +
-    (entry.where
-      ? '<p style="font-size:14px; line-height:1.6; margin:0 0 14px; color:#444;">Where: <strong>' +
-        esc(entry.where) + '</strong></p>' : '') +
-    (link
-      ? '<p style="margin:0 0 20px;"><a href="' + esc(link) +
-        '" style="background:#1a7a4c; color:#ffffff; text-decoration:none; font-weight:700; ' +
-        'font-size:15px; padding:10px 18px; border-radius:6px; display:inline-block;">Open StatChat</a></p>'
-      : '') +
+    '<div style="font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:#7a7a7a; font-weight:700; margin-bottom:16px;">' +
+      (entries.length === 1 ? 'New in StatChat' : entries.length + ' new things in StatChat') + '</div>' +
+    items +
+    '<p style="margin:0 0 20px;"><a href="' + esc(cta) +
+      '" style="background:#1a7a4c; color:#ffffff; text-decoration:none; font-weight:700; ' +
+      'font-size:15px; padding:10px 18px; border-radius:6px; display:inline-block;">Open StatChat</a></p>' +
     // CAN-SPAM. Product news is marketing, not transactional: it needs a
     // way out and a real postal address. The opt-out is a reply rather
     // than a link because a one-click unsubscribe endpoint is its own
@@ -88,11 +101,17 @@ function emailHtml(entry, origin) {
     '</p></div>';
 }
 
-function emailText(entry, origin) {
-  const link = entry.link ? origin + '/' + entry.link : '';
-  return 'NEW IN STATCHAT\n\n' + entry.title + '\n\n' + entry.body + '\n' +
-    (entry.where ? '\nWhere: ' + entry.where + '\n' : '') +
-    (link ? '\n' + link + '\n' : '') +
+function emailText(entries, origin) {
+  const head = entries.length === 1
+    ? 'NEW IN STATCHAT\n\n'
+    : entries.length + ' NEW THINGS IN STATCHAT\n\n';
+  const items = entries.map(entry => {
+    const link = entry.link ? origin + '/' + entry.link : '';
+    return entry.title + '\n\n' + entry.body + '\n' +
+      (entry.where ? '\nWhere: ' + entry.where + '\n' : '') +
+      (link ? link + '\n' : '');
+  }).join('\n----------\n\n');
+  return head + items +
     '\n---\nYou are getting this because you are listed as an admin on a StatChat ' +
     'account. Reply with "unsubscribe" and we will stop sending product news to ' +
     'this address; you will still see what is new inside the app.\n' +
@@ -144,11 +163,27 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const entry = cleanEntry(body.entry);
-  if (!entry) {
+  // publish/unpublish act on ONE note; send and preview take a LIST, so a
+  // batch of notes published together goes out as a single message.
+  const rawList = Array.isArray(body.entries) ? body.entries
+                : (body.entry ? [body.entry] : []);
+  const entries = rawList.map(cleanEntry).filter(Boolean);
+  if (!entries.length) {
     res.status(400).json({ error: 'A release id, title and audience are required.' });
     return;
   }
+  if (entries.length !== rawList.length) {
+    res.status(400).json({ error: 'One of those notes is missing an id, a title or an audience.' });
+    return;
+  }
+  {
+    const ids = entries.map(e => e.id);
+    if (new Set(ids).size !== ids.length) {
+      res.status(400).json({ error: 'The same note is in that batch twice.' });
+      return;
+    }
+  }
+  const entry = entries[0];
 
   // ---- PUBLISH / UNPUBLISH ---------------------------------------------
   // The switch between "written" and "live on every dashboard". Reversible
@@ -158,6 +193,10 @@ module.exports = async function handler(req, res) {
   // Unpublishing does NOT un-email anything, and does not reset who has
   // dismissed what -- a person who read it read it.
   if (action === 'publish' || action === 'unpublish') {
+    if (entries.length !== 1) {
+      res.status(400).json({ error: 'Publish and take down act on one note at a time.' });
+      return;
+    }
     const { data: existing } = await admin
       .from('release_state').select('release_id, emailed_at')
       .eq('release_id', entry.id).limit(1);
@@ -188,13 +227,35 @@ module.exports = async function handler(req, res) {
   // ---- A NOTE CANNOT BE EMAILED BEFORE IT IS PUBLISHED ------------------
   // The email links people INTO the app. Mailing a note that is not live
   // sends them to a dashboard that says nothing about it.
-  const { data: st } = await admin
-    .from('release_state').select('published_at, emailed_at, sent_at:emailed_at, recipient_count')
-    .eq('release_id', entry.id).limit(1);
-  const state = (st || [])[0];
-  if (action === 'send' && !(state && state.published_at)) {
+  const { data: allState } = await admin
+    .from('release_state').select('release_id, published_at, emailed_at, recipient_count');
+  const stateById = {};
+  (allState || []).forEach(r => { stateById[r.release_id] = r; });
+
+  // EVERY NOTE IN THE BATCH MUST BE LIVE. The email links people into the
+  // app; a note that is not published sends them to a dashboard that says
+  // nothing about it.
+  const notLive = entries.filter(e => !(stateById[e.id] && stateById[e.id].published_at));
+  if (notLive.length) {
     res.status(400).json({
-      error: 'Publish this note first. An email points people at a note that is not live yet.'
+      error: 'Publish ' + (notLive.length === 1 ? 'this note' : 'these notes') +
+        ' first, or leave ' + (notLive.length === 1 ? 'it' : 'them') +
+        ' out of the batch: ' + notLive.map(e => e.id).join(', ') +
+        '. An email points people at a note that is not live yet.'
+    });
+    return;
+  }
+
+  // AND NONE OF THEM CAN HAVE GONE ALREADY. Refused as a whole rather than
+  // quietly dropping the ones already sent -- "I sent four" must mean four.
+  const already = entries.filter(e => stateById[e.id] && stateById[e.id].emailed_at);
+  if (already.length && action === 'send') {
+    res.status(200).json({
+      alreadySent: true,
+      message: (already.length === 1 ? 'That note was' : 'Some of those notes were') +
+        ' already emailed (' + already.map(e => e.id).join(', ') +
+        '). Nothing was sent. Clear ' + (already.length === 1 ? 'it' : 'them') +
+        ' from the selection and send the rest.'
     });
     return;
   }
@@ -203,21 +264,21 @@ module.exports = async function handler(req, res) {
   // A duplicate announcement to every school cannot be taken back, and the
   // second press of a button is far more likely to be a double-click than
   // a decision.
-  if (state && state.emailed_at) {
-    res.status(200).json({
-      alreadySent: true, sentAt: state.emailed_at,
-      recipientCount: state.recipient_count,
-      message: 'That release was already emailed on ' +
-        String(state.emailed_at).slice(0, 10) + ' to ' + state.recipient_count +
-        ' recipient(s). Nothing was sent again.'
-    });
-    return;
-  }
+
 
   // ---- who it goes to --------------------------------------------------
+  // THE BATCH'S AUDIENCE IS THE UNION; EACH PERSON'S MESSAGE IS NOT.
+  // A batch can mix an admin-only note with one a scorer should also see.
+  // Mailing the union to everybody would put the admin-only note in a
+  // scorer's inbox, which is the same leak as showing it on their
+  // dashboard. So recipients are grouped by ROLE and each group is sent
+  // only the notes its role is an audience for.
+  const ROLES = ['admin', 'game_entry'];
+  const audience = ROLES.filter(r => entries.some(e => e.audience.indexOf(r) > -1));
+
   const { data: people, error: peopleError } = await admin
     .from('profiles').select('id, role, tenant_id, release_email_opt_out')
-    .in('role', entry.audience);
+    .in('role', audience);
   if (peopleError) { res.status(500).json({ error: peopleError.message }); return; }
 
   // A DELETED SCHOOL IS NOT A CUSTOMER. Its staff rows survive deletion --
@@ -233,13 +294,16 @@ module.exports = async function handler(req, res) {
 
   const wanted = (people || []).filter(p =>
     !p.release_email_opt_out && p.tenant_id && !deleted[p.tenant_id]);
+  const roleById = {};
+  wanted.forEach(p => { roleById[p.id] = p.role; });
   const wantedIds = new Set(wanted.map(p => p.id));
 
   // Addresses live in auth.users, not profiles. listUsers() is paginated
   // and defaults to 50 -- taking the first page only would silently email
   // some of the platform and report success.
-  const emails = [];
+  const byRole = {};                       // role -> [address]
   const seen = new Set();
+  ROLES.forEach(r => { byRole[r] = []; });
   for (let page = 1; page <= 40; page++) {
     const { data: list, error: listError } =
       await admin.auth.admin.listUsers({ page, perPage: 200 });
@@ -248,16 +312,29 @@ module.exports = async function handler(req, res) {
     users.forEach(u => {
       if (!wantedIds.has(u.id)) return;
       const addr = String(u.email || '').trim().toLowerCase();
+      // ONE ADDRESS, ONE MESSAGE. A person who is somehow in both groups
+      // gets the wider one, never two emails.
       if (!addr || seen.has(addr)) return;
       // A DISABLED ACCOUNT IS NOT A RECIPIENT. Same test manage-users.js
       // uses to draw its "disabled" badge.
       if (u.banned_until && new Date(u.banned_until) > new Date()) return;
-      seen.add(addr); emails.push(addr);
+      seen.add(addr);
+      (byRole[roleById[u.id]] || []).push(addr);
     });
     if (users.length < 200) break;
   }
 
-  if (!emails.length) {
+  // What each group actually gets, in file order.
+  const groups = ROLES
+    .map(role => ({
+      role: role,
+      emails: byRole[role] || [],
+      notes: entries.filter(e => e.audience.indexOf(role) > -1)
+    }))
+    .filter(g => g.emails.length && g.notes.length);
+
+  const totalRecipients = groups.reduce((n, g) => n + g.emails.length, 0);
+  if (!totalRecipients) {
     res.status(200).json({ sent: 0, message: 'Nobody matched that audience, so nothing was sent.' });
     return;
   }
@@ -267,7 +344,15 @@ module.exports = async function handler(req, res) {
   // are not this screen's business and putting them in a response is how
   // a customer list ends up in a browser cache.
   if (action === 'preview') {
-    res.status(200).json({ preview: true, recipientCount: emails.length });
+    res.status(200).json({
+      preview: true,
+      recipientCount: totalRecipients,
+      // Per group, so a batch that mixes audiences says what each will
+      // actually receive rather than one number that hides the split.
+      groups: groups.map(g => ({
+        role: g.role, recipients: g.emails.length, notes: g.notes.length
+      }))
+    });
     return;
   }
 
@@ -294,8 +379,12 @@ module.exports = async function handler(req, res) {
   // to the from-address with the real recipients in bcc.
   let delivered = 0;
   const failures = [];
-  for (let i = 0; i < emails.length; i += 40) {
-    const batch = emails.slice(i, i + 40);
+  for (const group of groups) {
+   const subject = group.notes.length === 1
+     ? 'New in StatChat: ' + group.notes[0].title
+     : group.notes.length + ' new things in StatChat';
+   for (let i = 0; i < group.emails.length; i += 40) {
+    const batch = group.emails.slice(i, i + 40);
     try {
       const r = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -303,7 +392,7 @@ module.exports = async function handler(req, res) {
         body: JSON.stringify({
           from, to: [fromAddr], bcc: batch,
           reply_to: unsubTo,
-          subject: 'New in StatChat: ' + entry.title,
+          subject: subject,
           // LIST-UNSUBSCRIBE. Gmail and Outlook render this as a native
           // Unsubscribe link beside the sender, which is both easier than
           // replying and materially better for placement -- a reader who
@@ -318,36 +407,51 @@ module.exports = async function handler(req, res) {
           headers: {
             'List-Unsubscribe': '<mailto:' + unsubTo + '?subject=unsubscribe>'
           },
-          html: emailHtml(entry, origin),
-          text: emailText(entry, origin)
+          html: emailHtml(group.notes, origin),
+          text: emailText(group.notes, origin)
         })
       });
       if (r.ok) delivered += batch.length;
-      else failures.push('batch ' + (i / 40 + 1) + ': HTTP ' + r.status);
+      else failures.push(group.role + ' batch ' + (i / 40 + 1) + ': HTTP ' + r.status);
     } catch (e) {
-      failures.push('batch ' + (i / 40 + 1) + ': ' + (e && e.message ? e.message : String(e)));
+      failures.push(group.role + ' batch ' + (i / 40 + 1) + ': ' +
+                    (e && e.message ? e.message : String(e)));
     }
+   }
   }
 
   // RECORDED ONLY IF SOMETHING ACTUALLY WENT. Writing this row after a
   // total failure would mark the release sent and make it unsendable --
   // the announcement lost permanently, with the button reporting success.
+  // EVERY NOTE IN THE BATCH IS MARKED, not just the first. Leaving one
+  // unmarked would let it be emailed again on its own, to people who have
+  // already read it in the message that went out today.
+  //
+  // The rows already exist -- a send cannot happen before a publish.
   if (delivered > 0) {
-    // The row already exists -- a send cannot happen before a publish.
-    await admin.from('release_state').update({
-      emailed_at: new Date().toISOString(),
-      emailed_by: callerId,
-      recipient_count: delivered
-    }).eq('release_id', entry.id);
+    const stamp = new Date().toISOString();
+    for (const e of entries) {
+      await admin.from('release_state').update({
+        emailed_at: stamp, emailed_by: callerId, recipient_count: delivered
+      }).eq('release_id', e.id);
+    }
   }
 
+  const noteCount = entries.length;
   res.status(200).json({
     sent: delivered,
-    attempted: emails.length,
+    attempted: totalRecipients,
+    notes: noteCount,
     failures: failures.length ? failures : undefined,
-    message: delivered === emails.length
-      ? 'Sent to ' + delivered + ' recipient(s).'
-      : 'Sent to ' + delivered + ' of ' + emails.length + ' recipient(s). ' +
+    message: delivered === totalRecipients
+      ? 'Sent ' + noteCount + ' note' + (noteCount === 1 ? '' : 's') +
+        ' to ' + delivered + ' recipient(s)' +
+        (groups.length > 1
+          ? ' (' + groups.map(g => g.emails.length + ' ' +
+              (g.role === 'admin' ? 'admin' : 'scorer') + (g.emails.length === 1 ? '' : 's') +
+              ', ' + g.notes.length + ' note' + (g.notes.length === 1 ? '' : 's')).join('; ') + ')'
+          : '') + '.'
+      : 'Sent to ' + delivered + ' of ' + totalRecipients + ' recipient(s). ' +
         'Nothing was recorded as sent unless at least one went, so this can be retried.'
   });
 };
