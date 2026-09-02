@@ -417,11 +417,10 @@
          new to try. If both are showing, the one that can stop a
          Friday night goes first.
 
-         SUPPRESSED DURING A GAME. renderReleaseCard() will not draw
-         this while a game is in progress or on air -- a coach opening
-         the dashboard at halftime to check a stat is not an audience
-         for product news, and "something changed" reads as "something
-         broke" at exactly the wrong moment. -->
+         NOT SUPPRESSED DURING A GAME. It was, on both is_broadcast and
+         in_progress, and both were wrong -- see the note on
+         renderReleaseCard(). A game left unfinalized silenced this
+         permanently and said nothing about it. -->
     <div id="releaseCard" class="card hidden"
          style="border-left:5px solid var(--sc-green, #a3d93f); padding:16px 18px;">
       <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
@@ -815,23 +814,27 @@
     return all.filter(r => Array.isArray(r.audience) && r.audience.indexOf(role) > -1);
   }
 
-  async function renderReleaseCard(games){
+  // NO GAME-STATE SUPPRESSION, and it took two goes to get here.
+  // -------------------------------------------------------------------
+  // The first version hid the card while any game was `in_progress` OR
+  // `is_broadcast`. is_broadcast was plainly wrong -- schools set a game
+  // ON AIR on Monday and leave it all week for the crew, so the card
+  // would have been hidden most of the season.
+  //
+  // in_progress was wrong more quietly, and that is worse. A game only
+  // leaves in_progress when somebody finalizes it, so ONE test game left
+  // open silenced the card for that school forever -- no error, no
+  // message, nothing to notice. It cost twenty minutes of diagnosis the
+  // first time it happened, on 2 Sep 2026, and it would have cost that
+  // again every time.
+  //
+  // Andy's call: drop it. This card is on the DASHBOARD, not the scoring
+  // screen -- a coach who opens it at halftime is one keystroke from
+  // ignoring a card at the top of the page, and that is a far smaller
+  // cost than a feature that switches itself off and says nothing.
+  async function renderReleaseCard(){
     const card = document.getElementById('releaseCard');
     if (!card || !window.STATCHAT_RELEASES) return;
-
-    // NOT WHILE A GAME IS BEING SCORED. A coach on the dashboard at
-    // halftime is checking a stat, not reading product news, and
-    // "something changed" reads as "something broke" with a game on the
-    // field.
-    //
-    // `status === 'in_progress'` ONLY -- NOT is_broadcast. The first pass
-    // tested both, which was wrong: schools set a game ON AIR on Monday
-    // and leave it there all week so the broadcast crew can set up, so
-    // is_broadcast is true for most of the season and the card would have
-    // been suppressed nearly always. Andy, 2 Sep 2026. On air is a
-    // schedule; in progress is somebody scoring right now.
-    const live = (games || []).some(g => g.status === 'in_progress');
-    if (live) return;
 
     // Role decides the audience. A view account is never an audience for
     // release notes: everything announced here is on a screen it cannot
@@ -1173,11 +1176,10 @@
     picker.addEventListener('change', renderForSelectedSeason);
     renderForSelectedSeason();
     hideSplash();
-    // AFTER the games are in hand, because the card suppresses itself while
-    // one is in progress or on air. Deliberately not awaited: a release
-    // note is the least important thing on this page and must never hold
-    // the splash up or fail the load.
-    renderReleaseCard(allGames);
+    // Deliberately not awaited: a release note is the least important
+    // thing on this page and must never hold the splash up or fail the
+    // load. Takes no argument -- see the note on renderReleaseCard.
+    renderReleaseCard();
   }
 
   async function refreshGames(){
