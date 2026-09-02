@@ -14105,7 +14105,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const top = (banner ? banner.getBoundingClientRect().height : 0) + 12;
       // Clear of the banner, and not so low that the card is half off the
       // bottom. Anything between those two is left alone.
-      if (r.top >= top && r.top <= window.innerHeight * 0.6) return;
+      // "IS IT USABLE", NOT "IS IT IN THE TOP 60%".
+      // ----------------------------------------------------------------
+      // The rule this replaces scrolled whenever the card sat below 0.6 of
+      // the window. On a phone that is roughly the fold. On a DESKTOP it
+      // is not: at 1300px tall, 0.6 is 780, so a card sitting perfectly
+      // visible at 800 was declared out of view and the page scrolled
+      // DOWN to hoist it to the top -- carrying the scorer several hundred
+      // pixels past where they were, to Previous drive and All plays.
+      // Reported 2 Sep 2026, on the punt -> nudge -> Adjust spot path, and
+      // the wide layout is why I could not reproduce it at phone size.
+      //
+      // Visible means visible: clear of the sticky banner at the top, and
+      // its top edge on screen with room to read it. Anything in between
+      // is left exactly where it is.
+      const bottomLimit = window.innerHeight - 80;
+      if (r.top >= top && r.top <= bottomLimit) return;
       const target = Math.max(0, window.scrollY + r.top - top);
       if (window.scrollTo) window.scrollTo({ top: target, behavior: 'auto' });
     } catch (e) { /* positioning is a nicety; never let it block a save */ }
@@ -14401,22 +14416,14 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // it fires: the pad would be placed against where the field WAS. This
     // is the same class of fault as the clamp above, arriving by a
     // different route.
+    // ONE PASS, NOT THREE. A rAF pass and a 90ms pass were added on
+    // 1 Sep and made this WORSE, not better: each one re-applied the rule
+    // after more layout had settled, so the page scrolled again and landed
+    // further down. With a rule that only fires when the card is genuinely
+    // unusable, one synchronous pass is the whole job -- and on the common
+    // path, where the card is already under the scorer's eye, it does
+    // nothing at all.
     bringCardIntoView(cc);
-    // AND AGAIN ONCE THE LAYOUT HAS SETTLED. The measurement above is
-    // taken in the same tick as the tree collapsing and, on the spot-nudge
-    // path, the nudge card being hidden -- roughly 150px of content
-    // disappearing from ABOVE this card, plus whatever the tree was.
-    // raiseClockPad's own attempts run at rAF and at 60ms and can move the
-    // pad over it. One re-check after that settles costs nothing when the
-    // first pass was right, because the rule declines to scroll a card
-    // that is already in view.
-    //
-    // Reported 1 Sep 2026: pressing "Adjust spot" on the nudge left the
-    // confirm card off-screen, with the scorer having to scroll back to it.
-    if (window.requestAnimationFrame){
-      window.requestAnimationFrame(() => bringCardIntoView(cc));
-    }
-    setTimeout(() => bringCardIntoView(cc), 90);
 
   }
 
