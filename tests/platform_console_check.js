@@ -197,9 +197,11 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // from the TABS array -- 'tenants' becomes tabTenants and panelTenants.
   // A renamed panel with a stale array entry throws on click rather than
   // failing visibly, and only on the tab nobody opened during testing.
+  const EXPECTED_TABS = ['Tenants', 'Users', 'Live games', 'Recovery tools',
+                         'Release notes', 'Numbers'];
   const tabLabels = [...b.d.querySelectorAll('.tabs button')].map(x => x.textContent.trim());
-  chk(tabLabels.join(' | ') === 'Tenants | Users | Live games | Recovery tools | Release notes',
-      'tabs read Tenants, Users, Live games, Recovery tools, Release notes in that order ' +
+  chk(tabLabels.join(' | ') === EXPECTED_TABS.join(' | '),
+      'tabs read ' + EXPECTED_TABS.join(', ') + ' in that order ' +
       '(got: ' + tabLabels.join(' | ') + ')');
 
   // BUTTONS AND PANELS IN THE SAME ORDER. Only one panel shows at a time, so
@@ -211,6 +213,33 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
       'and the panels are in the same order as the buttons (' +
       btnOrder.join('|') + ' vs ' + panOrder.join('|') + ')');
   const tabsArr = (code.match(/const TABS = \[([^\]]*)\]/) || [])[1] || '';
+
+  // EVERY TABS ENTRY MUST RESOLVE TO A REAL BUTTON AND A REAL PANEL.
+  // This is the failure the comment above has always described -- selectTab
+  // builds 'tabTenants' and 'panelTenants' out of the string 'tenants', so a
+  // stale entry throws on click, and only on the tab nobody opened. Until
+  // now nothing checked it: the block above compared LABELS, which is a
+  // different question, and it broke the moment a sixth tab was added
+  // without catching anything it was written for.
+  {
+    const entries = (tabsArr.match(/'([^']+)'/g) || []).map(x => x.replace(/'/g, ''));
+    chk(entries.length === EXPECTED_TABS.length,
+        'TABS has one entry per tab button (' + entries.length + ' vs ' +
+        EXPECTED_TABS.length + ')');
+    const orphans = entries.filter(t => {
+      const cap = t.charAt(0).toUpperCase() + t.slice(1);
+      return !b.d.getElementById('tab' + cap) || !b.d.getElementById('panel' + cap);
+    });
+    chk(orphans.length === 0,
+        // Note the two halves fail differently: a missing BUTTON makes the
+        // page's own boot throw (loud, non-zero exit, caught by CI before
+        // this line runs), while a missing PANEL boots fine and is caught
+        // right here. Both directions verified by mutation, 2 Sep 2026.
+        'every TABS entry has both a tab button and a panel' +
+        (orphans.length ? ' — MISSING for: ' + orphans.join(', ') +
+                          ' (selectTab would throw on that tab)' : ''));
+  }
+
   ['tenants','users','recovery'].forEach(t => {
     chk(tabsArr.includes("'" + t + "'"), 'TABS includes ' + t);
     const cap = t.charAt(0).toUpperCase() + t.slice(1);
