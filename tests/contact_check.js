@@ -147,7 +147,22 @@ function bootForm(reply) {
     if (reply.throws) throw new Error('offline');
     return { ok: reply.ok, json: async () => reply.body }; };
   w.matchMedia = () => ({ matches: true });   // reduced motion: no interval left running
-  w.eval([...w.document.querySelectorAll('script')].map(s => s.textContent).join('\n;\n'));
+  // EXECUTABLE SCRIPTS ONLY. This took every <script> on the page and
+  // evaluated the lot as JavaScript -- including the two
+  // <script type="application/ld+json"> blocks of SEO structured data. JSON
+  // is not JavaScript, so {"@context": ...} threw `Unexpected token ':'`
+  // and bootForm() died before the form was ever wired.
+  //
+  // Everything ABOVE this line still ran, which is why the suite looked
+  // half-alive: the endpoint checks all reported, and every check of the
+  // form itself had been silently unreachable since the structured data
+  // was added.
+  //
+  // A tag with a src and no body contributes an empty string, which is
+  // harmless, so the filter is on TYPE alone.
+  w.eval([...w.document.querySelectorAll('script')]
+    .filter(s => !s.type || /javascript/i.test(s.type))
+    .map(s => s.textContent).join('\n;\n'));
   return { w, sent };
 }
 const set = (w, id, v) => { w.document.getElementById(id).value = v; };
@@ -161,7 +176,10 @@ async function formChecks(bad) {
   let { w, sent } = bootForm({ ok: true, body: { ok: true } });
   click(w, 'sendBtn'); await pause();
   ok(sent.length === 0, 'an empty form still posts');
-  ok(/name and email/i.test(w.document.getElementById('formMsg').textContent),
+  // NAMES THE FIRST MISSING FIELD, since 2 Sep 2026. It used to say
+  // "please give your name and email" whatever was actually blank, which
+  // over an already-filled name reads as a form arguing with you.
+  ok(/give your name/i.test(w.document.getElementById('formMsg').textContent),
      'an empty form does not say what is missing');
 
   ({ w, sent } = bootForm({ ok: true, body: { ok: true } }));
@@ -178,7 +196,8 @@ async function formChecks(bad) {
   ok(w.document.getElementById('sendBtn').disabled, 'the button is usable again after a send');
 
   ({ w, sent } = bootForm({ ok: false, body: { ok: false, error: 'Could not send that just now.' } }));
-  set(w, 'fName', 'Coach Reed'); set(w, 'fEmail', 'coach@school.edu'); set(w, 'fMsg', 'Three cameras.');
+  set(w, 'fName', 'Coach Reed'); set(w, 'fEmail', 'coach@school.edu');
+  set(w, 'fOrg', 'Riverside HS'); set(w, 'fMsg', 'Three cameras.');
   click(w, 'sendBtn'); await pause();
   ok(/Could not send/i.test(w.document.getElementById('formMsg').textContent),
      'a failure is swallowed and reported as success');
@@ -186,10 +205,23 @@ async function formChecks(bad) {
      'the typing is discarded on a failure — asking someone to write it again is how a lead is lost');
 
   ({ w } = bootForm({ throws: true, ok: true, body: {} }));
-  set(w, 'fName', 'A'); set(w, 'fEmail', 'a@b.co');
+  set(w, 'fName', 'A'); set(w, 'fEmail', 'a@b.co'); set(w, 'fOrg', 'A School');
   click(w, 'sendBtn'); await pause();
   ok(/signup@statchat\.co/.test(w.document.getElementById('formMsg').textContent),
      'an unreachable server does not fall back to the email address');
+
+  // ORGANIZATION IS REQUIRED, 2 Sep 2026 -- and this is the check that did
+  // not exist, on a change that shipped two days before twelve schools went
+  // live. The form gated on it from the moment it shipped; nothing asserted
+  // that it did, because bootForm could not parse the page.
+  ({ w, sent } = bootForm({ ok: true, body: { ok: true } }));
+  set(w, 'fName', 'Coach Reed'); set(w, 'fEmail', 'coach@school.edu');
+  click(w, 'sendBtn'); await pause();
+  ok(sent.length === 0, 'a lead with no school, team or company is posted anyway');
+  ok(/school, team or production/i.test(w.document.getElementById('formMsg').textContent),
+     'the refusal does not name the field that is missing');
+  ok(w.document.getElementById('fOrg').classList.contains('bad'),
+     'the organization field is not flagged when it is what is missing');
 
   ({ w } = bootForm({ ok: true, body: { ok: true } }));
   ok(w.document.querySelectorAll('form').length === 0,
