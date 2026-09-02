@@ -11,6 +11,26 @@
      Harmless, but a red console error should MEAN something. -->
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" href="logo.png" type="image/png">
+<!-- OPEN THE CONNECTIONS WHILE THE HTML IS STILL BEING READ.
+     ------------------------------------------------------------------
+     This page talks to two hosts it does not serve from: jsdelivr for
+     supabase-js, and the Supabase project itself. Without these, the DNS
+     lookup and TLS handshake for each one happen only when something
+     first needs them -- the script tag, then the first query -- and both
+     sit on the critical path, one after the other.
+     A handshake is 100-300ms on a phone. Two of them, in series, before
+     a single useful byte moves.
+     preconnect starts both during parse, so by the time the script tag
+     and the first query are reached the pipes are already open. It costs
+     nothing when the connection is already warm.
+     crossorigin on both: supabase-js is fetched as an anonymous CORS
+     request and the queries are CORS too, so the preconnected socket
+     only gets reused if the credentials mode matches. Without the
+     attribute the browser opens a SECOND connection and the preconnect
+     bought nothing -- which is the usual way this optimisation is
+     written down wrong. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://pboushzlcyfkssojpuut.supabase.co" crossorigin>
 <!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
      below still wins -- that ordering is what lets a page be converted
      a bit at a time without breaking on the way. -->
@@ -846,7 +866,8 @@
   // Read by renderGettingStarted, which runs later in the render cycle than
   // loadDashboard -- so these are module scope rather than locals.
   let gsCustomized = false;
-  let gsPlayerCount = 0;
+  // NULL, not 0, until asked. See the note on the players query.
+  let gsHasRoster = null;
   let gsHasMfa = false;
   // THE ONE "everything this card needs is in" SIGNAL. The getting-started
   // card is fed by two paths that finish in either order -- the dashboard
@@ -1198,8 +1219,28 @@
       // show one.
       .select('name, full_name, logo_url, primary_color, secondary_color, current_season_year')
       .maybeSingle());
-    const playersP = start(supabaseClient
-      .from('players').select('id', { count: 'exact', head: true }));
+    // ONLY AN ADMIN EVER NEEDS THIS, AND ONLY AS A YES/NO.
+    // ---------------------------------------------------------------------
+    // Andy, 2 Sep 2026: "why are we reading all players on a dashboard
+    // refresh?" We were, and there was no good answer.
+    //
+    // The number feeds ONE thing: the roster step on the Getting started
+    // card. That card returns immediately for anyone who is not an admin,
+    // and hides itself entirely once its steps are done -- so on an
+    // established school's dashboard the count was computed and thrown
+    // away, and for every scorer and view account it was work done for
+    // something they can never see.
+    //
+    // It was also the wrong QUESTION. `count: 'exact'` asks "how many
+    // players are there on this platform that I may see", which forces a
+    // full pass. The card only asks "is there a roster yet". limit(1) can
+    // stop at the first row it finds.
+    //
+    // Left null for non-admins rather than 0: 0 would mean "no roster",
+    // which is a claim, and this path does not know.
+    const playersP = currentIsAdmin
+      ? start(supabaseClient.from('players').select('id').limit(1))
+      : null;
 
     const { data, error } = await teamsP;
     let seasonYear = new Date().getFullYear();
@@ -1207,11 +1248,11 @@
     // THE ONE EXTRA QUERY. The dashboard already knows the team and the
     // games; it has never had a reason to count players. head:true with an
     // exact count returns the number without fetching a single row.
-    let playerCount = 0;
     try {
-      const { count } = await playersP;
-      playerCount = count || 0;
-      gsPlayerCount = playerCount;
+      if (playersP){
+        const { data: pr } = await playersP;
+        gsHasRoster = !!(pr && pr.length);
+      }
     } catch (e) {
       // A COUNT THAT FAILS MUST NOT BLOCK THE DASHBOARD. Worst case the
       // roster step reads as not done and the card offers a link the person
@@ -1397,8 +1438,7 @@
     const ownGames = allGames.filter(g => g.is_sample !== true);
     gsState = {
       customized: gsCustomized,
-      hasRoster:  gsPlayerCount > 0,
-      playerCount: gsPlayerCount,
+      hasRoster:  gsHasRoster === true,
       hasGames:   ownGames.length > 0,
       // Still there, still theirs to remove. Deleting it soft-deletes the
       // row, and games_select stops returning it the moment that happens --
@@ -1574,7 +1614,11 @@
       { done: state.hasRoster,
         title: 'Add your roster',
         desc:  'Numbers, names and positions. Paste a list or add players one at a time.',
-        doneDesc: state.playerCount + ' player' + (state.playerCount === 1 ? '' : 's') + '.',
+        // WAS "42 players." -- which cost a full count of the table on every
+        // dashboard load to render three words on a step already ticked.
+        // The roster page says how many there are, and that is where
+        // somebody asking the question is going.
+        doneDesc: 'Done.',
         href:  'roster.html', label: 'Roster' },
       { done: state.hasGames,
         title: 'Create your first game',
