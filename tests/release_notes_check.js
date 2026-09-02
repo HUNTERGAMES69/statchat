@@ -242,9 +242,8 @@ function captureMail(f){
     chk('a release already emailed is not emailed again',
         r.code === 200 && r.body.alreadySent === true && FIXTURE.sent.length === 0,
         JSON.stringify(r.body) + ' messages=' + FIXTURE.sent.length);
-    chk('...and says when and to how many, rather than failing silently',
-        /2026-09-01/.test(r.body.message || '') && /12/.test(r.body.message || ''),
-        r.body.message);
+    chk('...and names the note, so it can be cleared from the selection',
+        /rel-1/.test(r.body.message || ''), r.body.message);
   }
 
   // ---- the dry run -----------------------------------------------------
@@ -414,6 +413,107 @@ function captureMail(f){
     chk('...and it does not touch whether it was emailed',
         FIXTURE.updated.every(u => !('emailed_at' in (u.fields || {}))),
         JSON.stringify(FIXTURE.updated));
+  }
+
+  // ---- BATCHING -------------------------------------------------------
+  // Andy, 2 Sep 2026: "we need to be able to batch emails so that if i
+  // elect to show 4 on the dashboard we can email those 4." Four notes
+  // must not be four emails to the same people -- the second one is what
+  // gets a product-news address filtered.
+  const ADMIN_ONLY = { id: 'rel-a', title: 'Admin thing', body: 'For admins.',
+                       audience: ['admin'] };
+  const BOTH       = { id: 'rel-b', title: 'Crew thing', body: 'For everyone.',
+                       audience: ['admin', 'game_entry'] };
+  const bothLive = [{ release_id: 'rel-a', published_at: '2026-09-01T09:00:00Z' },
+                    { release_id: 'rel-b', published_at: '2026-09-01T09:00:00Z' }];
+  {
+    FIXTURE = fixture({ state: bothLive }); captureMail(FIXTURE);
+    const r = await call(loadSender(), { action: 'send', entries: [ADMIN_ONLY, BOTH] });
+    chk('two notes go out together', r.code === 200 && r.body.notes === 2,
+        JSON.stringify(r.body));
+
+    // THE LEAK THIS GUARDS. A batch mixing an admin-only note with a
+    // shared one must not mail the admin-only one to a scorer -- that is
+    // the same disclosure as showing it on their dashboard.
+    const toScorer = FIXTURE.sent.filter(m => (m.bcc || []).indexOf('s1@school.org') > -1);
+    const toAdmin  = FIXTURE.sent.filter(m => (m.bcc || []).indexOf('a1@school.org') > -1);
+    chk('...the admin gets both', toAdmin.length === 1 &&
+        /Admin thing/.test(toAdmin[0].html) && /Crew thing/.test(toAdmin[0].html),
+        toAdmin.length + ' message(s)');
+    chk('...the scorer gets ONLY the note aimed at scorers',
+        toScorer.length === 1 && !/Admin thing/.test(toScorer[0].html) &&
+        /Crew thing/.test(toScorer[0].html),
+        toScorer.length ? String(toScorer[0].html).slice(0, 140) : 'no message');
+
+    // ONE MESSAGE PER PERSON, not one per note.
+    const everyAddr = FIXTURE.sent.flatMap(m => m.bcc || []);
+    chk('...and nobody is mailed twice',
+        new Set(everyAddr).size === everyAddr.length, JSON.stringify(everyAddr));
+
+    // Marking only the first would let the rest be emailed again later, to
+    // people who already read them in today's message.
+    const marked = FIXTURE.updated.filter(u => u.fields && u.fields.emailed_at).length;
+    chk('...and BOTH notes are recorded as emailed, not just the first',
+        marked === 2, marked + ' marked');
+  }
+  {
+    // The subject has to change: "New in StatChat: <title>" is a lie when
+    // the message carries four.
+    FIXTURE = fixture({ state: bothLive }); captureMail(FIXTURE);
+    await call(loadSender(), { action: 'send', entries: [ADMIN_ONLY, BOTH] });
+    const admin = FIXTURE.sent.find(m => (m.bcc || []).indexOf('a1@school.org') > -1);
+    chk('a multi-note message says how many, rather than naming one',
+        /2 new things/i.test(admin.subject || ''), admin.subject);
+    const scorer = FIXTURE.sent.find(m => (m.bcc || []).indexOf('s1@school.org') > -1);
+    chk('...and a group receiving one note still gets that note\'s title',
+        /Crew thing/.test(scorer.subject || ''), scorer.subject);
+  }
+  {
+    // A BATCH IS ALL OR NOTHING. Quietly dropping the ones already sent
+    // would make "I sent four" mean something else.
+    FIXTURE = fixture({ state: [
+      { release_id: 'rel-a', published_at: '2026-09-01T09:00:00Z',
+        emailed_at: '2026-09-01T10:00:00Z', recipient_count: 9 },
+      { release_id: 'rel-b', published_at: '2026-09-01T09:00:00Z' } ] });
+    captureMail(FIXTURE);
+    const r = await call(loadSender(), { action: 'send', entries: [ADMIN_ONLY, BOTH] });
+    chk('a batch containing an already-sent note is refused whole',
+        r.body.alreadySent === true && FIXTURE.sent.length === 0,
+        JSON.stringify(r.body) + ' messages=' + FIXTURE.sent.length);
+    chk('...naming which one, so it can be unticked',
+        /rel-a/.test(r.body.message || ''), r.body.message);
+  }
+  {
+    FIXTURE = fixture({ state: [
+      { release_id: 'rel-a', published_at: '2026-09-01T09:00:00Z' } ] });  // rel-b not live
+    captureMail(FIXTURE);
+    const r = await call(loadSender(), { action: 'send', entries: [ADMIN_ONLY, BOTH] });
+    chk('a batch containing an unpublished note is refused whole',
+        r.code === 400 && /rel-b/.test(r.body.error || ''), JSON.stringify(r.body));
+    chk('...and nothing was sent', FIXTURE.sent.length === 0);
+  }
+  {
+    FIXTURE = fixture({ state: bothLive }); captureMail(FIXTURE);
+    const r = await call(loadSender(), { action: 'preview', entries: [ADMIN_ONLY, BOTH] });
+    chk('a preview of a mixed batch reports each group separately',
+        Array.isArray(r.body.groups) && r.body.groups.length === 2,
+        JSON.stringify(r.body));
+    chk('...saying how many notes each group would receive',
+        r.body.groups.every(g => g.notes > 0 && g.recipients > 0),
+        JSON.stringify(r.body.groups));
+    chk('...and still sends nothing', FIXTURE.sent.length === 0);
+  }
+  {
+    FIXTURE = fixture({ state: bothLive }); captureMail(FIXTURE);
+    const r = await call(loadSender(), { action: 'send', entries: [ADMIN_ONLY, ADMIN_ONLY] });
+    chk('the same note twice in one batch is refused',
+        r.code === 400 && /twice/i.test(r.body.error || ''), JSON.stringify(r.body));
+  }
+  {
+    FIXTURE = fixture({ state: bothLive });
+    const r = await call(loadSender(), { action: 'publish', entries: [ADMIN_ONLY, BOTH] });
+    chk('publish still acts on one note at a time', r.code === 400,
+        JSON.stringify(r.body));
   }
 
   // ---- the dashboard's own rules --------------------------------------
