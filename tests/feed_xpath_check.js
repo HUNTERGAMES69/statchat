@@ -102,6 +102,62 @@ chk('...covering every view the feed serves', views.length >= 11,
   chk('...and each one is right', wrong.length === 0, wrong.join('; '));
 }
 
+// ---- help.html has to describe the feeds that EXIST -----------------
+// It said "Eight separate data sources" and listed eight, while api/feed.js
+// served eleven -- kicking, punting and starters were undocumented in the
+// place a coach actually looks. Same drift as the vmix.html table, one page
+// over, and the same fix: count against the source of truth.
+{
+  const help = read('help.html');
+  // The count in prose, which is the bit a reader trusts.
+  const words = { 8:'Eight', 9:'Nine', 10:'Ten', 11:'Eleven', 12:'Twelve',
+                  13:'Thirteen', 14:'Fourteen' };
+  const said = (help.match(/(Eight|Nine|Ten|Eleven|Twelve|Thirteen|Fourteen) separate data sources/) || [])[1];
+  chk('help.html counts the data sources correctly',
+      said === words[views.length],
+      'help says "' + said + '", api/feed.js serves ' + views.length);
+
+  // SCOPED TO THE FEED TABLE, not the whole page. The first version matched
+  // /Starting lineup/ anywhere in help.html and passed happily against a
+  // page whose FEED row had been deleted -- because the OVERLAY table three
+  // sections down says "Starting lineups" too. A check that cannot fail is
+  // worse than no check.
+  const feedTable = (() => {
+    const i = help.indexOf('separate data sources');
+    const j = help.indexOf('</table>', i);
+    return i > -1 && j > -1 ? help.slice(i, j) : '';
+  })();
+  chk('...and the feed table was found, or nothing below means anything',
+      feedTable.length > 200, feedTable.length + ' chars');
+
+  // Rushing/passing/receiving share a row by design, so this asserts the
+  // ones that would otherwise go unmentioned.
+  // Matched on the feed's NAME, not on a URL parameter. The overlays and
+  // feeds are canned -- the setup page hands over a finished address with a
+  // copy button, and help.html deliberately does not teach anyone to build
+  // one by hand. Andy, 2 Sep 2026: "that is not the intent of an overlay."
+  const mustName = { kicking: /Kicking leaders/i, punting: /Punting leaders/i,
+                     starters: /Starting lineup/i };
+  Object.keys(mustName).forEach(v => {
+    if (views.indexOf(v) === -1) return;
+    chk('...and the feed table describes ' + v, mustName[v].test(feedTable),
+        '(not in the feed table)');
+  });
+  chk('...and explains the season version of the leader feeds',
+      /season version/i.test(help));
+
+  // AND DOES NOT TEACH URL EDITING. Every variant a crew needs is its own
+  // row on the setup page with its own copy button; documenting the query
+  // strings invites somebody to hand-build an address and mistype it.
+  const switches = ['?cols=', '?dd=0', '?compact=1', 'layout=portrait',
+                    'sponsor=none', 'scope=season', 'unit=offense'];
+  const taught = switches.filter(x => help.indexOf(x) > -1);
+  chk('...without telling anyone to append switches to an address',
+      taught.length === 0, 'help.html mentions: ' + taught.join(', '));
+  chk('...and tells a reader the XPath differs per feed',
+      /XPath is not the same for every feed/i.test(help));
+}
+
 // ---- the shape the XPath actually selects ---------------------------
 // The docs are worth nothing if the emitter changed. toXml writes
 // `<feed ...>` wrapping `<rowName ... />`, so /feed/<rowName> is only
