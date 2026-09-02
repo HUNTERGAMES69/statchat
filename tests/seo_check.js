@@ -45,8 +45,8 @@ chk('...out of a repo with many more pages than that', all.length > 20,
 // ---- canonicals ------------------------------------------------------
 PUBLIC.forEach(f => {
   const m = read(f).match(/<link rel="canonical" href="([^"]+)"/);
-  chk(f + ' has a canonical on statchat.co',
-      !!m && /^https:\/\/statchat\.co\//.test(m[1]), m ? m[1] : 'none');
+  chk(f + ' has a canonical on www.statchat.co',
+      !!m && /^https:\/\/www\.statchat\.co\//.test(m[1]), m ? m[1] : 'none');
 });
 // Vercel serves the site on its own hostname too. A canonical pointing there
 // hands the ranking to a domain nobody typed.
@@ -81,7 +81,7 @@ PUBLIC.filter(f => f !== 'index.html').forEach(f =>
 
 // ---- robots.txt ------------------------------------------------------
 const robots = read('robots.txt');
-chk('robots.txt names the sitemap', /^Sitemap: https:\/\/statchat\.co\/sitemap\.xml$/m.test(robots));
+chk('robots.txt names the sitemap', /^Sitemap: https:\/\/www\.statchat\.co\/sitemap\.xml$/m.test(robots));
 chk('robots.txt does not disallow any public page',
     !PUBLIC.some(f => new RegExp('^Disallow: /' + f + '$', 'm').test(robots)));
 ['game.html', 'dashboard.html', 'platform.html', 'login.html'].forEach(p =>
@@ -118,11 +118,11 @@ chk('...and the other overlays', ['/broadcast_drive.html', '/broadcast_leaders.h
 // recap, and a dead card for all of them the day that deployment moves.
 // Both are asserted here because neither shows on the page itself: you find
 // out when somebody posts a link and it looks broken.
-const OG = 'https://statchat.co/og-image.png';
+const OG = 'https://www.statchat.co/og-image.png';
 const withOg = all.filter(f => /<meta property="og:image"/.test(read(f)));
 withOg.forEach(f => {
   const img = (read(f).match(/<meta property="og:image" content="([^"]*)"/) || [])[1];
-  chk(f + ' points og:image at the shared card on statchat.co', img === OG, img);
+  chk(f + ' points og:image at the shared card on www.statchat.co', img === OG, img);
   const tw = (read(f).match(/<meta name="twitter:image" content="([^"]*)"/) || [])[1];
   if (tw) chk('  ...and twitter:image with it', tw === OG, tw);
 });
@@ -177,12 +177,12 @@ shareable.forEach(f => {
 const sm = read('sitemap.xml');
 const locs = [...sm.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
 chk('the sitemap lists the eight public pages and nothing else',
-    locs.length === PUBLIC.length && locs.includes('https://statchat.co/') &&
+    locs.length === PUBLIC.length && locs.includes('https://www.statchat.co/') &&
     PUBLIC.filter(f => f !== 'index.html')
-      .every(f => locs.includes('https://statchat.co/' + f)),
+      .every(f => locs.includes('https://www.statchat.co/' + f)),
     JSON.stringify(locs));
-chk('every sitemap URL is on statchat.co',
-    locs.every(l => l.indexOf('https://statchat.co/') === 0), JSON.stringify(locs));
+chk('every sitemap URL is on www.statchat.co',
+    locs.every(l => l.indexOf('https://www.statchat.co/') === 0), JSON.stringify(locs));
 // XML forbids a double hyphen inside a comment. This file did not parse the
 // first time it was written, for exactly that reason.
 chk('no double hyphen inside a sitemap comment',
