@@ -61,6 +61,20 @@
     box-shadow:none !important; }
   h1, h2, h3, h4{ color:var(--v-paper) !important; }
   .sub, .hint, .note, .fieldnote{ color:var(--v-mute) !important; }
+  /* A HINT THAT HAS TO BE READ, NOT SKIMMED.
+     ------------------------------------------------------------------
+     The overtime prompts are the one place the app asks a question whose
+     answer it cannot check afterwards -- which book, who has the ball,
+     and from where. Muted grey is right for a hint that repeats what the
+     controls already say; these do not.
+     KEEPS .hint for its size and margins and overrides only the colour,
+     rather than a bare <p> restating both -- that is how one prompt ends
+     up a different size from the one before it. Two class names beat the
+     single-class rule above even with both marked !important, so order
+     here does not matter.
+     #ffc72c literal, not var(--sc-amber): the amber var() fallbacks in
+     this file are light-theme values that disagree with the tokens. */
+  .hint.hint-key { color:#ffc72c !important; }
   a{ color:var(--v-brand-hi); }
   label{ color:var(--v-mute) !important; }
   /* TEXT FIELDS ARE WELLS, NOT WEAK BUTTONS.
@@ -7113,7 +7127,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     if (guided.step === 'otPickTeam'){
       content.innerHTML =
-        '<p class="hint">Overtime — no kickoff. Who gets the ball first? Possession will keep alternating from here as normal (turnovers, New Drive after each score) until someone\'s actually ahead.</p>' +
+        '<p class="hint hint-key">Overtime — no kickoff. Who gets the ball first? Possession will keep alternating from here as normal (turnovers, New Drive after each score) until someone\'s actually ahead.</p>' +
         '<button type="button" id="ot_pickA">' + TEAMS.teamA.name + '</button> ' +
         '<button type="button" id="ot_pickB">' + TEAMS.teamB.name + '</button>' +
         '<div class="row" style="margin-top:10px;">' + guidedBackBtn() + '</div>';
@@ -7151,7 +7165,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const st0 = computeState();
       const opener = !st0.otSeriesTeam;
       content.innerHTML =
-        '<p class="hint">' + TEAMS[team].name +
+        '<p class="hint hint-key">' + TEAMS[team].name +
           (opener ? ' starts overtime.' : ' starts their series.') +
           ' Starting spot' + (function(){
             const r = otRulesFromLog() || (guided && guided.otRules) || null;
