@@ -198,8 +198,8 @@ const chk = (o, m) => { console.log((o ? '  ok   ' : '  FAIL ') + m); if (!o) fa
   // A renamed panel with a stale array entry throws on click rather than
   // failing visibly, and only on the tab nobody opened during testing.
   const tabLabels = [...b.d.querySelectorAll('.tabs button')].map(x => x.textContent.trim());
-  chk(tabLabels.join(' | ') === 'Tenants | Users | Live games | Recovery tools',
-      'tabs read Tenants, Users, Live games, Recovery tools in that order ' +
+  chk(tabLabels.join(' | ') === 'Tenants | Users | Live games | Recovery tools | Release notes',
+      'tabs read Tenants, Users, Live games, Recovery tools, Release notes in that order ' +
       '(got: ' + tabLabels.join(' | ') + ')');
 
   // BUTTONS AND PANELS IN THE SAME ORDER. Only one panel shows at a time, so
