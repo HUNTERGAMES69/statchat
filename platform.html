@@ -275,6 +275,7 @@
       <button id="tabGames">Live games</button>
       <button id="tabRecovery">Recovery tools</button>
       <button id="tabReleases">Release notes</button>
+      <button id="tabNumbers">Numbers</button>
     </div>
 
     <div id="panelTenants" class="card">
@@ -434,6 +435,18 @@
         invited in November does not meet a wall of announcements about features they
         have always had.
       </p>
+      <!-- SHELF CONTROL. releases.js only grows -- an id is what
+           "I have read this" is recorded against, so a note can never be
+           deleted from the file -- and the notes still needing a decision
+           get lost among the ones already sent. Archiving is cosmetic to
+           THIS PAGE: it changes nothing a coach sees. -->
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 12px;">
+        <label style="display:inline-flex; align-items:center; gap:7px; font-size:13px; cursor:pointer;">
+          <input type="checkbox" id="relShowArchived" style="margin:0;">
+          Show archived
+        </label>
+        <span id="relArchivedCount" class="sub" style="font-size:13px;"></span>
+      </div>
       <div id="releaseList"></div>
       <!-- ONE EMAIL FOR THE WHOLE SELECTION. Four notes shipping together
            must not be four messages to the same people; the second one is
@@ -446,6 +459,126 @@
         <button type="button" id="relSendBtn" style="font-size:12.5px; padding:5px 12px;">Send one email</button>
       </div>
       <div id="relBatchMsg" style="margin-top:10px; font-size:13px;"></div>
+    </div>
+
+    <!-- NUMBERS. Added 2 Sep 2026.
+         --------------------------------------------------------------
+         How much football has been logged, this week and ever. Destined
+         for the brochure site and social posts once the figure is worth
+         showing, so THE CARD IS BUILT TO BE SCREENSHOT: it carries its own
+         dark brand palette rather than the light console's, it is a clean
+         rectangle with nothing of the admin UI inside it, and it states
+         its own window and exclusions so a cropped image is still honest
+         about what it counts.
+
+         The palette is the LOGO's, not the app's. The mark is a gold block
+         and two bars, one paper and one green; games are green and plays
+         are gold here for that reason, so the card and the mark agree.
+
+         Tokens are defined ON THIS PANEL, never on :root. platform.html is
+         a light page and every other panel depends on it staying light --
+         and a token defined in one place and read in another is exactly
+         the fault that painted an invisible amber chip twice. -->
+    <div id="panelNumbers" class="card hidden">
+      <h1>Numbers</h1>
+      <p class="sub">How much real football has been logged on StatChat. Built to be
+         screenshot &mdash; the card below carries the brand palette and states its own
+         window, so a crop of it still says what it counts.</p>
+
+      <style>
+        /* Scoped to the card. Nothing here escapes to the rest of the console. */
+        #scNumbers {
+          --n-ink:#10141a; --n-panel:#191f27; --n-edge:#2b333d;
+          --n-paper:#eef1f4; --n-mute:#8d99a6;
+          --n-green:#7cb518; --n-green-hi:#a3d93f; --n-gold:#ffc72c;
+          background:var(--n-ink); color:var(--n-paper);
+          border:1px solid var(--n-edge); border-radius:12px;
+          padding:26px 26px 20px; margin:4px 0 14px;
+        }
+        #scNumbers .nHead { display:flex; align-items:center; gap:12px; margin:0 0 22px; }
+        #scNumbers .nHead svg { flex:none; }
+        #scNumbers .nWord { font-size:19px; font-weight:800; letter-spacing:-.01em;
+                            color:var(--n-paper); }
+        #scNumbers .nWord em { font-style:normal; color:var(--n-green-hi); }
+        #scNumbers .nWhen { margin-left:auto; font-size:11.5px; text-transform:uppercase;
+                            letter-spacing:.09em; color:var(--n-mute); text-align:right;
+                            line-height:1.5; }
+        #scNumbers .nGrid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr));
+                            gap:14px; }
+        #scNumbers .nCell { background:var(--n-panel); border:1px solid var(--n-edge);
+                            border-radius:9px; padding:16px 18px 14px; position:relative;
+                            overflow:hidden; }
+        /* The stripe is the logo's accent block, and it is what carries the
+           colour coding: green = games, gold = plays. */
+        #scNumbers .nCell::before { content:""; position:absolute; left:0; top:0; bottom:0;
+                                    width:4px; background:var(--n-edge); }
+        #scNumbers .nCell.g::before { background:var(--n-green); }
+        #scNumbers .nCell.d::before { background:var(--n-gold); }
+        #scNumbers .nLabel { font-size:11px; text-transform:uppercase; letter-spacing:.1em;
+                             color:var(--n-mute); font-weight:700; }
+        #scNumbers .nBig { font-size:44px; line-height:1.05; font-weight:800;
+                           letter-spacing:-.02em; font-variant-numeric:tabular-nums;
+                           margin:6px 0 2px; }
+        #scNumbers .nCell.g .nBig { color:var(--n-green-hi); }
+        #scNumbers .nCell.d .nBig { color:var(--n-gold); }
+        #scNumbers .nSub { font-size:12.5px; color:var(--n-mute); }
+        #scNumbers .nRule { border:0; border-top:1px solid var(--n-edge); margin:20px 0 12px; }
+        #scNumbers .nFoot { font-size:12px; color:var(--n-mute); line-height:1.6; margin:0; }
+        #scNumbers .nSection { font-size:11px; text-transform:uppercase; letter-spacing:.1em;
+                               color:var(--n-mute); font-weight:700; margin:18px 0 8px; }
+        #scNumbers .nSection:first-of-type { margin-top:0; }
+        @media (max-width:560px){
+          #scNumbers .nGrid { grid-template-columns:minmax(0,1fr); }
+          #scNumbers .nBig { font-size:38px; }
+          #scNumbers .nHead { flex-wrap:wrap; }
+          #scNumbers .nWhen { margin-left:0; text-align:left; width:100%; }
+        }
+      </style>
+
+      <div id="scNumbers">
+        <div class="nHead">
+          <!-- The mark, dark-background colorway, straight from logo.svg. -->
+          <svg viewBox="0 0 32 32" width="30" height="30" role="img" aria-label="StatChat">
+            <rect x="2"  y="7"  width="6"  height="18" rx="1.5" fill="#ffc72c"/>
+            <rect x="10" y="7"  width="20" height="7"  rx="1.5" fill="#eef1f4"/>
+            <rect x="10" y="18" width="13" height="7"  rx="1.5" fill="#7cb518"/>
+          </svg>
+          <span class="nWord">Stat<em>Chat</em></span>
+          <span class="nWhen" id="nWhen">&nbsp;</span>
+        </div>
+
+        <p class="nSection">This week &middot; Monday to Sunday</p>
+        <div class="nGrid">
+          <div class="nCell g"><div class="nLabel">Games</div>
+            <div class="nBig" id="nGamesWeek">&mdash;</div>
+            <div class="nSub">logged this week</div></div>
+          <div class="nCell d"><div class="nLabel">Plays</div>
+            <div class="nBig" id="nPlaysWeek">&mdash;</div>
+            <div class="nSub">entered this week</div></div>
+        </div>
+
+        <p class="nSection">All time</p>
+        <div class="nGrid">
+          <div class="nCell g"><div class="nLabel">Games</div>
+            <div class="nBig" id="nGamesTotal">&mdash;</div>
+            <div class="nSub">on StatChat</div></div>
+          <div class="nCell d"><div class="nLabel">Plays</div>
+            <div class="nBig" id="nPlaysTotal">&mdash;</div>
+            <div class="nSub">on StatChat</div></div>
+        </div>
+
+        <hr class="nRule">
+        <!-- THE FOOTNOTE IS PART OF THE CLAIM. A crop of this card is going
+             on a brochure page; it has to say what it counts. -->
+        <p class="nFoot">Real football only &mdash; demo schools, the sample game seeded
+           into new accounts, deleted games and period dividers are all excluded.
+           Weeks run Monday to Sunday, US Central.</p>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <button type="button" id="nRefresh" style="font-size:12.5px; padding:5px 12px;">Refresh</button>
+        <span id="nMsg" class="sub" style="font-size:13px;"></span>
+      </div>
     </div>
 </div>
 
@@ -633,7 +766,7 @@
   // GENERALISED FROM A BOOLEAN. It was `isTenants` and two toggles, which
   // is exactly the shape that stops working the moment a third tab exists
   // -- and adding one was the first thing asked for after it shipped.
-  const TABS = ['tenants', 'users', 'games', 'recovery', 'releases'];   // order here is wiring; the DOM decides display order
+  const TABS = ['tenants', 'users', 'games', 'recovery', 'releases', 'numbers'];   // order here is wiring; the DOM decides display order
   function selectTab(which){
     // AND A TAB SWITCH CLEARS IT TOO. A message describes something that
     // happened on the tab you were on; carrying it to a different one makes
@@ -648,11 +781,82 @@
     // stylesheet. Set here rather than in CSS because the panels are siblings
     // and CSS cannot style an ancestor from the one that happens to be shown.
     document.body.classList.toggle('wide-users', which === 'users');
+    // LOADED ON FIRST OPEN, not at sign-in. It is a cross-tenant count over
+    // every play ever; there is no reason to run it for somebody who came
+    // here to disable a tenant.
+    if (which === 'numbers' && !numbersLoaded) loadNumbers();
   }
   TABS.forEach(t => {
     const cap = t.charAt(0).toUpperCase() + t.slice(1);
     document.getElementById('tab' + cap).addEventListener('click', () => selectTab(t));
   });
+
+  // ---- numbers ----------------------------------------------------------
+  // Four counts from api/stats.js, which is the only thing that can see
+  // across tenants. The rule for what counts lives in the database
+  // (public.statchat_activity_totals, sql/041) so the weekly figure and the
+  // total cannot drift apart; this just renders what comes back.
+  let numbersLoaded = false;
+
+  function nSet(id, value){
+    const el = document.getElementById(id);
+    // toLocaleString, because "12483" and "12,483" are the same number and
+    // only one of them reads at a glance in a screenshot.
+    if (el) el.textContent = (value === null || value === undefined)
+      ? '\u2014' : Number(value).toLocaleString();
+  }
+  function nMsg(text, good){
+    const el = document.getElementById('nMsg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.style.color = good === false ? 'var(--sc-red, #a32d2d)' : '';
+  }
+
+  async function loadNumbers(){
+    const btn = document.getElementById('nRefresh');
+    if (btn) btn.disabled = true;
+    nMsg('Counting\u2026');
+    try {
+      const r = await fetch('/api/stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json',
+                   Authorization: 'Bearer ' + accessToken }
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok){ nMsg(j.error || ('HTTP ' + r.status), false); return; }
+
+      nSet('nGamesWeek',  j.gamesWeek);
+      nSet('nPlaysWeek',  j.playsWeek);
+      nSet('nGamesTotal', j.gamesTotal);
+      nSet('nPlaysTotal', j.playsTotal);
+
+      // THE WINDOW IS SHOWN, NOT ASSUMED. "This week" means nothing on its
+      // own in a screenshot taken on a Tuesday; the dates make it checkable.
+      const when = document.getElementById('nWhen');
+      if (when && j.weekStart){
+        const opt = { timeZone: 'America/Chicago', month: 'short', day: 'numeric' };
+        const ws = new Date(j.weekStart);
+        // weekEnd is EXCLUSIVE -- the Monday after. Sunday is what a person
+        // means by the end of the week, so a day is taken back off before
+        // it is shown. Printing the raw value would name a week eight days
+        // long, which is the kind of error nobody spots on a graphic.
+        const we = new Date(new Date(j.weekEnd).getTime() - 86400000);
+        when.textContent = ws.toLocaleDateString('en-US', opt) + ' \u2013 ' +
+                           we.toLocaleDateString('en-US', opt) + ' \u00b7 Central';
+      }
+      numbersLoaded = true;
+      nMsg('');
+    } catch (err) {
+      nMsg('Could not reach the server: ' + (err && err.message ? err.message : err), false);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  {
+    const btn = document.getElementById('nRefresh');
+    if (btn) btn.addEventListener('click', loadNumbers);
+  }
 
   // ---- release notes ----------------------------------------------------
   // Reads releases.js, asks the API what has already gone out, and offers
@@ -687,10 +891,26 @@
     // 30 days matches the dashboard's own cut-off, so this list says the
     // same thing the coaches are seeing.
     const AGED = 30 * 86400000;
-    host.innerHTML = all.map(rel => {
+    // ARCHIVED ROWS ARE HIDDEN, NOT DROPPED. The count beside the toggle is
+    // what stops the shelf becoming a place things vanish into: an archived
+    // note is one tick away, always, and the page says how many there are.
+    const showArch = !!(document.getElementById('relShowArchived') || {}).checked;
+    const archived = all.filter(r => (releaseState[r.id] || {}).archived_at);
+    const shown = showArch ? all : all.filter(r => !(releaseState[r.id] || {}).archived_at);
+    const cnt = document.getElementById('relArchivedCount');
+    if (cnt) cnt.textContent = archived.length
+      ? archived.length + ' archived' + (showArch ? ', shown below' : ', hidden')
+      : 'Nothing archived yet.';
+    if (!shown.length){
+      host.innerHTML = '<p class="sub">Every note is archived. Tick "Show archived" to see them.</p>';
+      relSyncBar();
+      return;
+    }
+    host.innerHTML = shown.map(rel => {
       const st = releaseState[rel.id] || {};
       const live = !!st.published_at;
       const sent = !!st.emailed_at;
+      const arch = !!st.archived_at;
       const old = Date.parse(rel.date) < (Date.now() - AGED);
       const aud = (rel.audience || []).map(a =>
         a === 'admin' ? 'Admins' : a === 'game_entry' ? 'Scorers' : a).join(' + ');
@@ -707,10 +927,18 @@
         : '<span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; ' +
           'color:var(--sc-amber, #ffc72c); border:1px solid var(--sc-amber, #ffc72c); ' +
           'border-radius:3px; padding:1px 7px;">Draft</span>';
+      // ARCHIVED REPLACES THE STATE BADGE rather than sitting beside it. An
+      // archived note is never live -- the API refuses to archive one that
+      // is -- so "Archived" is the whole truth about where it stands.
+      const stateBadge = arch
+        ? '<span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; ' +
+          'color:var(--sc-ink-muted, #8d99a6); border:1px dashed var(--sc-rule-strong, #6b7d8f); ' +
+          'border-radius:3px; padding:1px 7px;">Archived</span>'
+        : badge;
       // TICKABLE ONLY WHEN IT COULD ACTUALLY GO: live, and not already
       // emailed. A box you can tick on a note that cannot be sent is a
       // selection that fails at the last step.
-      const sendable = live && !sent;
+      const sendable = live && !sent && !arch;
       return '<div class="relRow" data-id="' + esc(rel.id) + '" style="border:1px solid var(--sc-rule, #2b333d); ' +
         'border-radius:8px; padding:12px 14px; margin-bottom:10px;">' +
         '<div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;">' +
@@ -722,7 +950,7 @@
               (rel.email ? ' checked' : '') +
               ' style="margin:0 2px 0 0;" aria-label="Include in email">'
             : '<span style="display:inline-block; width:15px;"></span>') +
-          badge +
+          stateBadge +
           '<strong style="font-size:15px;">' + esc(rel.title) + '</strong>' +
           '<span class="sub" style="font-size:12px;">' + esc(rel.date) + '</span>' +
           '<span style="font-size:11px; text-transform:uppercase; letter-spacing:.07em; ' +
@@ -730,16 +958,32 @@
             esc(aud) + '</span>' +
           (rel.email ? '' : '<span class="sub" style="font-size:12px;">in-app only</span>') +
           '<span style="flex:1;"></span>' +
-          (live
-            ? '<button type="button" class="relUnpublish" data-id="' + esc(rel.id) + '" ' +
-              'style="font-size:12.5px; padding:4px 10px;">Take down</button> '
-            : '<button type="button" class="relPublish" data-id="' + esc(rel.id) + '" ' +
-              'style="font-size:12.5px; padding:4px 10px;">Publish to dashboards</button> ') +
+          (arch
+            ? ''
+            : (live
+              ? '<button type="button" class="relUnpublish" data-id="' + esc(rel.id) + '" ' +
+                'style="font-size:12.5px; padding:4px 10px;">Take down</button> '
+              : '<button type="button" class="relPublish" data-id="' + esc(rel.id) + '" ' +
+                'style="font-size:12.5px; padding:4px 10px;">Publish to dashboards</button> ')) +
+          // NO ARCHIVE BUTTON ON A LIVE NOTE. The API refuses it anyway, but
+          // offering a control that always errors is worse than not offering
+          // it: it reads as a bug rather than a rule. The hint says why.
+          (arch
+            ? '<button type="button" class="relUnarchive" data-id="' + esc(rel.id) + '" ' +
+              'style="font-size:12.5px; padding:4px 10px;">Restore</button> '
+            : (live
+              ? '<span class="sub" style="font-size:12px;">take down before archiving</span> '
+              : '<button type="button" class="relArchive" data-id="' + esc(rel.id) + '" ' +
+                'style="font-size:12.5px; padding:4px 10px;">Archive</button> ')) +
           (sent
             ? '<span style="font-size:12.5px; color:var(--sc-green, #a3d93f); font-weight:600;">' +
               'Emailed ' + esc(String(st.emailed_at).slice(0,10)) + ' &middot; ' +
               esc(st.recipient_count) + ' recipient(s)</span>'
-            : (!live
+            // NOT ON AN ARCHIVED ROW. "publish before emailing" is advice
+            // about a note you still intend to send; on something you have
+            // deliberately shelved it reads as an instruction to un-shelve
+            // it. Archived rows say nothing here.
+            : (!live && !arch
                 ? '<span class="sub" style="font-size:12px;">publish before emailing</span>'
                 : '')) +
         '</div>' +
@@ -790,11 +1034,17 @@
   // Delegated, so a row re-rendered after a send keeps working.
   document.getElementById('panelReleases').addEventListener('change', (e) => {
     if (e.target.classList && e.target.classList.contains('relPick')) relSyncBar();
+    // Re-render rather than toggling display: the row's buttons and its
+    // tickability differ for an archived note, so showing one is not the
+    // same row with a different visibility.
+    if (e.target.id === 'relShowArchived') loadReleases();
   });
   document.getElementById('panelReleases').addEventListener('click', async (e) => {
     const pub  = e.target.closest ? e.target.closest('button.relPublish') : null;
     const unpub= e.target.closest ? e.target.closest('button.relUnpublish') : null;
-    const btn = pub || unpub;
+    const arch = e.target.closest ? e.target.closest('button.relArchive') : null;
+    const unarch=e.target.closest ? e.target.closest('button.relUnarchive') : null;
+    const btn = pub || unpub || arch || unarch;
     if (!btn) return;
     const id = btn.dataset.id;
     const entry = relFind(id);
@@ -811,7 +1061,9 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json',
                    Authorization: 'Bearer ' + accessToken },
-        body: JSON.stringify({ action: pub ? 'publish' : 'unpublish', entry: entry })
+        body: JSON.stringify({
+          action: pub ? 'publish' : unpub ? 'unpublish' : arch ? 'archive' : 'unarchive',
+          entry: entry })
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) relMsg(id, j.error || ('HTTP ' + r.status), false);
