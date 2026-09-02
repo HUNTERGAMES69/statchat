@@ -723,6 +723,14 @@ function scoringSummary(playsList){
         // this row -- there is no try after a defensive conversion, but a
         // row claiming six points it did not score would be wrong anyway.
         isTouchdown: false,
+        // AND IT IS A TRY, which is the only row scoringSummary has ever
+        // returned that is one. A try is never a drive -- findDriveStarts
+        // skips both play types -- so a caller that decorates a row with
+        // drive figures has nothing to show here and must not go looking:
+        // walking back from a try lands on somebody else's drive, which is
+        // exactly what scoresummary.html did on the first game that had one
+        // (a Q3 conversion wearing the Q1 opening drive's 78 yards).
+        isTry: true,
         detail: '',
         teamA: running.teamA,
         teamB: running.teamB

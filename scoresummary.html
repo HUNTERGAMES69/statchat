@@ -425,7 +425,17 @@
         ? '<img class="slogo" src="' + esc(t.logo) + '" alt="">'
         : '<div class="slogo blank"></div>';
       const here = scoreIdx[n] === undefined ? plays.length - 1 : scoreIdx[n];
-      const d = driveFor(here, starts, n > 0 ? scoreIdx[n - 1] : undefined);
+      // A TRY HAS NO DRIVE, so it gets no drive tiles.
+      // ----------------------------------------------------------------
+      // Until 2 Sep 2026 no row could be a try: scoringSummary folded
+      // every try into the touchdown above it. A defensive conversion is
+      // now a row of its own, and driveFor() walking back from it finds
+      // the last drive that ENDED -- which belongs to another team, in
+      // another quarter. Reported on the first game that had one: a Q3
+      // two-point return wearing "1 play, 78 yds, Long 78 rush" copied
+      // from the Q1 opening drive.
+      const d = r.isTry ? null
+        : driveFor(here, starts, n > 0 ? scoreIdx[n - 1] : undefined);
       const tiles = d
         ? [['Drive', d.count + (d.count === 1 ? ' play' : ' plays')],
            ['Yds', d.yds],
