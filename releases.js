@@ -42,6 +42,20 @@
 
 window.STATCHAT_RELEASES = [
   {
+    id: '2026-09-02-opponent-starters',
+    date: '2026-09-02',
+    title: "Put the opponent's starting lineups on the broadcast too",
+    body: 'The starters section now has a twin in the opponent roster card, and it ' +
+          'works exactly the same way. Six more overlay addresses draw the ' +
+          "visitors' offense, defense and special teams in their own colours, with " +
+          'their name on the card. Broadcast only, same as yours: nothing entered ' +
+          'there touches play entry, the pickers, or a statistic.',
+    where: 'Game setup → Opponent roster → Specify all opponent starters',
+    link: 'create_game.html',
+    audience: ['admin'],
+    email: true
+  },
+  {
     id: '2026-09-01-broadcast-starters',
     date: '2026-09-01',
     title: 'Put your full starting lineups on the broadcast',

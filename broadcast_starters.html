@@ -89,6 +89,13 @@
   };
   const UNIT = UNITS[(params.get('unit') || 'offense').toLowerCase()] || UNITS.offense;
 
+  // WHOSE LINEUP. ?team=opp draws the visitors' starters; anything else,
+  // including no parameter at all, draws ours. Defaulting to ours is what
+  // keeps every overlay address already sitting in a switcher bank working
+  // untouched -- there were six of them before this card learned the
+  // parameter, and none of them carry it.
+  const TEAM = (params.get('team') || 'our').toLowerCase() === 'opp' ? 'opp' : 'our';
+
   // Two columns by default: an eleven-man card one-per-row is 600px tall.
   // Special teams is four rows either way, so it defaults to one.
   const askedCols = params.get('cols');
@@ -116,6 +123,18 @@
   // position labels repeat in a real lineup (DE, DT, DT, DE) and the
   // position-keyed object it replaced silently dropped the duplicates.
   // Anything saved before that is still an object, and still renders.
+  // ONE SHAPE RULE, THREE READERS -- the identical function is in
+  // create_game.html and api/feed.js. broadcast_starters is nested by side,
+  // { teamA, teamB }, matching seed_starters. A lineup saved before
+  // 2 Sep 2026 is a bare { offense, defense, special } object and was by
+  // definition ours, so it answers for 'our' and 'opp' gets nothing.
+  function sideOf(all, side){
+    if (!all || typeof all !== 'object') return null;
+    if (all.teamA || all.teamB) return (side === 'our' ? all.teamA : all.teamB) || null;
+    if (all.offense || all.defense || all.special) return side === 'our' ? all : null;
+    return null;
+  }
+
   function lineupRows(unitVal){
     if (!unitVal) return [];
     if (Array.isArray(unitVal)) return unitVal.map(e => ({
@@ -128,7 +147,7 @@
 
   function render(game, branding){
     const panel = document.getElementById('panel');
-    const all = game && game.broadcast_starters;
+    const all = sideOf(game && game.broadcast_starters, TEAM);
     const rows = lineupRows(all && all[UNIT.key]);
 
     // NOTHING ENTERED IS NOT AN ERROR. Most games will never have a lineup
@@ -142,15 +161,31 @@
 
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
     const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    // THE TEAM WHOSE LINEUP THIS IS READS FIRST. On the opponent card that
+    // is the visitors, and a card headed with our name over their eleven
+    // is worse than no card -- a viewer reads the top line and believes it.
+    const lineupTeam = TEAM === 'opp' ? oppName : ourName;
+    const otherTeam  = TEAM === 'opp' ? ourName : oppName;
     document.getElementById('title').textContent = UNIT.title;
     document.getElementById('sub').textContent =
-      [ourName, oppName ? 'vs ' + oppName : ''].filter(Boolean).join(' · ');
+      [lineupTeam, otherTeam ? 'vs ' + otherTeam : ''].filter(Boolean).join(' · ');
 
+    // AND SO DO THEIR COLOURS. The opponent's live on the game row, entered
+    // on the same setup screen as their lineup; ours come from the tenant's
+    // branding. The amber fallback is the same one both sides have always
+    // had, so a game with no opponent colours set still draws a readable
+    // card rather than an unstyled one.
     const head = document.getElementById('head');
-    head.style.background = (branding && branding.primary_color) || '#ffc72c';
-    head.style.color      = (branding && branding.secondary_color) || '#20180a';
+    const pri = TEAM === 'opp' ? game.opponent_primary_color
+                               : (branding && branding.primary_color);
+    const sec = TEAM === 'opp' ? game.opponent_secondary_color
+                               : (branding && branding.secondary_color);
+    const logoUrl = TEAM === 'opp' ? game.opponent_logo_url
+                                   : (branding && branding.logo_url);
+    head.style.background = pri || '#ffc72c';
+    head.style.color      = sec || '#20180a';
     const logo = document.getElementById('logo');
-    if (branding && branding.logo_url){ logo.src = branding.logo_url; logo.hidden = false; }
+    if (logoUrl){ logo.src = logoUrl; logo.hidden = false; }
     else { logo.hidden = true; }
 
     document.getElementById('rows').innerHTML = rows.map(r => {
@@ -191,11 +226,12 @@
       document.getElementById('panel').style.display = 'none';
       if (DEBUG){
         document.body.innerHTML = '<pre style="color:#fff; font:16px monospace; padding:24px;">' +
-          'No lineup shown.\n\nunit: ' + UNIT.key + '\n\n' +
+          'No lineup shown.\n\nunit: ' + UNIT.key + '\nteam: ' + TEAM + '\n\n' +
           String(e && e.message ? e.message : e) +
           '\n\nCheck /api/gamedata in a browser: it reports which game it ' +
           'resolved, or says no game is on air. If it resolves a game, that ' +
-          'game has no ' + UNIT.key + ' lineup entered on the setup screen.</pre>';
+          'game has no ' + UNIT.key + ' lineup entered on the setup screen for ' +
+          (TEAM === 'opp' ? 'the opponent' : 'our team') + '.</pre>';
       }
       return;
     }
