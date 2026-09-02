@@ -410,6 +410,29 @@
          the account is paid for.
          Filled by renderSubscriptionNotice(); hidden on a healthy
          account, which is almost every load. -->
+    <!-- WHAT'S NEW. Added 2 Sep 2026.
+         --------------------------------------------------------------
+         BELOW the subscription notice, deliberately. That one is about
+         whether the account still works; this one is about something
+         new to try. If both are showing, the one that can stop a
+         Friday night goes first.
+
+         SUPPRESSED DURING A GAME. renderReleaseCard() will not draw
+         this while a game is in progress or on air -- a coach opening
+         the dashboard at halftime to check a stat is not an audience
+         for product news, and "something changed" reads as "something
+         broke" at exactly the wrong moment. -->
+    <div id="releaseCard" class="card hidden"
+         style="border-left:5px solid var(--sc-green, #a3d93f); padding:16px 18px;">
+      <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+        <span style="font-size:11.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+                     color:var(--sc-green, #a3d93f); border:1px solid var(--sc-green, #a3d93f);
+                     border-radius:3px; padding:1px 7px;">New in StatChat</span>
+        <span style="flex:1;"></span>
+        <button class="secondary" id="releaseDismiss" style="padding:4px 12px; font-size:12.5px;">Got it</button>
+      </div>
+      <div id="releaseBody"></div>
+    </div>
     <div id="subNotice" class="card hidden"
          style="border-left:5px solid var(--sc-amber, #ffc72c); padding:16px 18px;">
       <div id="subNoticeTitle" style="font-weight:700; font-size:17px; margin-bottom:6px;"></div>
@@ -565,6 +588,7 @@
 <!-- Season state. Shared with the platform console and the Account page,
      so a school and StatChat can never read different answers off one row. -->
 <script src="billing.js"></script>
+<script src="releases.js"></script>
 <script src="team-icon.js"></script>
 <script>
   const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
@@ -775,6 +799,152 @@
   // stopped. A modal on every load for a warning weeks out is how people
   // learn to dismiss modals without reading them.
   const SUB_MODAL_SEEN = 'sc_sub_modal_seen';
+  // WHAT'S NEW — the in-app half of release notes. Added 2 Sep 2026.
+  // -------------------------------------------------------------------
+  // The notes live in releases.js in the repo; the only thing the database
+  // holds is which one this person last dismissed. That makes the read
+  // state follow a coach from phone to laptop, which localStorage would
+  // not, and lets us answer "how many admins have actually seen this".
+  //
+  // ONE DISMISS ACCEPTS EVERYTHING ABOVE IT. Notes are read newest-first,
+  // so recording only the newest id is enough -- no reads table, no join.
+  let releaseUnseen = [];
+
+  function releasesFor(role){
+    const all = (window.STATCHAT_RELEASES || []);
+    return all.filter(r => Array.isArray(r.audience) && r.audience.indexOf(role) > -1);
+  }
+
+  async function renderReleaseCard(games){
+    const card = document.getElementById('releaseCard');
+    if (!card || !window.STATCHAT_RELEASES) return;
+
+    // NOT WHILE A GAME IS BEING SCORED. A coach on the dashboard at
+    // halftime is checking a stat, not reading product news, and
+    // "something changed" reads as "something broke" with a game on the
+    // field.
+    //
+    // `status === 'in_progress'` ONLY -- NOT is_broadcast. The first pass
+    // tested both, which was wrong: schools set a game ON AIR on Monday
+    // and leave it there all week so the broadcast crew can set up, so
+    // is_broadcast is true for most of the season and the card would have
+    // been suppressed nearly always. Andy, 2 Sep 2026. On air is a
+    // schedule; in progress is somebody scoring right now.
+    const live = (games || []).some(g => g.status === 'in_progress');
+    if (live) return;
+
+    // Role decides the audience. A view account is never an audience for
+    // release notes: everything announced here is on a screen it cannot
+    // open.
+    const role = currentIsAdmin ? 'admin' : (currentCanEnterGames ? 'game_entry' : 'view');
+    if (role === 'view') return;
+    let mine = releasesFor(role);
+    if (!mine.length) return;
+
+    let seen = null, published = {};
+    try {
+      const { data } = await supabaseClient
+        .from('profiles').select('last_seen_release').eq('id', currentUserId).limit(1);
+      seen = (data && data[0] && data[0].last_seen_release) || null;
+      // WRITTEN IS NOT PUBLISHED. A note in releases.js reaches nobody
+      // until a platform admin presses Publish, which is what puts a row
+      // here with a published_at. Uploading the file does not do it --
+      // uploading is how the app is deployed, for bug fixes and stylesheet
+      // tweaks and everything else, and that must not be the same act as
+      // speaking to every customer.
+      const { data: st } = await supabaseClient
+        .from('release_state').select('release_id, published_at');
+      (st || []).forEach(r => { if (r.published_at) published[r.release_id] = true; });
+    } catch (e) {
+      // A COLUMN OR TABLE THAT IS NOT THERE YET IS NOT AN ERROR WORTH
+      // SHOWING. sql/037 may not have run. Drawing nothing is the right
+      // failure: the dashboard's actual job is unaffected.
+      return;
+    }
+
+    // Published only, and nothing older than 30 days.
+    //
+    // THE AGE-OUT IS FOR THE PERSON WHO HAS NEVER DISMISSED ANYTHING.
+    // Without it, an admin invited in November opens their first dashboard
+    // to every note ever written -- a wall of announcements about features
+    // they have never not had. A release note is news; after a month it is
+    // just the product. Andy chose 30 days, 2 Sep 2026.
+    //
+    // Applied to EVERYONE, not only new accounts: a coach who ignored the
+    // card for six weeks should not come back to a backlog either. The
+    // note is still in the file and still on the dashboard of anyone it
+    // reached in time; it simply stops being new.
+    const MAX_AGE_DAYS = 30;
+    const cutoff = Date.now() - MAX_AGE_DAYS * 86400000;
+    mine = mine.filter(r => {
+      if (!published[r.id]) return false;
+      const t = Date.parse(r.date);
+      // An unparseable date is shown rather than hidden -- failing open on
+      // a typo beats a note that silently never appears.
+      return isNaN(t) ? true : t >= cutoff;
+    });
+    if (!mine.length) return;
+
+    // Everything newer than what they dismissed. Compared on the ORDER in
+    // the file rather than on the id string -- ids are slugs, and a
+    // string comparison would break the first time one is not date-first.
+    const idx = seen ? mine.findIndex(r => r.id === seen) : -1;
+    releaseUnseen = idx === -1 ? mine.slice() : mine.slice(0, idx);
+    // A dismissed id that is no longer in the file (an entry withdrawn)
+    // leaves idx === -1, which would re-show everything. Treat an unknown
+    // id as "has seen the lot" unless there is genuinely something newer.
+    if (seen && idx === -1) releaseUnseen = [];
+    if (!releaseUnseen.length) return;
+
+    document.getElementById('releaseBody').innerHTML = releaseUnseen.map(r => {
+      // esc: these strings are ours, from a file in the repo -- but this
+      // renders into innerHTML beside data that is not, and an escaper
+      // that is only applied to "untrusted" strings is one refactor from
+      // being applied to none.
+      const e = (v) => String(v == null ? '' : v)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;');
+      // SAME-ORIGIN PATHS ONLY. A relative page in this app, never an
+      // absolute URL -- a link field is exactly the shape that turns into
+      // an open redirect the day somebody pastes one in.
+      const safeLink = (r.link && /^[a-z0-9_\-]+\.html$/i.test(r.link)) ? r.link : '';
+      return '<div style="margin-bottom:14px;">' +
+        '<div style="font-weight:700; font-size:16px; color:var(--sc-ink, #eef1f4); margin-bottom:4px;">' +
+          e(r.title) + '</div>' +
+        '<div style="font-size:14px; line-height:1.55; color:var(--sc-ink-soft, #c7d0da);">' +
+          e(r.body) + '</div>' +
+        (r.where
+          ? '<div style="font-size:13px; margin-top:6px; color:var(--sc-ink-muted, #8d99a6);">' +
+            'Where: <strong style="color:var(--sc-ink-soft, #c7d0da);">' + e(r.where) + '</strong></div>'
+          : '') +
+        (safeLink
+          ? '<div style="margin-top:8px;"><a class="button-link secondary" href="' + e(safeLink) +
+            '" style="font-size:13px; padding:5px 12px;">Take me there</a></div>'
+          : '') +
+      '</div>';
+    }).join('');
+    card.classList.remove('hidden');
+  }
+
+  (function(){
+    const b = document.getElementById('releaseDismiss');
+    if (!b) return;
+    b.addEventListener('click', async () => {
+      const card = document.getElementById('releaseCard');
+      // HIDDEN FIRST, WRITTEN SECOND. The write can fail -- offline, or
+      // sql/037 not run -- and a "Got it" that leaves the card sitting
+      // there reads as a broken button. Worst case it comes back on the
+      // next load, which is the same as never having dismissed it.
+      if (card) card.classList.add('hidden');
+      const newest = releaseUnseen[0];
+      if (!newest || !currentUserId) return;
+      try {
+        await supabaseClient.from('profiles')
+          .update({ last_seen_release: newest.id }).eq('id', currentUserId);
+      } catch (e) { /* see above */ }
+    });
+  })();
+
   async function renderSubscriptionNotice(){
     const box = document.getElementById('subNotice');
     if (!box) return;
@@ -1003,6 +1173,11 @@
     picker.addEventListener('change', renderForSelectedSeason);
     renderForSelectedSeason();
     hideSplash();
+    // AFTER the games are in hand, because the card suppresses itself while
+    // one is in progress or on air. Deliberately not awaited: a release
+    // note is the least important thing on this page and must never hold
+    // the splash up or fail the load.
+    renderReleaseCard(allGames);
   }
 
   async function refreshGames(){

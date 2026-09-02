@@ -45,6 +45,7 @@
 <!-- Season state. Shared with account.html so the console and the school
      can never read different answers off the same row. -->
 <script src="billing.js"></script>
+<script src="releases.js"></script>
 <link rel="stylesheet" href="statchat.css">
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
@@ -273,6 +274,7 @@
       <button id="tabUsers">Users</button>
       <button id="tabGames">Live games</button>
       <button id="tabRecovery">Recovery tools</button>
+      <button id="tabReleases">Release notes</button>
     </div>
 
     <div id="panelTenants" class="card">
@@ -404,6 +406,34 @@
          learn to filter. Restoring is a support action, so it lives with support.</p>
     </div>
   </div>
+
+    <!-- RELEASE NOTES. Added 2 Sep 2026.
+         --------------------------------------------------------------
+         The notes themselves are in releases.js in the repo and ship with
+         the feature they describe. THIS PANEL DOES NOT WRITE THEM -- it
+         shows what is in the file, and sends the ones marked email:true.
+         In-app is the system of record; this is the megaphone. -->
+    <div id="panelReleases" class="card hidden">
+      <h1>Release notes</h1>
+      <p class="sub">Everything in <code>releases.js</code>. Uploading that file does
+         <strong>not</strong> show anything to anyone — a note is a draft until you
+         publish it here. Publishing puts it on the dashboard of every admin or scorer
+         it is aimed at; emailing is a second, separate decision.</p>
+      <div class="warn" style="margin:0 0 14px; padding:10px 14px; border-radius:6px;
+           background:var(--sc-amber-soft, rgba(255,199,44,.10));
+           border-left:3px solid var(--sc-amber, #ffc72c); font-size:13px; line-height:1.55;">
+        <strong>Publishing can be undone. An email cannot.</strong> Take down puts a note
+        back to draft and it stops appearing on the next dashboard load. An email is once,
+        ever &mdash; check the recipient count first, and avoid Thursday and Friday in
+        season, when a coach reads &ldquo;something changed&rdquo; as &ldquo;something
+        broke&rdquo;. A second press of Send reports what already went and sends nothing.
+      </div>
+      <p class="sub" style="margin:0 0 14px; font-size:13px;">
+        A published note stops appearing 30 days after its date, so somebody invited in
+        November does not meet a wall of announcements about features they have always had.
+      </p>
+      <div id="releaseList"></div>
+    </div>
 </div>
 
 <script>
@@ -510,6 +540,7 @@
     // they take the bearer token rather than riding on the client.
     accessToken = session.access_token;
     loadUsers(accessToken);
+    loadReleases();
   }
 
   // Signing out is wired unconditionally, not inside the gate: an account
@@ -589,7 +620,7 @@
   // GENERALISED FROM A BOOLEAN. It was `isTenants` and two toggles, which
   // is exactly the shape that stops working the moment a third tab exists
   // -- and adding one was the first thing asked for after it shipped.
-  const TABS = ['tenants', 'users', 'games', 'recovery'];   // order here is wiring; the DOM decides display order
+  const TABS = ['tenants', 'users', 'games', 'recovery', 'releases'];   // order here is wiring; the DOM decides display order
   function selectTab(which){
     // AND A TAB SWITCH CLEARS IT TOO. A message describes something that
     // happened on the tab you were on; carrying it to a different one makes
@@ -608,6 +639,153 @@
   TABS.forEach(t => {
     const cap = t.charAt(0).toUpperCase() + t.slice(1);
     document.getElementById('tab' + cap).addEventListener('click', () => selectTab(t));
+  });
+
+  // ---- release notes ----------------------------------------------------
+  // Reads releases.js, asks the API what has already gone out, and offers
+  // to send the ones marked email:true. Nothing is authored here.
+  let releaseState = {};
+
+  async function loadReleases(){
+    const host = document.getElementById('releaseList');
+    if (!host) return;
+    const all = (window.STATCHAT_RELEASES || []);
+    if (!all.length){
+      host.innerHTML = '<p class="sub">releases.js has no entries.</p>';
+      return;
+    }
+    // What has already been emailed. A failure here is not fatal -- the
+    // list still renders, and the API refuses a duplicate on its own
+    // regardless of what this page believes.
+    try {
+      const r = await fetch('/api/send-release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json',
+                   Authorization: 'Bearer ' + accessToken },
+        body: JSON.stringify({ action: 'status' })
+      });
+      if (r.ok){
+        const j = await r.json();
+        releaseState = {};
+        (j.state || []).forEach(x => { releaseState[x.release_id] = x; });
+      }
+    } catch (e) { /* the send itself is still guarded server-side */ }
+
+    // 30 days matches the dashboard's own cut-off, so this list says the
+    // same thing the coaches are seeing.
+    const AGED = 30 * 86400000;
+    host.innerHTML = all.map(rel => {
+      const st = releaseState[rel.id] || {};
+      const live = !!st.published_at;
+      const sent = !!st.emailed_at;
+      const old = Date.parse(rel.date) < (Date.now() - AGED);
+      const aud = (rel.audience || []).map(a =>
+        a === 'admin' ? 'Admins' : a === 'game_entry' ? 'Scorers' : a).join(' + ');
+      // The state badge is the first thing on the row, because "is this
+      // live?" is the question this page exists to answer.
+      const badge = live
+        ? (old
+            ? '<span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; ' +
+              'color:var(--sc-ink-muted, #8d99a6); border:1px solid var(--sc-rule-strong, #6b7d8f); ' +
+              'border-radius:3px; padding:1px 7px;">Published &middot; aged out</span>'
+            : '<span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; ' +
+              'color:var(--sc-green, #a3d93f); border:1px solid var(--sc-green, #a3d93f); ' +
+              'border-radius:3px; padding:1px 7px;">Live</span>')
+        : '<span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; ' +
+          'color:var(--sc-amber, #ffc72c); border:1px solid var(--sc-amber, #ffc72c); ' +
+          'border-radius:3px; padding:1px 7px;">Draft</span>';
+      return '<div class="relRow" data-id="' + esc(rel.id) + '" style="border:1px solid var(--sc-rule, #2b333d); ' +
+        'border-radius:8px; padding:12px 14px; margin-bottom:10px;">' +
+        '<div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;">' +
+          badge +
+          '<strong style="font-size:15px;">' + esc(rel.title) + '</strong>' +
+          '<span class="sub" style="font-size:12px;">' + esc(rel.date) + '</span>' +
+          '<span style="font-size:11px; text-transform:uppercase; letter-spacing:.07em; ' +
+            'border:1px solid var(--sc-rule-strong, #6b7d8f); border-radius:3px; padding:1px 6px;">' +
+            esc(aud) + '</span>' +
+          (rel.email ? '' : '<span class="sub" style="font-size:12px;">in-app only</span>') +
+          '<span style="flex:1;"></span>' +
+          (live
+            ? '<button type="button" class="relUnpublish" data-id="' + esc(rel.id) + '" ' +
+              'style="font-size:12.5px; padding:4px 10px;">Take down</button> '
+            : '<button type="button" class="relPublish" data-id="' + esc(rel.id) + '" ' +
+              'style="font-size:12.5px; padding:4px 10px;">Publish to dashboards</button> ') +
+          (sent
+            ? '<span style="font-size:12.5px; color:var(--sc-green, #a3d93f); font-weight:600;">' +
+              'Emailed ' + esc(String(st.emailed_at).slice(0,10)) + ' &middot; ' +
+              esc(st.recipient_count) + ' recipient(s)</span>'
+            : (rel.email && live
+                ? '<button type="button" class="relPreview" data-id="' + esc(rel.id) + '" ' +
+                  'style="font-size:12.5px; padding:4px 10px;">Who would get this?</button>' +
+                  ' <button type="button" class="relSend" data-id="' + esc(rel.id) + '" ' +
+                  'style="font-size:12.5px; padding:4px 10px;">Send email</button>'
+                : (rel.email
+                    ? '<span class="sub" style="font-size:12px;">publish before emailing</span>'
+                    : ''))) +
+        '</div>' +
+        '<div class="sub" style="margin-top:6px; font-size:13px; line-height:1.5;">' + esc(rel.body) + '</div>' +
+        (rel.where ? '<div class="sub" style="margin-top:4px; font-size:12.5px;">Where: ' + esc(rel.where) + '</div>' : '') +
+        '<div class="relMsg" data-id="' + esc(rel.id) + '" style="margin-top:8px; font-size:13px;"></div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function relFind(id){ return (window.STATCHAT_RELEASES || []).find(r => r.id === id); }
+  function relMsg(id, text, good){
+    const el = document.querySelector('.relMsg[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+    if (el){
+      el.textContent = text;
+      el.style.color = good ? 'var(--sc-green, #a3d93f)' : 'var(--sc-red, #ff8fa3)';
+    }
+  }
+
+  // Delegated, so a row re-rendered after a send keeps working.
+  document.getElementById('panelReleases').addEventListener('click', async (e) => {
+    const prev = e.target.closest ? e.target.closest('button.relPreview') : null;
+    const send = e.target.closest ? e.target.closest('button.relSend') : null;
+    const pub  = e.target.closest ? e.target.closest('button.relPublish') : null;
+    const unpub= e.target.closest ? e.target.closest('button.relUnpublish') : null;
+    const btn = prev || send || pub || unpub;
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const entry = relFind(id);
+    if (!entry) return;
+
+    // TYPE THE ID TO SEND. Not a confirm() -- a dialog is dismissed by
+    // reflex, and this one reaches every school at once. The same
+    // reasoning as the ON AIR confirmations on the dashboard.
+    if (unpub && !window.confirm('Take "' + entry.title + '" down? It stops appearing on ' +
+        'dashboards on the next load. Anyone who already read it has still read it.')) return;
+    if (send){
+      const typed = window.prompt(
+        'This emails every ' + (entry.audience || []).join(' and ') +
+        ' on the platform, once, and cannot be undone.\n\n' +
+        'Type the release id to confirm:\n' + id);
+      if (typed !== id){ relMsg(id, 'Not sent.', false); return; }
+    }
+
+    const action = prev ? 'preview' : send ? 'send' : pub ? 'publish' : 'unpublish';
+    btn.disabled = true;
+    const idle = btn.textContent;
+    btn.textContent = prev ? 'Checking…' : send ? 'Sending…' : 'Working…';
+    try {
+      const r = await fetch('/api/send-release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json',
+                   Authorization: 'Bearer ' + accessToken },
+        body: JSON.stringify({ action: action, entry: entry })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok){ relMsg(id, j.error || ('HTTP ' + r.status), false); }
+      else if (j.preview){ relMsg(id, j.recipientCount + ' recipient(s) would get this.', true); }
+      else if (typeof j.published === 'boolean'){ relMsg(id, j.message, true); await loadReleases(); }
+      else if (j.alreadySent){ relMsg(id, j.message, true); await loadReleases(); }
+      else { relMsg(id, j.message || ('Sent to ' + j.sent + '.'), true); await loadReleases(); }
+    } catch (err) {
+      relMsg(id, 'Could not reach the server: ' + (err && err.message ? err.message : err), false);
+    } finally {
+      btn.disabled = false; btn.textContent = idle;
+    }
   });
 
   // ---- tenants ----------------------------------------------------------
@@ -1644,9 +1822,17 @@
         // the number of ACCOUNTS -- the label named one thing and the figure
         // counted another, so it was read as a tenant count and reported as
         // one. Saying which is which also makes a mismatch legible: schools
+        // AND THE SCHOOL FIGURE COUNTS LIVE SCHOOLS IN BOTH VIEWS. It
+        // excluded the two pseudo-groups but not the deleted schools, and
+        // deleted schools only ever reach `keys` when the show-disabled
+        // toggle is on -- so the default view was right and ticking the box
+        // quietly added them to your school count. A deleted school is not
+        // one of your schools in either view; its accounts still are, which
+        // is why the second figure does grow and this one does not.
         // far below accounts is normal, schools ABOVE accounts is not.
         '<option value="' + K_ALL + '">All tenants (' +
-          keys.filter(k => k !== K_PLATFORM && k !== K_UNASSIGNED).length +
+          keys.filter(k => k !== K_PLATFORM && k !== K_UNASSIGNED &&
+                          k.indexOf(K_GONE) !== 0).length +
           ' schools \u00b7 ' + visible.length +
           (visible.length === 1 ? ' account' : ' accounts') + ')</option>' +
         keys.map(k => '<option value="' + esc(k) + '">' + esc(heading(k)) +
