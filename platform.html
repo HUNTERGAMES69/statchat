@@ -636,7 +636,27 @@
 
   // THE AUTH LISTENER IS THE REAL ENTRY POINT on any page that has one --
   // the standing rule for this codebase. Nothing runs before it fires.
+  let accessToken = null;
   supabaseClient.auth.onAuthStateChange((event, session) => {
+    // KEEP THE CACHED BEARER TOKEN CURRENT.
+    // ------------------------------------------------------------------
+    // A Supabase access token is a JWT that expires in about an hour. The
+    // client refreshes it in the background and announces the new one with
+    // TOKEN_REFRESHED -- an event this listener did not handle, so the
+    // token captured at INITIAL_SESSION was the only one this page ever
+    // held.
+    //
+    // The DATABASE queries kept working, because supabaseClient uses its
+    // own refreshed token internally. Only the calls that carry the bearer
+    // by hand went stale, and they failed with the endpoint's own
+    // "Invalid or expired session -- please sign in again". So the page
+    // half-worked after an hour: tenants and games loaded, and Users,
+    // Numbers, release actions and create-tenant all said reauthenticate.
+    //
+    // Written as "any event that carries a session" rather than a test for
+    // TOKEN_REFRESHED alone: SIGNED_IN and USER_UPDATED carry one too, and
+    // a list of event names is a list somebody has to remember to extend.
+    if (session && session.access_token) accessToken = session.access_token;
     if (event === 'INITIAL_SESSION'){
       if (session){ init(session); } else { window.location.href = '/login.html'; }
     } else if (event === 'SIGNED_OUT'){
@@ -644,7 +664,6 @@
     }
   });
 
-  let accessToken = null;
   async function init(session){
     const email = (session.user && session.user.email) || '';
 
