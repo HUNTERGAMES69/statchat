@@ -230,7 +230,12 @@ async function run() {
            'what it thinks');
     }
 
+    // OVERTIME NOW ASKS WHICH BOOK FIRST, 2 Sep 2026. NFHS is chosen
+    // because it starts a series at the opponent's 10 -- the value this
+    // panel hardcoded before the question existed -- so everything below
+    // this line is testing exactly what it was testing before.
     click(win, doc.getElementById('otUtilBtn'));
+    click(win, doc.getElementById('ot_fmt_nfhs'));
     click(win, doc.getElementById('ot_pickA'));
     await new Promise(r => setTimeout(r, 60));
     click(win, doc.getElementById('ot_review'));
@@ -270,7 +275,12 @@ async function run() {
       }
       click(w, d.getElementById('saveBtn'));
 
+      // OVERTIME NOW ASKS WHICH BOOK FIRST, 2 Sep 2026. NFHS is chosen
+      // because it starts a series at the opponent's 10 -- the value this
+      // panel hardcoded before the question existed -- so everything below
+      // this line is testing exactly what it was testing before.
       click(w, d.getElementById('otUtilBtn'));
+      click(w, d.getElementById('ot_fmt_nfhs'));
       click(w, d.getElementById('ot_pickA'));
       await new Promise(r => setTimeout(r, 60));
       click(w, d.getElementById('ot_review'));
@@ -293,7 +303,11 @@ async function run() {
     g.evalIn("pushAndPersist({id:nextId++, text:'Q4', effect:{setQuarter:4}, quarter:4}); renderAll();");
     setDrive(g, { down: 1, distance: 10, side: 'own', yardline: 25 });
     g.evalIn("pushAndPersist({id:nextId++, text:'Clock — start', effect:{clockEvent:{type:'start',team:'teamA',absSec:2400}}, quarter:4}); renderAll();");
+    // OVERTIME NOW ASKS WHICH BOOK FIRST, 2 Sep 2026. NFHS starts a
+    // series at the opponent's 10 -- the value this panel hardcoded
+    // before the question existed -- so what follows is unchanged.
     click(g.window, g.document.getElementById('otUtilBtn'));
+    click(g.window, g.document.getElementById('ot_fmt_nfhs'));
     click(g.window, g.document.getElementById('ot_pickA'));
     await new Promise(r => setTimeout(r, 60));
     click(g.window, g.document.getElementById('ot_review'));

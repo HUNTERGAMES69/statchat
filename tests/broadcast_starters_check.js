@@ -39,6 +39,18 @@
 
 const { bootPage } = require('./harness');
 
+// THE COLUMN IS NESTED BY SIDE, since 2 Sep 2026: { teamA, teamB },
+// the same shape seed_starters has always used. ourSide() reads teamA and
+// still accepts a bare { offense, defense, special } object, because that
+// is what every lineup saved before that date looks like and those games
+// must keep reading.
+const ourSide = (bs) => {
+  if (!bs || typeof bs !== 'object') return null;
+  if (bs.teamA || bs.teamB) return bs.teamA || null;
+  return bs;
+};
+
+
 let pass = 0, fail = 0;
 const chk = (l, ok, d) => { if (ok) { pass++; console.log('  ok   ' + l); }
   else { fail++; console.log('  FAIL ' + l + (d ? '\n         ' + d : '')); } };
@@ -72,7 +84,13 @@ const PLAYERS = [
 const boot = () => bootPage('create_game.html',
   { query:'?nothing=1', players:PLAYERS, branding:{ current_season_year:2026, team_id:'test-team-1' } });
 
-const inp = (w,u,i) => w.document.querySelector('input.bcNum[data-unit="'+u+'"][data-i="'+i+'"]');
+// SCOPED TO OUR SIDE, since 2 Sep 2026. The opponent has an identical
+// panel of its own, so an unscoped selector now matches twice and picks
+// whichever the DOM happens to hold first. Everything this suite asserts
+// is about the our-team panel; tests/opponent_starters_check.js covers
+// the other one and the independence of the two.
+const inp = (w,u,i) => w.document.querySelector(
+  'input.bcNum[data-side="our"][data-unit="'+u+'"][data-i="'+i+'"]');
 const settle = (ms) => new Promise(r => setTimeout(r, ms || 80));
 
 async function typeInto(w, u, i, v){
@@ -92,16 +110,16 @@ async function typeInto(w, u, i, v){
   {
     const w = await boot(); await settle(150);
     const d = w.document;
-    const wrap = d.getElementById('bcStartersWrap');
-    chk('the section is on the page', !!wrap && !!d.getElementById('bcGroups'));
+    const wrap = d.getElementById('bcStartersWrap_our');
+    chk('the section is on the page', !!wrap && !!d.getElementById('bcGroups_our'));
     chk('...and is collapsed by default, not competing with the seeded six',
         !!wrap && !wrap.open);
     chk('...and the seeded starters block is untouched',
         !!d.getElementById('ourStarterQB') && !!d.getElementById('ourStarterResolve'));
     chk('26 slots: 11 offence, 11 defence, 4 special teams',
-        d.querySelectorAll('input.bcNum[data-unit="offense"]').length === 11 &&
-        d.querySelectorAll('input.bcNum[data-unit="defense"]').length === 11 &&
-        d.querySelectorAll('input.bcNum[data-unit="special"]').length === 4);
+        d.querySelectorAll('input.bcNum[data-side="our"][data-unit="offense"]').length === 11 &&
+        d.querySelectorAll('input.bcNum[data-side="our"][data-unit="defense"]').length === 11 &&
+        d.querySelectorAll('input.bcNum[data-side="our"][data-unit="special"]').length === 4);
     // NOT VACUOUS: if the roster does not load, every shared-number check
     // below "passes" against a page correctly reporting an empty roster.
     // Asserted through candidatesForNumber() rather than by reading
@@ -115,8 +133,10 @@ async function typeInto(w, u, i, v){
         (w.window.candidatesForNumber('our','7') || []).length === 2,
         JSON.stringify(w.window.candidatesForNumber('our','7')));
     chk('the questionable slots are selectors, the line and QB are not',
-        d.querySelectorAll('select.bcPos').length === 20,
-        d.querySelectorAll('select.bcPos').length + ' selectors');
+        // OUR SIDE ONLY. The opponent panel builds an identical twenty,
+        // so an unscoped count reads 40 and says nothing about either.
+        d.querySelectorAll('select.bcPos[data-side="our"]').length === 20,
+        d.querySelectorAll('select.bcPos[data-side="our"]').length + ' selectors');
     w.close();
   }
 
@@ -128,8 +148,8 @@ async function typeInto(w, u, i, v){
     chk('a duplicate number on offence is REMOVED, not just flagged',
         inp(w,'offense',2).value === '', JSON.stringify(inp(w,'offense',2).value));
     chk('...and says which slot already has it',
-        /already the RB on offense/.test(w.document.getElementById('bcRes_offense').innerHTML),
-        w.document.getElementById('bcRes_offense').textContent.slice(0,110));
+        /already the RB on offense/.test(w.document.getElementById('bcRes_our_offense').innerHTML),
+        w.document.getElementById('bcRes_our_offense').textContent.slice(0,110));
     chk('...while the first slot keeps it',
         inp(w,'offense',1).value === '22');
 
@@ -145,7 +165,7 @@ async function typeInto(w, u, i, v){
     dup.value = '7';
     dup.dispatchEvent(new w.window.Event('input', { bubbles:true }));
     await settle();
-    const midPickers = w.document.querySelectorAll('#bcRes_offense button.bcPick').length;
+    const midPickers = w.document.querySelectorAll('#bcRes_our_offense button.bcPick').length;
     chk('a refused duplicate is offered NO shared-number picker',
         midPickers === 2,
         midPickers + ' buttons — 2 is the one legitimate picker; 4 means the ' +
@@ -169,11 +189,11 @@ async function typeInto(w, u, i, v){
     chk('special teams KEEPS the same player in two slots',
         inp(w,'special',1).value === '3');
     chk('...and says it will be one line on the card',
-        /FG\/PAT/.test(w.document.getElementById('bcRes_special').innerHTML),
-        w.document.getElementById('bcRes_special').textContent.slice(0,110));
+        /FG\/PAT/.test(w.document.getElementById('bcRes_our_special').innerHTML),
+        w.document.getElementById('bcRes_our_special').textContent.slice(0,110));
     chk('...and the tally counts him once',
-        /2\/4 slots · 1 player/.test(w.document.getElementById('bcTally_special').textContent),
-        w.document.getElementById('bcTally_special').textContent);
+        /2\/4 slots · 1 player/.test(w.document.getElementById('bcTally_our_special').textContent),
+        w.document.getElementById('bcTally_our_special').textContent);
 
     // WHAT ACTUALLY REACHES THE OVERLAY. The tally cannot tell combining
     // apart from skipping -- both give one row -- so the difference only
@@ -200,7 +220,7 @@ async function typeInto(w, u, i, v){
     // the documented way to inspect what a page actually wrote.
     const gameRow = (w.db.inserted || []).filter(r => r.table === 'games').pop();
     const saved = gameRow && gameRow.row;
-    const st = saved && saved.broadcast_starters && saved.broadcast_starters.special;
+    const st = (ourSide(saved && saved.broadcast_starters) || {}).special;
     chk('the game actually saved, so the payload below means something',
         !!saved, (w.document.getElementById('setupMsg')||{}).textContent);
     // A unit is an ORDERED ARRAY of { pos, num, name } since 1 Sep 2026.
@@ -231,9 +251,9 @@ async function typeInto(w, u, i, v){
         inp(w,'defense',5).value === '22');
     chk('...and is not questioned, on either unit',
         !w.document.querySelector('button.bcTwoWay') &&
-        !/two-way|both cards/i.test(w.document.getElementById('bcRes_offense').textContent +
-                                   w.document.getElementById('bcRes_defense').textContent),
-        w.document.getElementById('bcRes_offense').textContent.slice(0,140));
+        !/two-way|both cards/i.test(w.document.getElementById('bcRes_our_offense').textContent +
+                                   w.document.getElementById('bcRes_our_defense').textContent),
+        w.document.getElementById('bcRes_our_offense').textContent.slice(0,140));
     chk('...and neither slot is marked as a fault',
         inp(w,'offense',1).style.borderColor === '' &&
         inp(w,'defense',5).style.borderColor === '',
@@ -267,7 +287,7 @@ async function typeInto(w, u, i, v){
       if (i < 10) el.dispatchEvent(new w.window.Event('change', { bubbles:true }));
       await settle(60);
     }
-    const onScreen = [...d.querySelectorAll('input.bcNum[data-unit="defense"]')]
+    const onScreen = [...d.querySelectorAll('input.bcNum[data-side="our"][data-unit="defense"]')]
       .filter(x => x.value.trim()).length;
     chk('the duplicate is still on screen, which is what makes this dangerous',
         onScreen === 11, onScreen + ' filled');
@@ -282,7 +302,7 @@ async function typeInto(w, u, i, v){
     chk('...and says the rest of the page is fine, so nothing else is hunted for',
         /Everything else/i.test(msg), msg);
     chk('...and opens the section, since a refusal points at nothing when hidden',
-        !!d.getElementById('bcStartersWrap').open);
+        !!d.getElementById('bcStartersWrap_our').open);
 
     // Clearing it lets the save through -- the guard must not be a wall.
     const last = inp(w,'defense',10);
@@ -294,8 +314,8 @@ async function typeInto(w, u, i, v){
     chk('...and once cleared the game saves',
         !!after, (d.getElementById('setupMsg')||{}).textContent);
     chk('...storing exactly what is on screen, ten men',
-        after && (after.row.broadcast_starters.defense || []).length === 10,
-        after && JSON.stringify((after.row.broadcast_starters.defense||[]).map(r => r.num)));
+        after && ((ourSide(after.row.broadcast_starters) || {}).defense || []).length === 10,
+        after && JSON.stringify(((ourSide(after.row.broadcast_starters)||{}).defense||[]).map(r => r.num)));
     w.close();
   }
 
@@ -304,7 +324,7 @@ async function typeInto(w, u, i, v){
     const w = await boot(); await settle(150);
     const nums = ['7','22','80','11','21','3','55','91','2','4','5'];
     for (let i = 0; i < 11; i++) await typeInto(w, 'offense', i, nums[i]);
-    const t = w.document.getElementById('bcTally_offense').textContent;
+    const t = w.document.getElementById('bcTally_our_offense').textContent;
     chk('a full unit reads eleven players', /11\/11 slots · 11 players/.test(t), t);
     chk('...and is marked done', /✓/.test(t), t);
     w.close();
@@ -369,10 +389,10 @@ async function typeInto(w, u, i, v){
     // to change a kickoff time. The summary tally says there is something
     // inside without spending 26 rows to say it. Andy, 1 Sep 2026.
     chk('...and the section stays collapsed, letting the tally say it has content',
-        !w.document.getElementById('bcStartersWrap').open);
+        !w.document.getElementById('bcStartersWrap_our').open);
     chk('...with the tally actually showing a count, or nothing says it at all',
-        /\d+\s*\/\s*26/.test(w.document.getElementById('bcSummary').textContent),
-        JSON.stringify(w.document.getElementById('bcSummary').textContent));
+        /\d+\s*\/\s*26/.test(w.document.getElementById('bcSummary_our').textContent),
+        JSON.stringify(w.document.getElementById('bcSummary_our').textContent));
     // A STORED DUPLICATE IS REFUSED LIKE A TYPED ONE, not quietly dropped.
     // Until 1 Sep 2026 re-saving this game wrote one WR row and discarded the
     // other with no message -- the same silent loss Andy hit on defence. It
@@ -391,7 +411,7 @@ async function typeInto(w, u, i, v){
         /#22/.test(m) && /RB/.test(m) && /WR/.test(m), m);
 
     // And clearing it lets the save through, with the survivors intact.
-    const dupSlot = [...w.document.querySelectorAll('input.bcNum[data-unit="offense"]')]
+    const dupSlot = [...w.document.querySelectorAll('input.bcNum[data-side="our"][data-unit="offense"]')]
       .filter(x => x.value.trim() === '22')[1];
     dupSlot.value = '';
     dupSlot.dispatchEvent(new w.window.Event('input', { bubbles:true }));
@@ -403,7 +423,7 @@ async function typeInto(w, u, i, v){
     const up  = (w.db.updated  || []).filter(r => r.table === 'games').pop();
     const ins = (w.db.inserted || []).filter(r => r.table === 'games').pop();
     const rec = (up && up.fields) || (ins && ins.row) || null;
-    const off = rec && rec.broadcast_starters && rec.broadcast_starters.offense;
+    const off = (ourSide(rec && rec.broadcast_starters) || {}).offense;
     const nums = (off || []).map(r => r.num);
     chk('...and once cleared it saves, with no duplicate written back',
         nums.length > 0 && new Set(nums).size === nums.length, JSON.stringify(off));
@@ -438,14 +458,14 @@ async function typeInto(w, u, i, v){
     for (const [i,n] of [[2,'11'],[3,'12'],[4,'13']]) await typeInto(w, 'offense', i, n);
 
     const labels = [0,1,2,3].map(i => {
-      const sel = d.querySelector('select.bcPos[data-unit="defense"][data-i="'+i+'"]');
+      const sel = d.querySelector('select.bcPos[data-side="our"][data-unit="defense"][data-i="'+i+'"]');
       return sel ? sel.value : ''; });
     chk('the default defensive labels really do repeat, or this proves nothing',
         new Set(labels).size < labels.length, JSON.stringify(labels));
 
     d.getElementById('createGameBtn').click(); await settle(500);
     const row = (w.db.inserted || []).filter(r => r.table === 'games').pop();
-    const bs  = row && row.row.broadcast_starters;
+    const bs  = ourSide(row && row.row.broadcast_starters);
     const def = bs && bs.defense, offn = bs && bs.offense;
 
     chk('a unit is stored as an ORDERED ARRAY, not keyed by position',
@@ -486,13 +506,13 @@ async function typeInto(w, u, i, v){
               our_team_is_home:true, quarter_length_seconds:720, status:'setup',
               seed_starters:{ teamA:{}, teamB:{} }, broadcast_starters: saved } });
     await settle(500);
-    const filled = [...w.document.querySelectorAll('input.bcNum[data-unit="defense"]')]
+    const filled = [...w.document.querySelectorAll('input.bcNum[data-side="our"][data-unit="defense"]')]
       .filter(i => i.value.trim()).length;
     chk('all eleven come back into the form when the game is reopened',
         filled === 11, filled + ' slots filled');
     w.document.getElementById('createGameBtn').click(); await settle(500);
     const up = (w.db.updated || []).filter(r => r.table === 'games').pop();
-    const back = up && up.fields.broadcast_starters && up.fields.broadcast_starters.defense;
+    const back = (ourSide(up && up.fields.broadcast_starters) || {}).defense;
     chk('...and re-saving an untouched lineup loses nobody',
         (back || []).length === 11, JSON.stringify((back||[]).map(r => r.num)));
     chk('...with the same men in the same order',
@@ -522,7 +542,7 @@ async function typeInto(w, u, i, v){
         'QB=' + inp(w,'offense',0).value + ' RB=' + inp(w,'offense',1).value);
     w.document.getElementById('createGameBtn').click(); await settle(500);
     const up = (w.db.updated || []).filter(r => r.table === 'games').pop();
-    const off = up && up.fields.broadcast_starters && up.fields.broadcast_starters.offense;
+    const off = (ourSide(up && up.fields.broadcast_starters) || {}).offense;
     chk('...and is written back in the array shape, migrating itself on save',
         Array.isArray(off) && off.length === 2 && off[0].num === '7',
         JSON.stringify(off));
@@ -566,7 +586,7 @@ async function typeInto(w, u, i, v){
     // The chosen candidate is the one painted with the green fill's ink.
     // Matched on that rather than on the fill, because the harness resolves
     // var(--sc-green) to a literal and picks the light palette's value.
-    const chosen = () => [...d.querySelectorAll('#bcRes_offense button.bcPick')]
+    const chosen = () => [...d.querySelectorAll('#bcRes_our_offense button.bcPick')]
       .filter(b => /color:#0e1408/.test(b.getAttribute('style') || ''))
       .map(b => b.dataset.name);
 
@@ -576,11 +596,11 @@ async function typeInto(w, u, i, v){
         chosen().indexOf('Devin Whitfield') > -1 && chosen().indexOf('Lamar Wilson') > -1,
         JSON.stringify(chosen()));
     chk('...and an answered picker stops asking "Which one?"',
-        !/Which one\?/.test(d.getElementById('bcRes_offense').textContent),
-        d.getElementById('bcRes_offense').textContent.slice(0,140));
+        !/Which one\?/.test(d.getElementById('bcRes_our_offense').textContent),
+        d.getElementById('bcRes_our_offense').textContent.slice(0,140));
 
     // The reported trigger: type into an EMPTY slot, which re-renders.
-    const empty = [...d.querySelectorAll('input.bcNum[data-unit="offense"]')]
+    const empty = [...d.querySelectorAll('input.bcNum[data-side="our"][data-unit="offense"]')]
       .find(x => !x.value.trim());
     empty.value = '55';
     empty.dispatchEvent(new w.window.Event('input', { bubbles:true }));
@@ -593,7 +613,7 @@ async function typeInto(w, u, i, v){
     set('designator','LATE-1'); set('quarterLen','12');
     d.getElementById('createGameBtn').click(); await settle(600);
     const up = (w.db.updated || []).filter(r => r.table === 'games').pop();
-    const off = up && up.fields.broadcast_starters && up.fields.broadcast_starters.offense;
+    const off = (ourSide(up && up.fields.broadcast_starters) || {}).offense;
     const named = (off || []).filter(r => r.name).map(r => r.name);
     chk('...and the picked names are written back, not dropped',
         named.indexOf('Devin Whitfield') > -1 && named.indexOf('Lamar Wilson') > -1,

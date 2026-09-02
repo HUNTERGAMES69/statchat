@@ -217,7 +217,12 @@ async function run() {
       win.confirm = () => true; win.alert = () => {};
       h.evalIn("pushAndPersist({id:nextId++, text:'Q4', effect:{setQuarter:4}, quarter:4}); renderAll();");
       setDrive(h, { down: 1, distance: 10, side: 'own', yardline: 30 });
+      // OVERTIME NOW ASKS WHICH BOOK FIRST, 2 Sep 2026. NFHS is chosen
+      // because it starts a series at the opponent's 10 -- the value this
+      // panel hardcoded before the question existed -- so everything below
+      // this line is testing exactly what it was testing before.
       click(win, doc.getElementById('otUtilBtn'));
+      click(win, doc.getElementById('ot_fmt_nfhs'));
       click(win, doc.getElementById('ot_pickA'));
       await new Promise(r => setTimeout(r, 60));
       click(win, doc.getElementById('ot_review'));
@@ -230,6 +235,12 @@ async function run() {
       const h = await intoOt();
       const { window: win, document: doc } = h;
       enterPlay(h, { type: 'rush', carrier: '22', yards: '10', td: true });
+      // A TOUCHDOWN IN OVERTIME NOW ASKS whether a try was attempted, and
+      // grays the ladder while it asks (2 Sep 2026). Kick opens the very
+      // same PAT panel the ladder used to, so the entry below is unchanged
+      // -- it just has to answer the question first.
+      click(win, doc.getElementById('ot_try_kick'));
+      await new Promise(r => setTimeout(r, 60));
       enterPlay(h, { type: 'pat', kicker: '3', result: 'g' });
       await new Promise(r => setTimeout(r, 90));
       click(win, doc.getElementById('ot_review'));
