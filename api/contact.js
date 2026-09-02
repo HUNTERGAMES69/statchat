@@ -85,8 +85,17 @@ module.exports = async (req, res) => {
   const organization = clean(body.organization, MAX.organization);
   const message = clean(body.message, MAX.message, true);
 
-  if (!name || !email) {
-    res.status(400).json({ ok: false, error: 'Please give your name and email.' });
+  // ORGANIZATION IS REQUIRED TOO, since 2 Sep 2026.
+  //
+  // The form gates on it as well. Both ends check for the same reason the
+  // email rule is duplicated here rather than trusted from the page: two
+  // different definitions of a valid submission is how a form accepts
+  // something the server then refuses -- or, worse, how a direct POST that
+  // never saw the form writes a lead nobody can qualify.
+  if (!name || !email || !organization) {
+    res.status(400).json({ ok: false, error: !organization && name && email
+      ? 'Please tell us your school, team or production company.'
+      : 'Please give your name and email.' });
     return;
   }
   if (!looksLikeEmail(email)) {
