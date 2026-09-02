@@ -312,6 +312,44 @@
     <div class="note"><strong>Likely starters are the single most useful field here.</strong> Anyone you name is guaranteed to appear in the pickers for the roles that slot plays — regardless of what position they were filed under, or whether they have a position at all. Without them, an opponent's first few plays mean typing numbers by hand.</div>
     <p>Players you type in by hand during the game are added to the picker from then on, so a number never has to be typed twice.</p>
 
+    <h3>Specify all game starters &mdash; for the broadcast only</h3>
+    <p>Below the likely starters is a collapsed section marked <strong>BROADCAST
+      ONLY</strong>. It holds your full starting lineups &mdash; eleven on offense,
+      eleven on defense, four on special teams &mdash; and it exists for one reason:
+      to drive the three starting-lineup overlays your production crew can put on
+      air. See <a href="#broadcast">15. Broadcasting</a> for the addresses.</p>
+    <div class="note"><strong>Nothing you type here affects anything else.</strong>
+      Not play entry, not the player pickers, not a single statistic. It is stored in
+      its own column and read only by the broadcast graphics. A coach who never opens
+      it loses nothing, and the section stays collapsed until you open it.</div>
+    <p>It is entirely optional, and partial is fine &mdash; fill in four names or all
+      twenty-six. An overlay draws <em>nothing at all</em> for a unit with no lineup,
+      rather than an empty frame, so a card left in a switcher bank all season is
+      simply blank until there is something to show.</p>
+    <ul>
+      <li><strong>Fill from likely starters</strong> copies the six you already
+        entered above into the matching positions. It never overwrites a slot you
+        have already filled.</li>
+      <li><strong>Positions are yours to choose.</strong> The line and the quarterback
+        are fixed labels; every other slot is a dropdown, so a Wing-T team stores FB
+        where a spread team stores SB, and the card prints what you picked.</li>
+      <li><strong>A number can only start once per unit.</strong> Two boys may share a
+        jersey number on the roster, but never on the field together, so a repeat
+        inside offense or inside defense is refused and the slot is cleared. The same
+        number on offense <em>and</em> defense is fine and is not questioned &mdash;
+        the two units draw from different number ranges, so it is almost always two
+        different players.</li>
+      <li><strong>Special teams combines.</strong> One boy in both the FG and PAT
+        slots appears once on the card as <strong>FG/PAT</strong>, not twice.</li>
+      <li><strong>A shared number asks which player.</strong> If two boys on your
+        roster wear the number you typed, the section asks which one and remembers
+        the answer &mdash; the same question the seeded starters ask above.</li>
+    </ul>
+    <p>Edit the lineup any time before or during the game, including on a game that
+      already has plays recorded &mdash; officials change a lineup right up to
+      kickoff. Clearing every slot removes the lineup entirely and the overlays go
+      blank again.</p>
+
     <h3>Marking a game as preseason</h3>
     <p>Tick <strong>This is a preseason game</strong> for a scrimmage or anything else that should not count toward the year's numbers. Everything about the game works exactly as normal — you enter it, view it, and export its own recap and stat package the usual way. The only difference is that <strong>Season Report</strong> and <strong>Player Report</strong> skip it entirely, so a scrimmage never quietly shifts a season average.</p>
     <p>The dashboard's game list shows a small <strong>PRESEASON</strong> tag on any game marked this way, so it stays easy to spot months later, long after the reason for excluding it has been forgotten.</p>
@@ -1076,7 +1114,7 @@
     <p>Four blocks, top to bottom. Most weeks you only need the first.</p>
 
     <h4>Feed addresses</h4>
-    <p>Eight separate data sources, each a web address your production
+    <p>Eleven separate data sources, each a web address your production
       software reads on a timer. <strong>The addresses never change from week
       to week</strong> &mdash; they follow whichever game is set ON AIR, so a
       producer sets them up once and never touches them again.</p>
@@ -1094,20 +1132,53 @@
         player, most yards first.</td></tr>
       <tr><td>Defensive leaders</td><td>One row per player, most tackles
         first.</td></tr>
+      <tr><td>Kicking leaders</td><td>Field goals and PATs &mdash; made,
+        attempted, longest, blocked. One row per player who <em>attempted</em> a
+        kick, so a punter never appears at 0 for 0.</td></tr>
+      <tr><td>Punting leaders</td><td>Punts, yards, longest. One row per player
+        who punted.</td></tr>
+      <tr><td>Starting lineup</td><td>One row per position, with the number and the
+        player's name. Offense, defense and special teams each have their own address
+        on the setup page. Empty until a lineup is entered on the game setup
+        screen.</td></tr>
     </table>
-    <p>Each is available as <strong>XML</strong> or <strong>JSON</strong>
+
+    <h4>Season totals, not just this game</h4>
+    <p>The six leader feeds &mdash; rushing, passing, receiving, defense, kicking
+      and punting &mdash; also come in a season version. It has its own row on the
+      setup page, directly under the game one, with its own copy button, and it takes
+      the same XPath.</p>
+    <div class="note">A season feed covers <strong>your team only</strong>, from
+      <strong>completed games only</strong>. Preseason games are excluded, the
+      same as in Season Report. Because it reads finished games, a season panel
+      cut to air mid-game will not change under the director.</div>
+
+    <p>Each feed is available as <strong>XML</strong> or <strong>JSON</strong>
       &mdash; the toggle at the top switches every address at once. vMix and
       most switchers want XML; JSON is there if someone is building
       something custom. <span class="btn">Copy all for the crew</span> and
-      <span class="btn">Email to the crew</span> send the whole set, which is
-      easier than reading eight addresses down a phone.</p>
+      <span class="btn">Email to the crew</span> send the whole set &mdash;
+      addresses, XPaths and column names &mdash; which is easier than reading
+      them down a phone.</p>
 
     <h4>Setting it up</h4>
+    <p>Every feed row on the setup page gives you the two things vMix asks for,
+      numbered in the order it asks for them, each with its own copy button:</p>
+    <ol>
+      <li><strong>Address</strong> &mdash; paste into the data source.</li>
+      <li><strong>XPath</strong> &mdash; which element in the file holds the rows.</li>
+    </ol>
     <p>In vMix: the menu icon at the <em>bottom right</em> of the main window
       &rarr; <em>Data Sources Manager</em> &rarr; add &rarr; type <em>XML</em>,
-      paste the address, set the update interval to 1&ndash;2 seconds, and give
-      it the <strong>XPath</strong> for that feed. Then map each column onto a
-      field in your title.</p>
+      paste the address, set the update interval to 1&ndash;2 seconds, and paste
+      the XPath. Then map each column onto a field in your title.</p>
+    <div class="warn"><strong>The XPath is not the same for every feed.</strong>
+      The element name changes with what the feed returns &mdash;
+      <code>/feed/game</code>, <code>/feed/player</code>,
+      <code>/feed/starter</code> and so on &mdash; which is why the setup page
+      prints it next to each address rather than leaving you to work it out. A
+      wrong one gives an empty data source with no error message, which is the
+      hardest kind of fault to chase.</div>
     <p>One row per record &mdash; the scoreboard, drive and last-play feeds
       return a single row; the leader feeds return one per player, so a title
       using them needs to be built for a repeating list.</p>
@@ -1151,22 +1222,44 @@
       <tr><td>Rushing / Passing / Receiving / Defence</td><td>One row per player, best first</td></tr>
     </table>
 
-    <h3>The ready-made overlay</h3>
-
-    <p>If the crew would rather not build their own graphics, there is a finished
-    transparent scoreboard. It is added differently from the feeds &mdash; as a
-    <strong>web browser input at 1920&times;1080</strong>, not as a data source. The
-    background is transparent, so it keys straight over the programme feed and needs
-    no mapping.</p>
-
-    <div class="note"><strong>The trade-off.</strong> The broadcast software receives a
+    <h3>The ready-made overlays</h3>
+    <p>If the crew would rather not build their own graphics, StatChat ships finished
+    ones. They are added differently from the feeds &mdash; as a <strong>web browser
+    input at 1920&times;1080</strong>, not as a data source. The background is
+    transparent, so each keys straight over the programme feed and needs no
+    mapping.</p>
+    <p>Every address is listed on the Broadcast setup page with a copy button. In
+    outline:</p>
+    <table>
+      <tr><th>Overlay</th><th>What it is</th></tr>
+      <tr><td>Full scoreboard<br>Score only</td><td>The scoreboard bug, with or
+        without the down-and-distance line.</td></tr>
+      <tr><td>Team stats + leaders<br><em>and a portrait version</em></td><td>The
+        team-versus-team comparison with each side's leaders underneath &mdash; the
+        graphic to hold between drives. Reads the game on air and keeps polling, so
+        it is current whenever the director cuts to it.</td></tr>
+      <tr><td>Current drive<br><em>three layouts</em></td><td>Plays, yards, where the
+        drive started, down and distance. Two shorter versions drop the down and
+        distance, or the field position entirely, for a bank whose score bug already
+        carries the situation.</td></tr>
+      <tr><td>Season leaders<br><em>six, plus a rotating one</em></td><td>Rushing,
+        passing, receiving, tackles, kicking, punting &mdash; season totals, your team
+        only. The rotating version cycles several categories on one input instead of
+        needing a switcher input for each.</td></tr>
+      <tr><td>Starting lineups<br><em>six addresses</em></td><td>Offense, defense and
+        special teams, each in a one-column or two-column layout so a lineup card fits
+        a lower third or a tall side slot. Fed by the lineup you enter on the game
+        setup screen.</td></tr>
+    </table>
+    <div class="note"><strong>Several of these hide themselves when they have nothing
+      to say.</strong> The current-drive panel disappears between possessions and
+      before kickoff rather than sitting there reading 0 and 0; a starting-lineup card
+      draws nothing at all until a lineup is entered. That is what makes them safe to
+      build into a switcher bank once and leave alone all season.</div>
+    <div class="warn"><strong>The trade-off.</strong> The broadcast software receives a
     picture, not data. That means it cannot be restyled, and the numbers are not
     available to any other graphic. Adding it as a <em>data source</em> by mistake will
     fail with a parsing error &mdash; it is a web page, not XML.</div>
-
-    <h3>The team stats graphic</h3>
-    <p><code>/broadcast_stats.html</code> is a second full graphic for holding between drives: the team-versus-team comparison on top — total, pass and rush yards, time of possession, turnovers, third down — and each side's passing, rushing and receiving leaders underneath.</p>
-    <p>Add <code>?layout=portrait</code> for a tall narrow version for a lower third or a side panel; in that one the two leader panels stack with your team on top. Both carry the sponsor bar; <code>?sponsor=none</code> drops it. Like the scoreboard it reads whichever game is ON AIR and refreshes on its own, so it is current whenever the director cuts to it.</p>
 
     <h3>Caveats worth knowing</h3>
 
