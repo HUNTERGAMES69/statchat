@@ -433,6 +433,17 @@
         November does not meet a wall of announcements about features they have always had.
       </p>
       <div id="releaseList"></div>
+      <!-- ONE EMAIL FOR THE WHOLE SELECTION. Four notes shipping together
+           must not be four messages to the same people; the second one is
+           what gets a product-news address filtered. Andy, 2 Sep 2026. -->
+      <div id="releaseSendBar" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+           border-top:1px solid var(--sc-rule, #2b333d); padding-top:14px; margin-top:4px;">
+        <span id="relPickCount" class="sub" style="font-size:13px;"></span>
+        <span style="flex:1;"></span>
+        <button type="button" id="relPreviewBtn" style="font-size:12.5px; padding:5px 12px;">Who would get these?</button>
+        <button type="button" id="relSendBtn" style="font-size:12.5px; padding:5px 12px;">Send one email</button>
+      </div>
+      <div id="relBatchMsg" style="margin-top:10px; font-size:13px;"></div>
     </div>
 </div>
 
@@ -694,9 +705,21 @@
         : '<span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; ' +
           'color:var(--sc-amber, #ffc72c); border:1px solid var(--sc-amber, #ffc72c); ' +
           'border-radius:3px; padding:1px 7px;">Draft</span>';
+      // TICKABLE ONLY WHEN IT COULD ACTUALLY GO: live, and not already
+      // emailed. A box you can tick on a note that cannot be sent is a
+      // selection that fails at the last step.
+      const sendable = live && !sent;
       return '<div class="relRow" data-id="' + esc(rel.id) + '" style="border:1px solid var(--sc-rule, #2b333d); ' +
         'border-radius:8px; padding:12px 14px; margin-bottom:10px;">' +
         '<div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;">' +
+          (sendable
+            ? '<input type="checkbox" class="relPick" data-id="' + esc(rel.id) + '"' +
+              // Pre-ticked for the ones marked email:true in the file, so
+              // the default selection is the one that was intended when
+              // the note was written.
+              (rel.email ? ' checked' : '') +
+              ' style="margin:0 2px 0 0;" aria-label="Include in email">'
+            : '<span style="display:inline-block; width:15px;"></span>') +
           badge +
           '<strong style="font-size:15px;">' + esc(rel.title) + '</strong>' +
           '<span class="sub" style="font-size:12px;">' + esc(rel.date) + '</span>' +
@@ -714,20 +737,16 @@
             ? '<span style="font-size:12.5px; color:var(--sc-green, #a3d93f); font-weight:600;">' +
               'Emailed ' + esc(String(st.emailed_at).slice(0,10)) + ' &middot; ' +
               esc(st.recipient_count) + ' recipient(s)</span>'
-            : (rel.email && live
-                ? '<button type="button" class="relPreview" data-id="' + esc(rel.id) + '" ' +
-                  'style="font-size:12.5px; padding:4px 10px;">Who would get this?</button>' +
-                  ' <button type="button" class="relSend" data-id="' + esc(rel.id) + '" ' +
-                  'style="font-size:12.5px; padding:4px 10px;">Send email</button>'
-                : (rel.email
-                    ? '<span class="sub" style="font-size:12px;">publish before emailing</span>'
-                    : ''))) +
+            : (!live
+                ? '<span class="sub" style="font-size:12px;">publish before emailing</span>'
+                : '')) +
         '</div>' +
         '<div class="sub" style="margin-top:6px; font-size:13px; line-height:1.5;">' + esc(rel.body) + '</div>' +
         (rel.where ? '<div class="sub" style="margin-top:4px; font-size:12.5px;">Where: ' + esc(rel.where) + '</div>' : '') +
         '<div class="relMsg" data-id="' + esc(rel.id) + '" style="margin-top:8px; font-size:13px;"></div>' +
       '</div>';
     }).join('');
+    relSyncBar();
   }
 
   function relFind(id){ return (window.STATCHAT_RELEASES || []).find(r => r.id === id); }
@@ -739,54 +758,119 @@
     }
   }
 
+  // How many are ticked, and what they are.
+  function relPicked(){
+    return [...document.querySelectorAll('#releaseList input.relPick:checked')]
+      .map(b => relFind(b.dataset.id)).filter(Boolean);
+  }
+  function relSyncBar(){
+    const picked = relPicked();
+    const count = document.getElementById('relPickCount');
+    const send  = document.getElementById('relSendBtn');
+    const prev  = document.getElementById('relPreviewBtn');
+    if (!count) return;
+    const anyTickable = document.querySelectorAll('#releaseList input.relPick').length > 0;
+    document.getElementById('releaseSendBar').style.display = anyTickable ? 'flex' : 'none';
+    count.textContent = picked.length
+      ? picked.length + ' note' + (picked.length === 1 ? '' : 's') + ' selected — they go out as ONE email'
+      : 'Tick the notes to include. Nothing is sent until you press Send.';
+    send.disabled = !picked.length;
+    prev.disabled = !picked.length;
+    send.style.opacity = prev.style.opacity = picked.length ? '' : '.5';
+  }
+  function relBatchMsg(text, good){
+    const el = document.getElementById('relBatchMsg');
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = good ? 'var(--sc-green, #a3d93f)' : 'var(--sc-red, #ff8fa3)';
+  }
+
   // Delegated, so a row re-rendered after a send keeps working.
+  document.getElementById('panelReleases').addEventListener('change', (e) => {
+    if (e.target.classList && e.target.classList.contains('relPick')) relSyncBar();
+  });
   document.getElementById('panelReleases').addEventListener('click', async (e) => {
-    const prev = e.target.closest ? e.target.closest('button.relPreview') : null;
-    const send = e.target.closest ? e.target.closest('button.relSend') : null;
     const pub  = e.target.closest ? e.target.closest('button.relPublish') : null;
     const unpub= e.target.closest ? e.target.closest('button.relUnpublish') : null;
-    const btn = prev || send || pub || unpub;
+    const btn = pub || unpub;
     if (!btn) return;
     const id = btn.dataset.id;
     const entry = relFind(id);
     if (!entry) return;
 
-    // TYPE THE ID TO SEND. Not a confirm() -- a dialog is dismissed by
-    // reflex, and this one reaches every school at once. The same
-    // reasoning as the ON AIR confirmations on the dashboard.
     if (unpub && !window.confirm('Take "' + entry.title + '" down? It stops appearing on ' +
         'dashboards on the next load. Anyone who already read it has still read it.')) return;
-    if (send){
-      const typed = window.prompt(
-        'This emails every ' + (entry.audience || []).join(' and ') +
-        ' on the platform, once, and cannot be undone.\n\n' +
-        'Type the release id to confirm:\n' + id);
-      if (typed !== id){ relMsg(id, 'Not sent.', false); return; }
-    }
 
-    const action = prev ? 'preview' : send ? 'send' : pub ? 'publish' : 'unpublish';
     btn.disabled = true;
     const idle = btn.textContent;
-    btn.textContent = prev ? 'Checking…' : send ? 'Sending…' : 'Working…';
+    btn.textContent = 'Working…';
     try {
       const r = await fetch('/api/send-release', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json',
                    Authorization: 'Bearer ' + accessToken },
-        body: JSON.stringify({ action: action, entry: entry })
+        body: JSON.stringify({ action: pub ? 'publish' : 'unpublish', entry: entry })
       });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok){ relMsg(id, j.error || ('HTTP ' + r.status), false); }
-      else if (j.preview){ relMsg(id, j.recipientCount + ' recipient(s) would get this.', true); }
-      else if (typeof j.published === 'boolean'){ relMsg(id, j.message, true); await loadReleases(); }
-      else if (j.alreadySent){ relMsg(id, j.message, true); await loadReleases(); }
-      else { relMsg(id, j.message || ('Sent to ' + j.sent + '.'), true); await loadReleases(); }
+      if (!r.ok) relMsg(id, j.error || ('HTTP ' + r.status), false);
+      else { relMsg(id, j.message, true); await loadReleases(); }
     } catch (err) {
       relMsg(id, 'Could not reach the server: ' + (err && err.message ? err.message : err), false);
     } finally {
       btn.disabled = false; btn.textContent = idle;
     }
   });
+
+  // ---- the batch bar ----------------------------------------------------
+  async function relBatch(action){
+    const picked = relPicked();
+    if (!picked.length) return;
+    const prevBtn = document.getElementById('relPreviewBtn');
+    const sendBtn = document.getElementById('relSendBtn');
+
+    if (action === 'send'){
+      // TYPE THE COUNT. Not a confirm() -- a dialog is dismissed by
+      // reflex, and this reaches every school at once and cannot be
+      // undone. The number is what the person has to have actually read.
+      const typed = window.prompt(
+        'This sends ONE email covering ' + picked.length + ' note' +
+        (picked.length === 1 ? '' : 's') + ', once, and cannot be undone:\n\n' +
+        picked.map(p => '  \u2022 ' + p.title).join('\n') +
+        '\n\nType the number ' + picked.length + ' to confirm:');
+      if (String(typed || '').trim() !== String(picked.length)){
+        relBatchMsg('Not sent.', false); return;
+      }
+    }
+
+    prevBtn.disabled = sendBtn.disabled = true;
+    relBatchMsg(action === 'send' ? 'Sending…' : 'Checking…', true);
+    try {
+      const r = await fetch('/api/send-release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json',
+                   Authorization: 'Bearer ' + accessToken },
+        body: JSON.stringify({ action: action, entries: picked })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) relBatchMsg(j.error || ('HTTP ' + r.status), false);
+      else if (j.preview){
+        const per = (j.groups || []).map(g =>
+          g.recipients + ' ' + (g.role === 'admin' ? 'admin' : 'scorer') +
+          (g.recipients === 1 ? '' : 's') + ' would get ' + g.notes +
+          ' note' + (g.notes === 1 ? '' : 's')).join('; ');
+        relBatchMsg(j.recipientCount + ' recipient(s) in total' + (per ? ' — ' + per : '') + '.', true);
+      }
+      else if (j.alreadySent){ relBatchMsg(j.message, false); await loadReleases(); }
+      else { relBatchMsg(j.message || ('Sent to ' + j.sent + '.'), true); await loadReleases(); }
+    } catch (err) {
+      relBatchMsg('Could not reach the server: ' + (err && err.message ? err.message : err), false);
+    } finally {
+      prevBtn.disabled = sendBtn.disabled = false;
+      relSyncBar();
+    }
+  }
+  document.getElementById('relPreviewBtn').addEventListener('click', () => relBatch('preview'));
+  document.getElementById('relSendBtn').addEventListener('click', () => relBatch('send'));
 
   // ---- tenants ----------------------------------------------------------
   // A tenant may field several sports, so the embedded `teams` is a list.
