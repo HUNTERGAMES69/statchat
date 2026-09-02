@@ -45,14 +45,73 @@ window.STATCHAT_RELEASES = [
     id: '2026-09-01-broadcast-starters',
     date: '2026-09-01',
     title: 'Put your full starting lineups on the broadcast',
-    body: 'Three new overlays — offensive, defensive and special-teams starters — ' +
-          'built from a lineup you enter once on the game setup screen. It is ' +
+    body: 'Enter your offensive, defensive and special-teams starters once on the ' +
+          'game setup screen and they drive three new lineup-card overlays. It is ' +
           'broadcast only: nothing you type there touches play entry, the player ' +
           'pickers, or a single statistic.',
     where: 'Game setup → Specify all game starters',
     link: 'create_game.html',
     audience: ['admin'],
     email: true
+  },
+  {
+    id: '2026-09-01-starter-overlays',
+    date: '2026-09-01',
+    title: 'Starting lineup overlays — six addresses, one and two columns',
+    body: 'Each unit — offense, defense, special teams — has its own overlay ' +
+          'address in one column or two, so a lineup card fits a lower third or a ' +
+          'tall side slot without rebuilding it. The same lineups publish through ' +
+          'the feeds as a starters view, one row per position, if you build your ' +
+          'own graphics. An overlay draws nothing at all until a lineup is entered, ' +
+          'so it is safe to leave in a switcher bank all season.',
+    where: 'Broadcast setup → Overlays, and Feeds',
+    link: 'broadcast_setup.html',
+    audience: ['admin', 'game_entry'],
+    email: false
+  },
+  {
+    id: '2026-09-01-drive-overlays',
+    date: '2026-09-01',
+    title: 'Current drive overlay, in three layouts',
+    body: 'A live panel showing the drive in progress — plays, yards, where it ' +
+          'started and the down and distance. It hides itself between possessions ' +
+          'and before kickoff rather than sitting there reading 0 and 0, so it can ' +
+          'stay in a switcher bank all night. Two shorter versions drop the down ' +
+          'and distance, or the field position entirely, for a bank whose score bug ' +
+          'already carries the situation.',
+    where: 'Broadcast setup → Overlays → Current drive',
+    link: 'broadcast_setup.html',
+    audience: ['admin', 'game_entry'],
+    email: false
+  },
+  {
+    id: '2026-09-01-game-stat-overlays',
+    date: '2026-09-01',
+    title: 'Team stats and leaders for the game on air',
+    body: 'The team-versus-team comparison with each side\u2019s leaders underneath — ' +
+          'the graphic to hold between drives. It reads the game that is ON AIR and ' +
+          'keeps polling, so it is current whenever the director cuts to it, unlike ' +
+          'the season panels beside it. There is a portrait version for a tall side ' +
+          'slot as well as the wide one.',
+    where: 'Broadcast setup → Overlays → Team stats + leaders',
+    link: 'broadcast_setup.html',
+    audience: ['admin', 'game_entry'],
+    email: false
+  },
+  {
+    id: '2026-09-01-kicking-punting-feeds',
+    date: '2026-09-01',
+    title: 'Kicking and punting numbers are in the feeds now',
+    body: 'The kicking and punting leader overlays have been on the setup page for ' +
+          'months, but the numbers behind them were not available to anyone building ' +
+          'their own graphics. Both are feeds now, game or season, alongside rushing, ' +
+          'passing, receiving and defense. Each lists only players who actually ' +
+          'attempted that thing, so a punter never shows up on the kicking board at ' +
+          '0 for 0.',
+    where: 'Broadcast setup → Feeds',
+    link: 'broadcast_setup.html',
+    audience: ['admin', 'game_entry'],
+    email: false
   },
   {
     id: '2026-09-01-feed-xpath',
