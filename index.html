@@ -1329,8 +1329,8 @@
       <label class="fld">Email <span class="req">*</span>
         <input type="email" id="fEmail" name="email" autocomplete="email" maxlength="254" required>
       </label>
-      <label class="fld wide">School, team or production company
-        <input type="text" id="fOrg" name="organization" autocomplete="organization" maxlength="160">
+      <label class="fld wide">School, team or production company <span class="req">*</span>
+        <input type="text" id="fOrg" name="organization" autocomplete="organization" maxlength="160" required>
       </label>
       <label class="fld wide">What does your Friday night look like?
         <textarea id="fMsg" name="message" rows="4" maxlength="4000"
@@ -1535,8 +1535,22 @@
 
     async function send(){
       var name = f.name.value.trim(), email = f.email.value.trim();
+      var organization = f.organization.value.trim();
       mark(f.name, !name); mark(f.email, !email || !looksLikeEmail(email));
-      if (!name || !email){ say('Please give your name and email.', 'err'); (name?f.email:f.name).focus(); return; }
+      // REQUIRED SINCE 2 Sep 2026. A lead with no school, team or company
+      // behind it cannot be qualified, priced or even greeted properly --
+      // it is the field that says who is asking.
+      mark(f.organization, !organization);
+      if (!name || !email || !organization){
+        // Names the field that is actually missing rather than listing all
+        // three: "please give your name and email" over a filled-in name is
+        // how someone stares at a form that looks complete.
+        say(!name ? 'Please give your name.'
+          : !email ? 'Please give your email.'
+          : 'Please tell us your school, team or production company.', 'err');
+        (!name ? f.name : !email ? f.email : f.organization).focus();
+        return;
+      }
       if (!looksLikeEmail(email)){ say('That email address does not look right.', 'err'); f.email.focus(); return; }
 
       sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; say('', '');
@@ -1545,7 +1559,7 @@
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
             name: name, email: email,
-            organization: f.organization.value.trim(),
+            organization: organization,
             message: f.message.value.trim(),
             website: f.website.value          // the honeypot
           })
