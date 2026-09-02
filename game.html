@@ -6003,6 +6003,50 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // Reuses the existing `disable` rather than adding a second mechanism,
     // so every control that already knows how to be unavailable stays
     // consistent -- the same reasoning as gamePhase === 'halftime'.
+    // A STRANDED OVERTIME FLOW IS HEALED HERE, ABOVE `disable`.
+    // ------------------------------------------------------------------
+    // Reported 2 Sep 2026: undoing plays back past the overtime marker
+    // left the guided panel on screen, and an active flow disables every
+    // control -- so the game read as locked in an overtime the log says
+    // never started.
+    //
+    // ABOVE `disable` AND NOT BESIDE THE SECOND-HALF HEAL FURTHER DOWN,
+    // which is the mistake worth not repeating: healing after `disable`
+    // has been computed clears the panel but leaves the whole ladder
+    // greyed for that render, because every control read the stale value.
+    // The same shape as the try prompt painting PAT and 2PT live
+    // underneath itself. Fixed by moving, not by re-rendering.
+    //
+    // ONLY THE TWO STEPS THAT DEPEND ON THE MARKER. otFormat and
+    // otPickTeam are asked BEFORE anything is written, so a scorer sitting
+    // on one of them with the log still in regulation is the normal case,
+    // not a stranded one -- healing those would tear the panel down the
+    // instant Start overtime was pressed.
+    //
+    // Keyed on the QUARTER, which is what every other overtime gate in
+    // this file reads. A second way of asking "are we in overtime" is one
+    // that can disagree with the first.
+    if (guided.active && guided.targetPhase === 'overtime' &&
+        (guided.step === 'otSpot' || guided.step === 'otTry') &&
+        computeState().quarter < 5){
+      guided = { active: false, quarter: null, kickingTeam: null,
+                 receivingTeam: null, step: null, targetPhase: null };
+      persistUiState();
+    }
+    // AND THE PANEL MUST AGREE WITH THE FLAG, whoever cleared it.
+    // ------------------------------------------------------------------
+    // Written as an invariant rather than as another line inside the heal
+    // above, because the heal was not what left the panel on screen. Undo
+    // already clears `guided` by itself -- it just never hides the element
+    // and never repaints the flow, so the panel stayed exactly where it
+    // was with no active flow behind it. A heal that only fixed its own
+    // case would have left every other caller free to do the same thing.
+    //
+    // One rule: no guided flow, no guided panel.
+    {
+      const gp = document.getElementById('guidedPanel');
+      if (gp && !guided.active && gp.style.display !== 'none') gp.style.display = 'none';
+    }
     const disable = seasonLocked || guided.active || !!clockPrompt || gamePhase === 'notStarted' || gamePhase === 'halftime' || gamePhase === 'ended';
     // Undo is blocked on a finalized game. The database refuses to delete
     // a play from a final game, so the button would drop it locally, look
