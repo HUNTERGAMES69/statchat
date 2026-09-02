@@ -3859,12 +3859,24 @@ function parseInput(raw, state){
         effect: { endsDrive: true }, flipEligible: false, team: off, quarter: state.quarter };
     }
     if (res === 'b' || res === 'B'){
-      const rec = rest[1], retyds = rest[2];
+      // NO RETURN YARDAGE ON A TRY, 2 Sep 2026. Andy's call, and the
+      // reason is that the number cannot be read: a try is snapped from
+      // the 3, so "returned 78" invites the reader to work out a field
+      // position that was never true. It is not a tracked statistic --
+      // both rule books keep try plays out of the box score -- and there
+      // is no input for it on the tree any more, so the only codes that
+      // could carry one are older than this change.
+      //
+      // rest[2] is still SKIPPED rather than read, so an old code with a
+      // yardage token in it parses exactly as it always did; the number
+      // simply no longer reaches the sentence.
+      const rec = rest[1];
       let t = ST(p1) + ' PAT BLOCKED';
       if (rec) t += ', recovered by ' + D(rec);
-      if (retyds) t += ', returned ' + retyds;
       let score = null;
-      if (td){ t += ' — returned for 2 — ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 2 }; }
+      // "returned for 2" reads as two YARDS, which is exactly the
+      // confusion the yardage above was removed to avoid. Say the unit.
+      if (td){ t += ' — returned for 2 POINTS — ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 2 }; }
       // team: def on the return -- same fix as the other thirteen
       // branches found the same night this was reported.
       return { text: t, effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: td ? def : off, quarter: state.quarter };
@@ -3880,7 +3892,9 @@ function parseInput(raw, state){
       let t = O(p1) + ' 2PT rush attempt FUMBLED, turned over';
       if (rec) t += ', recovered by ' + D(rec);
       let score = null;
-      if (td){ t += ' — returned for 2 — ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 2 }; }
+      // "returned for 2" reads as two YARDS, which is exactly the
+      // confusion the yardage above was removed to avoid. Say the unit.
+      if (td){ t += ' — returned for 2 POINTS — ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 2 }; }
       return { text: t, effect: Object.assign({ endsDrive: true }, score ? { score } : {}), flipEligible: false, team: td ? def : off, quarter: state.quarter };
     }
     const good = res === 'g';
@@ -3894,7 +3908,9 @@ function parseInput(raw, state){
       let t = O(p1) + ' 2PT pass INTERCEPTED';
       if (rec) t += ' by ' + D(rec);
       let score = null;
-      if (td){ t += ' — returned for 2 — ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 2 }; }
+      // "returned for 2" reads as two YARDS, which is exactly the
+      // confusion the yardage above was removed to avoid. Say the unit.
+      if (td){ t += ' — returned for 2 POINTS — ' + TEAMS[def].name.toUpperCase(); score = { team: def, points: 2 }; }
       // team: def on the return, not off -- last of fourteen branches
       // with this bug, found and fixed the same night it was
       // reported (a blocked field goal returned for a touchdown).
