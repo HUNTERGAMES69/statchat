@@ -14077,6 +14077,40 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     return true;
   }
 
+  // BRINGING A CARD INTO VIEW, ONE RULE FOR BOTH CARDS.
+  // -------------------------------------------------------------------
+  // Two call sites -- the confirm card and the spot nudge -- each had
+  // their own copy of `rect.top < 0 || rect.top > innerHeight * 0.6`, and
+  // both were wrong the same way: .banner is `position:sticky; top:8px;
+  // z-index:50` with a solid fill, so it covers roughly the top 80px of
+  // the page. A card sitting at rect.top = 20 is not off-screen by that
+  // arithmetic and is completely invisible in fact, hidden behind the
+  // banner -- which reads to a scorer as the button having done nothing.
+  //
+  // fitPanel() already measures the banner before scrolling #playPanel;
+  // this is the same rule for the two cards it does not own. Declines to
+  // scroll when the element is genuinely visible, so the ordinary case
+  // where the card is already under the eye stays completely still.
+  //
+  // INSTANT, never smooth: raiseClockPad() positions the pad from a
+  // field's bounding rect a frame or two later, and a smooth scroll is
+  // still travelling when it fires -- the pad would be placed against
+  // where the field was.
+  function bringCardIntoView(el){
+    if (!el) return;
+    try {
+      const r = el.getBoundingClientRect();
+      if (!(r.height > 0)) return;
+      const banner = document.querySelector('.banner');
+      const top = (banner ? banner.getBoundingClientRect().height : 0) + 12;
+      // Clear of the banner, and not so low that the card is half off the
+      // bottom. Anything between those two is left alone.
+      if (r.top >= top && r.top <= window.innerHeight * 0.6) return;
+      const target = Math.max(0, window.scrollY + r.top - top);
+      if (window.scrollTo) window.scrollTo({ top: target, behavior: 'auto' });
+    } catch (e) { /* positioning is a nicety; never let it block a save */ }
+  }
+
   function showConfirm(){
     if (spotIsMissing()) return;
     const val = document.getElementById('code').value;
@@ -14367,14 +14401,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // it fires: the pad would be placed against where the field WAS. This
     // is the same class of fault as the clamp above, arriving by a
     // different route.
-    try {
-      const rect = cc.getBoundingClientRect();
-      const outOfView = rect.top < 0 || rect.top > window.innerHeight * 0.6;
-      if (outOfView){
-        const target = Math.max(0, window.scrollY + rect.top - 12);
-        if (window.scrollTo) window.scrollTo({ top: target, behavior: 'auto' });
-      }
-    } catch (e) { /* positioning is a nicety; never let it block the save */ }
+    bringCardIntoView(cc);
+    // AND AGAIN ONCE THE LAYOUT HAS SETTLED. The measurement above is
+    // taken in the same tick as the tree collapsing and, on the spot-nudge
+    // path, the nudge card being hidden -- roughly 150px of content
+    // disappearing from ABOVE this card, plus whatever the tree was.
+    // raiseClockPad's own attempts run at rAF and at 60ms and can move the
+    // pad over it. One re-check after that settles costs nothing when the
+    // first pass was right, because the rule declines to scroll a card
+    // that is already in view.
+    //
+    // Reported 1 Sep 2026: pressing "Adjust spot" on the nudge left the
+    // confirm card off-screen, with the scorer having to scroll back to it.
+    if (window.requestAnimationFrame){
+      window.requestAnimationFrame(() => bringCardIntoView(cc));
+    }
+    setTimeout(() => bringCardIntoView(cc), 90);
 
   }
 
@@ -14622,13 +14664,10 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // test fixture, and guessing either way was worse than making it
     // moot. Same guard as the confirm card -- only when it is genuinely
     // off-screen, so nothing moves in the ordinary case.
-    try {
-      const r = n.getBoundingClientRect();
-      if (r.height > 0 && (r.top < 0 || r.top > window.innerHeight * 0.6)){
-        const target = Math.max(0, window.scrollY + r.top - 12);
-        if (window.scrollTo) window.scrollTo({ top: target, behavior: 'auto' });
-      }
-    } catch (e) { /* never let positioning break the nudge itself */ }
+    // Same rule as the confirm card, and for the same reason: this card's
+    // own copy of the arithmetic also treated "behind the sticky banner"
+    // as visible.
+    bringCardIntoView(n);
   }
   (function(){
     const n = document.getElementById('spotNudge');
