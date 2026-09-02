@@ -950,7 +950,11 @@ const TIMEOUTS_PER_OT = 1;
           // both.
           const detail = e.detail ? ' <span class="ss-detail">(' + e.detail + ')</span>' : '';
           return '<tr>' +
-            '<td class="ss-qtr">' + (e.quarter >= 5 ? 'OT' : 'Q' + e.quarter) + stampFor(e) + '</td>' +
+            // OT1, OT2, OT3 -- scoringSummary walks the series count and
+            // hands the round out, because every overtime period is
+            // quarter 5 and this could otherwise only ever say "OT".
+            '<td class="ss-qtr">' + (e.otRound ? 'OT' + e.otRound
+              : e.quarter >= 5 ? 'OT' : 'Q' + e.quarter) + stampFor(e) + '</td>' +
             '<td class="ss-team">' + TEAMS[e.team].name + '</td>' +
             '<td>' + e.text + detail + '</td>' +
             // Named, not "7-0". A bare pair leaves a reader working out

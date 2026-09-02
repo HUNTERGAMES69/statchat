@@ -670,10 +670,30 @@ function scoringSummary(playsList){
     return two ? 'two-point good' : 'kick good';
   };
 
+  // WHICH OVERTIME. Added 2 Sep 2026.
+  // --------------------------------------------------------------------
+  // Every overtime period is quarter 5 -- OT2 and OT3 do not get their own
+  // quarter number -- so a row could only ever say "OT", and every reader
+  // downstream said exactly that whatever period it was. scoresummary.html
+  // did worse: it faked an otSeries from the quarter, which is always 5,
+  // so its label read OT1 in the third overtime.
+  //
+  // The round is a property of WHERE IN THE LOG the play sits, so it has
+  // to be walked. Counted exactly as computeState counts it -- on an
+  // otSeriesStart whose forcePossession differs from the series team, so a
+  // manual possession flip is not mistaken for a new series -- and rounds
+  // are two series each: OT1 is series 1 and 2, OT2 is 3 and 4.
+  let otSeries = 0, otSeriesTeam = null;
+  const otRoundNow = () => Math.max(1, Math.ceil(otSeries / 2));
+
   for (let i = 0; i < list.length; i++){
     const p = list[i];
     const e = p.effect || {};
     if (e.setQuarter) walkQuarter = e.setQuarter;
+    if (walkQuarter >= 5 && e.otSeriesStart){
+      if (e.forcePossession !== otSeriesTeam) otSeries++;
+      otSeriesTeam = e.forcePossession;
+    }
     const sc = e.score;
 
     // A TRY IS HANDLED BEFORE THE SCORE CHECK, because a MISSED try
@@ -719,6 +739,9 @@ function scoringSummary(playsList){
         team: sc.team,
         points: sc.points,
         text: stripTeamNames(resolveNumbersInText(p.text, sc.team)),
+        // OT1, OT2, OT3 -- null in regulation, so a reader can test it
+        // rather than test the quarter and rediscover this rule.
+        otRound: (p.quarter || walkQuarter) >= 5 ? otRoundNow() : null,
         // NOT a touchdown, so the next try does not try to fold itself into
         // this row -- there is no try after a defensive conversion, but a
         // row claiming six points it did not score would be wrong anyway.
@@ -760,6 +783,7 @@ function scoringSummary(playsList){
       // rows are otherwise unchanged.
       idx: i,
       quarter: p.quarter || walkQuarter,
+      otRound: (p.quarter || walkQuarter) >= 5 ? otRoundNow() : null,
       team: sc.team,
       points: sc.points,
       text: stripTeamNames(resolveNumbersInText(p.text, sc.team)),
