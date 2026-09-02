@@ -532,14 +532,29 @@ function captureMail(f){
     chk('...and ages a note out after 30 days',
         /MAX_AGE_DAYS\s*=\s*30/.test(dash) && /cutoff/.test(dash));
 
-    // ON AIR IS A SCHEDULE, NOT A STATE. Schools set a game ON AIR on
-    // Monday and leave it all week so the crew can set up, so suppressing
-    // on is_broadcast would have hidden the card for most of the season.
-    // This is the check that would have caught it.
-    const live = dash.match(/const live = \(games \|\| \[\]\)\.some\([^;]*\);/);
-    chk('...and is suppressed only while a game is BEING SCORED',
-        !!live && /in_progress/.test(live[0]) && !/is_broadcast/.test(live[0]),
-        live ? live[0] : '(rule not found)');
+    // NO GAME-STATE SUPPRESSION AT ALL, and asserted as an ABSENCE
+    // because both attempts at one were wrong in the same direction.
+    //
+    // is_broadcast was obviously wrong: schools set a game ON AIR on
+    // Monday and leave it all week, so the card would have been hidden
+    // most of the season.
+    //
+    // in_progress was wrong more quietly, which is worse. A game only
+    // leaves in_progress when somebody finalizes it, so one test game
+    // left open silenced the card for that school FOREVER -- no error,
+    // nothing to notice. Andy hit it within an hour of publishing.
+    //
+    // Anything that reads a game's status or on-air flag to decide
+    // whether to draw this card is that bug coming back.
+    const fnStart = dash.indexOf('async function renderReleaseCard');
+    const fnBody = dash.slice(fnStart, dash.indexOf('\n  }', fnStart));
+    chk('the card is not gated on any game state',
+        fnStart > -1 && !/\bstatus\b/.test(fnBody) && !/is_broadcast/.test(fnBody),
+        fnStart === -1 ? '(function not found)'
+          : (fnBody.match(/[^\n]*(status|is_broadcast)[^\n]*/) || ['(clean)'])[0]);
+    chk('...and takes no games argument, so nothing can be gated on one later',
+        /async function renderReleaseCard\(\)/.test(dash),
+        (dash.match(/async function renderReleaseCard\([^)]*\)/) || [''])[0]);
   }
 
   // ---- the age-out rule, exercised -------------------------------------
