@@ -863,6 +863,28 @@ function scoreStamp(playsList, play){
   }
   if (!ev || typeof ev.absSec !== 'number') return null;
   const quarter = (evPlay && evPlay.quarter) || play.quarter || 1;
+  // NO CLOCK IN OVERTIME. Andy's call, 3 September 2026.
+  // ---------------------------------------------------------------------
+  // Overtime is played in SERIES, not against a running clock, so there is
+  // no game clock for a stamp to report. This file already takes that
+  // position everywhere else: the whole clockEvent block in computeState is
+  // wrapped in `if (state.quarter < 5)` on the stated grounds that any
+  // elapsed time recorded in overtime "is an artefact of the entry".
+  // Stamping one here contradicted that -- and printed it on screen.
+  //
+  // NOT RELABELLED TO 'OT2'. The first proposal was to route the quarter
+  // through quarterLabel() so it read OT2 instead of a bare OT. That fixes
+  // the label and leaves the real fault: a time of day for a period that
+  // has no clock. A wrong number stated precisely is worse than no number.
+  //
+  // RETURNS NULL, which is the house rule for this helper already -- it
+  // returns null for a missing clock and for a clock outside its quarter,
+  // on the same reasoning that "reporting nothing is honest". All six
+  // consumers guard it (`st ? ... : ''`, or `(stamp && stamp.clock) || ''`)
+  // and were checked one by one before this was added, so an overtime
+  // score simply carries no stamp. Which overtime it was is still on the
+  // row: scoringSummary() puts the round on every row as `otRound`.
+  if (quarter >= 5) return null;
   const len = quarterLengthSec;
   const remaining = len - (ev.absSec - (quarter - 1) * len);
   // A clock outside its own quarter means the event and the quarter
@@ -1335,7 +1357,31 @@ function computeBoxScore(playsList){
       const targetCat = r.attempt === 'pass' ? 'receiving'
         : (r.attempt === 'rush' || r.attempt === 'sack') ? 'rushing'
         : (RECEIVE_POS.has(pos) ? 'receiving' : 'rushing');
-      const s = bucket(r.carrier.team, targetCat, r.carrier.num, r.carrier.name);
+      // A FUMBLE BY A PLAYER NOBODY WROTE DOWN GOES TO `Unknown`, NOT `#`.
+      // ------------------------------------------------------------------
+      // The receiver is optional on a completion, and game.html writes the
+      // carrier role on a fumbled completion UNCONDITIONALLY -- carrier.num
+      // comes straight from the receiver field, so it is empty when nobody
+      // caught the number. playerName() then returned the string '#', and
+      // the box score grew a stat line called '#' carrying a fumble.
+      //
+      // THE ROLE CANNOT SIMPLY BE OMITTED UPSTREAM: countTurnovers() reads
+      // r.carrier to charge the turnover, so dropping it would lose the
+      // turnover as well as the fumble. The fix belongs here.
+      //
+      // `Unknown` is the right bucket by the rule this file already sets:
+      // TEAM means "correctly credited to nobody"; Unknown means "this
+      // happened to a player we did not record". An unnamed fumbler is the
+      // second thing, and it lands beside the reception on the same row.
+      //
+      // Tested for emptiness rather than truthiness: JERSEY 0 IS LEGAL, and
+      // a numeric 0 is falsy.
+      const cnum = r.carrier.num;
+      const carrierKnown = (cnum !== undefined && cnum !== null && cnum !== '')
+        || !!r.carrier.name;
+      const s = carrierKnown
+        ? bucket(r.carrier.team, targetCat, r.carrier.num, r.carrier.name)
+        : bucket(r.carrier.team, targetCat, 'UNKNOWN', UNKNOWN_RECEIVER);
       if (s) s.fum = (s.fum||0) + 1;
     }
     // A target is a pass thrown AT someone, caught or not. Counted on
@@ -1356,10 +1402,37 @@ function computeBoxScore(playsList){
       // and the completion simply vanished from the line.
       if (ps){ ps.att = (ps.att||0) + 1; ps.comp = (ps.comp||0) + 1;
         ps.yds = (ps.yds||0) + (r.passer.yards||0); ps.long = Math.max(ps.long||0, r.passer.yards||0); }
-      if (r.receiver){
-        const rs = bucket(r.receiver.team, 'receiving', r.receiver.num, r.receiver.name);
-        if (rs){ rs.rec = (rs.rec||0) + 1; rs.tgt = (rs.tgt||0) + 1;
-          rs.yds = (rs.yds||0) + (r.receiver.yards||0); rs.long = Math.max(rs.long||0, r.receiver.yards||0); }
+      // THE SAME `Unknown` FALLBACK THE ORDINARY COMPLETION PATH HAS.
+      // ------------------------------------------------------------------
+      // This branch used to credit the reception only when the receiver was
+      // named. It is the one completion path that skipped the fallback a few
+      // lines below, and the effect was the failure that fallback exists to
+      // prevent: PASSING YARDS STOPPED EQUALLING RECEIVING YARDS. A 12-yard
+      // completion fumbled with nobody's number written down counted 12
+      // passing yards and 0 receiving yards, silently.
+      //
+      // Reachable, not theoretical: flagNoReceiver() only WARNS, and the
+      // parser accepts '?' as the receiver token on purpose.
+      //
+      // `tgt` moves with it for the same reason it does above -- a ball was
+      // thrown at somebody, and leaving it out makes total targets disagree
+      // with total attempts.
+      //
+      // DELIBERATELY NO `td` CREDIT, and it is not an omission to be tidied
+      // up later. effect.td is set in exactly two places in the application
+      // -- an ordinary play from scrimmage and a fake punt -- and NO fumble
+      // path sets it, so `if (e.td)` here would be unreachable. Where a
+      // fumble does score, the points travel on effect.score and belong to
+      // the recovering player or the defense, never to the receiver.
+      const rs = r.receiver
+        ? bucket(r.receiver.team, 'receiving', r.receiver.num, r.receiver.name)
+        : bucket(r.passer.team, 'receiving', 'UNKNOWN', UNKNOWN_RECEIVER);
+      if (rs){
+        rs.rec = (rs.rec||0) + 1;
+        rs.tgt = (rs.tgt||0) + 1;
+        const y = r.receiver ? (r.receiver.yards||0) : (r.passer.yards||0);
+        rs.yds = (rs.yds||0) + y;
+        rs.long = Math.max(rs.long||0, y);
       }
     }
     if (type === 'incomplete' || type === 'int'){

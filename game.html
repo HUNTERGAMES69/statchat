@@ -313,6 +313,18 @@
   .floating-actions button { box-shadow:0 2px 8px rgba(0,0,0,0.2); }
   #playPanel, #utilPanel { background:#20272f; border-radius:8px; padding:12px 14px; margin-top:10px; scroll-margin-top:70px; }
   #confirmCard { background:#20272f; border-radius:8px; padding:12px 14px; margin-top:8px; }
+  /* The save button when it is about to store a touchdown with nobody
+     credited. Amber rather than red: this is a legitimate save the scorer
+     may well mean, not an error -- it just must not be pressed by reflex.
+     Literal #ffc72c, not var(--sc-amber): this file's own amber fallbacks
+     disagree with the token and resolve to a duller shade. */
+  #saveBtn.warnAction { background:#ffc72c; color:#20272f; border-color:#ffc72c; }
+  /* NO :hover VARIANT, deliberately. The first attempt lightened the amber
+     on hover and contrast_check refused it -- a converted (dark) page may
+     not carry a background that light. The button already says what it is
+     about to do, so a hover shade adds nothing the label does not, and
+     every extra colour on a dark page is one more thing that check can
+     legitimately fail on later. */
 
   /* ===================================================================
      RAIL LAYOUT. Promoted from gametest3.html on 22 Aug 2026; the old
@@ -14635,6 +14647,47 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // able to save the play and its yardage.
       if (pending.warnNoReceiver){
         warnings.push('NO RECEIVER SELECTED — this completion will be saved with the yardage but no receiving credit. Go back and pick a receiver, or save it as it stands.');
+      }
+      // A TOUCHDOWN WITH NO RECEIVER MAKES THE SCORER READ THE BUTTON.
+      // ------------------------------------------------------------------
+      // The receiver is optional everywhere and stays optional here: the
+      // save is never refused. What changes is that on a TOUCHDOWN the
+      // button stops saying "Save" and says what it is about to do, so
+      // saving an unattributed touchdown is a deliberate act rather than
+      // the default one.
+      //
+      // WHY A TOUCHDOWN AND NOT EVERY COMPLETION. The reason the receiver
+      // is optional is a deep ball -- ball in the air, bodies everywhere,
+      // number unreadable. A touchdown is the opposite of that situation:
+      // the receiver is standing in the end zone holding the ball, the PA
+      // is announcing him, and the clock is stopped for the try. And the
+      // cost of missing it is highest here -- it reaches the scoring
+      // summary, the PUBLIC RECAP that goes to local media, and the season
+      // leaders, where "Unknown" is the worst thing this app can print.
+      //
+      // WHY NOT REFUSE IT OUTRIGHT. A scorer who genuinely cannot identify
+      // the receiver would then either be unable to record the touchdown
+      // at all, or would INVENT A NUMBER. An invented number puts a real
+      // player's name on a touchdown he did not catch and nothing
+      // downstream can ever detect it. "Unknown" is honest; a wrong name is
+      // a lie that looks like data. It also protects the rule the whole
+      // offline path is built on: nothing stops a scorer entering plays.
+      //
+      // NOT EXTENDED TO TRIES. A two-point conversion generates no
+      // receiving statistic in either rule book, so demanding a receiver
+      // there would ask for data the app deliberately discards.
+      //
+      // SET ON BOTH BRANCHES, ALWAYS. The confirm card is reused for every
+      // play; a label changed on one play and not reset on the next is how
+      // a warning ends up on an unrelated touchdown.
+      {
+        const saveBtn = document.getElementById('saveBtn');
+        if (saveBtn){
+          const tdNoReceiver = !!(pending.warnNoReceiver &&
+                                  pending.effect && pending.effect.td);
+          saveBtn.textContent = tdNoReceiver ? 'Save with NO RECEIVER' : 'Save';
+          saveBtn.classList.toggle('warnAction', tdNoReceiver);
+        }
       }
       // Built as nodes with textContent rather than an innerHTML string.
       // Every warning here is assembled from numbers and literals today,
