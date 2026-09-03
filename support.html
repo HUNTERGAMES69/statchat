@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- NOINDEX, same reasoning as terms.html. The page is public and shareable
+     -- somebody should be able to send this link to a colleague who is
+     stuck -- but nobody searches for a support form, and a result for one
+     is noise against the pages that are meant to be found. Crawl stays
+     allowed in robots.txt, which is what lets a crawler read this tag at
+     all: a Disallow with no crawl behind it is how a URL ends up indexed
+     as a bare title anyway. -->
+<meta name="robots" content="noindex">
+<link rel="canonical" href="https://www.statchat.co/support.html">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StatChat — Get support</title>
+<meta name="description" content="Something not working? Tell us what is happening and where to reply, and we will come back to you.">
+
+<!-- WHY THIS PAGE IS NOT THE SIGNED-IN FORM.
+     account.html has a feedback form that knows who you are, which school
+     you belong to and how to reach you, all from the session. This page
+     exists for the case that one cannot serve: a customer who cannot sign
+     in. Sending them to a login screen to report that they cannot log in
+     is the worst thing this site could do.
+     So it asks for the one thing it genuinely cannot know -- somewhere to
+     reply -- and nothing else. No name, no school, no phone number. A
+     person whose Friday night has gone wrong is not filling in a form. -->
+
+<link rel="icon" href="favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    color-scheme:dark;
+    --ink:#10141a; --panel:#191f27; --raise:#20272f; --edge:#2b333d;
+    --paper:#eef1f4; --mute:#8d99a6; --amber:#ffc72c;
+    --brand:#7cb518; --brand-hi:#a3d93f;
+    --display:"Barlow Condensed",Impact,"Arial Narrow",sans-serif;
+    --body:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--body);
+       font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:640px;margin:0 auto;padding-left:24px;padding-right:24px}
+  a{color:var(--amber)}
+  a:hover{color:#fff}
+  :focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:2px}
+
+  header{padding:56px 0 26px;border-bottom:1px solid var(--edge)}
+  .eyebrow{font-family:var(--display);font-size:14px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--amber);margin:0 0 10px}
+  h1{font-family:var(--display);font-size:clamp(38px,8vw,58px);line-height:.98;
+     margin:0 0 14px;font-weight:700;text-transform:uppercase}
+  .lede{margin:0;font-size:18px;color:#cfd6dd;max-width:56ch}
+
+  form{margin:30px 0 0}
+  label{display:block;font-size:14px;color:var(--mute);margin-bottom:18px}
+  input,textarea{display:block;width:100%;margin-top:6px;padding:11px 12px;
+    background:#0b0f14;color:var(--paper);border:1px solid #3d4854;border-radius:6px;
+    font-family:inherit;font-size:16px;box-shadow:inset 0 1px 3px rgba(0,0,0,.55)}
+  textarea{min-height:160px;resize:vertical;line-height:1.5}
+  input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus{
+    -webkit-text-fill-color:var(--paper);
+    -webkit-box-shadow:0 0 0 1000px #0b0f14 inset, inset 0 1px 3px rgba(0,0,0,.55);
+    caret-color:var(--paper);transition:background-color 9999s ease-out 0s}
+  .req{color:var(--amber)}
+
+  /* HONEYPOT. Hidden from people, ignored by them, filled in by anything
+     that fills every field it finds. Not display:none -- some bots skip
+     those; this is off-canvas and out of the tab order instead. Same trap
+     the brochure form uses, and the endpoint FLAGS a hit rather than
+     rejecting it. */
+  .trap{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
+
+  /* THE SEND BUTTON USES --brand-hi, NOT --brand, and the reason is worth
+     recording. This page declares color-scheme:dark because it has form
+     fields, and that is the marker tests/contrast_check.js uses to decide
+     a page is "converted" -- so unlike index.html and the other brochure
+     pages, this one IS audited.
+     That audit only pairs a fill with its ink when the fill's luminance is
+     above 0.4. --brand (#7cb518) sits at 0.367, just under, so dark ink on
+     it is measured against the PAGE instead and reads 1.13:1. --brand-hi
+     (#a3d93f) is above the line, the pairing applies, and the ink is judged
+     where it actually sits. Same green family, one step lighter.
+     NO :hover VARIANT, and that is deliberate rather than forgotten. The
+     first attempt lightened the green on hover; a bright fill with no ink
+     of its own was refused, and then the lighter shade was refused again
+     for being a light background on a converted page. This is the second
+     time in this project a hover shade has been talked out of existence by
+     that check, and the check is right: a raised control on a dark page is
+     already the brightest thing on it, and lifting it further only pushes
+     it toward white. The focus ring and the cursor carry the affordance. */
+  button{font-family:var(--display);text-transform:uppercase;letter-spacing:.12em;
+    font-size:14px;font-weight:700;padding:13px 30px;border-radius:3px;
+    background:var(--brand-hi);color:#0e1408;border:1px solid transparent;cursor:pointer}
+  button:disabled{background:#2a3340;color:#8d99a6;cursor:default}
+
+  .msg{font-size:15px;padding:12px 14px;border-radius:6px;margin:0 0 18px}
+  .msg.error{background:#2a1519;color:#ff8fa3;border:1px solid #4a2028}
+  .alt{margin-top:26px;padding-top:18px;border-top:1px solid var(--edge);
+    font-size:14px;color:var(--mute)}
+
+  .done{margin:30px 0 0;background:var(--raise);border:1px solid var(--edge);
+    border-left:3px solid var(--brand);border-radius:0 6px 6px 0;padding:20px 22px}
+  .done h2{font-family:var(--display);font-size:26px;text-transform:uppercase;
+    margin:0 0 8px;font-weight:600}
+  .done p:last-child{margin-bottom:0}
+  .hidden{display:none}
+
+  footer{margin-top:56px;padding:24px 0 40px;border-top:1px solid var(--edge)}
+  .foot{font-size:12px;color:var(--mute);line-height:1.5}
+  .backlinks{margin-bottom:16px;font-size:14px}
+  .backlinks a{margin-right:18px;text-decoration:none}
+
+  @media (max-width:640px){ .wrap{padding-left:18px;padding-right:18px} }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">StatChat</p>
+  <h1>Get support</h1>
+  <p class="lede">Something not working? Tell us what is happening and where to reach you.
+  That is all we need &mdash; we will come back to you.</p>
+</header>
+
+<div id="formArea">
+  <form id="supportForm" novalidate>
+    <div id="msg"></div>
+
+    <label for="email">Your email <span class="req">*</span>
+      <input type="email" id="email" name="email" autocomplete="email"
+             maxlength="254" inputmode="email" placeholder="So we can write back">
+    </label>
+
+    <label for="message">What is happening? <span class="req">*</span>
+      <textarea id="message" name="message" maxlength="4000"
+        placeholder="What you were trying to do and what went wrong. If it is happening right now during a game, say so."></textarea>
+    </label>
+
+    <div class="trap" aria-hidden="true">
+      <label>Website<input type="text" id="website" name="website" tabindex="-1" autocomplete="off"></label>
+    </div>
+
+    <button type="submit" id="sendBtn">Send</button>
+  </form>
+
+  <p class="alt">Would rather use your own email?
+    <a href="mailto:support@statchat.co">support@statchat.co</a> reaches the same place.<br>
+    Already signed in? The form on your
+    <a href="account.html">account page</a> tells us which school you are with automatically.</p>
+</div>
+
+<div id="doneArea" class="done hidden">
+  <h2>Got it</h2>
+  <p>Your message is with us and we will reply to <strong id="doneEmail"></strong>.</p>
+  <p>If this is stopping a game right now, reply to that address and say so &mdash; it
+     comes straight back to the same place.</p>
+  <p style="margin-top:14px"><a href="/">&larr; Back to StatChat</a></p>
+</div>
+
+<footer>
+  <div class="backlinks">
+    <a href="/">StatChat</a>
+    <a href="statrules.html">How stats are counted</a>
+    <a href="pricing.html">Pricing</a>
+    <a href="terms.html">Terms of Service</a>
+  </div>
+  <p class="foot">&copy; 2026 StatChat. All rights reserved. Unauthorized copying,
+  modification or distribution of this software or its documentation is prohibited.</p>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var form = $('supportForm');
+
+  function showError(text){
+    $('msg').innerHTML = '<div class="msg error">' + text + '</div>';
+  }
+
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    $('msg').innerHTML = '';
+
+    var email = $('email').value.trim();
+    var message = $('message').value.trim();
+
+    // Checked here AND on the server, deliberately. Two different
+    // definitions of a valid submission is how a form accepts something
+    // the server then refuses.
+    if (!email){ showError('Please give an email address so we can reply.'); $('email').focus(); return; }
+    if (!message){ showError('Please tell us what is happening.'); $('message').focus(); return; }
+
+    var btn = $('sendBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    try {
+      var r = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: 'support',
+          email: email,
+          message: message,
+          website: $('website').value
+        })
+      });
+      var out = await r.json().catch(function(){ return {}; });
+
+      if (!r.ok || !out.ok){
+        // WHATEVER THEY TYPED STAYS ON SCREEN. Somebody describing a
+        // problem mid-game will not type it twice.
+        showError((out && out.error) ||
+          'That did not go through. Nothing was lost — try again, or email ' +
+          '<a href="mailto:support@statchat.co">support@statchat.co</a>.');
+        return;
+      }
+
+      $('doneEmail').textContent = email;
+      $('formArea').classList.add('hidden');
+      $('doneArea').classList.remove('hidden');
+      $('doneArea').scrollIntoView({ block: 'nearest' });
+    } catch (err) {
+      showError('Could not reach us just now. Nothing was lost — try again, or email ' +
+        '<a href="mailto:support@statchat.co">support@statchat.co</a>.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Send';
+    }
+  });
+})();
+</script>
+</body>
+</html>
