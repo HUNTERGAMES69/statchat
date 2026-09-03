@@ -80,6 +80,20 @@ module.exports = async (req, res) => {
   // the row is still there to be found rather than silently discarded.
   const trapped = clean(body.website, 200).length > 0;
 
+  // TWO KINDS OF SUBMISSION THROUGH ONE ENDPOINT, added 3 September 2026.
+  //
+  // 'support' comes from support.html and asks for an email address and a
+  // description, nothing else. A customer whose password has stopped
+  // working at 7pm on a Friday should not be made to fill in a sales form
+  // to say so, and their school is not what we need to help them -- being
+  // able to write back is.
+  //
+  // Anything else is the brochure enquiry, unchanged: name, email and
+  // organization all required, exactly as before. Read from the body but
+  // never trusted from it -- the routing and the required-field rules are
+  // both decided here.
+  const isSupport = body.topic === 'support';
+
   const name = clean(body.name, MAX.name);
   const email = clean(body.email, MAX.email).toLowerCase();
   const organization = clean(body.organization, MAX.organization);
@@ -92,7 +106,17 @@ module.exports = async (req, res) => {
   // different definitions of a valid submission is how a form accepts
   // something the server then refuses -- or, worse, how a direct POST that
   // never saw the form writes a lead nobody can qualify.
-  if (!name || !email || !organization) {
+  //
+  // A SUPPORT REQUEST NEEDS TWO THINGS: somewhere to reply, and something
+  // to reply about. Name and organization stay optional on that path.
+  if (isSupport) {
+    if (!email || !message) {
+      res.status(400).json({ ok: false, error: !email
+        ? 'Please give an email address so we can reply.'
+        : 'Please describe what is happening.' });
+      return;
+    }
+  } else if (!name || !email || !organization) {
     res.status(400).json({ ok: false, error: !organization && name && email
       ? 'Please tell us your school, team or production company.'
       : 'Please give your name and email.' });
@@ -109,26 +133,36 @@ module.exports = async (req, res) => {
     // Configuration failure, not the sender's fault. Say so plainly and
     // log it, rather than reporting a fake success and losing the lead.
     console.error('contact: SUPABASE_URL or SUPABASE_SECRET_KEY missing');
-    res.status(500).json({ ok: false, error: 'Could not send that just now. Please email signup@statchat.co.' });
+    res.status(500).json({ ok: false, error: 'Could not send that just now. Please email ' + (isSupport ? 'support' : 'signup') + '@statchat.co.' });
     return;
   }
 
   try {
     const supabase = createClient(url, key, { auth: { persistSession: false } });
     const { error } = await supabase.from('leads').insert({
-      name, email, organization: organization || null, message: message || null,
-      source: clean(req.headers['referer'] || req.headers['referrer'] || '', 300) || null,
+      // leads.name is NOT NULL and a support request does not ask for one,
+      // so the email stands in. It is the only identifier we have and it
+      // is the one that matters, rather than an invented placeholder that
+      // reads like a real name in a list.
+      name: name || email,
+      email, organization: organization || null, message: message || null,
+      // SUPPORT ROWS ARE FINDABLE, which is the whole reason for putting
+      // them in the same table rather than a new one:
+      //   select * from leads where source = 'support' and not handled;
+      // The enquiry path keeps writing the referer, unchanged.
+      source: isSupport ? 'support'
+        : (clean(req.headers['referer'] || req.headers['referrer'] || '', 300) || null),
       user_agent: clean(req.headers['user-agent'] || '', 300) || null,
       flagged: trapped
     });
     if (error) {
       console.error('contact: insert failed:', error.message);
-      res.status(500).json({ ok: false, error: 'Could not send that just now. Please email signup@statchat.co.' });
+      res.status(500).json({ ok: false, error: 'Could not send that just now. Please email ' + (isSupport ? 'support' : 'signup') + '@statchat.co.' });
       return;
     }
   } catch (e) {
     console.error('contact: unexpected:', e && e.message);
-    res.status(500).json({ ok: false, error: 'Could not send that just now. Please email signup@statchat.co.' });
+    res.status(500).json({ ok: false, error: 'Could not send that just now. Please email ' + (isSupport ? 'support' : 'signup') + '@statchat.co.' });
     return;
   }
 
@@ -142,7 +176,13 @@ module.exports = async (req, res) => {
   // here means a change of address is a code deploy.
   try {
     const resendKey = process.env.RESEND_API_KEY;
-    const to   = process.env.LEAD_NOTIFY_TO   || 'signup@statchat.co';
+    // WHERE IT LANDS, decided by the kind of submission. Both still come
+    // from the environment first, for the reason the comment above gives:
+    // the sending domain has to be one Resend has verified, and an address
+    // hardcoded here makes a change of address a code deploy.
+    const to   = isSupport
+      ? (process.env.SUPPORT_NOTIFY_TO || 'support@statchat.co')
+      : (process.env.LEAD_NOTIFY_TO    || 'signup@statchat.co');
     const from = process.env.LEAD_NOTIFY_FROM || 'StatChat <noreply@statchat.co>';
     if (resendKey) {
       const esc = (v) => String(v == null ? '' : v)
@@ -156,11 +196,17 @@ module.exports = async (req, res) => {
           // answer the person who filled the form, not bounce off the
           // no-reply address this was sent from.
           reply_to: email,
-          subject: 'StatChat enquiry — ' + (organization || name) + (trapped ? ' [flagged]' : ''),
+          subject: (isSupport ? 'StatChat support — ' + email
+                              : 'StatChat enquiry — ' + (organization || name))
+                   + (trapped ? ' [flagged]' : ''),
           html:
             (trapped ? '<p><strong>Flagged by the spam trap.</strong> Filled the hidden field. ' +
                        'Saved and shown here anyway in case it is a real person.</p>' : '') +
-            '<p><strong>' + esc(name) + '</strong> &lt;' + esc(email) + '&gt;</p>' +
+            // A support request has no name to lead with, so the address
+            // is the heading. Repeating the email as a fake name would
+            // read like a person and look wrong in a mail client.
+            (isSupport ? '<p><strong>' + esc(email) + '</strong></p>'
+                       : '<p><strong>' + esc(name) + '</strong> &lt;' + esc(email) + '&gt;</p>') +
             (organization ? '<p>' + esc(organization) + '</p>' : '') +
             (message ? '<p>' + esc(message).replace(/\n/g, '<br>') + '</p>' : '<p><em>No message.</em></p>') +
             '<hr><p style="color:#888;font-size:12px">From ' + esc(req.headers['referer'] || 'the site') + '</p>'
@@ -168,7 +214,7 @@ module.exports = async (req, res) => {
       });
       if (!r.ok) console.error('contact: resend returned', r.status, await r.text().catch(() => ''));
     } else {
-      console.warn('contact: RESEND_API_KEY not set — lead saved, nobody notified');
+      console.warn('contact: RESEND_API_KEY not set — row saved, nobody notified');
     }
   } catch (e) {
     console.error('contact: notify failed (lead IS saved):', e && e.message);
