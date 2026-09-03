@@ -187,14 +187,30 @@ select 'kind is constrained to bug or feature',
 
 union all
 
-select 'nothing outside public.feedback was touched',
-       case when count(*) = 0 then 'PASS' else 'FAIL' end,
-       count(*)
-  from information_schema.role_table_grants
- where table_schema = 'public'
-   and table_name in ('games', 'plays', 'profiles', 'tenants')
-   and grantee = 'anon'
-   and privilege_type in ('INSERT', 'UPDATE', 'DELETE')
+-- THE CHECK THAT USED TO BE HERE WAS WRONG, and it is worth recording why
+-- rather than quietly deleting it. It was labelled "nothing outside
+-- public.feedback was touched" and asked whether `anon` holds
+-- INSERT/UPDATE/DELETE on games, plays, profiles and tenants. It does, and
+-- has since those tables were created: that is Supabase's default
+-- privilege grant on public, with RLS as the actual gate. So it returned
+-- FAIL, 12 -- four tables times three privileges -- on a migration that
+-- granted nothing to anyone.
+--
+-- The label and the query were asking different questions. Postgres keeps
+-- no DDL timestamp, so "did this migration touch anything else" cannot be
+-- answered from the catalogs at all; the way to establish it is to read
+-- the statements, every one of which names public.feedback.
+--
+-- Replaced with a check that the query can actually support: the default
+-- grants that DO land on a new table were taken off this one. Row 4 above
+-- proves the revoke worked; this proves it was needed, which is the same
+-- fact from the other side.
+select 'RLS is on for the four core tables, so their default grants are inert',
+       case when count(*) filter (where relrowsecurity) = 4 then 'PASS' else 'FAIL' end,
+       count(*) filter (where relrowsecurity)
+  from pg_class
+ where oid in (to_regclass('public.games'), to_regclass('public.plays'),
+               to_regclass('public.profiles'), to_regclass('public.tenants'))
 
 union all
 
