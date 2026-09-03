@@ -1515,10 +1515,10 @@ function computeBoxScore(playsList){
     // it away: only int, sack and fumRec were ever counted, so an ordinary
     // tackle produced no stat at all.
     //
-    // Counted on any SCRIMMAGE play with a credited defender. A sack is a
-    // tackle as well as a sack, which is how stat sheets treat it. Kicks
-    // and returns are excluded: the credit field means something different
-    // there, and lumping them in would inflate the number quietly.
+    // Counted on any SCRIMMAGE play with a credited defender, and since 30
+    // August 2026 on kicks and returns as well -- see KICKS AND RETURNS
+    // below for what had to change first. A sack is a tackle as well as a
+    // sack, which is how stat sheets treat it.
     //
     // SINGLE NUMBER, no solo/assisted split. The panel takes ONE tackler,
     // so every tackle is implicitly solo today; splitting would need a
@@ -1564,13 +1564,12 @@ function computeBoxScore(playsList){
     //
     // The recovery itself is untouched: fumRec is credited whether or not
     // anyone is named, including to a TEAM bucket.
-    // KICKS AND RETURNS ADDED 30 August 2026, which the comment above
-    // says they are excluded from -- that paragraph described the world
-    // before `roles.returner` existed. Back then `defense` on a kicking
-    // play WAS the returner, so counting those types would have credited
-    // the man being tackled. All three entry paths now write the returner
-    // to `roles.returner` and leave `defense` for the cover tackler, so
-    // the credit lands on the right player on the right team.
+    // KICKS AND RETURNS ADDED 30 August 2026. They were excluded before
+    // that, and rightly so: until `roles.returner` existed, `defense` on a
+    // kicking play WAS the returner, so counting those types would have
+    // credited the man being tackled. All three entry paths now write the
+    // returner to `roles.returner` and leave `defense` for the cover
+    // tackler, so the credit lands on the right player on the right team.
     //
     // A cover tackle is often the most notable thing a special-teams
     // player does all night, and until now it could not be recorded at
@@ -1757,7 +1756,8 @@ function computeBoxScore(playsList){
         if (r.kicker.result === 'b') s.patBlocked = (s.patBlocked||0) + 1;
       }
     }
-    // RETURNS — kickoff and punt COMBINED into one line (Andy's call).
+    // RETURNS — kickoff and punt kept SEPARATE (Andy's call, 23 Aug --
+    // combined first, split the same day; see SPLIT BY KIND below).
     // ---------------------------------------------------------------------
     // Read from `roles.returner`, a role of its own rather than the
     // `defense` key returners used to share with tacklers, interceptors
