@@ -1473,7 +1473,9 @@ function computeBoxScore(playsList){
       // already entered reconciles the moment this ships.
       //
       // Distinct from the TEAM bucket in rushing, which means "correctly
-      // credited to nobody, by rule" -- a sack, a kneel, a bad snap.
+      // credited to nobody, by rule" -- a bad snap, and for now a kneel.
+      // NOT a sack any more: NFHS charges that to the passer's own rushing
+      // line, and this file does too as of 3 September 2026.
       // UNKNOWN means "this happened to a player we did not record", and
       // conflating the two would hide a data-entry gap behind a rule.
       const rcv = r.receiver
@@ -1489,18 +1491,50 @@ function computeBoxScore(playsList){
       }
     }
     // A fumble that ended a SACK is still a sack: the quarterback is
-    // charged, and NFHS still books the yardage as a team rushing loss.
+    // charged, and the yardage is a rushing loss on his own line.
+    //
+    // SACK YARDAGE IS CHARGED TO THE PASSER, not to a TEAM row. Corrected
+    // 3 September 2026, after this file had asserted the opposite since it
+    // was written. NFHS Statisticians' Manual, section 2:
+    //
+    //   "Any loss by a player apparently intending to pass, but downed
+    //    behind the LOS, is recorded as 'Loss by Rushing.' The player is
+    //    not a passer until the player has thrown the ball, since a player
+    //    retains at all times the option of running."
+    //
+    //   "Whenever a player attempting to pass is tackled behind the LOS,
+    //    that player is charged with a 'time carried' and minus rushing
+    //    yards."
+    //
+    // THAT PLAYER. NCAA is the same -- it is why a college quarterback's
+    // official rushing line carries his sacks. The NFL is the outlier, and
+    // it takes the yardage out of TEAM PASSING, which is not what this file
+    // used to claim either. Both halves of that sentence were wrong.
+    //
+    // TEAM RUSHING IS UNCHANGED BY THIS. The same attempt and the same loss
+    // move from one row to another inside the same team, so every team
+    // total, tile and feed reads exactly as it did before. What changes is
+    // the quarterback: he now carries his own sacks, the way an official
+    // worksheet and MaxPreps show him.
+    //
+    // The TEAM row is still correct for a BAD SNAP -- the manual says so in
+    // as many words -- and that path is untouched. Only the sack and the
+    // kneel were ever stretched onto it.
+    //
+    // `long` is deliberately NOT updated. A sack is a loss, longest rush is
+    // floored at zero, and a lost-yardage play has no business competing
+    // for it.
+    //
+    // SIGN: the panel stores a sack loss as a POSITIVE magnitude -- seven
+    // yards lost is `passer.yards = 7` -- so this SUBTRACTS, exactly as the
+    // TEAM row did. Do not "fix" it into an addition.
     if (r.passer && (type === 'sack' || (type === 'fumble' && r.attempt === 'sack'))){
       const s = bucket(r.passer.team, 'passing', r.passer.num, r.passer.name);
       if (s) s.sacked = (s.sacked||0) + 1;
-      // NFHS charges sack yardage to the team as a rushing loss. Doing
-      // it here rather than as a subtraction in each page's totals
-      // means the rushing rows actually add up to the rushing tile,
-      // and every surface gets the same numbers from one place.
-      const ts = bucket(r.passer.team, 'rushing', 'TEAM');
-      if (ts){
-        ts.att = (ts.att||0) + 1;
-        ts.yds = (ts.yds||0) - (r.passer.yards||0);
+      const rs = bucket(r.passer.team, 'rushing', r.passer.num, r.passer.name);
+      if (rs){
+        rs.att = (rs.att||0) + 1;
+        rs.yds = (rs.yds||0) - (r.passer.yards||0);
       }
     }
     if (r.passer && type === 'int'){
@@ -2161,13 +2195,22 @@ function auditBoxScore(playsList){
       put(r.passer.team, 'passing', key('passing', r.passer), 'att', 1);
       put(r.passer.team, 'passing', key('passing', r.passer), 'intThrown', 1);
     }
-    // A sack is charged to TEAM rushing, not to the quarterback's passing --
-    // NFHS, and the difference from NFL convention that catches people out.
-    // The panel sends a POSITIVE loss, so the engine negates it.
+    // A sack is a rushing loss on the PASSER's own line. NFHS charges "that
+    // player" a time carried and minus rushing yards; NCAA agrees; the NFL
+    // is the book that takes it out of team passing instead. Corrected here
+    // and in computeBoxScore on 3 September 2026 -- the long note there
+    // carries the manual's own wording.
+    //
+    // This is a deliberate re-implementation of the same rule rather than a
+    // shared helper: the value of this function is that it DISAGREES when
+    // one of the two is wrong. Changing one and not the other is precisely
+    // the fault it exists to catch.
+    //
+    // The panel sends a POSITIVE loss, so this negates it.
     if (r.passer && (t === 'sack' || (t === 'fumble' && r.attempt === 'sack'))){
       put(r.passer.team, 'passing', key('passing', r.passer), 'sacked', 1);
-      put(r.passer.team, 'rushing', 'TEAM', 'att', 1);
-      put(r.passer.team, 'rushing', 'TEAM', 'yds', -(r.passer.yards || 0));
+      put(r.passer.team, 'rushing', key('rushing', r.passer), 'att', 1);
+      put(r.passer.team, 'rushing', key('rushing', r.passer), 'yds', -(r.passer.yards || 0));
     }
 
     // --- receiving. rec only on a catch; tgt on a catch, an incompletion
