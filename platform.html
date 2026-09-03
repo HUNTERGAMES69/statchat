@@ -199,6 +199,22 @@
      above. */
   #usersBody, #tenantsBody, #gamesBody, #recoveryBody, #delTenantsBody { overflow-x:auto; }
 
+  /* A GROUP HEADING INSIDE A TABLE -- the school's name over its own rows,
+     in the users and live-games lists. These five declarations lived twice
+     as an inline style attribute on the <td>, once in each renderer. They
+     are here because an inline style cannot be overridden by a media query
+     at any specificity, and the phone layout has to reset the padding.
+     Identical output above the breakpoint; two copies became one. */
+  tr.grp td { padding:18px 10px 6px; border-bottom:none; font-size:14px;
+              font-weight:700; color:var(--sc-ink-soft, #3a3a3a); }
+  tr.grp .n { font-weight:400; color:#6b7680; }
+
+  /* THE USERS ACTION CELL. Was style="white-space:nowrap" inline, for the
+     same reason and with the same problem: on a phone those three or four
+     buttons have to be allowed to wrap, and an inline rule cannot be told
+     to. Same value above the breakpoint. */
+  .uacts { white-space:nowrap; }
+
   .uact { font-size:12px; padding:5px 9px; border-radius:5px; border:1px solid #ccc;
           background:#fff; color:#1a1a2e; cursor:pointer; margin-left:5px;
           font-weight:600; }
@@ -246,6 +262,135 @@
   .sc-copyright { margin:26px 0 0; padding:0 2px 4px; font-size:12px;
     line-height:1.5; color:#6b7680; opacity:.85;
     text-align:center; max-width:760px; margin-left:auto; margin-right:auto; }
+  /* ======================================================================
+     PHONES. Added 3 September 2026.
+     ----------------------------------------------------------------------
+     Until now this page had no mobile rules at all -- its only media
+     queries were a DESKTOP widening at 1240px, @media print, and the one
+     inside the Numbers screenshot card, which is why Numbers was the only
+     part of the console that read properly on a phone.
+
+     Measured at 390px with 17 schools and 35 accounts on screen: the
+     tenants table was 611px inside a 322px card and the users table 862px,
+     so 47% and 63% of each was off to the right -- and the part off to the
+     right was the actions column in both. The overflow-x backstop above
+     kept it inside the card, which is not the same as being usable: you
+     could see who a school was and not reach the menu that does anything
+     to it.
+
+     SO THE ROWS STOP BEING ROWS. A table is a shape for comparing values
+     down a column, and a 320px screen cannot show a column and its
+     neighbour at once -- there is nothing left to compare. Below 700px
+     each <tr> becomes a card: the name across the top, the facts in a
+     two-up grid underneath with their column headings as labels, and the
+     controls on their own line at the bottom where a thumb can reach them.
+     The headings move into the cells because a heading row that has
+     scrolled out of sight is worse than no heading at all.
+
+     700px, NOT 560px: the tables need roughly 611px and 862px, so a
+     breakpoint below that leaves a tablet in exactly the state being fixed.
+     A PC is never below it -- verified pixel-identical at 1024, 1100, 1280
+     and 1440, and at 768 -- so nothing here can reach a desktop.
+     ====================================================================== */
+  @media (max-width:700px){
+    /* 8px back from the gutters, which is a whole extra column of digits. */
+    .wrap { padding:16px 12px 48px; }
+    h1 { font-size:19px; }
+
+    /* THE BACKSTOP IS TURNED OFF, not left on. Nothing inside these is
+       wide any more, and a scroll container clips what overflows it in
+       BOTH axes -- which would cut off the row menu, the one thing this
+       whole layout exists to put back within reach. */
+    #usersBody, #tenantsBody, #gamesBody, #recoveryBody, #delTenantsBody {
+      overflow-x:visible;
+    }
+
+    #usersBody table, #tenantsBody table, #gamesBody table,
+    #recoveryBody table, #delTenantsBody table,
+    #usersBody tbody, #tenantsBody tbody, #gamesBody tbody,
+    #recoveryBody tbody, #delTenantsBody tbody { display:block; width:auto; }
+
+    /* The heading row has nothing left to head. */
+    #usersBody tr.hdr, #tenantsBody tr.hdr, #gamesBody tr.hdr,
+    #recoveryBody tr.hdr, #delTenantsBody tr.hdr { display:none; }
+
+    #usersBody tr, #tenantsBody tr, #gamesBody tr,
+    #recoveryBody tr, #delTenantsBody tr {
+      display:grid; grid-template-columns:1fr 1fr; gap:10px 14px;
+      border:1px solid var(--sc-rule, #e6e6e6);
+      border-radius:var(--sc-radius-sm, 6px);
+      padding:13px 14px; margin:0 0 10px; background:#fff;
+    }
+    #usersBody td, #tenantsBody td, #gamesBody td,
+    #recoveryBody td, #delTenantsBody td {
+      display:block; padding:0; border-bottom:none; min-width:0;
+      overflow-wrap:anywhere;
+    }
+    /* .right is a table alignment. In a card the values read from the left
+       like everything else; only the control strip keeps its edge. */
+    #usersBody td.right, #tenantsBody td.right, #gamesBody td.right,
+    #recoveryBody td.right, #delTenantsBody td.right { text-align:left; }
+
+    /* A school heading is not a card. */
+    #usersBody tr.grp, #gamesBody tr.grp {
+      display:block; border:none; background:none; padding:0; margin:14px 0 8px;
+    }
+    #usersBody tr.grp:first-child, #gamesBody tr.grp:first-child { margin-top:0; }
+    tr.grp td { padding:0; font-size:13px; text-transform:uppercase;
+                letter-spacing:.06em; }
+
+    /* THE COLUMN HEADING BECOMES THE FIELD LABEL. Same 11px uppercase the
+       <th> used, so a value is captioned exactly as it was before -- the
+       caption has moved, not changed. */
+    td[data-label]::before {
+      content:attr(data-label); display:block; font-size:11px; font-weight:700;
+      letter-spacing:.08em; text-transform:uppercase;
+      color:var(--sc-ink-muted, #9aa3b2); margin-bottom:3px;
+    }
+
+    /* Full width: the name, the status, the pills and the controls. The
+       four remaining facts fall into the two-up grid on their own. */
+    #usersBody td.name, #tenantsBody td.name, #gamesBody td.name,
+    #recoveryBody td.name, #delTenantsBody td.name,
+    #tenantsBody td.st, td.pills, td.act { grid-column:1 / -1; }
+    #usersBody td.name, #tenantsBody td.name { font-size:15px; }
+    /* The role and the timestamp were pinned nowrap to stop them splitting
+       inside a cramped column. There is no cramped column now, and "Sep 3,
+       06:14 PM" pinned into a half-width card is what would overflow. */
+    td.role, td.when { white-space:normal; }
+    td.pills:empty { display:none; }
+    td.pills::before { content:none; }
+
+    /* THE CONTROLS, on their own line under a rule. Separated because
+       everything above it is a fact and everything on it changes
+       something -- and because a destructive control sitting flush against
+       a value is how it gets hit by accident. */
+    td.act { border-top:1px solid #f2f2f0; padding-top:11px; margin-top:1px; }
+    #tenantsBody td.act, #recoveryBody td.act,
+    #delTenantsBody td.act, #gamesBody td.act { text-align:right; }
+
+    /* A 24px dot target becomes a 44px one. It is the only way into every
+       action a school has. */
+    .dots { padding:9px 18px; font-size:19px; }
+    .menu { min-width:190px; }
+
+    /* Four buttons at 340px in a 250px card. They wrap now. */
+    .uacts { white-space:normal; display:flex; flex-wrap:wrap; gap:7px;
+             justify-content:flex-start; }
+    .uact { margin-left:0; padding:8px 11px; font-size:12.5px; }
+
+    /* Both of these were sized for a table cell. */
+    .act, .topAct { padding:9px 14px; }
+    .topAct { display:inline-block; }
+
+    /* THUMB TARGETS. Both were 33-34px tall, which is fine for a pointer
+       and short for a finger -- and one of them is a list of destructive
+       actions where the neighbour of "Delete tenant" is "Invite user".
+       Only the padding moves; nothing here reaches a pointer. */
+    .tabs button { padding:10px 15px; }
+    .menu button { padding:11px 15px; }
+  }
+
   @media print { .sc-copyright { color:#666 !important; opacity:1; } }
 </style>
 </head>
@@ -336,11 +481,13 @@
              table, so a user whose tenant was deleted still has a group to
              appear under. -->
         <label style="display:flex; align-items:center; gap:6px; font-size:13px;
-               color:var(--sc-ink-soft, #3a3a3a); white-space:nowrap;">
+               color:var(--sc-ink-soft, #3a3a3a); white-space:nowrap;
+               max-width:100%; min-width:0;">
           <span>Tenant</span>
           <select id="userTenantPick" style="padding:6px 8px; border-radius:6px;
             border:1px solid var(--sc-rule, #e6e6e6); font-size:13px;
-            background:#fff; color:var(--sc-ink, #1a1a1a); min-width:190px;">
+            background:#fff; color:var(--sc-ink, #1a1a1a);
+            min-width:min(190px,100%); max-width:100%;">
             <option value="">Select a tenant&hellip;</option>
           </select>
         </label>
@@ -1295,7 +1442,7 @@
       // left to right in the order they happen, and "created" is the one
       // that is always there -- created_at is `not null default now()` in
       // 006, where renews_on can be null on a trial.
-      '<table><tr><th>Tenant</th><th>Status</th><th>Created</th><th>Renews</th>' +
+      '<table><tr class="hdr"><th>Tenant</th><th>Status</th><th>Created</th><th>Renews</th>' +
       '<th>Games</th><th>Deleted</th><th></th></tr>' +
       liveTenants.map(t => {
         // SUSPENDED OUTRANKS EVERYTHING. A tenant can be paid up and
@@ -1375,18 +1522,19 @@
           // is this, and the seed/reset controls in the menu. Both the SQL
           // functions refuse any tenant without the flag, so the badge is also
           // the honest indicator of which rows those controls can touch.
-          '<td><span class="pill status ' + pill + '">' + esc(label) + '</span></td>' +
+          '<td class="st" data-label="Status"><span class="pill status ' + pill + '">' +
+            esc(label) + '</span></td>' +
           // DAY PRECISION, via the same fmtDate as Renews. created_at is a
           // timestamptz, so the hour is there to be shown -- but the
           // question this column answers is "how long have they been a
           // customer", and a time of day beside a renewal date reads as
           // two different kinds of fact in adjacent columns.
-          '<td>' + fmtDate(t.created_at) + '</td>' +
+          '<td data-label="Created">' + fmtDate(t.created_at) + '</td>' +
           // SEASON END, NOT JUST A DATE. A bare date makes the operator do
           // the arithmetic, and the whole reason to look at this column is
           // to find the schools that need chasing. seasonState is shared
           // with the school's own Account page so the two cannot disagree.
-          '<td>' + (function(){
+          '<td data-label="Renews">' + (function(){
             const st = seasonState(t);
             // NOT AN EM DASH. A dash means "no date on file", which is what
             // an unbilled trial has. A lifetime tenant is not missing a
@@ -1415,12 +1563,12 @@
                        (t.renews_on ? ' \u00b7 extended' : '') + '</div>'
                      : '');
           })() + '</td>' +
-          '<td>' + (live[t.id] || 0) + '</td>' +
-          '<td>' + (gone[t.id] || 0) + '</td>' +
+          '<td data-label="Games">' + (live[t.id] || 0) + '</td>' +
+          '<td data-label="Deleted">' + (gone[t.id] || 0) + '</td>' +
           // A MENU, because a row now has more than one action and one of
           // them is destructive. Suspend and Delete sitting side by side as
           // buttons is a misclick waiting to happen on a list.
-          '<td class="right">' +
+          '<td class="right act">' +
             '<div class="menuWrap">' +
               '<button class="dots" data-menu="' + esc(t.id) + '" aria-haspopup="true" ' +
                 'aria-expanded="false" aria-label="Actions for ' + esc(t.name) + '">' +
@@ -1518,14 +1666,14 @@
     const gone = (tenants || []).filter(t => t.deleted_at);
     if (!gone.length){ body.innerHTML = '<p class="empty">No tenants have been deleted.</p>'; return; }
     body.innerHTML =
-      '<table><tr><th>Tenant</th><th>Deleted</th><th></th></tr>' +
+      '<table><tr class="hdr"><th>Tenant</th><th>Deleted</th><th></th></tr>' +
       gone.map(t =>
         '<tr>' +
           '<td class="name">' + esc(t.name) +
             (t.full_name ? '<div style="font-weight:400; font-size:12.5px; color:#6b7680;">' +
               esc(t.full_name) + '</div>' : '') + '</td>' +
-          '<td>' + fmtWhen(t.deleted_at) + '</td>' +
-          '<td class="right"><button class="act" data-untenant="' + esc(t.id) + '" ' +
+          '<td data-label="Deleted">' + fmtWhen(t.deleted_at) + '</td>' +
+          '<td class="right act"><button class="act" data-untenant="' + esc(t.id) + '" ' +
             'data-name="' + esc(t.name) + '">Restore</button></td>' +
         '</tr>').join('') + '</table>';
   }
@@ -1568,16 +1716,16 @@
       return;
     }
     body.innerHTML =
-      '<table><tr><th>Tenant</th><th>Game</th><th>Played</th><th>Deleted</th><th></th></tr>' +
+      '<table><tr class="hdr"><th>Tenant</th><th>Game</th><th>Played</th><th>Deleted</th><th></th></tr>' +
       rows.map(g =>
         '<tr data-game="' + esc(g.id) + '">' +
           '<td class="name">' + esc((g.tenants && g.tenants.name) || '—') + '</td>' +
-          '<td>' + esc(g.designator) +
+          '<td data-label="Game">' + esc(g.designator) +
             '<div style="font-size:12.5px; color:#6b7680;">' +
               esc(g.away_team_name) + ' at ' + esc(g.home_team_name) + '</div></td>' +
-          '<td>' + fmtDate(g.game_date) + '</td>' +
-          '<td>' + fmtWhen(g.deleted_at) + '</td>' +
-          '<td class="right"><button class="act" data-restore="' + esc(g.id) + '">Restore</button></td>' +
+          '<td data-label="Played">' + fmtDate(g.game_date) + '</td>' +
+          '<td data-label="Deleted">' + fmtWhen(g.deleted_at) + '</td>' +
+          '<td class="right act"><button class="act" data-restore="' + esc(g.id) + '">Restore</button></td>' +
         '</tr>').join('') + '</table>';
   }
 
@@ -2165,21 +2313,19 @@
     });
 
     body.innerHTML = '<table>' +
-      '<tr><th>Game</th><th>Date</th><th>Status</th><th></th></tr>' +
+      '<tr class="hdr"><th>Game</th><th>Date</th><th>Status</th><th></th></tr>' +
       [...groups.keys()].sort().map(k => {
         const list = groups.get(k);
-        return '<tr><td colspan="4" style="padding:18px 10px 6px; border-bottom:none; ' +
-                 'font-size:14px; font-weight:700; color:var(--sc-ink-soft, #3a3a3a);">' +
-                 esc(k) + ' <span style="font-weight:400; color:#6b7680;">(' +
-                 list.length + ')</span></td></tr>' +
+        return '<tr class="grp"><td colspan="4">' +
+                 esc(k) + ' <span class="n">(' + list.length + ')</span></td></tr>' +
           list.map(g =>
             '<tr>' +
               '<td class="name">' + esc(g.away_team_name) + ' at ' + esc(g.home_team_name) +
                 ' <span style="color:#6b7680; font-weight:400;">' + esc(g.designator) + '</span></td>' +
-              '<td>' + esc(g.game_date || '') + '</td>' +
-              '<td>' + (g.status === 'in_progress' ? 'In progress' : 'Final') +
+              '<td data-label="Date">' + esc(g.game_date || '') + '</td>' +
+              '<td data-label="Status">' + (g.status === 'in_progress' ? 'In progress' : 'Final') +
                 (g.is_broadcast ? ' <span class="pill live">on air</span>' : '') + '</td>' +
-              '<td class="right"><a class="topAct" target="_blank" rel="noopener" ' +
+              '<td class="right act"><a class="topAct" target="_blank" rel="noopener" ' +
                 'href="view.html?id=' + encodeURIComponent(g.id) + '">Crew view &#8599;</a></td>' +
             '</tr>').join('');
       }).join('') + '</table>';
@@ -2368,10 +2514,8 @@
     // a problem that was fixed one line earlier.
 
     const groupRow = (k, n) =>
-      '<tr><td colspan="5" style="padding:18px 10px 6px; border-bottom:none; ' +
-        'font-size:14px; font-weight:700; color:var(--sc-ink-soft, #3a3a3a);">' +
-        esc(heading(k)) +
-        ' <span style="font-weight:400; color:#6b7680;">(' + n + ')</span></td></tr>';
+      '<tr class="grp"><td colspan="5">' + esc(heading(k)) +
+        ' <span class="n">(' + n + ')</span></td></tr>';
 
     body.innerHTML =
       // SAID IN WORDS, ONCE, when the column cannot be trusted. An empty 2FA
@@ -2384,7 +2528,7 @@
         'below \u2014 it does not mean nobody has it. Check that ' +
         'sql/033_mfa_visibility.sql has been applied.</p>') +
       '<table>' +
-      '<tr><th>Name</th><th>Role</th><th>Last sign-in</th><th></th><th></th></tr>' +
+      '<tr class="hdr"><th>Name</th><th>Role</th><th>Last sign-in</th><th></th><th></th></tr>' +
       [...groups.keys()].sort().map(k => {
       const rows = groups.get(k).sort((a, b) =>
         (a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
@@ -2410,10 +2554,11 @@
             // entry", "Aug 31, 10:59 / AM") purely because the status column
             // beside them was holding slack it does not need. Pinning these
             // pushes that slack where it belongs.
-            '<td class="role">' + esc(u.role === 'game_entry' ? 'Game entry'
+            '<td class="role" data-label="Role">' + esc(u.role === 'game_entry' ? 'Game entry'
                        : u.role.charAt(0).toUpperCase() + u.role.slice(1)) + '</td>' +
-            '<td class="when">' + (u.lastSignInAt ? fmtWhen(u.lastSignInAt) : 'never') + '</td>' +
-            '<td class="right">' +
+            '<td class="when" data-label="Last sign-in">' +
+              (u.lastSignInAt ? fmtWhen(u.lastSignInAt) : 'never') + '</td>' +
+            '<td class="right pills">' +
               (u.disabled ? '<span class="pill lapsed">Disabled</span>' : '') +
               (!u.emailConfirmedAt ? '<span class="pill trial">Invited</span>' : '') +
               (u.mustChangePassword ? '<span class="pill trial">Temp password</span>' : '') +
@@ -2456,7 +2601,7 @@
             //                  reach their email at all.
             //   Disable/Enable reads the current state, so a row never
             //                  offers what has already happened.
-            '<td class="right" style="white-space:nowrap;">' +
+            '<td class="right act uacts">' +
               (!u.emailConfirmedAt
                 ? '<button class="uact" data-act="resendInvite" data-email="' + esc(u.email) + '">Resend invite</button>' +
                   // CHANGE EMAIL, only while the invite is unaccepted --
