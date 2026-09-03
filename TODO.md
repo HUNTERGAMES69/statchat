@@ -12,11 +12,16 @@ Ordered roughly by how much it would hurt to leave undone.
 
 ---
 
-## 0a. THIS FILE IS 3,300 LINES LONG
+## 0a. THIS FILE IS 3802 LINES LONG
 
-52 sections. It opens by saying completed work lives in
-`PROJECT_NOTES.md`, and mostly that has held — but a work list nobody can
-read in one sitting stops being a work list.
+63 sections, and it grows every session — it was 3,300 lines and 52
+sections when this heading was written. It opens by saying completed work
+lives in `PROJECT_NOTES.md`, and mostly that has held — but a work list
+nobody can read in one sitting stops being a work list.
+
+The count above is now derived rather than remembered, because the old one
+was wrong for weeks: a heading that states a fact the file itself already
+carries is a fact that drifts. Re-read it from `wc -l` when you touch this.
 
 - [ ] Split it: near-term items here, everything speculative or
   long-dated into a separate `BACKLOG.md`. The test is whether somebody
@@ -445,6 +450,58 @@ incompletions, which would slow the fastest-moving entry in the app.
   Same shape as team TFL versus per-player TFL: the number answers
   exactly the question it was given, and the entry decides which question
   that is.
+
+- [x] **REVISITED 3 September 2026 — the decision above still stands for
+  the general case, with exactly two exceptions.** Both were reported from
+  live testing, neither changes the ordinary completion or the incompletion.
+
+  1. **A touchdown pass with no receiver** now changes the Save button to
+     read *"Save with NO RECEIVER"*. It still saves; it just cannot be saved
+     by reflex. A touchdown is the opposite of the deep ball this rule was
+     written for — the receiver is in the end zone holding the ball and the
+     clock is stopped — and it is where a blank costs most, reaching the
+     scoring summary and the public recap. **Not extended to two-point
+     tries:** they generate no receiving statistic, so requiring a receiver
+     would demand data the app deliberately discards.
+
+  2. **A fumbled completion now REQUIRES the receiver.** Not a judgement
+     call — see the parser gap below. Without him there is no storable play.
+
+## 5b2. THE PARSER CANNOT TAKE A NON-NUMERIC LEADING PLAYER — open
+
+`game.html:3012`
+
+    const m = tokens[0].match(/^(\d+)([a-z]+)$/i);
+    if (!m) return null;
+
+The first token of every play code must be **digits followed by letters**.
+A fumbled completion is keyed on the receiver and coded `<receiver>f ...`,
+so when the receiver is unknown the panel substitutes `?` and builds
+`?f ...` — which can never parse. `?` is perfectly valid LATER in a code
+(the recoverer uses it); only the leading token must be numeric.
+
+**Found 3 September 2026 by live testing**, not by reading. Until then the
+panel offered the combination and then refused to save it with a bare
+*"Unrecognized entry"* naming no cause — a dead end mid-game, in all three
+recovery outcomes (touchback, own recovery, defence recovery).
+
+**Shipped 3 Sep as an interim:** the panel now refuses that entry clearly,
+naming the receiver as required and why (`missingPlayer('receiverFumbled',
+...)`). Confirmed working.
+
+**The proper fix is still open:** teach `parseInput` to accept `?` as a
+leading token. `p1` flows through every branch of that function and each
+one would need to handle a non-numeric player. Real work, deliberately not
+done the night before sixteen live games.
+
+**Worth keeping for the reasoning, not just the bug.** Six candidate stat
+defects were written up that week from reading `engine.js`. Two were real.
+The rest were impossible football, unreachable code, a control that had
+been removed, and this — a play shape the engine handles correctly and the
+parser will not accept. Reading the engine tells you what it computes; only
+the entry path tells you what it will ever be ASKED to compute.
+
+---
 
 ---
 
@@ -3562,6 +3619,136 @@ in it needs a live game on screen before it can be done.
       claimed it could not, which was an assumption written down as a
       fact. Either way anonymous read stops the moment the repo goes
       private, so the read path has to be replaced before that happens.
+
+## 3 September 2026 — a full session, the day before game two
+
+Sixteen tenants score live tomorrow night. Everything below either shipped
+today or is written down because it did not.
+
+### Shipped
+
+- [x] **Migration 044 — three privilege paths RLS does not cover.** Applied
+      to production, three verify rows PASS, ON AIR confirmed working after.
+      A self-privilege trigger on `profiles`, a tenant check inside
+      `set_broadcast_game` / `clear_broadcast_game`, and column-scoped
+      `anon` grants on `tenants` so the feed key stopped being readable.
+- [x] **Platform: delete a user, invite into a tenant.** Closes the "create
+      tenant succeeds with no user" trap — a typo in the email left a tenant
+      nobody could sign into and no way to fix it.
+- [x] **Two stat defects, both live-reported.** A fumbled completion with no
+      receiver named credited passing yards and dropped the receiving yards,
+      breaking the one identity most likely to be checked, and filed the
+      fumble on a row literally named `#`. And a scoring play in overtime
+      stamped a clock reading for a period that has no clock.
+- [x] **The scoring summary said the score and quarter of the last play on a
+      finalized game** instead of FINAL. Wrong object and wrong case in one
+      expression.
+- [x] **Terms of Service live** at `terms.html`, v1.11, linked from the login
+      and account pages in a new tab with a 34px tap target.
+- [x] **The stat reference**, internal and public. `statrules.html` is the
+      public rule book; the internal version keeps the defect history.
+- [x] **SACK YARDAGE — see the section below. The largest correctness fix of
+      the day and the only one that changes historical numbers.**
+- [x] **Bug reports and feature requests from inside the app.** Migration
+      045, `api/feedback.js`, `feedback.html`, and a link on the account
+      page. Row written first, email best-effort on top — the same order
+      `/api/contact` uses and for the same reason.
+- [x] **A public support page** at `support.html`, reached from the brochure
+      header. Asks for an email address and what is happening, nothing else.
+      Exists for the one case the signed-in form cannot serve: somebody who
+      cannot sign in.
+
+### Sack yardage was not the NFHS treatment — corrected in code
+
+Raised by an outside AI review of the public page, verified against the
+source documents. **NFHS Statisticians' Manual, section 2:** a player downed
+behind the line while intending to pass "is charged with a 'time carried'
+and minus rushing yards." *That player* — not a team row. NCAA is the same.
+The NFL is the outlier and takes it out of team passing, which is what our
+comments had attributed to NCAA.
+
+`engine.js` charged a `TEAM` rushing row in both `computeBoxScore` and
+`auditBoxScore`. Six lines changed, both re-bucketed to the passer.
+
+**Team rushing totals do not move** — the same attempt and the same loss on
+a different row inside the same team — so no tile, feed or report changed.
+What changed is the quarterback: he now carries his own sacks, and appears
+in the rushing table even if he never ran by choice.
+
+- [x] Verified: 200-game/6,000-play attribution fuzz and a 25-game/983-play
+      identity fuzz, both clean. `tests/sack_attribution_check.js` added.
+- [x] `tests/tackles_check.js` assertion updated; it encoded the old rule.
+- [x] `tests/box_score_audit_check.js` mutation target renamed with the code.
+
+- [ ] **The kneel has the same fault and is only half-addressed.** NFHS
+      credits the player with the loss; StatChat charges `TEAM`. Charging
+      the player needs entry to ask WHO took the snap, and the `kn N` play
+      code has no room for it — a picker plus a format change plus a
+      decision about existing kneels, which carry no player and cannot be
+      backfilled. **Scoped instead:** the panel already prefilled 0, and now
+      says in amber that the button is for a true clock-killing kneeldown at
+      the spot, and that anything which actually lost ground belongs on the
+      Rush tree. That reduces the whole divergence to one 0-yard attempt.
+      Documented as a StatChat choice on both public pages rather than
+      dressed up as a rule.
+- [ ] **A bad snap stays on `TEAM` and that is correct** — the manual says
+      so in as many words. Do not "fix" it to match the sack.
+
+### Owed, and none of it urgent
+
+- [ ] **The golden fixture.** `accuracy_check` gained exactly four diffs
+      today, all sacks, all correct. NOT blessed: it was **already red with
+      15 unblessed diffs** from changes predating today — a `cmp`→`comp`
+      rename, the team-TFL credit, play-text edits — and `--update` is
+      all-or-nothing. That fixture has been stale long enough that the test
+      gives no signal at all. Half an hour to review and re-bless properly.
+      (This is the same complaint as §"ACCURACY GOLDEN IS STALE", opened
+      24 August. It has now been true for ten days.)
+- [ ] **A `link_check` test.** Every internal `href` in the repo resolving
+      to a file that exists. Would have caught the filename break below in
+      one run.
+- [ ] **`.vercelignore`** — written, deliberately held for a quiet day.
+- [ ] **An admin view of the feedback backlog.** Read from the SQL editor
+      today; `handled` is set by hand.
+- [ ] **`support@statchat.co` and `features@statchat.co` must actually
+      receive mail.** Three paths now point at them. Resend does not need
+      them verified to send *to* them, so nothing will fail loudly.
+- [ ] Carried from this morning: teach the parser to accept a non-numeric
+      leading player (see §5b2), the long-form quarter labels in the feeds,
+      and the trial-signup automation.
+
+### Two process failures worth keeping
+
+**A code comment asserting an external rule is a claim, not a citation.**
+The sack error entered three documents because it was read out of
+`engine.js:1496` and `game.html:3205`, two comments that named a rule book
+without citing one. This project already had the rule *where a code comment
+and the code disagree, the code wins*. That is not sufficient: here the
+comment and the code agreed with each other and were both wrong about the
+world outside the repo, and only the manual could settle it. **A stat
+engine's correctness is defined by documents that are not in the
+repository.**
+
+**A verify query must be able to support its own label.** Migration 045's
+row 6 was labelled "nothing outside public.feedback was touched" and asked
+whether `anon` holds write privileges on four core tables. It does, and has
+since those tables were created — that is Supabase's default. So it
+reported FAIL on a migration that granted nothing to anybody, and three
+follow-up checks written to chase it were wrong in the same way: they
+asserted absolutes where the real property was conditional. "No policy
+names anon" is the wrong invariant for a product with public recaps; "no
+policy lets anon **write**" is the right one, and it was true throughout.
+
+### And one small operational lesson
+
+`statrules.html` has no hyphens in its filename on purpose. It shipped
+twice as `how-stats-are-counted.html` and arrived both times with the
+hyphens stripped somewhere between here and the repo, leaving a live 404
+behind every link to it, a 404 in the sitemap, and a canonical pointing at
+a URL that did not exist. A name that cannot be mangled is worth more than
+a prettier one on a page that will be edited every time a stat rule
+changes. **Do not tidy it back.**
+
 
 ## AFTER GAME ONE
 

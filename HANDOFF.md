@@ -3,9 +3,132 @@
      is prohibited. -->
 
 # StatChat — session handoff
-### Last updated 30 August 2026. Everything above the first `---` is current; the rest is history kept for reference.
+### Last updated 3 September 2026, evening. Everything above the first `---` is current; the rest is history kept for reference.
 
-## WHERE THINGS STAND — 30 August 2026, evening
+## WHERE THINGS STAND — 3 September 2026, the night before game two
+
+**Sixteen tenants score live tomorrow, Friday 4 September.** The first live
+regular-season weekend was 29 August; this is the second and much the
+larger one.
+
+Nothing in the app's scoring path changed today except one deliberate
+correction, described first because it is the only thing that alters
+numbers already in the database.
+
+### The correction that matters
+
+**Sack yardage now lands on the quarterback's own rushing line**, not on a
+`TEAM` row. NFHS charges "that player" a time carried and minus rushing
+yards; NCAA agrees; the NFL is the outlier that takes it out of team
+passing. Our code and three of our documents had said the opposite. Found
+by an outside review, verified against the Statisticians' Manual.
+
+Six lines, in both `computeBoxScore` and the independent `auditBoxScore`
+oracle. **Team rushing totals are unchanged by construction** — the same
+attempt and the same loss on a different row inside the same team — so no
+tile, feed or report moved.
+
+**What tenants will notice:** a quarterback now appears in the rushing
+table even if he never chose to run. Sacked three times for 21 shows
+`3 att, −21 yds`. That is correct and it is what MaxPreps shows. It is
+worth a line in Friday's email, because it will look new.
+
+The box score is computed at read time, so this repaired every game already
+stored, not only tomorrow's.
+
+### Also closed today
+
+- **The known gap named in the 30 August handoff is fixed.** A completed
+  pass with no receiver that is then fumbled no longer builds a code the
+  parser refuses. The panel now requires the receiver on that one path and
+  says why; the engine's `Unknown` fallback was corrected as well, so the
+  two completion branches agree.
+- **Migration 044** — three privilege paths RLS does not cover. Applied,
+  verified, ON AIR confirmed working afterwards.
+- **Migration 045** — in-app bug reports and feature requests. Applied.
+- Platform can delete a user and invite one into a tenant.
+- Overtime scoring plays no longer stamp a clock reading.
+- `scoresummary.html` shows FINAL on a finalized game.
+- Terms of Service live and linked from login and account.
+- `statrules.html`, the public stat rule book, and `help.html` retitled to
+  the how-to so the two stop competing for one search.
+- `support.html` on the brochure, reachable from the header on mobile too.
+
+### The kneel — half-addressed on purpose
+
+NFHS credits the player with a kneel's rushing loss; we charge `TEAM`.
+Fixing it properly needs the entry panel to ask **who took the snap**, and
+the `kn N` play code has no room for a player. Instead the panel now says
+in amber that the button is only for a true clock-killing kneeldown taken
+at the spot, and that anything which actually lost ground belongs on the
+Rush tree under the quarterback's number.
+
+That reduces the entire divergence to **one 0-yard rushing attempt**. It is
+documented as a StatChat choice on both public pages rather than dressed up
+as a rule. A bad snap stays on `TEAM` and is correct — the manual says so.
+
+### What is NOT done, and none of it is urgent
+
+- **The golden fixture.** `accuracy_check` gained four correct sack diffs
+  today and was **already red with fifteen unblessed ones** predating this
+  session. `--update` is all-or-nothing, so blessing mine would accept
+  those too. It has been stale since at least 24 August and is currently
+  giving no signal at all. Half an hour, worth doing properly.
+- **`link_check`** — a test that every internal `href` resolves to a file
+  that exists. Would have caught today's filename break in one run.
+- **`.vercelignore`**, written and held for a quiet day.
+- **An admin view of the feedback backlog.** SQL editor only; `handled` is
+  set by hand.
+- Charging the kneel to the player, if it is ever wanted.
+
+### Two things only a person can do
+
+1. **`support@statchat.co` and `features@statchat.co` must actually receive
+   mail.** Three paths point at them now — the account form, the brochure
+   support page, and a mailto. Resend does not need them verified to send
+   *to* them, so if the aliases do not exist nothing will fail loudly and
+   the rows will simply pile up in the database with `notified = true`.
+   One test send each settles it.
+2. **Publish the release note.** `releases.js` carries a note dated
+   3 September about the feedback form. Uploading the file makes it a
+   draft; a platform admin has to press Publish for anyone to see it. That
+   separation is deliberate — see migration 037.
+
+### If something goes wrong tomorrow
+
+The scoring path — `game.html`, `engine.js` — changed today only for the
+sack re-attribution and comments. If a tenant reports numbers that look
+wrong, check whether it is the quarterback's rushing line before assuming a
+regression: that one is intended and correct.
+
+`ROLLBACK.md` is the procedure. Migration 044 and 045 are both additive and
+neither touches the scoring path.
+
+### Lessons this session, worth reading before the next one
+
+**A code comment asserting an external rule is a claim, not a citation.**
+The sack error reached three documents because it was read out of two
+comments that named a rule book without citing one. This project already
+had *where a comment and the code disagree, the code wins* — and it did not
+help, because comment and code agreed with each other and were both wrong
+about the world outside the repo. **A stat engine's correctness is defined
+by documents that are not in this repository.**
+
+**A verify query must be able to support its own label.** Migration 045's
+row 6 was labelled "nothing outside public.feedback was touched" and asked
+whether `anon` holds write privileges on four core tables. It does, and has
+since those tables were created. It reported FAIL on a migration that
+granted nothing to anybody, and three follow-up checks repeated the mistake
+by asserting absolutes where the property was conditional.
+
+**Say when a filename is load-bearing.** `statrules.html` has no hyphens on
+purpose: it shipped twice as `how-stats-are-counted.html` and lost them in
+transit both times, leaving 404s behind every link, a 404 in the sitemap
+and a canonical pointing nowhere. Do not tidy it back.
+
+---
+
+## WHERE THINGS STOOD — 30 August 2026, evening
 
 **The first live regular-season game has not happened yet.** Everything in
 the database up to now is development and demo data.
@@ -34,12 +157,16 @@ between the structural fix and the cheap pair; **3** is decided and not
 built; **5** and **6** are raised but not designed — though item 6 now
 names a bounded first slice, found while closing item 4.
 
-### The known gap
+### The known gap  — CLOSED 3 September 2026, see the top of this file
 
 A **completed pass with no receiver that is then fumbled** builds a code
 the parser refuses: "Unrecognized entry", and nothing saves. All three
 recovery choices are affected. It predates this session. Workaround: put a
 number in the receiver box before marking the fumble.
+
+*(The panel now requires the receiver on that path and says why. The
+underlying parser limitation — a leading player token must be numeric — is
+still there and is tracked in TODO §5b2.)*
 
 ### Tests
 
