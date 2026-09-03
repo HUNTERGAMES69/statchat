@@ -227,6 +227,12 @@
 
   let plays = [], currentGameId = null, startingPossession = 'teamA';
   let quarterLengthSec = 720, gameLabel = '';
+  // THE GAME'S OWN STATUS, hoisted for the same reason gameLabel and
+  // startingPossession are: render() is a sibling of the loader, not nested
+  // inside it, so the `game` row is out of scope by the time the header is
+  // drawn. Values are 'setup', 'in_progress' and 'final' -- lowercase, per
+  // the games_status_check constraint in sql/000_baseline.sql.
+  let gameStatus = '';
   const TEAMS = { teamA:null, teamB:null };
   const PENALTIES = {};
   function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
@@ -384,8 +390,22 @@
       ' vs ' + (TEAMS.teamB ? TEAMS.teamB.name : '');
     document.getElementById('finalScore').textContent =
       (state.scores.teamA || 0) + ' – ' + (state.scores.teamB || 0);
+    // FINAL COMES FROM THE GAME ROW, NOT FROM THE COMPUTED STATE.
+    // --------------------------------------------------------------------
+    // This read `state.status === 'FINAL'`, which was wrong twice over and
+    // so could never be true: computeState() returns scores, quarter, down,
+    // possession and clock figures and has never set a `status` at all, and
+    // the value it was compared against was upper case while the column
+    // stores 'final'. The header therefore always fell through to
+    // quarterLabel() and a finished game went on reporting the quarter of
+    // the last play entered -- reported from a real game, 3 Sep 2026, where
+    // a final score still read Q3.
+    //
+    // Whether a game is over is a fact about the GAME, not something that
+    // can be derived from its plays: the last play of a finished game looks
+    // exactly like the last play of one still in progress.
     document.getElementById('phase').textContent =
-      state.status === 'FINAL' ? 'FINAL' : quarterLabel(state);
+      gameStatus === 'final' ? 'FINAL' : quarterLabel(state);
 
     const list = document.getElementById('list');
     if (!rows.length){
@@ -503,6 +523,7 @@
       fitSheet(); return;
     }
     const game = gameRows[0];
+    gameStatus = game.status || '';
     gameLabel = game.designator;
     quarterLengthSec = game.quarter_length_seconds || 720;
     startingPossession = game.starting_possession || 'teamA';
@@ -534,6 +555,14 @@
     setInterval(async () => {
       if (document.hidden) return;
       await loadPlays();
+      // THE STATUS IS REFRESHED TOO, not just the plays. A booth leaves this
+      // page up all night; finalizing the game elsewhere has to reach it, or
+      // the header keeps saying Q4 until somebody reloads -- which is the
+      // same fault as the bug above wearing different clothes.
+      // ONE COLUMN, so it costs a fraction of the play fetch beside it.
+      const { data: g } = await supabaseClient
+        .from('games').select('status').eq('id', currentGameId).limit(1);
+      if (g && g[0] && g[0].status) gameStatus = g[0].status;
       render();
     }, 4000);
   }
