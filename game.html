@@ -14703,6 +14703,33 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
   }
 
+  // THE PLAY AS SAVE WILL BUILD IT, not as the parser returned it.
+  // ---------------------------------------------------------------------
+  // A turnover on downs, an interception and a fumble are `flipEligible`:
+  // the parser marks that possession MAY change and the save handler
+  // decides it from the checkbox, at line ~15000, by copying the effect
+  // and adding flip / flipTo / flipApplied. `pending.effect` never carries
+  // them.
+  //
+  // So computing the result off `pending` alone showed the situation as if
+  // possession had NOT changed -- "4th & Goal at Neville 1" under a play
+  // whose own text said "turnover on downs". Found in live testing, 3 Sep.
+  //
+  // This mirrors the save handler deliberately rather than sharing code
+  // with it: the handler also writes clock markers, drive events and
+  // persistence, none of which may happen while a card is merely being
+  // looked at. A COPY is returned; `pending` is never touched.
+  function pendingAsSaved(p){
+    const effect = Object.assign({}, p.effect);
+    if (p.flipEligible){
+      const box = document.getElementById('flipCheck');
+      effect.flip = true;
+      effect.flipTo = p.flipTo;
+      effect.flipApplied = !!(box && box.checked);
+    }
+    return Object.assign({}, p, { effect: effect });
+  }
+
   function showResultRow(p){
     const row = document.getElementById('resultRow');
     const val = document.getElementById('resultText');
@@ -14719,7 +14746,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // a rush and be wrong for a punt, a penalty and a kickoff, each of
       // which sets the situation its own way. This cannot drift from what
       // the app does a second later, because it IS what the app does.
-      const after = computeState(plays.concat([p]));
+      const after = computeState(plays.concat([pendingAsSaved(p)]));
       if (!after || after.fieldPos === null || after.fieldPos === undefined){
         hideResultRow(); return;
       }
@@ -15110,6 +15137,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // so the two can never drift.
     collapsePlayPanel();
     if (window.__railClear) window.__railClear();
+  });
+
+  // UNTICKING THE BOX CHANGES THE RESULT, so the line has to follow it.
+  // Without this, clearing "Change of possession" left the card still
+  // claiming the other team had the ball.
+  document.getElementById('flipCheck').addEventListener('change', () => {
+    if (pending) showResultRow(pending);
   });
 
   document.getElementById('editBtn').addEventListener('click', () => {
