@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
+<!-- NOT A PAGE FOR SEARCH. Behind a login. robots.txt disallows it too;
+     the two do different jobs, and a URL linked from anywhere can be
+     indexed without ever being crawled. -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<!-- Shared tokens. Loaded BEFORE this page's own <style> so anything
+     below still wins. -->
+<link rel="stylesheet" href="statchat.css">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StatChat">
+<title>StatChat — Report a bug or request a feature</title>
+<style>
+  /* SAME TOKENS AS account.html, deliberately identical values. This page
+     is reached from that one and must not look like a different product
+     the moment you arrive. */
+  :root{ color-scheme:dark; }
+  :root{
+    --sc-page:#10141a;   --sc-card:#191f27;   --sc-raise:#20272f;
+    --sc-ink:#eef1f4;    --sc-ink-soft:#c7d0da;  --sc-ink-muted:#8d99a6;
+    --sc-rule:#2b333d;   --sc-rule-strong:#6b7d8f;
+    --sc-navy:#2f3a47;   /* A BUTTON FILL. Never text, never a panel. */
+    --sc-green:#a3d93f;  --sc-red:#ff8fa3;
+    --sc-amber:#ffc72c;  --sc-amber-tint:rgba(255,199,44,.13);
+    --sc-link:#7cb518;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+         background:var(--sc-page, #10141a); margin:0; padding:14px;
+         padding-top:calc(14px + env(safe-area-inset-top)); }
+  .wrap { max-width:600px; margin:0 auto; }
+  .card { background:var(--sc-card); border:1px solid var(--sc-rule); color:var(--sc-ink);
+          border-radius:12px; padding:18px; margin-bottom:16px;
+          box-shadow:0 2px 12px rgba(0,0,0,0.08); }
+  h1 { font-size:20px; margin:0; }
+  h2 { font-size:16px; margin:0 0 10px; color:var(--sc-ink); }
+  p.sub { color:var(--sc-ink-muted); margin:0 0 14px; font-size:13px; }
+  label { display:block; font-size:13px; margin-bottom:14px; color:var(--sc-ink-muted); }
+  label > input, label > select, label > textarea { display:block; margin-top:5px; }
+
+  /* THE STATCHAT MARK, identical on every page reachable from the
+     dashboard. Same element, same size, same place. */
+  .scMark { display:flex; align-items:center; gap:10px; min-width:0; }
+  .scMark > img { width:26px; height:26px; border-radius:5px; flex:none; display:block;
+                  background:#fff; padding:2px; box-sizing:border-box; }
+
+  /* Fields are wells, buttons are raised -- the same rule account.html
+     states at length. An input that is lighter than its card reads as a
+     button that does not work. */
+  input, select, textarea {
+    padding:8px; border:1px solid #3d4854; background-color:#10141a;
+    color:var(--sc-ink); border-radius:6px; font-size:14px;
+    box-sizing:border-box; width:100%;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.55);
+    font-family:inherit;
+  }
+  textarea { min-height:170px; resize:vertical; line-height:1.5; }
+  /* The native arrow on a dark select is drawn by the OS and is usually
+     fine; what is not fine is the OS drawing the whole control light,
+     which is what color-scheme:dark above prevents. */
+  select { appearance:none; -webkit-appearance:none;
+           background-image:linear-gradient(45deg,transparent 50%,var(--sc-ink-muted) 50%),
+                            linear-gradient(135deg,var(--sc-ink-muted) 50%,transparent 50%);
+           background-position:calc(100% - 18px) 55%, calc(100% - 13px) 55%;
+           background-size:5px 5px, 5px 5px; background-repeat:no-repeat;
+           padding-right:34px; }
+  /* AUTOFILL. A browser will offer to fill the title field, and WebKit
+     paints an autofilled input with an inset shadow that no background
+     rule reaches -- so on a dark page it arrives as a white block with
+     invisible text. It has to be told separately. Same rule as
+     account.html; contrast_check refuses a converted page without it. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color:var(--sc-ink);
+    -webkit-box-shadow:0 0 0 1000px #10141a inset, inset 0 1px 3px rgba(0,0,0,.55);
+    caret-color:var(--sc-ink);
+    transition:background-color 9999s ease-out 0s;
+  }
+  input:focus-visible, select:focus-visible, textarea:focus-visible,
+  button:focus-visible, a:focus-visible {
+    outline:2px solid var(--sc-link); outline-offset:2px;
+  }
+  button { padding:9px 16px; border-radius:6px; border:1px solid var(--sc-rule-strong);
+           background:var(--sc-navy, #2f3a47); color:#fff; font-size:14px;
+           font-weight:600; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--sc-ink); border:1px solid var(--sc-rule-strong); }
+  button:disabled, button[disabled] {
+    background:var(--sc-card, #191f27); color:#727e8c;
+    border:1px solid #252d36; cursor:default; box-shadow:none;
+  }
+  a.backlink { text-decoration:none; padding:8px 14px; border-radius:6px;
+               border:1px solid var(--sc-rule-strong); color:var(--sc-ink);
+               font-size:13px; font-weight:600; display:inline-block; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+
+  /* MESSAGE TINTS MEASURED AGAINST THE DARK CARD, copied from account.html
+     rather than re-chosen: pale ink on a near-white block is how the login
+     page once showed an error nobody could read. */
+  .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
+  .msg.error { background:#2a1519; color:#ff8fa3; border:1px solid #4a2028; }
+  .msg.success { background:#16210f; color:#a3d93f; border:1px solid #2c3d18; }
+  .hidden { display:none; }
+
+  /* A live count, and it only appears when it starts to matter. A counter
+     sitting at "0 of 4000" from the moment the page loads is noise; one
+     that arrives at 80% is information. */
+  .count { font-size:12px; color:var(--sc-ink-muted); margin-top:4px; text-align:right; }
+  .count.near { color:var(--sc-amber); }
+
+  .tick { font-size:34px; line-height:1; color:var(--sc-green); margin:0 0 10px; }
+
+  @media (min-width: 768px) {
+    body { padding:24px; padding-top:calc(24px + env(safe-area-inset-top)); }
+    .card { padding:24px; }
+  }
+  .sc-copyright { margin:26px 0 0; padding:0 2px 4px; font-size:12px;
+    line-height:1.5; color:var(--sc-ink-muted, #8d99a6); opacity:.75;
+    text-align:center; max-width:760px; margin-left:auto; margin-right:auto; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div id="loading" class="card">
+    <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:14px;">
+      <img src="logo.png" alt="StatChat" style="width:48px; height:auto; border-radius:8px;">
+    </div>
+    <h1>Loading…</h1>
+  </div>
+
+  <div id="mainView" class="hidden">
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding-bottom:14px; margin-bottom:20px; border-bottom:1px solid var(--sc-rule-strong, var(--sc-rule));">
+        <div class="scMark">
+          <img src="logo.png" alt="StatChat">
+          <h1>Feedback</h1>
+        </div>
+        <a href="dashboard.html" class="backlink">← Dashboard</a>
+      </div>
+      <p class="sub" id="whoLine"></p>
+    </div>
+
+    <!-- THE FORM -->
+    <div id="formCard" class="card">
+      <h2>Report a bug or request a feature</h2>
+      <p class="sub">Tell us what happened, or what you wish it did. We read every one of
+        these. You do not need to include your name or school &mdash; they come with it.</p>
+
+      <div id="formMsg"></div>
+
+      <label for="kind">What is this?
+        <select id="kind">
+          <option value="bug">Bug &mdash; something is wrong or broken</option>
+          <option value="feature">Feature request &mdash; something is missing</option>
+        </select>
+      </label>
+
+      <label for="title">Title
+        <input type="text" id="title" maxlength="140" autocomplete="off"
+               placeholder="One line: what happened, or what you want">
+        <span class="count hidden" id="titleCount"></span>
+      </label>
+
+      <label for="bodyText" id="bodyLabel">Description
+        <textarea id="bodyText" maxlength="4000"
+                  placeholder="For a bug: what you were doing, what you expected, and what happened instead. The quarter and the play help."></textarea>
+        <span class="count hidden" id="bodyCount"></span>
+      </label>
+
+      <div class="row">
+        <button id="submitBtn">Submit</button>
+        <a href="dashboard.html" class="backlink">Cancel</a>
+      </div>
+    </div>
+
+    <!-- THE CONFIRMATION. Replaces the form rather than sitting above it:
+         leaving a filled-in form on screen after a successful send invites
+         a second submit of the same thing. -->
+    <div id="doneCard" class="card hidden">
+      <p class="tick">&#10003;</p>
+      <h2 id="doneHead">Sent</h2>
+      <p class="sub" id="doneText"></p>
+      <div class="row">
+        <a href="dashboard.html" class="backlink" id="doneBack">← Back to dashboard</a>
+        <button class="secondary" id="againBtn">Send another</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<p class="sc-copyright">&copy; 2026 StatChat. All rights reserved.
+  Unauthorized copying, modification or distribution of this software or
+  its documentation is prohibited.</p>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = 'https://pboushzlcyfkssojpuut.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VGnUYurlkoH1yi67jHO6iQ_C8Q0EM2d';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  let accessToken = null;
+
+  // KEEP THE CACHED BEARER TOKEN CURRENT. A Supabase access token is a JWT
+  // that expires in about an hour; the client refreshes it in the
+  // background and announces the new one. account.html learned this the
+  // hard way -- the token captured at INITIAL_SESSION was the only one the
+  // page held, so hand-rolled calls started failing after an hour while
+  // ordinary queries kept working. Written as "any event that carries a
+  // session" rather than a test for TOKEN_REFRESHED alone.
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (session && session.access_token) accessToken = session.access_token;
+  });
+
+  const $ = id => document.getElementById(id);
+  function showMsg(text, type){
+    $('formMsg').innerHTML = '<div class="msg ' + type + '">' + text + '</div>';
+  }
+  function clearMsg(){ $('formMsg').innerHTML = ''; }
+
+  // ---- counters, shown only when they start to matter -------------------
+  function wireCount(inputId, countId, cap){
+    const el = $(inputId), out = $(countId);
+    const update = () => {
+      const n = el.value.length;
+      // 80% is where a limit stops being trivia and starts being a
+      // constraint you are about to hit.
+      if (n < cap * 0.8){ out.classList.add('hidden'); return; }
+      out.classList.remove('hidden');
+      out.classList.toggle('near', n >= cap * 0.95);
+      out.textContent = (cap - n) + ' characters left';
+    };
+    el.addEventListener('input', update);
+    update();
+  }
+
+  // The placeholder is the only guidance a scorer gets at 9pm, so it
+  // changes with the choice. A bug wants reproduction steps; a feature
+  // request wants the problem behind it.
+  const PLACEHOLDER = {
+    bug: 'What you were doing, what you expected, and what happened instead. The quarter and the play help.',
+    feature: 'What you are trying to do, and what would make it easier. What you do today instead is useful too.'
+  };
+  function syncKind(){
+    $('bodyText').setAttribute('placeholder', PLACEHOLDER[$('kind').value] || PLACEHOLDER.bug);
+  }
+
+  async function boot(){
+    const { data } = await supabaseClient.auth.getSession();
+    const session = data && data.session;
+    if (!session){
+      // Not signed in. Nothing on this page works without a session, and a
+      // form that fails on submit wastes what they typed.
+      window.location.replace('login.html');
+      return;
+    }
+    accessToken = session.access_token;
+
+    let who = session.user && session.user.email ? session.user.email : '';
+    try {
+      const { data: rows } = await supabaseClient
+        .from('profiles').select('full_name, tenant_id').eq('id', session.user.id).limit(1);
+      const p = (rows || [])[0];
+      if (p && p.tenant_id){
+        const { data: t } = await supabaseClient
+          .from('tenants').select('name, full_name').eq('id', p.tenant_id).limit(1);
+        const tn = (t || [])[0];
+        const name = tn && (tn.full_name || tn.name);
+        if (name) who = who + ' · ' + name;
+      }
+    } catch (e) {
+      // Decoration only. Never block the form on it.
+    }
+    $('whoLine').textContent = who;
+
+    syncKind();
+    $('kind').addEventListener('change', syncKind);
+    wireCount('title', 'titleCount', 140);
+    wireCount('bodyText', 'bodyCount', 4000);
+    $('submitBtn').addEventListener('click', submit);
+    $('againBtn').addEventListener('click', reset);
+
+    $('loading').classList.add('hidden');
+    $('mainView').classList.remove('hidden');
+  }
+
+  function reset(){
+    $('title').value = '';
+    $('bodyText').value = '';
+    clearMsg();
+    $('titleCount').classList.add('hidden');
+    $('bodyCount').classList.add('hidden');
+    $('doneCard').classList.add('hidden');
+    $('formCard').classList.remove('hidden');
+    $('title').focus();
+  }
+
+  async function submit(){
+    clearMsg();
+    const kind  = $('kind').value;
+    const title = $('title').value.trim();
+    const body  = $('bodyText').value.trim();
+
+    if (!title){ showMsg('Give it a title — one line is enough.', 'error'); $('title').focus(); return; }
+    if (!body){ showMsg('Add a description so we know what to look at.', 'error'); $('bodyText').focus(); return; }
+
+    const btn = $('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    try {
+      // Ask for a fresh session rather than trusting the cached token: this
+      // form can sit open for a long time while somebody writes, which is
+      // exactly the hour in which the old token expires.
+      const { data } = await supabaseClient.auth.getSession();
+      const token = (data && data.session && data.session.access_token) || accessToken;
+
+      const r = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ kind, title, body, source: 'feedback.html' })
+      });
+      const out = await r.json().catch(() => ({}));
+
+      if (!r.ok || !out.ok){
+        // WHATEVER THEY TYPED STAYS ON SCREEN. A failed submit that also
+        // clears the form is how somebody loses three paragraphs and does
+        // not report the thing at all.
+        showMsg((out && out.error) ||
+                'That did not go through. Nothing was lost — try again, or email support@statchat.co.', 'error');
+        return;
+      }
+
+      $('doneHead').textContent = kind === 'feature' ? 'Feature request sent' : 'Bug report sent';
+      $('doneText').textContent = kind === 'feature'
+        ? 'It went to features@statchat.co, and we can reply to you at the address on your account.'
+        : 'It went to support@statchat.co, and we can reply to you at the address on your account.';
+      $('formCard').classList.add('hidden');
+      $('doneCard').classList.remove('hidden');
+      $('doneBack').focus();
+    } catch (e) {
+      showMsg('Could not reach the server. Nothing was lost — check your connection and try again.', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Submit';
+    }
+  }
+
+  boot();
+</script>
+</body>
+</html>
