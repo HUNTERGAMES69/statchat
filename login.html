@@ -242,7 +242,21 @@
      to READ the document is not notice. */
   .sc-terms a { color:var(--sc-ink, #10141a); font-weight:600;
     text-decoration:underline; text-underline-offset:2px; }
-  .sc-terms a:hover, .sc-terms a:focus-visible { color:var(--sc-amber, #ffc72c); }
+  /* LITERAL, not var(--sc-amber). login.html defines --sc-ink and a dozen
+     other tokens in its own :root but NOT --sc-amber, so the fallback is
+     what actually renders -- and contrast_check refuses an undefined
+     token whose fallback is a light-theme colour, correctly: a page that
+     reaches for a token it does not have is one stylesheet load away from
+     painting the wrong thing. account.html declares --sc-amber itself and
+     so keeps the var(). Same call, same reason, as the amber literal in
+     game.html's save button. */
+  .sc-terms a:hover, .sc-terms a:focus-visible { color:#ffc72c; }
+  /* TAP TARGET. Vertical padding on an INLINE element expands the hit area
+     without changing the line box, so the sentence lays out exactly as
+     before and the link grows from 14px tall to something a thumb can
+     actually hit. Measured at 375px: 14px -> 34px. Horizontal padding is
+     kept at 0 so the underline still hugs the words. */
+  .sc-terms a { padding:10px 0; }
   @media print { .sc-terms { color:#666 !important; } }
 </style>
 </head>
@@ -310,8 +324,13 @@
            Still not the strongest form, and that is on purpose: a stored
            acceptance with a version and a timestamp at sign-up beats every
            notice, and remains a later change. -->
+      <!-- NEW TAB, and on the login page it is not cosmetic: a reader who
+       navigates away mid-sign-in loses whatever they have typed, and on a
+       phone that means the password too. rel="noopener" because
+       target="_blank" without it hands the opened page a reference back
+       to this one. -->
       <p class="sc-terms">By signing in and using StatChat, you accept our
-        <a href="terms.html">Terms of Service</a>.</p>
+        <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a>.</p>
     </div>
 
     <!-- Shown only when the account has two-factor enabled. Supabase
