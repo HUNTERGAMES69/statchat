@@ -9004,10 +9004,15 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // times.
   const ROLE_FIELD = { carrier: 'pp_carrier_grid', passer: 'pp_passer_grid',
                        receiver: 'pp_receiver_grid', punter: 'pp_punter_grid',
-                       kicker: 'pp_kicker_grid' };
+                       kicker: 'pp_kicker_grid',
+                       // Same field as `receiver`; a separate key only so the
+                       // refusal can say why it is required on this one path.
+                       receiverFumbled: 'pp_receiver_grid' };
   const ROLE_LABEL = { carrier: 'the ball carrier', passer: 'the passer',
                        receiver: 'the receiver', punter: 'the punter',
-                       kicker: 'the kicker' };
+                       kicker: 'the kicker',
+                       receiverFumbled: 'the receiver \u2014 required when the catch was fumbled, '
+                         + 'because the play cannot be recorded without him' };
   function missingPlayer(role, value){
     if (value) return false;
     const what = ROLE_LABEL[role] || 'a player';
@@ -13821,6 +13826,31 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         const yds = signedYards('pp_yards') || '0';
         const fumbled = document.getElementById('pp_pass_fumbled').checked;
         if (fumbled){
+          // THE RECEIVER IS REQUIRED ON THIS ONE PATH, AND ONLY THIS ONE.
+          // ----------------------------------------------------------------
+          // Reported from live testing, 3 September 2026: entering a fumbled
+          // completion with the receiver unknown produced "Unrecognized
+          // entry" and no saved play. The reason is that the fumble code is
+          // KEYED ON THE RECEIVER -- it is built as `<receiver>f ...` -- and
+          // parseInput's first token must match /^(\d+)([a-z]+)$/, so the '?'
+          // this panel substitutes for an unknown receiver can never parse.
+          // '?' is valid LATER in a code (the recoverer uses it); it is only
+          // the leading player token that must be a number.
+          //
+          // A DEAD END, not a warning: the panel offered the combination and
+          // then refused to save it, with a message that named no cause. A
+          // scorer meeting this mid-game cannot record the play at all.
+          //
+          // REFUSED CLEARLY RATHER THAN TAUGHT TO THE PARSER. Accepting '?'
+          // as a leading token is the better fix and is not a night-before
+          // change: `p1` flows through every branch of parseInput and each
+          // one would need to handle a non-numeric player. Andy's call,
+          // 3 Sep: require it here now, teach the parser later.
+          //
+          // The receiver stays optional on every other pass -- an ordinary
+          // completion, an incompletion and an interception are all unchanged
+          // and still accept '?'.
+          if (missingPlayer('receiverFumbled', sel.receiver)) return;
           // Same play, not two -- see the Rush panel above and the 'f'
           // branch of parseInput. The passer travels in the attempt token
           // because the fumble code is keyed on the RECEIVER, so without
