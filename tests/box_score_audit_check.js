@@ -168,9 +168,13 @@ chk(runWith(engineSrc).length === 0,
                   "s.yds = (s.yds||0) + 2*(r.carrier.yards||0);")],
   ['the cmp/comp fault returns',
    s => s.replace("ps.comp = (ps.comp||0) + 1;", "ps.cmp = (ps.cmp||0) + 1;")],
+  // Target renamed ts -> rs on 3 September 2026, when sack yardage moved off
+  // the TEAM rushing row onto the passer's own. The mutation is unchanged in
+  // meaning: flip the subtraction so a sack reads as a gain, and check the
+  // audit oracle still disagrees with the engine.
   ['sack yardage credited as a gain',
-   s => s.replace("ts.yds = (ts.yds||0) - (r.passer.yards||0);",
-                  "ts.yds = (ts.yds||0) + (r.passer.yards||0);")],
+   s => s.replace("rs.yds = (rs.yds||0) - (r.passer.yards||0);",
+                  "rs.yds = (rs.yds||0) + (r.passer.yards||0);")],
   ['a made field goal stops counting',
    s => s.replace("s.fgMade = (s.fgMade||0) + 1;", "")],
   ['punt yardage dropped',

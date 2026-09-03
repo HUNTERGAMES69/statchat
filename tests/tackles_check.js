@@ -245,15 +245,28 @@ async function run() {
          JSON.stringify(sledge));
   }
 
-  // --- the sack still lands on team rushing ------------------------------
-  // The other half of the sign convention, and the reason it must stay
-  // positive. NFHS charges sack yardage to the team as a rushing loss;
-  // if the stored sign flipped, this would silently read +7.
+  // --- the sack lands on the PASSER's rushing line ------------------------
+  // The other half of the sign convention, and the reason the stored value
+  // must stay positive: if the sign flipped, this would silently read +7.
+  //
+  // CHANGED 3 September 2026. This used to assert a TEAM rushing row, on the
+  // stated grounds that "NFHS charges sack yardage to the team". It does not.
+  // NFHS Statisticians' Manual section 2: a player downed behind the LOS
+  // while intending to pass "is charged with a 'time carried' and minus
+  // rushing yards" -- that player, not the squad. NCAA is the same; the NFL
+  // is the book that takes it out of team passing. The engine was corrected
+  // and this assertion follows it.
+  //
+  // The TEAM ROW IS STILL RIGHT FOR A BAD SNAP, which the manual says in as
+  // many words, and tests/bad_snap_fumble_check.js still asserts it.
   {
-    const teamRush = ((box.teamA || {}).rushing || {}).TEAM || {};
-    if (teamRush.yds !== -7 || teamRush.att !== 1) {
-      fail('convention', 'the sack should charge team rushing 1 attempt for -7 yards, got ' +
-           JSON.stringify(teamRush));
+    const qbRush = ((box.teamA || {}).rushing || {}).Robinson || {};
+    if (qbRush.yds !== -7 || qbRush.att !== 1) {
+      fail('convention', 'the sack should charge the quarterback 1 rushing attempt ' +
+           'for -7 yards, got ' + JSON.stringify(qbRush));
+    }
+    if (((box.teamA || {}).rushing || {}).TEAM) {
+      fail('convention', 'a sack created a TEAM rushing row; it belongs to the passer now');
     }
   }
 
