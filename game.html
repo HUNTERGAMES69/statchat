@@ -1333,7 +1333,7 @@
       </div>
       <!-- Third scrimmage row, at the ordinary two-up size rather than
            Rush and Pass's. Both ARE scrimmage plays -- a bad snap and a
-           kneel are charged as team rushes -- so they belong here rather
+           kneel are both charged as team rushes -- so they belong here rather
            than filed under utilities with the corrections. Kept smaller
            because they are not entered anything like as often. -->
       <div class="row">
@@ -3202,11 +3202,29 @@ function parseInput(raw, state){
       text = TEAMS[off].name + ' — bad snap, team rush ' + gainPhrase(netYards);
     }
     else if (type === 'kn'){
-      // NCAA statistics rules charge a quarterback kneel as a TEAM rush:
-      // the lost yardage counts against the team, and the individual is
-      // charged with no attempt and no yards. Logging it as a normal
-      // rush would quietly wreck the quarterback's rushing average every
-      // time the offense ran out the clock.
+      // A KNEEL IS CHARGED TO A TEAM RUSH HERE. That is a StatChat choice,
+      // not a rule-book one, and this comment used to claim otherwise --
+      // "NCAA statistics rules charge a quarterback kneel as a TEAM rush"
+      // was simply false. Corrected 3 September 2026.
+      //
+      // NFHS charges the player. The Statisticians' Manual, on a quarterback
+      // kneeling with no effort to gain: "credit Player A with a loss of 2
+      // yards rushing." NCAA charges the quarterback too.
+      //
+      // WHY WE STILL DIFFER, deliberately: the panel prefills 0 and now says
+      // in as many words that this button is for a true kneeldown at the
+      // spot and nothing else. A 0-yard attempt is the whole of the
+      // divergence -- no yardage moves anywhere, and the only cost is one
+      // rushing attempt not appearing on the quarterback's line. Charging
+      // him for it would need entry to ask WHO took the snap, which the
+      // `kn N` play code has no room for. That is a real change, it is on
+      // the list, and this is not it.
+      //
+      // The worry behind the TEAM row was sound and still holds: logging
+      // kneels as ordinary rushes wrecks a quarterback's rushing average
+      // every time the offense runs out the clock. The answer to that is
+      // the panel note, which sends real lost-yardage plays to the Rush
+      // tree where they belong.
       const kn = parseInt(rest[0], 10);
       netYards = -Math.abs(isNaN(kn) ? 1 : kn);
       text = TEAMS[off].name + ' — QB kneel, team rush ' + gainPhrase(netYards);
@@ -4075,7 +4093,8 @@ function offenseEligible(team, role){
   // could never reach him. That meant a back who was not on the likely-
   // starters list had to be typed in on every single carry.
   const candidates = Object.keys(visible).filter(n => n !== 'TEAM');
-  // TEAM is a stat bucket for kneels and sack yardage, not a person. It
+  // TEAM is a stat bucket for kneels and bad snaps, not a person. (Sack
+  // yardage moved off it to the passer's own line on 3 September 2026.) It
   // lands in usedInRole like any other "carrier", so adding used players
   // to the candidate list swept it into the picker -- offering "#TEAM
   // TEAM" as someone you could hand the ball to.
@@ -16243,8 +16262,18 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const panel = document.getElementById('playPanel');
     panel.style.display = 'block';
     panel.innerHTML =
-      '<p style="font-size:13px; color:#8d99a6; margin:0 0 6px;">QB kneel — recorded as a team rush, ' +
-      'so no quarterback is charged with the attempt or the yardage.</p>' +
+      '<p style="font-size:13px; color:#8d99a6; margin:0 0 6px;">' +
+      '<strong style="color:#eef1f4;">Only a true kneeldown to run the clock</strong> — ' +
+      'victory formation, taken at the spot, 0 yards. Recorded as a team rush, so no ' +
+      'quarterback is charged with the attempt or the yardage.</p>' +
+      // WHAT TO DO INSTEAD, not only what this button is for. A scorer who
+      // has just watched the quarterback go down after a scramble needs to
+      // be told where that play goes, or he enters it here and the yards
+      // leave the quarterback's line for good.
+      '<p style="font-size:13px; color:#8d99a6; margin:0 0 6px;">Anything else — a sneak, ' +
+      'a scramble, any play that actually lost ground — is a <strong style="color:#eef1f4;">rush</strong>. ' +
+      'Enter it on the Rush tree under his number so the yards land on his own line, ' +
+      'the way NFHS counts them.</p>' +
       '<p style="font-size:13px; color:#8d99a6; margin:8px 0 4px;">Yards lost</p>' +
       // PREFILLED 0. A kneel is nearly always taken at the spot -- the
       // loss is the exception, not the rule -- so the common case should
@@ -16266,8 +16295,9 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       const n = parseInt((document.getElementById('kneel_yds').value || '').trim(), 10);
       document.getElementById('code').value = '0kn ' + (isNaN(n) ? 0 : Math.abs(n));
       showConfirm();
-      // No individual carrier -- that is the whole point of a team rush.
-      // The yardage still has to ride on the role, or computeBoxScore
+      // No individual carrier -- that is the whole point of a team rush,
+      // and the divergence from NFHS is documented at the parser branch for
+      // 'kn'. The yardage still has to ride on the role, or computeBoxScore
       // records the attempts with zero yards against them.
       if (pending) pending.roles = {
         carrier: { team: computeState().possession, num: 'TEAM', yards: pending.effect.statYds },

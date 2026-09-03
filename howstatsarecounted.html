@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="canonical" href="https://www.statchat.co/how-stats-are-counted.html">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How high school football stats are counted (NFHS) — StatChat</title>
+<meta name="description" content="What produces each football statistic, who it is credited to, and what deliberately counts for nothing. The complete StatChat rule set, NFHS conventions.">
+
+<!-- WHY THIS PAGE EXISTS.
+     Every stat argument is really an argument about a rule nobody wrote
+     down. A coach asks why the punting average is 41.2 when the punter has
+     five punts and 165 yards; a parent asks why a reception shows under
+     "Unknown"; a reporter asks whether a sack counts against rushing. The
+     answers have always existed in the code. This page is where a person
+     who does not read code can find them.
+
+     THIS IS A RULE BOOK, NOT A CHANGE LOG. It states what the app does
+     today and why. What changed, when, and what it did before belongs in
+     the development notes, not on a page a coach reads at a stadium. If a
+     rule changes in the app, it changes here the same day. -->
+
+<link rel="icon" href="favicon.ico">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://www.statchat.co/how-stats-are-counted.html">
+<meta property="og:site_name" content="StatChat">
+<meta property="og:title" content="How high school football stats are counted (NFHS)">
+<meta property="og:description" content="What produces each statistic, who it is credited to, and what counts for nothing.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    /* The page has horizontal scrollers on its tables; without this the
+       browser paints their scrollbars, and the caret, in light chrome. */
+    color-scheme:dark;
+    --ink:#10141a; --panel:#191f27; --raise:#20272f; --edge:#2b333d;
+    --paper:#eef1f4; --mute:#8d99a6; --amber:#ffc72c;
+    --display:"Barlow Condensed",Impact,"Arial Narrow",sans-serif;
+    --body:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--body);
+       font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:820px;margin:0 auto;padding-left:24px;padding-right:24px}
+  a{color:var(--amber)}
+  a:hover{color:#fff}
+
+  header{padding:56px 0 26px;border-bottom:1px solid var(--edge)}
+  .eyebrow{font-family:var(--display);font-size:14px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--amber);margin:0 0 10px}
+  h1{font-family:var(--display);font-size:clamp(38px,8vw,62px);line-height:.98;
+     margin:0 0 14px;font-weight:700;letter-spacing:-.01em;text-transform:uppercase}
+  .lede{margin:0;font-size:18px;color:#cfd6dd;max-width:62ch}
+  .stamp{margin-top:22px;padding-top:16px;border-top:1px solid var(--edge);
+    font-size:13px;color:var(--mute)}
+  .stamp b{color:var(--paper);font-weight:600}
+
+  nav.toc{background:var(--panel);border:1px solid var(--edge);border-radius:8px;
+    padding:20px 24px;margin:30px 0}
+  nav.toc h2{font-family:var(--display);font-size:15px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--mute);margin:0 0 12px;font-weight:600}
+  nav.toc ol{margin:0;padding-left:20px;columns:2;column-gap:34px;font-size:14.5px}
+  nav.toc li{margin-bottom:5px;break-inside:avoid}
+  nav.toc a{text-decoration:none;color:#cfd6dd}
+  nav.toc a:hover{color:var(--amber);text-decoration:underline}
+
+  section{margin:40px 0 0;scroll-margin-top:20px}
+  h2.sec{font-family:var(--display);font-size:26px;margin:0 0 12px;font-weight:600;
+    letter-spacing:.005em;text-transform:uppercase}
+  h2.sec .n{color:var(--amber);margin-right:10px}
+  h3{font-family:var(--body);font-size:16px;font-weight:600;margin:22px 0 6px;color:#fff}
+  p{margin:0 0 13px}
+  ul{margin:0 0 13px;padding-left:22px}
+  li{margin-bottom:7px}
+  strong{color:#fff;font-weight:600}
+
+  /* TABLES SCROLL RATHER THAN SQUEEZE. Three columns of rule text will not
+     fit a phone, and a table that wraps to two words a line is unreadable.
+     The min-width forces the scroller to engage instead of compressing. */
+  .scroll{overflow-x:auto;margin:16px 0;
+    border:1px solid var(--edge);border-radius:8px;background:var(--panel)}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:520px}
+  th,td{text-align:left;padding:11px 16px;border-bottom:1px solid var(--edge);
+    vertical-align:top}
+  tbody tr:last-child td{border-bottom:0}
+  thead th{font-family:var(--display);font-size:13px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--mute);font-weight:600;
+    background:var(--raise)}
+  td.what{color:#fff;font-weight:600}
+
+  .callout{background:var(--raise);border:1px solid var(--edge);
+    border-left:3px solid var(--amber);border-radius:0 6px 6px 0;
+    padding:16px 20px;margin:16px 0}
+  .callout p:last-child{margin-bottom:0}
+  .callout .tag{font-family:var(--display);font-size:13px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--amber);font-weight:600;
+    display:block;margin-bottom:7px}
+
+  /* The label a reader will actually see on a stat sheet, set apart from
+     running text so TEAM and Unknown read as values rather than as shouting. */
+  .lbl{font-family:var(--display);letter-spacing:.06em;font-weight:600;
+    background:rgba(255,199,44,.12);border:1px solid rgba(255,199,44,.35);
+    color:var(--amber);padding:1px 8px;border-radius:3px;white-space:nowrap}
+
+  footer{margin-top:64px;padding:26px 0 40px;border-top:1px solid var(--edge)}
+  .foot{font-size:12px;color:var(--mute);line-height:1.5}
+  .backlinks{margin-bottom:16px;font-size:14px}
+  .backlinks a{margin-right:18px;text-decoration:none}
+
+  @media (max-width:640px){ nav.toc ol{columns:1} .wrap{padding-left:18px;padding-right:18px} }
+
+  /* PRINTS LIGHT. Coaches print this and put it in a binder; a dark page
+     wastes a cartridge and reads badly on paper. */
+  @media print{
+    body{background:#fff;color:#000}
+    a{color:#000;text-decoration:underline}
+    nav.toc{display:none}
+    .callout{background:#f5f5f5;border-color:#999;border-left-color:#000}
+    .scroll{border-color:#999;background:#fff}
+    thead th{background:#eee;color:#000}
+    th,td{border-color:#ccc}
+    h2.sec .n{color:#000}
+    .lbl{background:none;border:1px solid #000;color:#000}
+    header{border-color:#000}
+    section{page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">StatChat</p>
+  <h1>How stats are counted</h1>
+  <p class="lede">The complete rule set behind every number StatChat produces: what creates
+  each statistic, who gets credit for it, and what deliberately counts for nothing. If a
+  figure on a stat sheet ever looks wrong, the reason is almost always on this page.</p>
+  <p class="stamp">
+    <b>Applies to every game scored in StatChat</b> &middot; NFHS conventions
+    &middot; Updated September 2026
+  </p>
+</header>
+
+<nav class="toc" aria-label="Contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#credit">Who gets credit</a></li>
+    <li><a href="#passing">Passing</a></li>
+    <li><a href="#receiving">Receiving</a></li>
+    <li><a href="#rushing">Rushing</a></li>
+    <li><a href="#defense">Defense</a></li>
+    <li><a href="#kicking">Kicking and punting</a></li>
+    <li><a href="#returns">Returns and touchbacks</a></li>
+    <li><a href="#score">Score and scoring plays</a></li>
+    <li><a href="#downs">Downs, possession, drives</a></li>
+    <li><a href="#turnovers">Turnovers</a></li>
+    <li><a href="#nothing">What counts for nothing</a></li>
+    <li><a href="#rules">NFHS and NCAA</a></li>
+  </ol>
+</nav>
+
+<section id="credit">
+  <h2 class="sec"><span class="n">1</span>Who gets credit</h2>
+  <p>Read this first &mdash; every rule after it assumes this model.</p>
+  <p>A statistic is credited to a <strong>role</strong> recorded on the play: the ball
+  carrier, the passer, the receiver, the defender, the kicker, the punter, the returner.
+  Roles are how StatChat knows who did what, and every question about attribution comes
+  down to which role was filled in when the play was entered.</p>
+
+  <h3>Names, not numbers</h3>
+  <p>Every stat line is keyed by the player's <strong>name</strong>, not his jersey number.
+  Two players who wore <strong>#22</strong> in different games keep separate lines, and a
+  player who changed numbers mid-season keeps one.</p>
+
+  <div class="callout">
+    <span class="tag">When the player cannot be identified</span>
+    <p>The statistic is <strong>never thrown away</strong>. StatChat works through the
+    options in order: a name typed on the play is used as given; otherwise the roster is
+    searched, preferring the unit that fits the stat; otherwise any rostered player with
+    that number; and if nothing matches, the line is labeled <strong>#22</strong> and still
+    counts. A jersey nobody recognizes produces a real stat line with an ugly name, which
+    is the honest outcome.</p>
+  </div>
+
+  <h3><span class="lbl">TEAM</span> and <span class="lbl">Unknown</span> mean different things</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Label</th><th>What it means</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td class="what">TEAM</td><td>Charged to the squad rather than to a player</td>
+        <td>A bad snap, and a quarterback kneel to run out the clock</td></tr>
+      <tr><td class="what">Unknown</td><td>This happened to a player nobody wrote down</td>
+        <td>A completion where the receiver's number was not caught</td></tr>
+    </tbody>
+  </table></div>
+  <p>Keeping them apart matters. If you see <span class="lbl">Unknown</span> on a stat
+  sheet, somebody missed a number and it can be corrected. <span class="lbl">TEAM</span>
+  is not a gap &mdash; nothing is missing and nothing needs fixing at the keyboard.</p>
+</section>
+
+<section id="passing">
+  <h2 class="sec"><span class="n">2</span>Passing</h2>
+  <p>Credited to the passer named on the play. Passing yardage comes from what was recorded
+  for the passer, not from the play's net gain.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Stat</th><th>Comes from</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="what">Attempts</td><td>Every completion, incompletion and interception</td>
+        <td>A sack is <em>not</em> an attempt</td></tr>
+      <tr><td class="what">Completions</td><td>A completed pass</td>
+        <td>Still credited when the catch ended in a fumble</td></tr>
+      <tr><td class="what">Yards</td><td>The yardage recorded for the passer</td>
+        <td>Nothing on an interception &mdash; no yardage is recorded at all</td></tr>
+      <tr><td class="what">Long</td><td>Longest single completion</td><td>Never shown as a negative</td></tr>
+      <tr><td class="what">Touchdowns</td><td>A completion that scored</td><td></td></tr>
+      <tr><td class="what">Interceptions</td><td>A pass intercepted</td><td>Counts as an attempt as well</td></tr>
+      <tr><td class="what">Sacked</td><td>A sack, or a fumble that ended a sack</td>
+        <td>Appears on the passing line, not on the defense's</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout">
+    <span class="tag">Sack yardage goes on the quarterback</span>
+    <p><strong>A sack is a rushing loss on the passer's own line.</strong> The NFHS
+    Statisticians' Manual is explicit: a player downed behind the line while intending to
+    pass is charged with a carry and minus rushing yards, because he is not a passer until
+    he throws and always keeps the option of running. NCAA counts it the same way. It is
+    the <em>NFL</em> that keeps sack yardage off individual lines and takes it out of team
+    passing instead.</p>
+    <p>So a quarterback who is sacked three times for 21 yards <strong>appears in the
+    rushing table</strong> at 3 attempts for &minus;21, even if he never carried the ball
+    by choice. That is not an error. It is what an official worksheet and MaxPreps show for
+    the same player, and it is why his rushing line here reconciles against theirs.</p>
+    <p>Team rushing is unaffected either way &mdash; the same attempt and the same loss,
+    on a player's row rather than the squad's.</p>
+  </div>
+</section>
+
+<section id="receiving">
+  <h2 class="sec"><span class="n">3</span>Receiving</h2>
+  <p>Credited to the receiver named on the play &mdash; a name that is optional on purpose.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Stat</th><th>Comes from</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="what">Receptions</td><td>A completed pass</td><td></td></tr>
+      <tr><td class="what">Targets</td><td>Any pass thrown at him &mdash; complete, incomplete or intercepted</td>
+        <td>So targets and pass attempts agree</td></tr>
+      <tr><td class="what">Yards</td><td>The yardage recorded for the receiver</td><td></td></tr>
+      <tr><td class="what">Long</td><td>Longest single reception</td><td>Never shown as a negative</td></tr>
+      <tr><td class="what">Touchdowns</td><td>A reception that scored</td><td></td></tr>
+      <tr><td class="what">Fumbles</td><td>He fumbled</td><td>Filed under receiving when the play was a pass</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout">
+    <span class="tag">The deep ball nobody caught the number on</span>
+    <p>Naming the receiver is optional, because a deep ball is exactly the play where a
+    scorer misses a number and refusing the entry would be worse than accepting it. When no
+    receiver is named, the catch and its yardage go to an <span class="lbl">Unknown</span>
+    line on that team, so that <strong>passing yards still equal the sum of receiving
+    yards</strong>. That is the check most likely to be run against a stat sheet, and it
+    holds.</p>
+    <p>No invented player is ever created. <span class="lbl">Unknown</span> exists only in
+    the computed box score, never on your roster.</p>
+  </div>
+
+  <div class="callout">
+    <span class="tag">A touchdown asks harder</span>
+    <p>The receiver stays optional everywhere and the save is never refused. But when a pass
+    is marked a touchdown with no receiver picked, the save button itself reads
+    <strong>&ldquo;Save with NO RECEIVER&rdquo;</strong>, so recording an unattributed
+    touchdown is a deliberate act rather than the default one.</p>
+    <p>A touchdown is the opposite of the play that makes the receiver optional: he is
+    standing in the end zone holding the ball and the clock is stopped. It is also where a
+    missing name costs most &mdash; the scoring summary, the public recap, the season
+    leaders. Refusing the save outright would be worse, because a scorer who truly cannot
+    identify the receiver would guess a number, and <em>a wrong name is a lie that looks
+    like data</em> where <span class="lbl">Unknown</span> is merely honest.</p>
+    <p>A catch that ends in a fumble is the one place a receiver is genuinely required: that
+    play is filed under his number, so without it there is nothing to file.</p>
+  </div>
+</section>
+
+<section id="rushing">
+  <h2 class="sec"><span class="n">4</span>Rushing</h2>
+  <p>Credited to the ball carrier. Rushing yardage is signed &mdash; a loss is a negative
+  number and reduces the total.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Stat</th><th>Comes from</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="what">Attempts</td><td>A run, or a run that ended in a fumble</td>
+        <td>A carry that ends in a fumble is <strong>one play</strong>, not two</td></tr>
+      <tr><td class="what">Yards</td><td>The yardage recorded for the carrier</td><td>Negative on a loss</td></tr>
+      <tr><td class="what">Long</td><td>Longest single carry</td>
+        <td>Never negative &mdash; a back whose only carry lost three yards shows 0</td></tr>
+      <tr><td class="what">Touchdowns</td><td>A carry that scored</td><td></td></tr>
+      <tr><td class="what">Fumbles</td><td>He fumbled</td>
+        <td>Filed under rushing on a run or a sack</td></tr>
+      <tr><td class="what">TEAM</td><td>Bad snaps and clock-killing kneels</td>
+        <td>A bad snap belongs to the squad under NFHS. A kneel is a documented difference
+        worth no yardage &mdash; see section 12</td></tr>
+    </tbody>
+  </table></div>
+  <p>A strip-sack is charged as a fumble on the <strong>quarterback's rushing line</strong>,
+  because he is the ball carrier at the moment it comes loose.</p>
+</section>
+
+<section id="defense">
+  <h2 class="sec"><span class="n">5</span>Defense</h2>
+  <p>Credited to the defender named on the play.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Stat</th><th>Comes from</th><th>Credited to</th></tr></thead>
+    <tbody>
+      <tr><td class="what">Tackles</td><td>Runs, passes, sacks, kickoffs, kickoff returns and punts</td>
+        <td>The named defender</td></tr>
+      <tr><td class="what">Tackles for loss</td><td>Any of those with negative net yardage</td>
+        <td>The named defender, or <span class="lbl">TEAM</span> if nobody was named</td></tr>
+      <tr><td class="what">Sacks</td><td>A sack</td><td>Named defender, else <span class="lbl">TEAM</span></td></tr>
+      <tr><td class="what">Interceptions</td><td>A pass intercepted</td><td>Named defender, else <span class="lbl">TEAM</span></td></tr>
+      <tr><td class="what">Fumble recoveries</td><td>A fumble the offense lost</td>
+        <td>Named defender, else <span class="lbl">TEAM</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout">
+    <span class="tag">Why unnamed events still count</span>
+    <p>Naming the tackler is optional. When nobody is named the event is credited to a
+    <span class="lbl">TEAM</span> row instead of being dropped, and because every report
+    totals the whole defense, the column adds up either way. The
+    <span class="lbl">TEAM</span> row holds only what no player claimed, so nothing is
+    counted twice.</p>
+  </div>
+
+  <div class="callout">
+    <span class="tag">One field, three meanings</span>
+    <p>The defender you name is read as the <strong>tackler</strong> on a play from
+    scrimmage, the <strong>cover tackler</strong> on a kick or a return, and the
+    <strong>recoverer</strong> on a fumble or a blocked kick. That is why recovering a
+    fumble does not also award a tackle, and neither does recovering a blocked kick &mdash;
+    picking up a loose ball is a different act from making a tackle.</p>
+  </div>
+
+  <h3>Tackles are a single number</h3>
+  <p>There is no solo-versus-assisted split. Entry takes one tackler per play, so every
+  tackle is effectively solo. Splitting it would mean a second field on the fastest-moving
+  part of the app, during a live game.</p>
+
+  <h3>Cover tackles count here, not in a special-teams column</h3>
+  <p>A tackle on a kick or a return is often the most notable thing a special-teams player
+  does all night. It appears in the <strong>defensive</strong> table beside tackles from
+  scrimmage, because it is a tackle &mdash; a separate special-teams column would split one
+  statistic across two tables so that neither added up.</p>
+
+  <h3>Team and player tackles for loss will not match, and both are right</h3>
+  <p>Team tackles for loss are counted from the plays themselves and need no named tackler,
+  so that figure is a <strong>ceiling</strong>. The sum of the players' tackles for loss is
+  a <strong>floor</strong>. They answer different questions and should not be reconciled to
+  each other.</p>
+
+  <h3>A strip-sack credits the team, not the recoverer</h3>
+  <p>When a sack becomes a fumble, the sack goes to the defense's
+  <span class="lbl">TEAM</span> row even if a recoverer is named &mdash; the man who made
+  the sack and the man who fell on the ball are frequently different players, and entry
+  never asks for both. The team level is the only claim that can be made honestly.</p>
+</section>
+
+<section id="kicking">
+  <h2 class="sec"><span class="n">6</span>Kicking and punting</h2>
+  <p>Credited to the kicker or punter named on the play, always by roster number.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Stat</th><th>Comes from</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="what">FG attempts</td><td>Any field goal with a kicker named</td>
+        <td>Includes missed <em>and blocked</em></td></tr>
+      <tr><td class="what">FG made</td><td>A good kick</td><td></td></tr>
+      <tr><td class="what">FG long</td><td>Longest kick <em>made</em></td><td>A longer miss never counts</td></tr>
+      <tr><td class="what">FG blocked</td><td>A blocked field goal</td><td>Charged to the kicker</td></tr>
+      <tr><td class="what">PAT attempted / made / blocked</td><td>Extra-point kicks</td>
+        <td>No yardage of any kind is recorded</td></tr>
+      <tr><td class="what">Punts</td><td>Every punt</td><td>Blocked punts included</td></tr>
+      <tr><td class="what">Punt yards and long</td><td>Unblocked punts only</td><td></td></tr>
+      <tr><td class="what">Punting average</td><td>Punt yards &divide; unblocked punts</td>
+        <td>The denominator excludes blocks &mdash; see below</td></tr>
+      <tr><td class="what">Kickoffs</td><td>Every kickoff</td>
+        <td>Onside kicks included; no yardage recorded</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout">
+    <span class="tag">Punting average excludes blocks, on purpose</span>
+    <p>A punter showing <strong>5 punts, 41.2 average</strong> has had one blocked. The
+    average divides by unblocked punts only, so a block does not drag down a number that is
+    meant to describe how he strikes the ball. The two counts disagree by design; nothing is
+    wrong with the sheet.</p>
+  </div>
+
+  <h3>A botched hold is not a missed kick</h3>
+  <p>A muffed snap or hold charges the kicker with <strong>nothing at all</strong> &mdash;
+  no attempt and no miss, because he never got to kick it. A <em>blocked</em> kick does
+  count as an attempt, because he did.</p>
+
+  <h3>Nobody is credited with blocking a kick</h3>
+  <p>There is no "kicks blocked" statistic on the defensive side. A block appears only
+  against the kicking team, as a blocked field goal, PAT or punt.</p>
+
+  <h3>A kick always names its kicker</h3>
+  <p>Naming the tackler is optional; naming the kicker is not. A kickoff, punt, field goal
+  or extra point <strong>cannot be saved without one</strong> &mdash; the app refuses and
+  says which name it still wants.</p>
+  <p>That is deliberate, and it is the one place special teams works differently from
+  defense. An unnamed tackle can go to a <span class="lbl">TEAM</span> row and the column
+  still adds up; there is no <span class="lbl">TEAM</span> row on special teams, so a kick
+  with nobody named would simply be a punt that never happened. Requiring the name at the
+  moment of entry is what keeps the kicking totals complete.</p>
+</section>
+
+<section id="returns">
+  <h2 class="sec"><span class="n">7</span>Returns and touchbacks</h2>
+  <p>Credited to the returner, who is recorded separately from the man who tackled him.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Stat</th><th>Comes from</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="what">Kickoff returns, yards, long, touchdowns</td><td>A kickoff return</td>
+        <td>The default when the type is not specified</td></tr>
+      <tr><td class="what">Punt returns, yards, long, touchdowns</td><td>A punt return</td><td></td></tr>
+      <tr><td class="what">Touchbacks</td><td>A kickoff that reached the end zone</td>
+        <td>Part of the kickoff count, credited to the <em>kicker</em></td></tr>
+    </tbody>
+  </table></div>
+  <p>Kickoff and punt returns are kept apart because a 22-yard kickoff average and an
+  8-yard punt average are different skills in different situations; averaging them together
+  produces a number that describes neither.</p>
+
+  <div class="callout">
+    <span class="tag">A loose ball is not a return</span>
+    <p>A muffed kick, or a blocked kick recovered and run back, is deliberately
+    <strong>not</strong> counted as a return. Counting it would inflate the average that
+    makes the statistic worth having in the first place.</p>
+  </div>
+</section>
+
+<section id="score">
+  <h2 class="sec"><span class="n">8</span>Score and scoring plays</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Play</th><th>Points</th><th>Credited to</th></tr></thead>
+    <tbody>
+      <tr><td class="what">Touchdown</td><td>6</td>
+        <td>The scoring team &mdash; including the defense on a return</td></tr>
+      <tr><td class="what">Field goal</td><td>3</td><td>Offense</td></tr>
+      <tr><td class="what">Extra-point kick</td><td>1</td><td>Offense</td></tr>
+      <tr><td class="what">Two-point conversion</td><td>2</td><td>Offense</td></tr>
+      <tr><td class="what">Safety</td><td>2</td><td><strong>The defense</strong></td></tr>
+      <tr><td class="what">Try returned by the defense</td><td>2</td>
+        <td><strong>The defense</strong> &mdash; NCAA only, see section 12</td></tr>
+    </tbody>
+  </table></div>
+  <p>The scoring team travels on the play itself and is never guessed at. A safety does not
+  change possession &mdash; the free kick that follows it does.</p>
+
+  <h3>The scoring summary</h3>
+  <p>A touchdown and its try are <strong>one entry</strong>, the way scoring summaries are
+  written everywhere: <em>Roberson 4 run (Lyon kick)</em>. A missed try still appears, so
+  the touchdown above it reads <em>(kick failed)</em> rather than leaving a blank &mdash; a
+  blank reads as "no try was entered", which is a different fact entirely.</p>
+  <p>The running score beside each row is the score <strong>at that moment</strong>, not at
+  the end of the game.</p>
+
+  <div class="callout">
+    <span class="tag">When the defense takes a try back</span>
+    <p>A try returned by the defense gets its <strong>own row</strong> rather than folding
+    into the touchdown. Folding it in would be wrong three ways at once: one score shown
+    where two happened, a parenthetical hanging off the team that did not score it, and no
+    way to tell who got the points. The touchdown row keeps the score it was pushed with,
+    because those two points were not on the board yet.</p>
+  </div>
+</section>
+
+<section id="downs">
+  <h2 class="sec"><span class="n">9</span>Downs, possession and drives</h2>
+
+  <h3>First downs</h3>
+  <p>A first down is recorded when the play reaches the line to gain, measured against the
+  situation before the play. Distance to go is capped going into the red zone &mdash; inside
+  the 10 it becomes the distance to the goal line.</p>
+
+  <div class="callout">
+    <span class="tag">Distance measures the ball, not the stat sheet</span>
+    <p>On a fumble the offense recovers, the runner's yardage is measured to the spot of the
+    <em>fumble</em>, but the ball ends up where his team recovered it. The chains follow the
+    ball.</p>
+  </div>
+
+  <h3>Penalties never advance the down</h3>
+  <p>Three cases. A dead-ball or post-change foul moves the ball and leaves down and
+  distance alone; an automatic first down awards one whatever the yardage; and penalty
+  yardage that reaches the marker on its own produces a first down.</p>
+
+  <h3>Time of possession</h3>
+  <p>Time of possession is built from clock entries, which are recorded after the play they
+  belong to. A drive's time is only complete once the event that <em>closes</em> it has been
+  entered &mdash; for a drive that ends in a score, that is the following kickoff, several
+  plays later. A partial figure during a live game usually means the closing play has not
+  been entered yet.</p>
+  <p><strong>A game nobody timed shows nothing, not zero.</strong> Zero would state
+  something false.</p>
+
+  <div class="callout">
+    <span class="tag">Overtime is not timed</span>
+    <p>Time of possession stops at the end of regulation. Overtime is played in series
+    rather than against a running clock, so any elapsed time entered there would be an
+    artifact of data entry rather than a fact about the game. Overtime is also left out of
+    possession counts, since each side is simply handed the ball.</p>
+    <p>Scoring plays in overtime carry no time stamp for the same reason: a time of day for
+    a period with no clock states something untrue however it is labeled. Which overtime it
+    was is still shown on the row.</p>
+  </div>
+
+  <h3>Overtime rounds</h3>
+  <p>Overtime is counted in <strong>series</strong>, and the round a coach would name covers
+  two of them: OT1 is the first two series, OT2 the next two. A manual change of possession
+  is not mistaken for the start of a new series.</p>
+</section>
+
+<section id="turnovers">
+  <h2 class="sec"><span class="n">10</span>Turnovers</h2>
+  <p>A turnover is always charged to the team that <em>lost</em> the ball.</p>
+  <ul>
+    <li>An interception &mdash; charged to the passing team.</li>
+    <li>A lost fumble &mdash; charged to the ball carrier's team.</li>
+    <li>A muffed punt recovered by the kicking team &mdash; charged to the
+      <em>receiving</em> team. The punting team's drive had already ended with the punt, so
+      charging them would count it twice.</li>
+    <li>A muffed kickoff recovered by the kicking team &mdash; same reasoning.</li>
+  </ul>
+  <div class="callout">
+    <span class="tag">An onside kick is never a turnover</span>
+    <p>Nobody has possessed the ball yet, so a recovery by either side is simply a recovery.
+    A muff <em>is</em> a turnover because the receiving team had the ball, however briefly.
+    An onside kick recovered by the kicking team is not, because nobody had it to lose.</p>
+  </div>
+  <p>Also not turnovers: a fumble the offense recovers itself, a muff the receiving team
+  recovers itself, a blocked kick, and &mdash; by the definition used here &mdash; a
+  turnover on downs.</p>
+</section>
+
+<section id="nothing">
+  <h2 class="sec"><span class="n">11</span>What counts for nothing</h2>
+  <p>These are the answers to "why didn't that show up?" &mdash; and all of them are correct
+  behavior rather than gaps.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Situation</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td class="what">Any try &mdash; PAT or two-point</td>
+        <td>Both rule books keep try plays out of the box score. No passing, rushing or
+        receiving statistic, no yardage, and no defensive credit.</td></tr>
+      <tr><td class="what">A muffed snap or hold on a kick</td><td>The kicker never kicked it</td></tr>
+      <tr><td class="what">A fumble recovery counted as a tackle</td>
+        <td>Recovering a loose ball is not a tackle</td></tr>
+      <tr><td class="what">A blocked-kick recovery counted as a tackle</td><td>Same reason</td></tr>
+      <tr><td class="what">A tackle for loss on a fumble</td>
+        <td>Fumbles carry no net-yardage figure to test</td></tr>
+      <tr><td class="what">A tackle for loss on a kick or return</td>
+        <td>Kicks carry no net yardage either, so a cover tackle behind the line cannot
+        invent one</td></tr>
+      <tr><td class="what">Kickoff yardage</td><td>Recorded, but never totaled</td></tr>
+      <tr><td class="what">Punts inside the 20, net punting, fair catches, hang time</td>
+        <td>Not computed</td></tr>
+      <tr><td class="what">Solo versus assisted tackles</td><td>One tackler per play</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout">
+    <p><strong>Overtime plays from scrimmage count exactly like regulation.</strong> A run is
+    a run and a catch is a catch. Only the try rule and the clock behave differently.</p>
+  </div>
+</section>
+
+<section id="rules">
+  <h2 class="sec"><span class="n">12</span>NFHS and NCAA</h2>
+  <p>StatChat is built for high school football and follows NFHS conventions. Three places
+  where the rule books differ are worth stating plainly.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Rule</th><th>How StatChat handles it</th></tr></thead>
+    <tbody>
+      <tr><td class="what">Sack yardage</td>
+        <td>Charged to the <strong>individual passer</strong> as a carry and minus rushing
+        yards, which is what NFHS prescribes and what NCAA does. Only the NFL takes it out
+        of team passing instead. Matches an official worksheet line for line.</td></tr>
+      <tr><td class="what">Quarterback kneel</td>
+        <td>Charged to <span class="lbl">TEAM</span>. <strong>This is a StatChat choice,
+        not the rule</strong> &mdash; NFHS credits the player with the loss. It is scoped
+        so that it costs nothing: the kneel panel is for a true clock-killing kneeldown
+        taken at the spot, worth 0 yards, and says so. Any play that actually lost ground
+        is entered as a rush under the quarterback's number, where the yards land on his
+        line. So the whole of the difference is one 0-yard attempt.</td></tr>
+      <tr><td class="what">Bad snap</td>
+        <td>Charged to <span class="lbl">TEAM</span>, which <em>is</em> the NFHS treatment
+        &mdash; the manual says rushing yardage on a bad snap with no kick is credited to
+        the team and not to an individual. Correct as written.</td></tr>
+      <tr><td class="what">Defense returning a try</td>
+        <td>Supported, and worth two points. Under NFHS the try ends the moment the defense
+        gains possession &mdash; no return, no score &mdash; which is how it is played in 49
+        states. Texas uses the NCAA book. Nothing needs to be set: under NFHS the officials
+        kill the play, so there is no return for a scorer to record.</td></tr>
+      <tr><td class="what">Overtime starting spot</td>
+        <td>Asked at the moment overtime begins rather than stored on the account &mdash;
+        NFHS starts at the opponent's 10, NCAA at the 25, and NFHS overtime is itself a
+        state adoption. The answer stays with that game, so a finished game always reads the
+        way it was played. It sets the spot and nothing else.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout">
+    <p>The box score is computed one way for every game. No output field records which rule
+    book a number was computed under, so if you are sending numbers to someone who needs
+    that distinction, say so alongside them.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="backlinks">
+    <a href="/">StatChat</a>
+    <a href="stats.html">Every stat we keep</a>
+    <a href="pricing.html">Pricing</a>
+    <a href="terms.html">Terms of Service</a>
+    <a href="account.html">Your account</a>
+  </div>
+  <p class="foot">&copy; 2026 StatChat. All rights reserved. Unauthorized copying,
+  modification or distribution of this software or its documentation is prohibited.</p>
+</footer>
+
+</div>
+</body>
+</html>
