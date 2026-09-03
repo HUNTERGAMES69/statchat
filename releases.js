@@ -42,6 +42,28 @@
 
 window.STATCHAT_RELEASES = [
   {
+    id: '2026-09-03-report-a-bug',
+    date: '2026-09-03',
+    title: 'Report a bug or ask for a feature from your account page',
+    body: 'There is a form at the top of your account page now. Pick whether it is ' +
+          'something broken or something missing, give it a title, say what happened, ' +
+          'and send it. Your name and school come with it, so there is nothing to fill ' +
+          'in about who you are. For a bug the useful sentence is what you were doing, ' +
+          'what you expected, and what happened instead — the quarter and the play help ' +
+          'more than anything else. If you ever cannot sign in, statchat.co/support.html ' +
+          'does the same job and asks only for an email address.',
+    where: 'Account → Report a bug or request a feature',
+    link: 'account.html',
+    // Everybody who uses the app, not just admins: the person who finds a
+    // bug is usually the one entering plays at the time.
+    audience: ['admin', 'game_entry'],
+    // NOT emailed. This is a way to reach us, not news about the game --
+    // it matters at the moment somebody needs it, and an email about it a
+    // week earlier is one they will not remember. The dashboard card is
+    // where it belongs.
+    email: false
+  },
+  {
     id: '2026-09-02-defensive-try-score',
     date: '2026-09-02',
     title: 'The defense can score on a PAT or two-point try again',
