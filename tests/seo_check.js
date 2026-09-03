@@ -9,18 +9,42 @@
 // short — none of them show up on screen, in a console, or in a build. They
 // show up as traffic that never arrives, months later.
 //
-// EIGHT PUBLIC PAGES: the brochure, the four split pages, and the three guides.
-// Everything else in this repo is behind a login or composited into a live
-// picture, and carries noindex plus a Disallow. Adding a public page means
-// adding it to PUBLIC here, to the sitemap, and to the brochure's links —
-// this file fails until all three are done, which is the point.
+// THE PUBLIC PAGES are the brochure, the split pages, the guides, and the
+// stat rule book. Everything else in this repo is behind a login or
+// composited into a live picture, and carries noindex plus a Disallow.
+// Adding a public page means adding it to PUBLIC here, to the sitemap, and
+// to the brochure's links — this file fails until all three are done, which
+// is the point.
+//
+// THE COUNT IS NEVER WRITTEN DOWN IN PROSE ANY MORE. It used to be, and by
+// 3 September 2026 one block of this file said "five" twice and "eight"
+// once while PUBLIC held eight — a comment asserting a fact the code next
+// to it already knows will drift, and then it misleads. Every label below
+// reads PUBLIC.length instead, so the list is the single statement of how
+// many there are.
 //
 //   node tests/seo_check.js
 
 const fs = require('fs');
 const path = require('path');
 const ROOT = path.join(__dirname, '..');
-const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+// A MISSING FILE IS A DIAGNOSIS, NOT A STACK TRACE. Adding a page to
+// PUBLIC before the page itself is committed threw ENOENT out of
+// readFileSync, which names a path and explains nothing -- and that is the
+// single most likely way to arrive here, because the natural order is to
+// update the check and upload the page in separate steps.
+const read = f => {
+  try {
+    return fs.readFileSync(path.join(ROOT, f), 'utf8');
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+    console.log('\n  FAIL ' + f + ' is listed in PUBLIC but is not in the repo.');
+    console.log('         Either the page has not been committed yet, or the name');
+    console.log('         in PUBLIC does not match the file. Both are real faults:');
+    console.log('         every link to it, and the sitemap, would be a 404.\n');
+    process.exit(1);
+  }
+};
 
 let pass = 0, fail = 0;
 const chk = (l, ok, det) => { if (ok) { pass++; console.log('  ok   ' + l); }
@@ -29,16 +53,26 @@ const chk = (l, ok, det) => { if (ok) { pass++; console.log('  ok   ' + l); }
 console.log('=== SEO foundation ===\n');
 
 const PUBLIC = ['index.html', 'broadcasting.html', 'stats.html', 'pricing.html',
-                'compare.html', 'help.html', 'tips.html', 'vmix.html'];
+                'compare.html', 'help.html', 'tips.html', 'vmix.html',
+                // The stat rule book, added 3 September 2026. Deliberately a
+                // separate page from help.html rather than a section of it:
+                // help.html is how to WORK the app, this is what each number
+                // MEANS, and one page cannot rank for both. See the titles.
+                //
+                // The filename carries no hyphens on purpose. It shipped
+                // twice as how-stats-are-counted.html and arrived both times
+                // with the hyphens stripped, leaving a live 404 behind every
+                // link and in the sitemap. Do not "tidy" it back.
+                'statrules.html'];
 const all = fs.readdirSync(ROOT).filter(f => f.endsWith('.html'));
 
-// ---- exactly five pages are indexable --------------------------------
+// ---- exactly the public pages are indexable --------------------------
 const indexable = all.filter(f => !/name="robots"/.test(read(f)));
-chk('exactly the eight public pages are indexable',
+chk('exactly the ' + PUBLIC.length + ' public pages are indexable',
     indexable.length === PUBLIC.length && PUBLIC.every(p => indexable.includes(p)),
     JSON.stringify(indexable));
-// THE PREMISE. "Five" is only a filter if there are many more files than
-// that; in a repo of five pages this check would assert nothing.
+// THE PREMISE. A short list is only a filter if there are many more files
+// than that; in a repo of nine pages this check would assert nothing.
 chk('...out of a repo with many more pages than that', all.length > 20,
     all.length + ' html files');
 
@@ -176,7 +210,7 @@ shareable.forEach(f => {
 // ---- sitemap ---------------------------------------------------------
 const sm = read('sitemap.xml');
 const locs = [...sm.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
-chk('the sitemap lists the eight public pages and nothing else',
+chk('the sitemap lists all ' + PUBLIC.length + ' public pages and nothing else',
     locs.length === PUBLIC.length && locs.includes('https://www.statchat.co/') &&
     PUBLIC.filter(f => f !== 'index.html')
       .every(f => locs.includes('https://www.statchat.co/' + f)),
