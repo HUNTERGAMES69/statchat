@@ -204,6 +204,11 @@
           font-weight:600; }
   .uact:hover { background:#f4f6f9; }
   .uact:disabled { opacity:.55; cursor:default; }
+  /* THE ONLY IRREVERSIBLE CONTROL ON THIS PAGE. .danger elsewhere is
+     scoped to .menu button and .topAct, neither of which the users
+     table uses, so it needs saying here rather than reused. */
+  .uact.danger { color:var(--sc-red, #a32d2d); border-color:#e3bcbc; }
+  .uact.danger:hover { background:#fbf2f2; }
 
   /* NOWRAP because a pill is a LABEL, not a sentence. "No 2FA" broke
      across two lines in the narrow status column and read as two
@@ -1468,6 +1473,14 @@
                 '<button data-demo="' + esc(t.id) + '" data-on="' + (t.is_demo ? '1' : '0') + '" ' +
                   'data-name="' + esc(t.name) + '">' +
                   (t.is_demo ? 'Unmark as demo' : 'Mark as demo') + '</button>' +
+                // INVITE, AND THE MESSAGE THAT SENDS PEOPLE HERE PREDATES IT.
+                // api/create-tenant's 207 has always said "the tenant is in
+                // the list; invite them again from there" -- and there was
+                // nothing there to invite from. api/invite-user.js already
+                // takes a tenantId from a super admin (line 73); only
+                // account.html ever called it, and only for its own school.
+                '<button data-invite="' + esc(t.id) + '" ' +
+                  'data-name="' + esc(t.name) + '">Invite user\u2026</button>' +
                 '<button class="danger" data-del="' + esc(t.id) + '" ' +
                   'data-name="' + esc(t.name) + '">Delete tenant</button>' +
                 // SEED AND RESET, ON DEMO TENANTS ONLY. The SQL refuses any
@@ -1747,6 +1760,68 @@
       return;
     }
 
+    // INVITING SOMEBODY INTO A NAMED SCHOOL. The path out of a tenant that
+    // was created without a user -- either because the address was already
+    // registered, or because it was left blank at creation time on purpose.
+    //
+    // THE TENANT TRAVELS IN THE REQUEST, which is why this can only be a
+    // platform control: api/invite-user.js takes req.body.tenantId when the
+    // caller is a super admin and ignores it otherwise, stamping the
+    // caller's own school instead. A tenant admin cannot reach another
+    // school with it however it is called.
+    const inv = e.target.closest('[data-invite]');
+    if (inv){
+      closeMenus(null);
+      const id = inv.getAttribute('data-invite');
+      const name = inv.getAttribute('data-name');
+      const addr = prompt('Invite a user into ' + name + '.\n\n' +
+        'They are emailed a link and land in this school as soon as they ' +
+        'accept it. If the address is already registered to somebody else, ' +
+        'this will refuse \u2014 free it from the Users tab first, or use a ' +
+        'different address.\n\nEmail address:');
+      if (addr === null) return;
+      const email = addr.trim();
+      if (!email){ showMsg('Nothing entered \u2014 no invite sent.', 'error'); return; }
+      // THE SAME TEST api/create-tenant APPLIES BEFORE IT BUILDS ANYTHING.
+      // Catching it here costs nothing and saves a round trip; the endpoint
+      // checks it again regardless, because this one can be skipped.
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
+        showMsg('That does not look like an email address \u2014 nothing was sent.', 'error');
+        return;
+      }
+      const who = prompt('Their name, for the invite and the user list.\n\n' +
+        'Optional \u2014 leave blank to skip:');
+      if (who === null) return;
+      if (!confirm('Send an invite to\n\n    ' + email +
+                   '\n\njoining\n\n    ' + name + '\n\nGo ahead?')) return;
+      const sess = await supabaseClient.auth.getSession();
+      const token = sess && sess.data && sess.data.session && sess.data.session.access_token;
+      if (!token){ showMsg('Your session has expired \u2014 please sign in again.', 'error'); return; }
+      try {
+        const r = await fetch('/api/invite-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ email, fullName: who.trim() || null, tenantId: id })
+        });
+        const out = await r.json();
+        if (!r.ok) throw new Error(out.error || ('HTTP ' + r.status));
+        // A PARTIAL SUCCESS COMES BACK AS 200 WITH nameWarning ON IT: the
+        // invite really did send and the display name really did not save.
+        // Read the same way the users table reads its own partials, rather
+        // than reporting a clean success for something that was not.
+        showMsg(out.nameWarning
+          ? esc(email) + ' invited to ' + esc(name) + ', but their name could not be ' +
+            'saved: ' + esc(out.nameWarning) + ' \u2014 set it from the Users tab.'
+          : esc(email) + ' invited to ' + esc(name) + '.',
+          out.nameWarning ? 'error' : 'success');
+      } catch (err){
+        showMsg('Could not send that invite: ' + esc(err.message), 'error');
+        return;
+      }
+      loadUsers(accessToken);
+      return;
+    }
+
     // DELETING A TENANT. Typed confirmation, not a yes/no: this row is
     // chosen from a list and lists are misclicked. Typing the name means
     // reading it, which is the only thing that reliably catches the wrong
@@ -1887,6 +1962,31 @@
                    '\n\ninstead of\n\n    ' + email + '\n\nGo ahead?')) return;
       payload.userId = btn.dataset.id;
       payload.email = trimmed;
+
+    } else if (act === 'delete'){
+      // TYPED CONFIRMATION, matching Delete tenant rather than the yes/no
+      // confirms above it. The risk being guarded is acting on the WRONG
+      // ROW -- these rows are chosen from a long list grouped by school,
+      // and a bare "are you sure?" catches none of that. Typing the
+      // address means reading it.
+      //
+      // Deliberately heavier than Delete tenant, which is a soft delete
+      // that Recovery tools can undo. This one cannot be undone at all,
+      // so it says so in the words the operator has to read past.
+      const typed = prompt('Permanently delete this user?\n\n    ' + email +
+        '\n\nThis removes the account itself, not just its access. It cannot ' +
+        'be undone from this console and there is no Recovery entry for it. ' +
+        'Any games or plays they entered stay exactly where they are -- those ' +
+        'belong to the school, not to the person.\n\n' +
+        'Use this to free an email address that is already registered so it ' +
+        'can be invited into a different school.\n\n' +
+        'Type the address exactly to confirm:');
+      if (typed === null) return;
+      if (typed.trim().toLowerCase() !== email.toLowerCase()){
+        alert('That did not match ' + email + ' \u2014 nothing was changed.');
+        return;
+      }
+      payload.userId = btn.dataset.id;
 
     } else if (act === 'setDisabled'){
       const turningOff = btn.dataset.disabled === '1';
@@ -2375,7 +2475,27 @@
                 ? '<span style="font-size:11.5px; color:#6b7680;">you</span>'
                 : '<button class="uact" data-act="setDisabled" data-id="' + esc(u.id) +
                   '" data-disabled="' + (u.disabled ? '0' : '1') + '">' +
-                  (u.disabled ? 'Enable' : 'Disable') + '</button>') +
+                  (u.disabled ? 'Enable' : 'Disable') + '</button>' +
+                  // DELETE, AND IT IS NOT THE SAME KIND OF ACTION AS THE REST.
+                  // Every other control on this row is reversible: a disabled
+                  // account re-enables, a reset link can be sent again, an
+                  // invite address can be changed. This one removes the row
+                  // from auth.users and there is no Recovery tab for it.
+                  //
+                  // IT EXISTS BECAUSE AN ADDRESS CANNOT BE REUSED WHILE ITS
+                  // USER STILL EXISTS. Creating a tenant with an email that
+                  // is already registered fails at the invite -- api/create-
+                  // tenant returns 207, the school is made and nobody is in
+                  // it -- and the only way forward is to free the address or
+                  // to invite that existing account into the new school.
+                  // Both were already implemented in the API and neither had
+                  // a button; this is one of the two.
+                  //
+                  // Self-delete is not offered, for the same reason Disable
+                  // is not: one mis-tap would remove the only account that
+                  // can reach this console. api/manage-users refuses it too.
+                  '<button class="uact danger" data-act="delete" data-id="' + esc(u.id) +
+                    '" data-email="' + esc(u.email) + '">Delete</button>') +
             '</td>' +
           '</tr>').join('');
     }).join('') + '</table>';
