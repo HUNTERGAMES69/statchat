@@ -313,6 +313,14 @@
   .floating-actions button { box-shadow:0 2px 8px rgba(0,0,0,0.2); }
   #playPanel, #utilPanel { background:#20272f; border-radius:8px; padding:12px 14px; margin-top:10px; scroll-margin-top:70px; }
   #confirmCard { background:#20272f; border-radius:8px; padding:12px 14px; margin-top:8px; }
+  /* THE RESULT LINE. Two states and no others: they reached the line to
+     gain, or they did not. Both measured against #confirmCard, which is
+     what sits behind them -- amber 9.66:1, green 9.01:1, against a project
+     floor of 3:1.
+     Green is the same token as the Save button's fill, deliberately: it
+     means the same thing in both places. */
+  #resultRow.resultConverts #resultText { color:var(--sc-green, #a3d93f); }
+  #resultRow.resultShort    #resultText { color:var(--sc-amber, #ffc72c); }
   /* The save button when it is about to store a touchdown with nobody
      credited. Amber rather than red: this is a legitimate save the scorer
      may well mean, not an error -- it just must not be pressed by reflex.
@@ -1456,8 +1464,26 @@
              still displays. -->
 
       <div id="confirmCard" style="display:none;">
-        <div style="font-size:14px; color:#8d99a6; margin-bottom:4px;">Parsed as</div>
+        <!-- "Will be logged as", not "Parsed as". The scorer is not
+             checking that the app understood the grammar; they are
+             checking that what is about to go in the book is what they
+             saw. -->
+        <div style="font-size:14px; color:#8d99a6; margin-bottom:4px;">Will be logged as</div>
         <div id="parsedText" style="font-size:16px; font-weight:600; margin-bottom:10px;"></div>
+        <!-- THE RESULT. Down, distance and the spot after this play, which
+             is the last thing worth checking before Save and the one fact
+             the card never stated. Hidden by default and shown only when
+             there is a real situation to show: after a touchdown or a
+             safety the next thing is a try, not a down, and a heading over
+             a guess is worse than no heading.
+             The label matches the one above it exactly -- same size, same
+             muted grey -- because it is the same kind of thing. Only the
+             VALUE is coloured, which is what separates the consequence
+             from the play. -->
+        <div id="resultRow" style="display:none; border-top:1px solid #2b333d; margin:0 0 10px; padding-top:10px;">
+          <div style="font-size:14px; color:#8d99a6; margin-bottom:4px;">Result</div>
+          <div id="resultText" style="font-size:16px; font-weight:600;"></div>
+        </div>
         <div id="fieldPosWarning" style="display:none; background:rgba(255,199,44,.13); border:1px solid #e0b400; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:13px; color:#eef1f4;"></div>
         <label id="flipRow" style="display:none;"><input autocomplete="off" type="checkbox" id="flipCheck" checked> <span id="flipLabel"></span></label>
         <div id="confirmClockRow" style="display:none; margin-bottom:8px;">
@@ -1467,7 +1493,11 @@
             Optional — but with no clock this possession's time won't be counted.
           </div>
         </div>
-        <div class="row" style="margin-top:8px;">
+        <!-- 18px, not the 8px every other gap in this card uses. The
+             result is the last thing to read and Save is the thing that
+             commits it; at the same spacing the eye ran straight past one
+             into the other. -->
+        <div class="row" style="margin-top:18px;">
           <button class="primary" id="saveBtn">Save</button>
           <button class="secondary" id="editBtn">Edit</button>
           <!-- Now that the tree collapses at Review, its own Clear is off
@@ -2955,6 +2985,11 @@ function parseInput(raw, state){
       newDown = 1;
       newDistance = Math.max(1, Math.min(10, 100 - newFieldPos));
     }
+    // THE SECOND APPEND SITE. A penalty states its own resulting situation
+    // rather than deriving one from yardage, so it carries the suffix the
+    // same way the scrimmage branch does -- see the note there. Missing
+    // this one would leave penalties showing the tail twice while every
+    // other play showed it once.
     const downDistanceText = (newDown !== null && newDistance !== null) ? (' — ' + ordinal(newDown) + ' & ' + togoLabel(newFieldPos, newDistance)) : '';
     return {
       // "PENALTY, Holding, on West Monroe, -10 yards". The yardage is
@@ -3000,7 +3035,11 @@ function parseInput(raw, state){
       // penaltyYds stays the penalty's OWN yardage: it feeds
       // state.penalties[team].yds, and a holding call is ten penalty yards
       // however far the ball happened to move.
-      effect: Object.assign({ penaltyTeam: team, penaltyYds: yds, fieldDelta: netMove },
+      effect: Object.assign({ penaltyTeam: team, penaltyYds: yds, fieldDelta: netMove,
+        // Display only, read by the Review card and nothing else -- the
+        // same tail this branch appended to the text above, handed back so
+        // the card can take it off again without a regular expression.
+        situationSuffix: downDistanceText },
         // Stored as well as written into the text, so a penalty breakdown
         // by type is possible later without re-parsing prose.
         penName ? { penaltyName: penName } : {},
@@ -3278,6 +3317,9 @@ function parseInput(raw, state){
     // The down and distance is what the eye looks for, so it goes at the
     // end where it is always in the same place.
     let score = null, converts = false, turnoverOnDowns = false;
+    // The exact tail appended below, or '' when nothing was. Read by
+    // showConfirm() and by nothing else.
+    let situationSuffix = '';
     if (tackler) text += ', tackled by ' + D(tackler);
     if (td){
       text += ' — TOUCHDOWN';
@@ -3287,11 +3329,24 @@ function parseInput(raw, state){
       else if (curDown >= 4){ turnoverOnDowns = true; text += ' — turnover on downs'; }
       else {
         const newFp = state.fieldPos !== null ? state.fieldPos + netYards : null;
-        text += ' — ' + ordinal(curDown + 1) + ' & ' + togoLabel(newFp, Math.max(curDist - netYards, 1));
+        // RECORDED AS WELL AS APPENDED, so the Review card can take it off
+        // the end again for display without a regular expression. The card
+        // states the situation once, in full, with the spot; the STORED
+        // text keeps the tail exactly as it always has, because the play
+        // log, the recap and the feeds all read it.
+        //
+        // Stripping by pattern would have to know that ' — ' also precedes
+        // TOUCHDOWN, '1st down', 'turnover on downs' and SAFETY. Handing
+        // back the exact string that was appended cannot be wrong.
+        situationSuffix = ' — ' + ordinal(curDown + 1) + ' & ' + togoLabel(newFp, Math.max(curDist - netYards, 1));
+        text += situationSuffix;
       }
     }
 
-    const effect = { isStat: true, statYds: netYards, fieldDelta: netYards, td, converts, turnoverOnDowns };
+    const effect = { isStat: true, statYds: netYards, fieldDelta: netYards, td, converts, turnoverOnDowns,
+                     // Display only. Nothing reads this except the Review
+                     // card, and nothing stored depends on it.
+                     situationSuffix };
     if (score) effect.score = score;
     // Shared by rush, pass, incomplete, sack and kneel, so the pass test
     // is explicit: only type 'p' has a receiver slot at rest[0].
@@ -10099,6 +10154,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     const panel = document.getElementById('playPanel');
     panel.style.display = 'block';
     document.getElementById('confirmCard').style.display = 'none';
+    hideResultRow();
 
     const { stats } = computePlayerStats();
     function offBlock(role, label){
@@ -14478,6 +14534,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // that needs them.
         markRowGap(prefix + '_wrap', 'Still needed: ' + gaps.join(' and '));
         document.getElementById('confirmCard').style.display = 'none';
+    hideResultRow();
         return;
       }
     }
@@ -14610,6 +14667,92 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     } catch (e) { /* positioning is a nicety; never let it block a save */ }
   }
 
+  // ---- THE REVIEW CARD'S RESULT LINE ---------------------------------
+  // Down, distance and the spot AFTER the play being reviewed. Display
+  // only: nothing here is stored, nothing reads it back, and the play text
+  // in the database, the log, the recap and the feeds is untouched.
+  //
+  // EVERY PATH IS WRAPPED, AND FAILURE IS SILENT ON PURPOSE. showConfirm()
+  // is the last control between a scorer and a saved play. A throw in here
+  // would take the card with it and leave a tenant unable to record
+  // anything, which is a far worse outcome than a missing line. So the
+  // worst this can do is show nothing.
+  //   tests/review_card_check.js drives thirteen play types through Review
+  //   and asserts the card opens AND Save works, precisely for this.
+
+  function hideResultRow(){
+    const row = document.getElementById('resultRow');
+    if (!row) return;
+    row.style.display = 'none';
+    // The class goes with it. A row hidden while still marked "converts"
+    // would flash green for the instant before the next play repaints it.
+    row.className = '';
+  }
+
+  // The play as it should READ on the card: the stored text minus the
+  // situation the parser appended to it.
+  function playTextForCard(p){
+    try {
+      const suffix = p && p.effect && p.effect.situationSuffix;
+      if (suffix && typeof p.text === 'string' && p.text.endsWith(suffix)){
+        return p.text.slice(0, -suffix.length);
+      }
+      return p.text;
+    } catch (e) {
+      return (p && p.text) || '';
+    }
+  }
+
+  function showResultRow(p){
+    const row = document.getElementById('resultRow');
+    const val = document.getElementById('resultText');
+    if (!row || !val) return;
+    try {
+      // NO SITUATION AFTER A SCORE. A touchdown or a safety is followed by
+      // a try and a kickoff, not by a down. Naming one would be inventing
+      // it. The play text already says TOUCHDOWN or SAFETY.
+      const e = p && p.effect;
+      if (!e || e.td || e.score){ hideResultRow(); return; }
+
+      // THE SAME REDUCER THAT WILL RUN ON SAVE, over the same plays plus
+      // this one. Reading the parser's own numbers instead would work for
+      // a rush and be wrong for a punt, a penalty and a kickoff, each of
+      // which sets the situation its own way. This cannot drift from what
+      // the app does a second later, because it IS what the app does.
+      const after = computeState(plays.concat([p]));
+      if (!after || after.fieldPos === null || after.fieldPos === undefined){
+        hideResultRow(); return;
+      }
+
+      const poss = after.possession;
+      const dd = ordinal(after.down || 1) + ' & ' + togoLabel(after.fieldPos, after.distance);
+      const spot = markerLabelNamed(after.fieldPos, poss);
+      if (!spot){ hideResultRow(); return; }
+
+      // NAME THE TEAM ONLY WHEN IT CHANGED. On a rush that keeps the ball
+      // "Ouachita ball" every play is noise; on a punt or a turnover it is
+      // the whole point, because "1st & 10" alone does not say whose.
+      const before = computeState();
+      const changed = before && before.possession && before.possession !== poss;
+      const who = changed && TEAMS[poss] ? TEAMS[poss].name + ' ball, ' : '';
+
+      val.textContent = who + dd + ' at ' + spot;
+      // GREEN WHEN THEY CONVERTED, AMBER WHEN THEY DID NOT -- read off the
+      // flag the parser already sets, not inferred from the string. A
+      // change of possession is amber: nobody reached the line to gain.
+      //
+      // A CLASS, not an inline style. contrast_check resolves a rule and
+      // scans inline colors separately, and style_audit counts them; this
+      // file already carries eight and does not need a ninth for something
+      // that has two fixed states.
+      row.className = e.converts ? 'resultConverts' : 'resultShort';
+      row.style.display = 'block';
+    } catch (err) {
+      // Deliberately quiet. See the note at the top of this block.
+      hideResultRow();
+    }
+  }
+
   function showConfirm(){
     if (spotIsMissing()) return;
     const val = document.getElementById('code').value;
@@ -14632,6 +14775,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (pending && pending.effect && pending.effect.isStat && state.fieldPos === null){
       pending = null;
       document.getElementById('confirmCard').style.display = 'none';
+    hideResultRow();
       document.getElementById('code').value = '';
       const msg = 'The ball\u2019s spot is not set, so this play cannot be recorded — yardage ' +
         'would not track and could not be checked. Use "Adjust Down/Distance" to set the spot, ' +
@@ -14647,10 +14791,17 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
     if (!pending){
       document.getElementById('parsedText').textContent = 'Unrecognized entry.';
+      hideResultRow();
       document.getElementById('flipRow').style.display = 'none';
       document.getElementById('confirmClockRow').style.display = 'none';
     } else {
-      document.getElementById('parsedText').textContent = pending.text;
+      // THE PLAY, WITHOUT ITS TAIL. The stored text still ends "— 2nd & 2";
+      // the card shows the play and states the situation once, below, with
+      // the spot the text never carried. Stripping uses the exact string
+      // the parser appended, handed back on the effect, so it cannot catch
+      // a "— TOUCHDOWN" or a "— turnover on downs" by mistake.
+      document.getElementById('parsedText').textContent = playTextForCard(pending);
+      showResultRow(pending);
       // A gain that reaches or passes the goal line should always be a
       // touchdown -- field position itself is clamped at 0/100 elsewhere,
       // but that clamp doesn't stop a play's own recorded yardage from
@@ -14963,6 +15114,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   document.getElementById('editBtn').addEventListener('click', () => {
     document.getElementById('confirmCard').style.display = 'none';
+    hideResultRow();
     // Bring the tree back with its selections intact -- showConfirm only
     // hid it. Guarded on there being something to show: Edit is also
     // reachable on paths that never built a panel.
@@ -15126,6 +15278,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // anybody re-spots for a new drive.
     if (startedDrive) showSpotNudge(); else hideSpotNudge();
     document.getElementById('confirmCard').style.display = 'none';
+    hideResultRow();
     document.getElementById('playPanel').style.display = 'none';
     document.getElementById('playPanel').innerHTML = '';
     document.getElementById('code').value = '';
@@ -15271,6 +15424,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   document.getElementById('driveUtilBtn').addEventListener('click', () => {
     document.getElementById('confirmCard').style.display = 'none';
+    hideResultRow();
     const panel = document.getElementById('playPanel');
     panel.style.display = 'block';
     const driveTeam = computeState().possession;
@@ -15363,6 +15517,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   document.getElementById('quarterUtilBtn').addEventListener('click', () => {
     document.getElementById('confirmCard').style.display = 'none';
+    hideResultRow();
     const panel = document.getElementById('playPanel');
     panel.style.display = 'block';
     const nowQ = computeState().quarter;
@@ -15634,6 +15789,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   document.getElementById('setClockUtilBtn').addEventListener('click', () => {
     document.getElementById('confirmCard').style.display = 'none';
+    hideResultRow();
     const panel = document.getElementById('playPanel');
     panel.style.display = 'block';
     const st = computeState();
@@ -15705,6 +15861,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
 
   document.getElementById('penUtilBtn').addEventListener('click', () => {
     document.getElementById('confirmCard').style.display = 'none';
+    hideResultRow();
     const panel = document.getElementById('playPanel');
     panel.style.display = 'block';
     panel.innerHTML =

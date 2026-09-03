@@ -54,6 +54,23 @@ stored, not only tomorrow's.
   the how-to so the two stop competing for one search.
 - `support.html` on the brochure, reachable from the header on mobile too.
 
+### Shipped after the handoff was first written
+
+**The Review card states the result.** "Will be logged as" replaces "Parsed
+as", and a **Result** line underneath gives the down, distance and spot
+after the play — green when it converted, amber when it did not. Display
+only: the stored play text is unchanged, so the log, the recap and the
+feeds read exactly what they always did.
+
+Andy asked for it the night before game two and tested it himself. A
+rollback snapshot of the previous `game.html` was taken first (main
+`50ea7e9`, md5 `7d1036c`); restoring is one upload of that file and nothing
+else, because the change touches one file and writes nothing.
+
+`tests/review_card_check.js` came with it and is the more durable half:
+thirteen play types through Review, asserting the card opens and Save
+works. Nothing in `tests/` checked that before.
+
 ### The kneel — half-addressed on purpose
 
 NFHS credits the player with a kneel's rushing loss; we charge `TEAM`.
@@ -77,6 +94,13 @@ as a rule. A bad snap stays on `TEAM` and is correct — the manual says so.
 - **`link_check`** — a test that every internal `href` resolves to a file
   that exists. Would have caught today's filename break in one run.
 - **`.vercelignore`**, written and held for a quiet day.
+- **The Review card stating the resulting down, distance and spot.**
+  Designed, mocked and agreed on 3 September; display only, blue value
+  under a "Result" heading, "Parsed as" becomes "Will be logged as". Fully
+  specced in `TODO.md` under 3 September, including why it is not amber and
+  why a touchdown gets no Result block. Deliberately not built before a
+  game night — the confirm card is the last thing between a scorer and a
+  saved play.
 - **An admin view of the feedback backlog.** SQL editor only; `handled` is
   set by hand.
 - Charging the kneel to the player, if it is ever wanted.

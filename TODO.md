@@ -3694,6 +3694,29 @@ in the rushing table even if he never ran by choice.
 - [ ] **A bad snap stays on `TEAM` and that is correct** — the manual says
       so in as many words. Do not "fix" it to match the sack.
 
+### Shipped late — the Review card states the result
+
+- [x] **The Review card now shows down, distance and spot after the play.**
+      "Parsed as" became "Will be logged as"; a **Result** line sits under
+      it in green when the play converted and amber when it did not.
+      Display only: the stored play text still ends "— 2nd & 2", because
+      the log, the recap and the feeds all read it, and the card strips
+      that tail using the exact suffix the parser hands back rather than a
+      regular expression.
+      Computed with `computeState(plays.concat([pending]))` — the same
+      reducer that runs on Save, so it cannot drift. The whole helper is
+      wrapped and fails silently: the worst it can do is show nothing,
+      because `showConfirm()` is the last control between a scorer and a
+      saved play.
+      Nine dismiss sites clear the row, not one. The card is torn down in
+      nine places and a stale Result would flash into the next play's card.
+- [x] **`tests/review_card_check.js`** — thirteen play types through Review,
+      asserting the card OPENS and Save WORKS. Nothing in `tests/` checked
+      that before; every existing test presses Review and assumes it
+      worked. Proven by injecting a throw into `showConfirm` and watching
+      it fail. Part A0 asserts the no-spot REFUSAL still refuses, which the
+      first draft of that file mistook for a bug.
+
 ### Owed, and none of it urgent
 
 - [ ] **The golden fixture.** `accuracy_check` gained exactly four diffs
@@ -3707,6 +3730,64 @@ in the rushing table even if he never ran by choice.
 - [ ] **A `link_check` test.** Every internal `href` in the repo resolving
       to a file that exists. Would have caught the filename break below in
       one run.
+
+- [ ] **The Review card should state the resulting situation.** Agreed
+      3 September, designed and mocked, **display only** — build it on a
+      quiet day, not before a game night. The card is the last thing
+      between a scorer and a saved play.
+
+      **Decided:**
+      - "Parsed as" becomes **"Will be logged as"**.
+      - A second labelled block beneath it, heading **"Result"**, same
+        muted grey label as the first (`14px`, `#8d99a6`) — they are the
+        same kind of thing and a second treatment would make them compete.
+      - The VALUE is `var(--sc-blue, #5aa9f0)`, `16px/600`. **Not amber:**
+        amber is this app's "stop and read this" — the fumbled-catch
+        refusal, the finalized-game notice, the NO RECEIVER save button,
+        the kneel panel. This line appears on *every* play, and spending
+        the warning colour on something routine is how the next real
+        warning stops registering. Blue is already a token, unused on
+        this screen, and reads as information rather than caution.
+      - A 1px `#2b333d` rule between the two halves. Two facts, one card.
+
+      **The string already exists** at `game.html:15175`, in
+      `showSpotNudge()`:
+      `ordinal(st.down) + ' & ' + togoLabel(st.fieldPos, st.distance) + ' at ' + markerLabelNamed(st.fieldPos, poss)`
+      — `togoLabel` already yields "1st & Goal", and `markerLabelNamed`
+      was lifted into `engine.js` on 30 August precisely so the entry page
+      could name the yard line by team.
+
+      **Compute it with `computeState(plays.concat([pending]))`**, not from
+      the parser's own numbers. That is the same reducer that runs on Save,
+      so the card cannot drift from what actually happens, and it covers
+      punts and kickoffs — which establish a spot and are the plays a
+      scorer most wants to confirm — without a branch each.
+
+      **Name the team only when possession changes.** "Ruston ball, 1st &
+      10 at the Ruston 32" after a punt; a rush that keeps the ball does
+      not need "Ouachita ball" on every play.
+
+      **Show no Result block at all after a score or a safety.** There is
+      no down and distance after a touchdown — the try comes next, then a
+      kickoff. A "Result" heading over a guess is worse than no heading.
+      A turnover on downs is the opposite case: it HAS a result and it is
+      the thing most worth confirming.
+
+      **The display-only trade, accepted deliberately.** The situation is
+      appended into the STORED play text at `game.html:3290`, so it is in
+      the database, the log, the recap and the feeds. The card strips that
+      tail for display and states it once in full underneath; nothing
+      stored changes, so no feed, recap or golden fixture moves. The cost
+      is that the play text in the card and in the log no longer read
+      identically. To strip it reliably rather than by regex — the text
+      uses " — " for TOUCHDOWN, 1st down, turnover on downs and SAFETY too
+      — have `parseInput` return the exact suffix it appended, which is one
+      additive line at 3290.
+
+      Taking the situation OUT of the stored text is the cleaner fix and a
+      much larger one: the log would read differently before and after,
+      and the golden fixture and feed tests all move. Not now, and not
+      before the golden fixture is sorted.
 - [ ] **`.vercelignore`** — written, deliberately held for a quiet day.
 - [ ] **An admin view of the feedback backlog.** Read from the SQL editor
       today; `handled` is set by hand.
