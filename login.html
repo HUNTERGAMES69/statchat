@@ -725,6 +725,28 @@
   // forgetting to hide the password fields is exactly the kind of miss
   // that three separate copies produce. One rule, one implementation.
   function setMfaChallenge(on){
+    // THE MESSAGE BELONGS TO THE STEP THAT WROTE IT.
+    // -------------------------------------------------------------------
+    // Reported 3 Sep 2026: a wrong password, then the right one, left
+    // "Incorrect email or password" sitting above the two-factor prompt --
+    // so the screen said the password was wrong at the exact moment it had
+    // just been accepted. Changing step is what makes a message stale, and
+    // this function is the one place a step change happens, which is why
+    // the clear lives here rather than at the three call sites.
+    //
+    // BOTH DIRECTIONS. Opening drops a password error that no longer
+    // applies; closing drops a code error that would otherwise follow the
+    // scorer back to the password fields.
+    //
+    // SAFE FOR THE TWO CLOSE PATHS, checked: a successful verify writes no
+    // message at all, and Cancel writes its own AFTER calling this. The
+    // failed-code path never calls this function, so its error survives,
+    // which is the point -- the step did not change.
+    //
+    // innerHTML rather than showMsg(id,'',''), because showMsg always wraps
+    // its text in a .msg div and .msg carries 10px of padding and a border:
+    // an "empty" message would still draw a box.
+    document.getElementById('loginMsg').innerHTML = '';
     document.getElementById('mfaChallenge').style.display = on ? 'block' : 'none';
     document.getElementById('loginView').classList.toggle('mfa-open', on);
   }
