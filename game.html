@@ -1627,11 +1627,58 @@
   function showView(name){
     ['loading','errorView','mainView'].forEach(v => document.getElementById(v).classList.toggle('hidden', v !== name));
   }
+  // A MESSAGE CLEARS ITSELF.
+  // ---------------------------------------------------------------------
+  // Reported 4 September 2026: "All plays are now saved to the server" sat
+  // above the field strip for the rest of the session. Nothing here ever
+  // took a message down, so every notice this function wrote was permanent
+  // until the page was reloaded.
+  //
+  // THIS HAS BEEN WORKED AROUND ONCE ALREADY, and that is the argument for
+  // fixing the lifecycle rather than the message. See the broadcast toggle:
+  // its success message was DELETED, with a comment saying "showMsg writes
+  // into #gameMsg and nothing ever clears it, so 'Now ON AIR: G222' sat at
+  // the top of the page for the rest of the session". Removing messages one
+  // at a time treats each symptom and leaves the next one to be found live.
+  //
+  // SUCCESS AND INFO TIME OUT. They confirm something the scorer just did
+  // and watched happen -- a retry that worked, a clock that was set, a game
+  // reopened. Once read they are noise, and noise at the top of the page is
+  // not free: it pushes the field strip and the play panel down, which is
+  // the fault the two comments around updatePhaseUI already describe.
+  //
+  // ERRORS DO NOT. An error is the one thing that might be read after
+  // looking away -- a save that failed, a play the server rejected -- and a
+  // failure that erases its own explanation is worse than no message. It
+  // clears on the next message or on a reload. Same rule as platform.html.
+  //
+  // EIGHT SECONDS, not the console's six. The person reading this page is
+  // by definition looking at the field between plays, which the person
+  // reading the platform console is not. One number if it wants changing.
+  const MSG_LIFE_MS = 8000;
+  // Keyed by element, because there are two targets -- #gameMsg and the
+  // pre-load #errorMsg -- and a single shared timer would let a message on
+  // one cancel the countdown on the other.
+  const msgTimers = {};
   function showMsg(elId, text, type, opts){
     // `entry` marks a message that belongs to the open play panel rather
     // than to the game, so Clear can take those down and leave the rest.
     const cls = 'msg ' + type + ((opts && opts.entry) ? ' msg-entry' : '');
-    document.getElementById(elId).innerHTML = '<div class="' + cls + '">' + text + '</div>';
+    const el = document.getElementById(elId);
+    if (!el) return;
+    const html = '<div class="' + cls + '">' + text + '</div>';
+    if (msgTimers[elId]){ clearTimeout(msgTimers[elId]); delete msgTimers[elId]; }
+    el.innerHTML = html;
+    if (type === 'error') return;
+    msgTimers[elId] = setTimeout(function(){
+      delete msgTimers[elId];
+      const now = document.getElementById(elId);
+      // ONLY IF IT IS STILL OURS. #gameMsg is written by more than this
+      // function -- clearing the entry panel empties it directly, and a
+      // later notice may have replaced this one -- so a timer that fired
+      // late must not wipe a message it did not write.
+      if (now && now.innerHTML === html) now.innerHTML = '';
+    }, MSG_LIFE_MS);
   }
 
   let currentGameId = null;
