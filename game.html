@@ -15919,14 +15919,37 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<p class="hint">Set clock</p>' +
       // The warning Andy asked for, stated as a rule rather than a hint.
       // This writes a START event, which opens a stretch of time that runs
-      // until the next possession change. Used mid-drive it would discard
-      // the time already elapsed on that drive and restart the count, so
-      // the drive's time of possession comes out short and every
-      // per-possession average built on it is wrong -- silently, because
-      // nothing else looks off.
-      '<p style="font-size:15px; font-weight:700; color:#ff8fa3; background:rgba(176,0,32,.16); ' +
-      'border:2px solid #d33; border-radius:6px; padding:10px 12px; margin:0 0 10px;">' +
-      '⚠ ONLY USE THIS ON A NEW POSSESSION.</p>' +
+      // until the next possession change.
+      //
+      // A SECOND USE ON THE SAME POSSESSION REPLACES THE FIRST, and the
+      // wording says so as of 4 September 2026. computeState's reducer
+      // handles a start as `pendingClockStart[team] = absSec` -- a plain
+      // overwrite -- and time is only ever credited on an `end` or a
+      // `transition`. So a second start mid-drive does not double-count and
+      // does not truncate anything already banked; it moves the mark the
+      // possession will eventually be measured FROM. Correcting a start that
+      // was entered wrong is therefore a supported use, not a hazard, and the
+      // old wording -- "ONLY on a new possession" -- sent a scorer who had
+      // mistyped one looking for a fix that was already under their hand.
+      //
+      // What it still must not be used for is stamping the CURRENT time
+      // mid-drive, as though it were a running-clock reading. That moves the
+      // start forward, so the drive is measured from partway through itself,
+      // comes out short, and every per-possession average built on it is
+      // wrong -- silently, because nothing else looks off. That is what the
+      // red box is still here to prevent.
+      //
+      // SENTENCE CASE, not the caps it replaced. Six words in caps read as a
+      // stop sign; twenty read as shouting and are measurably slower to take
+      // in, which is the wrong trade on the one line that has to land. The
+      // red border, the tint, the bold and the glyph already carry the
+      // weight. line-height is set because it is now two lines rather than
+      // one.
+      '<p style="font-size:15px; font-weight:700; line-height:1.45; color:#ff8fa3; ' +
+      'background:rgba(176,0,32,.16); border:2px solid #d33; border-radius:6px; ' +
+      'padding:10px 12px; margin:0 0 10px;">' +
+      '⚠ Use this only on a new possession, or when you need to adjust the ' +
+      'starting value of the current possession.</p>' +
       '<p style="font-size:13px; color:#b9c4d0; margin:0 0 10px;">Records the clock at the start of ' +
       TEAMS[who].name + '\u2019s possession — for when a change of possession was saved without one. ' +
       'It does not change the down, the spot or the score.</p>' +
