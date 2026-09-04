@@ -46,6 +46,25 @@ const PAGE_PATH = path.join(ROOT, 'broadcast_boxscore.html');
 const PAGE = fs.existsSync(PAGE_PATH) ? fs.readFileSync(PAGE_PATH, 'utf8') : null;
 const engine = require(path.join(ROOT, 'engine.js'));
 
+// THE LINESCORE FUNCTION IS THE OVERLAY'S OWN, not engine.js's.
+// ---------------------------------------------------------------------
+// It lived in engine.js for one day. engine.js is loaded by fourteen pages,
+// so a leaf overlay's arithmetic sitting there made this file undeployable
+// on its own -- and that is not theoretical: the overlay went up without the
+// matching engine.js and drew nothing, silently, because an overlay swallows
+// its own errors on air.
+//
+// So the function is lifted OUT OF THE PAGE SOURCE and run here. That is
+// deliberately awkward, and it is still better than a copy in this file: a
+// test holding its own copy of the arithmetic agrees with itself forever and
+// says nothing about the page.
+function linescoreFromPage(){
+  const m = /function linescoreFor\(playsList\)\{[\s\S]*?\n  \}/.exec(PAGE || '');
+  if (!m) return null;
+  return new Function(m[0] + '; return linescoreFor;')();
+}
+const linescoreFor = linescoreFromPage();
+
 let pass = 0, fail = 0;
 const chk = (ok, m, detail) => {
   if (ok) { pass++; console.log('  ok   ' + m); }
@@ -66,11 +85,18 @@ console.log('-- quarterScores(), the shared arithmetic --');
 const S = (q, team, pts) => ({ quarter: q, effect: { score: { team, points: pts } } });
 const A = (q, team, pts) => ({ quarter: q, effect: { scoreAdjust: { team, pts } } });
 
-chk(typeof engine.quarterScores === 'function', 'engine.js exports quarterScores');
+chk(typeof linescoreFor === 'function',
+    'the overlay carries its own linescore function');
+// AND DOES NOT DEPEND ON engine.js FOR IT. This is the check that keeps the
+// page deployable by itself.
+chk(!/=\s*quarterScores\s*\(/.test(PAGE),
+    'and does not call a linescore function out of engine.js');
+chk(!/\bfunction quarterScores\b/.test(fs.readFileSync(path.join(ROOT, 'engine.js'), 'utf8')),
+    'engine.js is left alone — it is loaded by fourteen pages and this is one leaf');
 
 {
   // The game from the report: Ouachita 7-0-7-0, Neville 0-0-0-7.
-  const r = engine.quarterScores([S(1,'teamB',7), S(3,'teamB',7), S(4,'teamA',7)]);
+  const r = linescoreFor([S(1,'teamB',7), S(3,'teamB',7), S(4,'teamA',7)]);
   chk(JSON.stringify(r.teamB) === '[7,0,7,0]' && JSON.stringify(r.teamA) === '[0,0,0,7]',
       'points land in the quarter they were scored in',
       'A=' + JSON.stringify(r.teamA) + ' B=' + JSON.stringify(r.teamB));
@@ -82,7 +108,7 @@ chk(typeof engine.quarterScores === 'function', 'engine.js exports quarterScores
   // OVERTIME IS NOT A FIFTH QUARTER. Clamping it into Q4 is a fault this
   // project has already had once -- recap.html's own comment records an
   // overtime touchdown reading as a fourth-quarter one.
-  const r = engine.quarterScores([S(4,'teamA',7), S(5,'teamA',7), S(6,'teamB',6)]);
+  const r = linescoreFor([S(4,'teamA',7), S(5,'teamA',7), S(6,'teamB',6)]);
   chk(r.teamA[3] === 7, 'a fourth-quarter score stays in Q4');
   chk(r.ot.teamA === 7 && r.ot.teamB === 6,
       'every period from the fifth folds into one OT total', JSON.stringify(r.ot));
@@ -93,14 +119,14 @@ chk(typeof engine.quarterScores === 'function', 'engine.js exports quarterScores
 {
   // A SCORELESS OVERTIME STILL HAPPENED, so the column still belongs. This
   // is why hadOt is returned rather than inferred from a non-zero OT score.
-  const r = engine.quarterScores([{ quarter: 5, effect: {} }]);
+  const r = linescoreFor([{ quarter: 5, effect: {} }]);
   chk(r.hadOt === true && r.ot.teamA === 0 && r.ot.teamB === 0,
       'a scoreless overtime is still an overtime');
 }
 {
   // A CORRECTION IS PART OF THE QUARTER IT WAS ENTERED IN. A linescore that
   // ignores adjustments adds up to a different number than the scoreboard.
-  const r = engine.quarterScores([S(2,'teamA',7), A(2,'teamA',-2)]);
+  const r = linescoreFor([S(2,'teamA',7), A(2,'teamA',-2)]);
   chk(r.teamA[1] === 5 && r.totals.teamA === 5,
       'score adjustments count, in their own quarter',
       JSON.stringify(r.teamA) + ' total ' + r.totals.teamA);
@@ -109,7 +135,7 @@ chk(typeof engine.quarterScores === 'function', 'engine.js exports quarterScores
   // A team key the engine does not know must not take the graphic down.
   let threw = false, r = null;
   try {
-    r = engine.quarterScores([
+    r = linescoreFor([
       { quarter: 2, effect: { score: { team: 'teamZ', points: 7 } } },
       { quarter: 0, effect: { score: { team: 'teamA', points: 6 } } },
       null, { }, { quarter: 3 }
@@ -318,6 +344,29 @@ const OT  = REG.concat([S(5,'teamA',7), S(5,'teamB',6)]);
         'a team with no logo gets its colour block and initial, never a broken image',
         marks.map(m => m.textContent.trim()).join(','));
     dom.window.close();
+  }
+
+  // ---- the crew can actually find it ----
+  // AN ADDRESS THAT EXISTS ONLY IN A SOURCE COMMENT DOES NOT EXIST. The crew
+  // take what broadcast_setup.html hands them -- the lesson ?dd=0 on the
+  // drive overlay taught twice, described in a comment for weeks and
+  // therefore never used. Both graphics have to be on that page, and both
+  // have to carry the feed key, because an overlay is a browser source with
+  // no session and the address is the only place a key can come from.
+  {
+    const setup = fs.readFileSync(path.join(ROOT, 'broadcast_setup.html'), 'utf8');
+    chk(/'\/broadcast_boxscore\.html'/.test(setup),
+        'the plain linescore is listed on the broadcast setup page');
+    chk(/'\/broadcast_boxscore\.html\?totals=1'/.test(setup),
+        'and so is the version with team totals');
+    // Routed through overlayUrl, which is what appends the key -- a raw
+    // string in that table would hand the crew a keyless address.
+    const rows = [...setup.matchAll(/\[('[^']*'),\s*overlayUrl\('(\/broadcast_boxscore[^']*)'\)\]/g)];
+    chk(rows.length === 2,
+        'both go through overlayUrl(), so both come out carrying the feed key',
+        rows.length + ' of 2 found');
+    chk(rows.some(r => /linescore/i.test(r[1])) ,
+        'and they are named for what they are', rows.map(r => r[1]).join(' | '));
   }
 
   // ---- and the separation checks are shown to fail ----
