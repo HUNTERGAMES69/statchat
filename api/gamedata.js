@@ -20,6 +20,53 @@
 const { createClient } = require('@supabase/supabase-js');
 const { tenantFromKey } = require('./_tenant');
 
+// A ONE-SECOND MICRO-CACHE. Added 4 September 2026.
+// ---------------------------------------------------------------------
+// Measured from the API logs that evening: two tenants with games open
+// generated 41 requests/second against Postgres, because every overlay
+// poll runs this handler and this handler fans out to SEVEN queries. The
+// same six queries repeated 40-95 times inside a twelve-second window.
+// At sixteen tenants that is roughly 330 requests/second and about 3.5
+// million over a three-hour game night.
+//
+// The "never cache" rule above it is still right, and the reasoning is
+// unchanged: a scoreboard thirty seconds stale is worse than no
+// scoreboard. But ONE second is not thirty. No human watching a
+// broadcast can perceive a scoreboard one second late -- a play takes
+// longer than that to type -- and it removes about 95% of the load.
+//
+// WHAT THE KEY IS. The feed key, plus the explicit game id when one is
+// given. The feed key resolves to exactly one tenant, so two schools can
+// never share an entry: different key, different cache slot. This is the
+// whole multi-tenant argument and it must not be weakened to, say,
+// caching on game id alone.
+//
+// THE COST, STATED PLAINLY: a cache hit skips the key validation too, so
+// a REVOKED feed key keeps working for up to one more second. That is a
+// deliberate trade and a bounded one -- a key is revoked because it
+// leaked, and one second changes nothing about that.
+//
+// Only 200 and 404 are cached. A 401 must always re-check the key, and a
+// 500 must never be repeated back as though it were an answer.
+const CACHE_TTL_MS = 1000;
+const CACHE_MAX = 200;          // bounded: a warm Vercel instance is long-lived
+const cache = new Map();
+
+function cacheGet(k){
+  const e = cache.get(k);
+  if (!e) return null;
+  if (Date.now() - e.at > CACHE_TTL_MS){ cache.delete(k); return null; }
+  return e;
+}
+function cacheSet(k, status, body){
+  if (cache.size >= CACHE_MAX){
+    let oldestKey = null, oldestAt = Infinity;
+    for (const [kk, v] of cache){ if (v.at < oldestAt){ oldestAt = v.at; oldestKey = kk; } }
+    if (oldestKey !== null) cache.delete(oldestKey);
+  }
+  cache.set(k, { at: Date.now(), status, body });
+}
+
 module.exports = async (req, res) => {
   // The overlay may be served from a different origin than the API in
   // some vMix setups, and a browser input enforces CORS like any browser.
@@ -42,6 +89,18 @@ module.exports = async (req, res) => {
   // which game is being broadcast. Without an id, resolve it the same way
   // api/feed.js does, so both routes always agree on the game.
   const gameId = (req.query && req.query.id) || null;
+
+  // The cache is consulted here: after the method checks, before any work.
+  // Keyed on the feed key so a hit can never cross tenants.
+  const rawKey = (req.query && req.query.key) || '';
+  const cacheKey = rawKey + '|' + (gameId || '');
+  const hit = cacheGet(cacheKey);
+  if (hit){
+    res.setHeader('X-StatChat-Cache', 'hit');
+    res.status(hit.status).json(hit.body);
+    return;
+  }
+  res.setHeader('X-StatChat-Cache', 'miss');
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -95,7 +154,9 @@ module.exports = async (req, res) => {
       }
     }
     if (!resolvedId) {
-      res.status(404).json({ error: 'No game is on air' });
+      const body = { error: 'No game is on air' };
+      cacheSet(cacheKey, 404, body);
+      res.status(404).json(body);
       return;
     }
 
@@ -124,9 +185,18 @@ module.exports = async (req, res) => {
     ]);
 
     const game = (gameRes.data || [])[0];
-    if (!game) { res.status(404).json({ error: 'No such game' }); return; }
+    if (!game) {
+      const body = { error: 'No such game' };
+      cacheSet(cacheKey, 404, body);
+      res.status(404).json(body);
+      return;
+    }
 
-    res.status(200).json({
+    // `served` is stamped when the data was actually READ, and a cache hit
+    // replays that original stamp rather than refreshing it. That is the
+    // honest answer: an overlay greys itself out from this field, and a
+    // stamp refreshed on replay would tell it the data is newer than it is.
+    const body = {
       game,
       roster: rosterRes.data || [],
       plays: playsRes.data || [],
@@ -139,7 +209,9 @@ module.exports = async (req, res) => {
       // the scorer's device has stopped sending.
       served: new Date().toISOString(),
       resolvedBy
-    });
+    };
+    cacheSet(cacheKey, 200, body);
+    res.status(200).json(body);
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
   }
