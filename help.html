@@ -276,7 +276,7 @@
 
     <h3>Your team roster</h3>
     <p>From the dashboard, open <span class="btn">Team Roster</span>. This is your own squad and carries over from game to game. For each player enter a jersey number, a name, and a position.</p>
-    <div class="note"><strong>Positions matter.</strong> They decide which players appear in which picker during a game — quarterbacks in the passer list, backs and receivers in the carrier list, and so on. Two-way players can be entered as <code>RB/LB</code> or <code>WR, DB</code>; the app understands both.</div>
+    <div class="note"><strong>Positions matter.</strong> They decide which players appear in which picker during a game — quarterbacks in the passer list, backs and receivers in the carrier list, and so on. A two-way player can be entered as <code>RB/LB</code> or <code>WR, DB</code> and both are read — but only the <strong>first</strong> position decides which picker he appears in. See <em>Positions, and what the app does with them</em> below.</div>
 
     <h3>Uploading a roster from a spreadsheet</h3>
     <p>Both <span class="btn">Team Roster</span> and the opponent roster on
@@ -284,13 +284,135 @@
     file. Pressing the upload button shows a picture of the layout before it asks for the
     file: <strong>column A</strong> is the jersey number, <strong>column B</strong> the
     name, <strong>column C</strong> the position. A header row is ignored, and a player
-    with no position is fine — they simply appear in every picker rather than a few.</p>
+    with no position is fine &mdash; he is offered in the broad pickers and kept out of the
+    narrow ones (passer, kicker, punter) until he actually plays the role or you seed him
+    there.</p>
     <div class="note"><strong>Two limits, and both refuse rather than trim.</strong>
     A file over <strong>5MB</strong>, or a sheet with more than <strong>200 player
     rows</strong>, is rejected and nothing is imported. A roster that size is almost always
     a whole-school export rather than one team — and a partial import that <em>looks</em>
     like it worked is worse than one that plainly did not, because the missing players only
-    surface mid-game.</div>
+    surface mid-game. The 200 counts <em>readable player rows</em>, so title blocks, blank
+    lines and a header do not count against it.</div>
+
+    <h3>What is read, and what is ignored</h3>
+    <p>Only the <strong>first sheet</strong> of the workbook is read. Any other tab is
+    ignored completely, so a file with <code>Varsity</code> and <code>JV</code> as
+    separate tabs imports whichever one is first and gives no sign the other exists.</p>
+    <table>
+      <tr><th>Column</th><th>What it must hold</th></tr>
+      <tr><td><strong>A</strong></td><td>The jersey number, and <strong>digits only</strong>.</td></tr>
+      <tr><td><strong>B</strong></td><td>The name. Anything at all counts.</td></tr>
+      <tr><td><strong>C</strong></td><td>The position. Optional.</td></tr>
+      <tr><td><strong>D onward</strong></td><td>Ignored. Height, weight, class year and notes can stay in the file.</td></tr>
+    </table>
+    <p>A row is read only when column A is digits and column B is not empty. Everything
+    else is passed over: the header row, blank lines, a school name across the top, a
+    <code>Coaches</code> block at the bottom.</p>
+    <div class="warn"><strong>A number that is not purely digits is skipped, and nothing says so.</strong>
+    <code>#4</code> is skipped. <code>12A</code> is skipped. <code>4 (C)</code> for a captain
+    is skipped. These are the commonest reason an import comes up short, and because the
+    rows are simply passed over like a header row, the only clue is that the count in the
+    preview is lower than the squad. <strong>Read the number in the preview before you
+    confirm</strong> — if it is short, look for a <code>#</code> in column A.</div>
+    <div class="warn"><strong>Leading zeros are kept.</strong> A cell holding <code>0012</code>
+    imports as jersey <code>0012</code>, not <code>12</code>, and will not match
+    <code>12</code> typed during a game. Format the column as plain numbers, not text, if a
+    spreadsheet has padded them.</div>
+    <div class="note"><strong>A blank name is not caught.</strong> A row with a number and an
+    empty name column imports as a player with no name. It shows on the roster page as a
+    blank row, where it is easy to delete — but only if you look.</div>
+
+    <h3>Positions, and what the app does with them</h3>
+    <p>The position is read as an <strong>abbreviation</strong>, upper or lower case.
+    <code>Wide Receiver</code> spelled out is <em>not</em> understood — it reads as
+    <code>WIDE</code>, which is not a position the app knows.</p>
+    <table>
+      <tr><th>Unit</th><th>Abbreviations the app knows</th></tr>
+      <tr><td><strong>Offense</strong></td><td><code>QB RB FB HB TB WR SE FL SLOT SB TE OL OT OG G T C ATH ATHLETE</code></td></tr>
+      <tr><td><strong>Defense</strong></td><td><code>DB CB S FS SS LB OLB ILB MLB WLB DE DT NG NT EDGE DL</code></td></tr>
+      <tr><td><strong>Special teams</strong></td><td><code>K P LS DS H KR PR RET ST</code></td></tr>
+    </table>
+    <div class="note"><strong>Only the first position counts, so the order matters.</strong>
+    Two or three positions in one cell are fine, separated by anything you like — a slash,
+    a comma, a semicolon, a hyphen, a dot or a space all work. But everything after the
+    first is discarded. <code>RB/LB</code> files a player under <strong>offense</strong>;
+    <code>LB/RB</code> files the same player under <strong>defense</strong>. Put the side
+    of the ball he plays most first.</div>
+    <p>A position the app does not know, and a position left blank, are treated the same
+    way and neither stops the import. The player is still on the roster and his number
+    still works during a game; he is simply not filed under a unit yet, so he appears in
+    the broad pickers and not the narrow ones. The game setup page lists these under
+    <strong>needs assignment</strong> with a tag to apply.</p>
+    <div class="note"><strong>Forcing a unit from the name column.</strong> A name ending in
+    <code>(O)</code>, <code>(D)</code> or <code>(ST)</code> puts that player on offense,
+    defense or special teams whatever column C says, and the tag is stripped from the
+    stored name. <code>Macario Dade Jr (D)</code> becomes <em>Macario Dade Jr</em> on
+    defense. Case does not matter; any other tag is left alone as part of the name.</div>
+
+    <h3>Two players wearing the same number</h3>
+    <p>This is treated as a fact about the team rather than a mistake, and <strong>nothing
+    is merged or dropped</strong>. Both players are imported and kept.</p>
+    <ul>
+      <li><strong>One on offense, one on defense.</strong> Nothing to decide. Each appears
+        in his own unit's pickers.</li>
+      <li><strong>Both on the same side of the ball.</strong> Both are kept, and the game
+        asks which one on each play where it matters. The setup page counts these for you
+        before you start so it is not a surprise on a Friday night.</li>
+      <li><strong>Both with positions the app does not recognize.</strong> This is the one
+        case that needs a hand: there is nowhere to file either of them, so the setup page
+        asks you to tag them.</li>
+      <li><strong>The same name twice on one number</strong> is flagged as one player
+        entered twice, with the suggestion to delete the extra row.</li>
+    </ul>
+    <div class="note"><strong>A two-way player is filed under one unit, and that is
+    usually enough.</strong> The pickers are a convenience, not a gate — during a game you
+    can type <em>any</em> number, on or off the roster, and the play records correctly
+    against it. So a linebacker who also carries the ball does not need special handling to
+    be scored properly; the picker just will not offer him in the carrier list until he
+    has done it once.</div>
+
+    <h3>Uploading the same file again</h3>
+    <p>Re-uploading is safe and is the normal way to add players who arrived late. Anyone
+    already on <strong>this season's</strong> roster is skipped, and the preview says how
+    many before you confirm.</p>
+    <div class="warn"><strong>Matching is by name, and an existing player is skipped, not
+    updated.</strong> Correct a number or a position in the spreadsheet and upload it
+    again, and the correction <em>does not arrive</em> — the name is already there, so the
+    row is skipped and the old values stay. Edit that player on the roster page instead.</div>
+    <ul>
+      <li>Names are matched ignoring case and surrounding spaces, so
+        <code>MACARIO DADE JR</code> and <code>Macario Dade Jr</code> are the same player.</li>
+      <li>A different spelling is a different player. <code>Mac Dade</code> and
+        <code>Macario Dade Jr</code> both import.</li>
+      <li>Two identical names in the <em>same file</em> are both added — the check is
+        against the roster, not within the sheet.</li>
+      <li>Matching is scoped to the season and to your team, so last year's squad never
+        blocks this year's.</li>
+    </ul>
+
+    <h3>Your roster and an opponent roster behave differently</h3>
+    <p>The same file can succeed in one place and be refused in the other, and it is worth
+    knowing which is which before a game night.</p>
+    <table>
+      <tr><th></th><th>Team Roster</th><th>Opponent roster on New Game</th></tr>
+      <tr><td><strong>A row it cannot read</strong></td>
+          <td>Skipped quietly. The rest imports.</td>
+          <td><strong>The whole file is refused</strong> and every bad row is listed with the reason.</td></tr>
+      <tr><td><strong>An unknown position</strong></td>
+          <td>Imported; the player needs a unit tag later.</td>
+          <td>Refused, naming the position it did not recognize.</td></tr>
+      <tr><td><strong>Number and name swapped</strong></td>
+          <td>Nothing imports, and it does say so: <em>&ldquo;No valid rows found. Expected column A = number, column B = name, column C = position.&rdquo;</em></td>
+          <td>Refused, saying column B looks like a number.</td></tr>
+      <tr><td><strong>A compound position</strong></td>
+          <td>Stored whole, e.g. <code>RB/LB</code>, and reduced when the game is built.</td>
+          <td>Reduced to <code>RB</code> at import.</td></tr>
+    </table>
+    <div class="note">The opponent importer is the stricter of the two on purpose: an
+    opponent roster is typed from a programme minutes before kickoff and usually never
+    looked at again, so a quiet skip there would go unnoticed all night. Your own roster is
+    a list you can see and correct at leisure.</div>
 
     <h3>Rosters are kept per season</h3>
     <p>A <strong>Season</strong> picker sits at the top of the roster page. The current season is the only one you can change — add, edit, remove, upload, or clear. Pick an earlier season from the dropdown and everything on it becomes <strong>read-only</strong>: no controls at all, just the squad exactly as it was, kept for reference.</p>
