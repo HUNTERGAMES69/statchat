@@ -174,6 +174,14 @@
   const TIMEOUTS_PER_OT = 1;
 
   let GAME = null, ROWS = [];
+  // The last plays payload actually painted, so an unchanged poll can be
+  // dropped before it touches the DOM. See refresh().
+  let lastStamp = null;
+  // Set across a print so the refresh loop cannot put the screen order back
+  // while the sheet is being taken. Declared HERE with the rest of the page
+  // state rather than beside the handler that sets it: a let is in its
+  // temporal dead zone until its declaration runs, and paint() reads this.
+  let printing = false;
 
   function buildTeams(game, rosterRows, branding){
     const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
@@ -208,6 +216,21 @@
   // the CSV, so the two can never disagree about what a play said -- which
   // is the whole risk of writing an export beside a view.
   function buildRows(){
+    // THE NUMBER COUNTS PLAYS, NOT ROWS. Andy's call, 4 September 2026: a
+    // timeout or a change of possession does not need one, because the
+    // number is a play's name -- "#47" should mean the 47th play of the
+    // game, the way it does on a stat sheet.
+    //
+    // So it runs consecutively across the real plays and skips the markers
+    // entirely, rather than blanking a marker and leaving a hole in the
+    // sequence. A hole reads as missing data; an unnumbered row reads as a
+    // row that was never a play, which is what it is.
+    //
+    // It therefore no longer matches a row's POSITION. That was already
+    // true of the count line above the table -- "N entries logged · M
+    // plays" has always distinguished the two -- and that line stays the
+    // place to look for a total.
+    let playNo = 0;
     return plays.map((p, i) => {
       const before = computeState(plays.slice(0, i));
       const e = p.effect || {};
@@ -233,8 +256,12 @@
       if (p.unresolved)  tags.push('NEEDS REVIEW');
       if (p.isOverride)  tags.push('OVERRIDE');
       if (e.score && e.score.points) tags.push(e.score.points + ' PTS');
+      if (!marker) playNo += 1;
       return {
-        n: i + 1,
+        // Blank on a marker, and blank rather than a dash or a bullet: the
+        // cell is narrow and right-aligned, and anything printed in it
+        // lines up under the numbers as though it were one.
+        n: marker ? '' : playNo,
         seq: p.seq,
         quarter: q,
         clock: (stamp && stamp.clock) || '',
@@ -250,10 +277,25 @@
     });
   }
 
-  function renderTable(rows){
+  // NEWEST AT THE TOP, ON SCREEN ONLY.
+  // ---------------------------------------------------------------------
+  // The page refreshes itself now, so it is read the way a feed is read --
+  // you look at it to see what just happened, and the newest row being the
+  // one you have to scroll furthest for is the wrong way round for that.
+  //
+  // The CSV and the printed sheet stay OLDEST FIRST. A data file and a
+  // document are both read from the start, and a play log that runs
+  // backwards on paper is a log somebody has to read backwards. Andy's
+  // call, and it is why this reverses HERE rather than in buildRows():
+  // buildRows stays the single chronological source both exports use, so
+  // the two can still never disagree about what a play said.
+  //
+  // .slice() first -- reverse() mutates, and ROWS is that shared source.
+  function renderTable(rows, newestFirst){
+    const ordered = newestFirst ? rows.slice().reverse() : rows;
     const head = '<tr><th>#</th><th>Qtr</th><th>Clock</th><th>Team</th>' +
                  '<th>Situation</th><th>Ball on</th><th>Play</th><th>Gain</th><th>Flags</th></tr>';
-    const body = rows.map(r =>
+    const body = ordered.map(r =>
       '<tr class="' + (r.marker ? 'marker ' : '') + (r.divider ? 'divider' : '') + '">' +
         '<td class="num">' + r.n + '</td>' +
         '<td class="q">' + esc(r.quarter) + '</td>' +
@@ -310,6 +352,23 @@
   });
   document.getElementById('printBtn').addEventListener('click', () => window.print());
 
+  // PRINTING RE-RENDERS IN THE OTHER ORDER, because print takes the DOM as
+  // it stands and CSS cannot reverse table rows without breaking the
+  // columns. Bound to beforeprint/afterprint rather than to the button, so
+  // Ctrl+P and the browser's own menu get the same sheet as the button.
+  //
+  // The refresh loop is held during the print, so a tick landing between
+  // beforeprint and the snapshot cannot put the screen order back while the
+  // sheet is being taken.
+  window.addEventListener('beforeprint', () => {
+    printing = true;
+    document.getElementById('logTable').innerHTML = renderTable(ROWS, false);
+  });
+  window.addEventListener('afterprint', () => {
+    printing = false;
+    document.getElementById('logTable').innerHTML = renderTable(ROWS, true);
+  });
+
   supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION'){
       if (session){ init(); } else { window.location.href = '/login.html'; }
@@ -359,13 +418,103 @@
     const back = document.getElementById('backLink');
     if (GAME.season_year) back.href = 'reports.html?season=' + encodeURIComponent(GAME.season_year);
 
+    paint();
+    // SEEDED, so the first poll four seconds from now is not a repaint of
+    // what is already on screen. Built from the same plays the first paint
+    // used, by the same expression refresh() compares against.
+    lastStamp = JSON.stringify(plays);
+    showView('mainView');
+
+    // LIVE, on the same 4-second cadence as the scoring summary, and for
+    // the same reason: a booth leaves this page up and must not be reading
+    // a stale log. Rebuilding everything costs single-digit milliseconds
+    // even over a 300-play game -- measured -- so there is nothing to gain
+    // from a smarter incremental fetch and a whole class of ordering bugs
+    // to lose.
+    //
+    // document.hidden is checked first, so a tab left open all weekend is
+    // not polling all weekend.
+    setInterval(refresh, 4000);
+  }
+
+  // ONE PAINT, used by the first load and by every refresh, so the counts
+  // line and the table can never describe different data.
+  function paint(){
     ROWS = buildRows();
     const realPlays = ROWS.filter(r => !r.marker).length;
     document.getElementById('counts').textContent =
       ROWS.length + ' entries logged · ' + realPlays + ' plays · ' +
       (ROWS.length - realPlays) + ' clock and drive markers';
-    document.getElementById('logTable').innerHTML = renderTable(ROWS);
-    showView('mainView');
+    document.getElementById('logTable').innerHTML = renderTable(ROWS, !printing);
+  }
+
+  async function refresh(){
+    if (document.hidden || printing || !GAME) return;
+
+    const { data: playRows, error } = await supabaseClient
+      .from('plays').select('*').eq('game_id', GAME.id)
+      .order('sequence_number', { ascending: true });
+    // A FAILED POLL CHANGES NOTHING ON SCREEN. A dropped request in a
+    // press box is ordinary, and replacing a good log with an error
+    // message because one round trip failed is worse than showing the
+    // log four seconds late.
+    if (error || !playRows) return;
+
+    const next = playRows.map(p => ({
+      seq: p.sequence_number, text: p.text, effect: p.effect || {},
+      team: p.team_side, quarter: p.quarter, roles: p.roles,
+      unresolved: p.unresolved, isDivider: p.is_divider, isOverride: p.is_override
+    }));
+    // NOTHING NEW, NOTHING REDRAWN. Rewriting identical innerHTML every
+    // four seconds would drop a text selection mid-copy and reset the
+    // focus ring, which is exactly what somebody reading the log is doing.
+    // Compared on the same JSON the rows are built from rather than on a
+    // length, so a CORRECTION -- an edit that changes a play without
+    // adding one -- still repaints.
+    // THE HEADER GOES STALE INDEPENDENTLY OF THE PLAYS, so it is refreshed
+    // BEFORE the early return below and not after it.
+    // -------------------------------------------------------------------
+    // Finalizing a game elsewhere does not add a play -- that is the whole
+    // point of it -- so a status check sitting behind "nothing new to draw"
+    // is a status check that never runs on the one transition it exists
+    // for. Written the other way round first, and caught by asking the
+    // stub to go final without logging anything: the subtitle still read
+    // "In progress" two polls later.
+    //
+    // One column, so it is a fraction of the fetch above it.
+    const { data: g } = await supabaseClient
+      .from('games').select('status').eq('id', GAME.id).limit(1);
+    if (g && g[0] && g[0].status && g[0].status !== GAME.status){
+      GAME.status = g[0].status;
+      document.getElementById('subtitle').textContent =
+        [GAME.designator, GAME.game_date, GAME.season_year + ' season',
+         GAME.status === 'final' ? 'Final' : 'In progress'].filter(Boolean).join(' · ');
+    }
+
+    // NOTHING NEW, NOTHING REDRAWN. Rewriting identical innerHTML every
+    // four seconds would drop a text selection mid-copy and reset the
+    // focus ring, which is exactly what somebody reading the log is doing.
+    // Compared on the same JSON the rows are built from rather than on a
+    // length, so a CORRECTION -- an edit that changes a play without
+    // adding one -- still repaints.
+    const stamp = JSON.stringify(next);
+    if (stamp === lastStamp) return;
+    lastStamp = stamp;
+    plays = next;
+
+    // HOLD THE READER'S PLACE. New rows arrive at the TOP now, so every
+    // one of them pushes whatever is being read further down the page. At
+    // the top of the log that is what you want -- the newest play should
+    // land in front of you. Anywhere else it is the page yanking itself
+    // out from under a person mid-sentence, so the scroll is moved by
+    // exactly the height that was inserted above them.
+    const wasAtTop = window.scrollY <= 4;
+    const before = document.documentElement.scrollHeight;
+    paint();
+    if (!wasAtTop){
+      const grew = document.documentElement.scrollHeight - before;
+      if (grew) window.scrollTo(0, window.scrollY + grew);
+    }
   }
 </script>
 </body>
