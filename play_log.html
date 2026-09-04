@@ -100,6 +100,114 @@
   .sc-copyright { margin:26px 0 0; padding:0 2px 4px; font-size:12px; line-height:1.5;
     color:var(--sc-ink-muted); opacity:.75; text-align:center; max-width:760px;
     margin-left:auto; margin-right:auto; }
+  /* ======================================================================
+     PHONES. Added 4 September 2026.
+     ----------------------------------------------------------------------
+     This page had no mobile rules at all -- its only media queries were the
+     two print blocks above.
+
+     Measured at 390px with a full four-quarter game on screen: the document
+     was 628px wide against a 390px viewport, so the PAGE scrolled sideways
+     by 238px. Unlike platform.html there was no overflow-x backstop to
+     catch it, so the table simply left the card and took the page with it.
+
+     What was off the right-hand edge was the play text -- the entire point
+     of a play log. You could read the number, the quarter, the clock, the
+     team and the down, and not what happened.
+
+     Nine columns cannot be made to fit 320px and should not be tried. The
+     row becomes a card instead, ordered by what someone actually scans for:
+
+         48 · Q4 12:34 · Neville · 3rd & 4 · at own 32            +14
+         Conner pass to Clark Jr for 14, tackled by Grayson
+         [NEEDS REVIEW]
+
+     A FLEX ROW WITH EXPLICIT ORDER rather than a grid. The cells are fixed
+     in DOM order by the desktop table -- gain comes after play -- and grid
+     areas would work, except that a grid's columns are shared down the
+     whole row, so the short meta line would set the width of the long play
+     line. order + flex-wrap places each cell where it reads best and lets
+     every line size itself.
+
+     700px, and a laptop cannot reach it: verified pixel-identical at 1440,
+     1100 and 768.
+     ====================================================================== */
+  /* SCREEN ONLY. Paper is not a narrow screen: a sheet lays out at the page
+     width whatever device asked for it, the print block above is built for a
+     TABLE -- it repeats <thead> on every sheet and keeps rows off page breaks
+     -- and a log printed as 48 stacked cards runs half again as long as the
+     same log printed as rows. Without this, printing from a phone got the
+     card layout and neither of those print rules had anything to act on. */
+  @media screen and (max-width:700px){
+    body { padding:10px; padding-top:calc(10px + env(safe-area-inset-top)); }
+    .card { padding:13px 12px; border-radius:10px; }
+    h1 { font-size:19px; }
+
+    /* The column headings have nothing left to head. */
+    #logTable thead { display:none; }
+    #logTable table, #logTable tbody { display:block; width:auto; }
+
+    #logTable tr {
+      display:flex; flex-wrap:wrap; align-items:baseline;
+      column-gap:7px; row-gap:3px;
+      padding:11px 12px; margin:0 0 8px;
+      border:1px solid var(--sc-rule); border-radius:8px;
+      background:var(--sc-raise);
+    }
+    /* AN EMPTY CELL DISAPPEARS. A marker carries no number, no down and no
+       gain, and a card with three blank slots in it reads as a card with
+       something missing. :empty is exact here -- those cells are built as
+       '' + '', with no whitespace inside them. */
+    /* WIDTH IS RESET, and it has to be said explicitly. The desktop table
+       sizes its two elastic columns with td.num{width:1%} and
+       td.play{width:99%} -- percentages that mean "shrink to content" and
+       "take the rest" to a table layout, and mean literally 1% and 99% of
+       the row to a flex one. The number came out 3px wide with "48"
+       spilling out of it into the quarter beside it. Caught in a render,
+       not in review. */
+    #logTable td { display:inline; padding:0; border-bottom:none; width:auto; }
+    #logTable td:empty { display:none; }
+
+    /* Reading order, which is not DOM order. */
+    #logTable td.num   { order:1; font-weight:700; color:var(--sc-ink-soft); }
+    #logTable td.q     { order:2; }
+    #logTable td.clock { order:3; }
+    #logTable td.team  { order:4; color:var(--sc-ink-soft); }
+    #logTable td.sit   { order:5; }
+    #logTable td.ball  { order:6; }
+    #logTable td.q, #logTable td.clock,
+    #logTable td.sit, #logTable td.ball { color:var(--sc-ink-muted); font-size:12px; }
+    /* "at own 32" rather than a bare "own 32" once it is running inline in a
+       sentence instead of sitting under a BALL ON heading. Generated, so the
+       cell's own text -- and the CSV built from it -- is untouched. */
+    #logTable td.ball:not(:empty)::before { content:'at '; }
+
+    /* THE GAIN STAYS ON THE RIGHT, where a number that is scanned rather
+       than read belongs. margin-left:auto claims the rest of the meta line;
+       if that line wraps it settles at the end of whichever line it is on,
+       which is still the right edge. */
+    #logTable td.gain  { order:7; margin-left:auto; font-size:12.5px; }
+
+    /* THE PLAY, ON ITS OWN LINE AND LARGEST. It is the reason the page
+       exists and on a phone it gets the full width and the primary ink. */
+    #logTable td.play  { order:8; flex:0 0 100%; width:auto;
+                         font-size:14px; color:var(--sc-ink); line-height:1.4; }
+    #logTable td.flags { order:9; flex:0 0 100%; }
+
+    /* A marker is a card too, but a quieter one -- no fill and no border, so
+       a scan down the page lands on the plays. tr.marker td already sets the
+       muted italic; this is about the card, not the text. */
+    #logTable tr.marker { background:none; border-color:transparent;
+                          padding-top:4px; padding-bottom:4px; margin-bottom:4px; }
+    #logTable tr.marker td.play { font-size:13px; color:var(--sc-ink-muted); }
+    /* The divider's 2px rule was a line across a table. Between cards it
+       reads better as a gap plus a rule above the card it belongs to. */
+    #logTable tr.divider { border-top:2px solid var(--sc-rule-strong); margin-top:14px; }
+
+    .counts { font-size:12.5px; }
+    .actions button { padding:9px 13px; }
+  }
+
   @media print { .sc-copyright { color:#666 !important; opacity:1; } }
 </style>
 </head>
@@ -300,13 +408,17 @@
         '<td class="num">' + r.n + '</td>' +
         '<td class="q">' + esc(r.quarter) + '</td>' +
         '<td class="clock">' + esc(r.clock) + '</td>' +
-        '<td>' + esc(r.team) + '</td>' +
-        '<td>' + esc(r.situation) + '</td>' +
-        '<td>' + esc(r.ballOn) + '</td>' +
+        // THREE CLASSES ADDED FOR THE PHONE LAYOUT and nothing else. No rule
+        // matches them above the breakpoint -- checked against this file and
+        // against statchat.css -- so the table they build is byte-identical
+        // on a laptop.
+        '<td class="team">' + esc(r.team) + '</td>' +
+        '<td class="sit">' + esc(r.situation) + '</td>' +
+        '<td class="ball">' + esc(r.ballOn) + '</td>' +
         '<td class="play">' + esc(r.text) + '</td>' +
         '<td class="gain' + (r.gain !== '' && r.gain < 0 ? ' neg' : '') + '">' +
           (r.gain === '' ? '' : r.gain) + '</td>' +
-        '<td>' + r.tags.map(t =>
+        '<td class="flags">' + r.tags.map(t =>
           '<span class="tag ' + (t === 'NEEDS REVIEW' ? 'unres' : t === 'OVERRIDE' ? 'over' : 'score') +
           '">' + esc(t) + '</span>').join('') + '</td>' +
       '</tr>').join('');
