@@ -1,0 +1,427 @@
+<!--
+  Copyright 2026 StatChat. All rights reserved.
+  Unauthorized copying, modification or distribution of this software
+  or its documentation is prohibited.
+  NOT SHOWN ON SCREEN, deliberately. This file is composited live into
+  a broadcast; a visible notice would be burnt into the picture.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="logo.png" type="image/png">
+<title>StatChat — Box score overlay</title>
+<style>
+  /* A vMix browser input composites this over the programme feed, so
+     anything not explicitly painted shows the feed through. Do not give
+     html or body a background colour. */
+  html, body { background:transparent !important; margin:0; padding:0; overflow:hidden;
+               font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+               -webkit-font-smoothing:antialiased; }
+
+  /* Bottom-left, the same corner as the score bug, the leaders panel, the
+     drive panel and the starters card, so a director can cut between all
+     of them without the eye moving. */
+  /* TWO CARDS, NOT ONE. Reported 4 September: with the totals continuing
+     straight on from the linescore, the card was nine near-identical
+     horizontal bands and the eye had nowhere to rest. A rule between them
+     was just a tenth thing to read past.
+     The panel is now a stack: the linescore is one card, the totals are
+     another, and the programme feed shows through the gap. That is the one
+     separation that cannot be mistaken for another divider. */
+  /* THE INK LIVES ON THE PANEL, not on #body. It was on #body, and moving
+     the totals out of #body to make the second card left every figure in it
+     inheriting the browser default -- dark grey text on a near-black card,
+     legible in a screenshot and invisible on air. */
+  #panel { position:absolute; left:60px; bottom:60px; width:860px; display:none;
+           color:#fff;
+           opacity:0; transform:translateY(10px);
+           transition:opacity 380ms ease, transform 380ms ease; }
+  #card { border-radius:10px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,0.55); }
+  #panel.shown { opacity:1; transform:translateY(0); }
+  @media (prefers-reduced-motion: reduce) {
+    #panel { transition:opacity 180ms ease; transform:none; }
+    #panel.shown { transform:none; }
+  }
+
+  /* NO LOGO IN THE HEAD. Andy's call, 4 September: this is a TWO-team
+     graphic, and one crest at the top of it reads as though the panel
+     belongs to that team. Each side carries its own mark on its own line
+     instead, where it identifies a row rather than the card. */
+  #head { padding:16px 26px; font-weight:800; }
+  #head .title { font-size:34px; line-height:1.05; letter-spacing:0.01em; }
+  #head .sub   { font-size:18px; font-weight:600; opacity:0.78; margin-top:4px; }
+
+  #body { background:rgba(12,12,14,0.92); color:#fff; }
+
+  table.ls { border-collapse:collapse; width:100%; }
+  table.ls th { font-size:17px; font-weight:700; opacity:0.55; letter-spacing:0.06em;
+                text-transform:uppercase; padding:11px 0 9px; text-align:center; }
+  table.ls th.tm { text-align:left; padding-left:26px; }
+  table.ls td { padding:13px 0; text-align:center; font-size:38px; font-weight:800;
+                font-variant-numeric:tabular-nums;
+                border-top:1px solid rgba(255,255,255,0.09); }
+  table.ls td.tm { text-align:left; padding-left:26px; font-size:27px; font-weight:700;
+                   white-space:nowrap; }
+  /* THE CREST STAYS ON THE LINESCORE LINE AND NOWHERE ELSE. A badge on every
+     line AND again at both ends of the totals header was too much furniture
+     for a card that is on screen for a few seconds -- but the linescore is
+     where a viewer matches a name to a team, so that is the one that earns
+     its place. The totals header identifies its sides with the name and a
+     rule in the team's colour instead. */
+  .mark { display:inline-flex; align-items:center; justify-content:center;
+          width:34px; height:34px; border-radius:6px; margin-right:14px;
+          vertical-align:-9px; font-size:18px; font-weight:800; overflow:hidden;
+          flex:none; }
+  .mark img { width:100%; height:100%; object-fit:contain; display:block; }
+  table.ls col.q { width:76px; }
+  table.ls col.fin { width:104px; }
+  /* THE FINAL COLUMN IS THE ANSWER. Gold is the accent the score bug and
+     the drive panel already use, so it is the page's own emphasis rather
+     than a new colour. Everything else stays white and grey. */
+  table.ls th.fin { opacity:0.85; color:#ffc72c; }
+  table.ls td.fin { color:#ffc72c; background:rgba(255,199,44,0.07); }
+  table.ls tr.lose td { opacity:0.72; }
+  table.ls tr.lose td.fin { opacity:1; }
+
+  /* ---- team totals, only when ?totals=1 ----
+     WHOSE COLUMN IS WHOSE, SAID EXPLICITLY. Reported 4 September: with the
+     linescore reading teams DOWN the page and the totals reading teams
+     ACROSS it, nothing on the card said which side of a totals row belonged
+     to whom. This header is the same device broadcast_stats.html already
+     uses -- each team's mark and name at its own end, the label between --
+     so the two graphics answer the question the same way. */
+  #totals { margin-top:10px; background:rgba(12,12,14,0.92); border-radius:10px;
+             overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,0.55); }
+  /* The totals card names itself, so the second box is not an orphan. Tinted
+     rather than another full-colour bar: one gold header on the stack is the
+     brand, two is a stripe pattern. */
+  .thead { background:rgba(255,255,255,0.055); }
+  .thead { display:grid; grid-template-columns:1fr auto 1fr; align-items:end;
+           padding:14px 26px 0; }
+  /* A DEFINITIVE LINE, 5px, hard-edged, in the team's own colour. Andy's
+     call, 4 September, replacing the crests: a badge is a picture the eye has
+     to decode, a bar of colour under a name is read without looking at it.
+     Its colour is set inline per team; only the weight and position are here.
+     bottom-aligned so the two rules sit level whatever the names do. */
+  .thead .side { display:flex; align-items:flex-end; font-size:20px; font-weight:800;
+                 letter-spacing:0.01em; min-width:0;
+                 padding-bottom:9px; border-bottom:5px solid transparent; }
+  .thead .side.r { justify-content:flex-end; }
+  .thead .side .nm { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .thead .mid { font-size:14px; font-weight:700; opacity:0.5; letter-spacing:0.09em;
+                text-transform:uppercase; padding:0 22px 13px; white-space:nowrap; }
+  .srow { display:grid; grid-template-columns:1fr auto 1fr; align-items:center;
+          padding:9px 26px; border-top:1px solid rgba(255,255,255,0.09); }
+  /* The colour rules ARE the header's bottom edge, so the first row does not
+     draw a second line immediately under them. */
+  .srow:first-of-type { border-top:none; }
+  .srow .v { font-size:26px; font-weight:800; font-variant-numeric:tabular-nums; }
+  /* VALUES AT THE OUTER EDGES, under their own team's name in the header
+     above -- not pushed into the middle against the label. Drawn the other
+     way first and it read badly for exactly the reason this header exists:
+     the names sat at the outer edges and the numbers at the inner ones, so
+     the eye had to cross the label to get from a team to its figure. Now
+     each team owns one edge of the card, top to bottom. */
+  .srow .v.l { text-align:left; }
+  .srow .v.r { text-align:right; }
+  .srow .lab { font-size:14px; font-weight:700; opacity:0.5; letter-spacing:0.07em;
+               text-transform:uppercase; padding:0 22px; white-space:nowrap; }
+
+  /* ?debug=1 paints a near-black ground so the panel can be seen in a
+     browser. Never on air: vMix does not send this parameter. */
+  body.debug { background:#123 !important; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <div id="card">
+    <div id="head"><div class="title" id="title">Final</div><div class="sub" id="sub"></div></div>
+    <div id="body">
+      <table class="ls"><colgroup id="cols"></colgroup><tbody id="ls"></tbody></table>
+    </div>
+  </div>
+  <div id="totals" hidden></div>
+</div>
+
+<script src="team-icon.js"></script>
+<script src="engine.js"></script>
+<script>
+// THESE FOUR ARE DELIBERATELY OUTSIDE THE IIFE BELOW.
+// ---------------------------------------------------------------------
+// engine.js's computeState() and computeBoxScore() read `plays`,
+// `startingPossession`, `quarterLengthSec` and `TEAMS` as GLOBALS -- they
+// are shared with game.html, which declares them at script scope. Declared
+// inside a closure they are invisible to engine.js, and the first render
+// dies on "startingPossession is not defined" with the panel simply never
+// appearing, because an overlay swallows its own errors on air.
+//
+// broadcast_starters.html wraps everything in an IIFE and gets away with
+// it: it never calls the engine. broadcast_stats.html, which does, declares
+// these at script scope exactly as here.
+var TEAMS = { teamA: {}, teamB: {} };
+var plays = [], startingPossession = 'teamA', quarterLengthSec = 720;
+
+// AND THE THREE FUNCTIONS engine.js EXPECTS THE PAGE TO PROVIDE. Its own
+// header names the contract: TEAMS, plays, startingPossession,
+// quarterLengthSec, TIMEOUTS_PER_HALF, otherTeam and clockToAbsSeconds must
+// all exist before it runs. They are the page's to supply because they
+// legitimately differ between pages -- game.html builds TEAMS from a live
+// roster, a report builds it from a saved game.
+//
+// Copied from broadcast_stats.html unchanged, which is the nearest page
+// with the same job. Found the way these things are found: the panel simply
+// never appeared, and ?debug=1 said "otherTeam is not defined".
+function otherTeam(t){ return t === 'teamA' ? 'teamB' : 'teamA'; }
+const TIMEOUTS_PER_HALF = 3;
+function clockToAbsSeconds(quarter, clockStr){
+  let m = String(clockStr).match(/^(\d{1,2}):(\d{2})$/);
+  let mins, secs;
+  if (m){ mins = parseInt(m[1]); secs = parseInt(m[2]); }
+  else {
+    m = String(clockStr).match(/^(\d*)(\d{2})$/);
+    if (!m) return null;
+    mins = m[1] ? parseInt(m[1]) : 0; secs = parseInt(m[2]);
+  }
+  if (secs > 59) return null;
+  const remaining = mins * 60 + secs;
+  if (remaining > quarterLengthSec) return null;
+  return (quarter - 1) * quarterLengthSec + (quarterLengthSec - remaining);
+}
+
+(function(){
+  const params = new URLSearchParams(location.search);
+  const OVERLAY_KEY = params.get('key') || '';
+  const DEBUG = params.get('debug') === '1';
+  if (DEBUG) document.body.classList.add('debug');
+
+  // TWO GRAPHICS, ONE FILE, addressed by a parameter -- the same way
+  // broadcast_starters.html serves offense, defense and special teams. Two
+  // files would mean two copies of the linescore, and the whole reason the
+  // arithmetic moved into engine.js was to stop that happening again.
+  //   /broadcast_boxscore.html?key=…           the linescore alone
+  //   /broadcast_boxscore.html?key=…&totals=1  linescore plus team totals
+  const WITH_TOTALS = params.get('totals') === '1';
+
+  // A finished score does not change. This only exists so a card armed in
+  // the switcher before the whistle fills itself in without the operator
+  // reloading the input.
+  const POLL_MS = 5000;
+  let currentGameId = '';
+
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+  // Lifted from broadcast_stats.html rather than reinvented, including the
+  // colour-clash guard: two schools can genuinely share an accent, and only
+  // the OPPONENT's displayed colour moves, so our own identity stays put.
+  function buildTeams(game, ourBranding){
+    const ourName = game.our_team_is_home ? game.home_team_name : game.away_team_name;
+    const oppName = game.our_team_is_home ? game.away_team_name : game.home_team_name;
+    TEAMS.teamA = { name: ourName || 'Us',
+      bg: (ourBranding && ourBranding.primary_color) || '#2b3440',
+      text: (ourBranding && ourBranding.secondary_color) || '#ffffff',
+      isHome: !!game.our_team_is_home,
+      logo: (ourBranding && ourBranding.logo_url) || null };
+    const oppPrimary = game.opponent_primary_color || '#6e7885';
+    const oppSecondary = game.opponent_secondary_color || '#ffffff';
+    TEAMS.teamB = { name: oppName || 'Opponent', bg: oppPrimary, text: oppSecondary,
+      isHome: !game.our_team_is_home, logo: game.opponent_logo_url || null };
+    if (typeof colorDistance === 'function' &&
+        colorDistance(TEAMS.teamA.bg, TEAMS.teamB.bg) < 60){
+      if (colorDistance(TEAMS.teamA.bg, oppSecondary) >= 60){
+        TEAMS.teamB.bg = oppSecondary; TEAMS.teamB.text = oppPrimary;
+      } else {
+        TEAMS.teamB.bg = luminance(TEAMS.teamA.bg) > 0.5 ? '#3a3a3a' : '#c8c8c8';
+        TEAMS.teamB.text = luminance(TEAMS.teamB.bg) > 0.55 ? '#1a1a1a' : '#ffffff';
+      }
+    }
+  }
+
+  // THE RULE HAS TO BE VISIBLE ON A NEAR-BLACK CARD, and a school colour is
+  // chosen to look good on a jersey, not against #0c0c0e.
+  // ---------------------------------------------------------------------
+  // Measured against the totals card: Neville's gold reads at 10.9:1 and a
+  // green school at 7.9:1, but the maroon beside them manages 2.09:1, a navy
+  // school 1.16:1 and black 1.07:1. Five of eight realistic colours were
+  // close to invisible, including one already on screen.
+  //
+  // LIFTING THE COLOUR TOWARD WHITE WAS TRIED AND REJECTED. It clears the
+  // contrast bar -- maroon lifts to #a7506a -- but #a7506a is a washed pink
+  // that is not Ouachita's colour and not anybody else's either. A wrong
+  // colour presented as the team's is worse than no colour, because it
+  // claims something untrue and does it confidently.
+  //
+  // So: their primary when it genuinely reads, their own secondary when that
+  // does, and otherwise a plain neutral that claims nothing. Andy's call.
+  // The crest on the linescore line above already carries the identity; this
+  // rule is reinforcement, so a neutral here costs nothing.
+  //
+  // 3:1 is the non-text contrast threshold. This is a 5px block of colour,
+  // not something anybody reads.
+  // A crest when the school has uploaded one, its colour block with an
+  // initial when it has not -- the ordinary state for an opponent typed in
+  // from a programme. Never a broken image.
+  const markFor = (t) => t.logo
+    ? '<span class="mark"><img src="' + esc(t.logo) + '" alt="" ' +
+      'onerror="this.parentNode.textContent=\'' +
+        esc(String(t.name || '?').charAt(0).toUpperCase()) + '\'"></span>'
+    : '<span class="mark" style="background:' + esc(t.bg) + '; color:' + esc(t.text) + ';">' +
+      esc(String(t.name || '?').charAt(0).toUpperCase()) + '</span>';
+
+  const CARD_GROUND = '#0c0c0e';
+  const readsOnCard = (c) => {
+    try { return !!c && contrastRatio(c, CARD_GROUND) >= 3; } catch (e) { return false; }
+  };
+  function ruleColor(t){
+    if (readsOnCard(t.bg)) return t.bg;
+    if (readsOnCard(t.text)) return t.text;
+    return '#c8ced6';
+  }
+
+  const sumStat = (obj, key) =>
+    Object.keys(obj || {}).reduce((a, n) => a + ((obj[n] || {})[key] || 0), 0);
+
+  // THE SAME SIX ROWS broadcast_stats.html shows, in the same order and with
+  // the same wording. That file's own note records why it is six and not
+  // fourteen: on a graphic held for a few seconds, every extra row is
+  // something the eye must pass over to reach the ones a commentator says
+  // out loud. A viewer who sees both graphics must not meet two different
+  // answers, so this is a deliberate match, not a coincidence.
+  function totalsFor(teamKey, box, state, turnovers){
+    const s = box[teamKey] || {};
+    const rushYds = sumStat(s.rushing, 'yds');
+    const passYds = sumStat(s.passing, 'yds');
+    const own = ((box[teamKey === 'teamA' ? 'teamB' : 'teamA'] || {}).oppDowns) || {};
+    const top = (state.possessionTime || {})[teamKey];
+    return [
+      ['Total Yards', rushYds + passYds],
+      ['Pass Yards', passYds],
+      ['Rush Yards', rushYds],
+      ['Time of Possession', top ? formatDuration(top) : '—'],
+      ['Turnovers', (turnovers || {})[teamKey] || 0],
+      ['3rd Down', own.d3Pct !== null && own.d3Pct !== undefined
+        ? own.d3conv + '/' + own.d3att + ' (' + own.d3Pct + '%)' : '—']
+    ];
+  }
+
+  function render(game, branding){
+    buildTeams(game, branding || {});
+    const state = computeState(plays);
+    const ls = quarterScores(plays);
+
+    // VISITOR ON THE LEFT -- here, the top line. The order every scoreboard
+    // and every report in this app already uses, and the order a linescore
+    // is read in anywhere else.
+    const visitor = TEAMS.teamA.isHome ? 'teamB' : 'teamA';
+    const home    = TEAMS.teamA.isHome ? 'teamA' : 'teamB';
+
+    const isFinal = (game.status === 'final');
+    document.getElementById('title').textContent =
+      isFinal ? (ls.hadOt ? 'Final / OT' : 'Final')
+              : (typeof quarterLabel === 'function' ? quarterLabel(state) : '');
+    document.getElementById('sub').textContent =
+      [game.designator, game.game_date].filter(Boolean).join('  ·  ');
+    const head = document.getElementById('head');
+    head.style.background = TEAMS.teamA.bg || '#ffc72c';
+    head.style.color      = TEAMS.teamA.text || '#20180a';
+
+    // The OT column is drawn only when overtime happened, so an ordinary
+    // game keeps a five-column line rather than carrying an empty column.
+    const cols = ['<col>'].concat(['<col class="q">','<col class="q">','<col class="q">','<col class="q">'])
+      .concat(ls.hadOt ? ['<col class="q">'] : []).concat(['<col class="fin">']).join('');
+    document.getElementById('cols').innerHTML = cols;
+
+    const headRow = '<tr><th class="tm">&nbsp;</th><th>1</th><th>2</th><th>3</th><th>4</th>' +
+      (ls.hadOt ? '<th>OT</th>' : '') + '<th class="fin">F</th></tr>';
+    const line = (k) => {
+      const t = TEAMS[k];
+      const lost = ls.totals[k] < ls.totals[k === 'teamA' ? 'teamB' : 'teamA'];
+      return '<tr class="' + (lost ? 'lose' : 'win') + '">' +
+        '<td class="tm">' + markFor(t) + esc(t.name) + '</td>' +
+        ls[k].map(v => '<td>' + v + '</td>').join('') +
+        (ls.hadOt ? '<td>' + ls.ot[k] + '</td>' : '') +
+        '<td class="fin">' + ls.totals[k] + '</td></tr>';
+    };
+    document.getElementById('ls').innerHTML = headRow + line(visitor) + line(home);
+
+    const tot = document.getElementById('totals');
+    if (!WITH_TOTALS){ tot.hidden = true; tot.innerHTML = ''; }
+    else {
+      const box = computeBoxScore(plays);
+      const turnovers = (typeof countTurnovers === 'function') ? countTurnovers(plays) : {};
+      const v = totalsFor(visitor, box, state, turnovers);
+      const hRows = totalsFor(home, box, state, turnovers);
+      tot.innerHTML =
+        '<div class="thead">' +
+          // THE RULE UNDER EACH NAME IS THAT TEAM'S OWN COLOUR, and it is the
+          // only place colour identifies a side now that the crests are gone.
+          // Set inline because it comes from the database, and it is drawn at
+          // the FOOT of the header so it reads as underlining the name rather
+          // than boxing it.
+          '<div class="side" style="border-bottom-color:' + esc(ruleColor(TEAMS[visitor])) + ';">' +
+            '<span class="nm">' + esc(TEAMS[visitor].name) + '</span></div>' +
+          '<div class="mid">Team stats</div>' +
+          '<div class="side r" style="border-bottom-color:' + esc(ruleColor(TEAMS[home])) + ';">' +
+            '<span class="nm">' + esc(TEAMS[home].name) + '</span></div>' +
+        '</div>' +
+        v.map((r, i) =>
+          '<div class="srow"><span class="v l">' + esc(r[1]) + '</span>' +
+          '<span class="lab">' + esc(r[0]) + '</span>' +
+          '<span class="v r">' + esc(hRows[i][1]) + '</span></div>').join('');
+      tot.hidden = false;
+    }
+
+    const panel = document.getElementById('panel');
+    panel.style.display = 'block';
+    requestAnimationFrame(() => panel.classList.add('shown'));
+  }
+
+  async function fetchAndRender(){
+    const qs = [];
+    if (currentGameId) qs.push('id=' + encodeURIComponent(currentGameId));
+    if (OVERLAY_KEY)   qs.push('key=' + encodeURIComponent(OVERLAY_KEY));
+    const r = await fetch('/api/gamedata' + (qs.length ? '?' + qs.join('&') : ''),
+      { cache: 'no-store' });
+    if (!r.ok){
+      const body = await r.json().catch(() => ({}));
+      throw new Error(body.error || ('HTTP ' + r.status));
+    }
+    const d = await r.json();
+    const game = d.game || {};
+    plays = (d.plays || []).map(p => ({
+      seq: p.sequence_number, text: p.text, effect: p.effect || {},
+      team: p.team_side, quarter: p.quarter, roles: p.roles }));
+    startingPossession = game.starting_possession || 'teamA';
+    quarterLengthSec = game.quarter_length_seconds || 720;
+    render(game, d.ourBranding || {});
+  }
+
+  async function init(){
+    currentGameId = params.get('id') || '';
+    try { await fetchAndRender(); }
+    catch (e){
+      // Silent ON AIR by design: an overlay that prints an error puts that
+      // error on the broadcast. ?debug=1 says what happened; vMix never has
+      // that parameter, a person testing the address does.
+      document.getElementById('panel').style.display = 'none';
+      if (DEBUG){
+        document.body.innerHTML = '<pre style="color:#fff; font:16px monospace; padding:24px;">' +
+          'No box score shown.\n\ntotals: ' + (WITH_TOTALS ? 'on' : 'off') + '\n\n' +
+          String(e && e.message ? e.message : e) +
+          '\n\nCheck /api/gamedata in a browser: it reports which game it ' +
+          'resolved, or says no game is on air.</pre>';
+      }
+      return;
+    }
+    setInterval(() => { fetchAndRender().catch(() => {}); }, POLL_MS);
+  }
+  init();
+})();
+</script>
+</body>
+</html>
