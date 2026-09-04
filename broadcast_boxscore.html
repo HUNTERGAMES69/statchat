@@ -273,6 +273,59 @@ function clockToAbsSeconds(quarter, clockStr){
     : '<span class="mark" style="background:' + esc(t.bg) + '; color:' + esc(t.text) + ';">' +
       esc(String(t.name || '?').charAt(0).toUpperCase()) + '</span>';
 
+  // THE LINESCORE -- points by quarter, with overtime kept separate.
+  // ---------------------------------------------------------------------
+  // LOCAL TO THIS PAGE ON PURPOSE. It lived in engine.js for one day and
+  // came back out: engine.js is loaded by fourteen pages, and putting a
+  // brand-new overlay's arithmetic there made this file undeployable on its
+  // own. That is not theoretical -- the overlay went up without it and every
+  // vMix input reading it drew nothing, because an overlay swallows its own
+  // errors on air.
+  //
+  // The same arithmetic exists inline in recap.html and twice in
+  // stat_package.html. Those three agree, and this is a fourth -- a real
+  // cost, accepted knowingly, because the alternative was a shared-file
+  // change that has to ship in lockstep with a leaf page. If these ever need
+  // to converge, engine.js is the right home and all four should move at
+  // once, with tests to prove they still agree.
+  //
+  // NAMED linescoreFor, and deliberately not the obvious name: recap.html
+  // and stat_package.html each hold a local const of the obvious name, and a
+  // global matching it would shadow-collide with them for no benefit.
+  //
+  // scoreAdjust COUNTS. A correction to the score belongs to the quarter it
+  // was entered in, and a linescore that ignores adjustments adds up to a
+  // different number than the scoreboard beside it -- the one thing a
+  // graphic on air must never do.
+  //
+  // OVERTIME IS NOT A FIFTH QUARTER. Clamping it into Q4 is a fault this
+  // project has already had: an overtime touchdown read as a fourth-quarter
+  // one. Every period from 5 on folds into one OT total. hadOt is returned
+  // rather than inferred from a non-zero OT score, because a scoreless
+  // overtime still happened and its column still belongs.
+  function linescoreFor(playsList){
+    const q = { teamA: [0, 0, 0, 0], teamB: [0, 0, 0, 0] };
+    const ot = { teamA: 0, teamB: 0 };
+    let hadOt = false;
+    (playsList || []).forEach(function(p){
+      const qn = Math.max(1, (p && p.quarter) || 1);
+      if (qn >= 5) hadOt = true;
+      const e = (p && p.effect) || {};
+      const add = function(team, pts){
+        if (!team || !pts) return;
+        // A team key the engine does not know would otherwise throw on the
+        // array index and take the whole graphic down mid-show.
+        if (qn >= 5){ if (ot[team] !== undefined) ot[team] += pts; }
+        else if (q[team]) q[team][qn - 1] += pts;
+      };
+      if (e.score) add(e.score.team, e.score.points);
+      if (e.scoreAdjust) add(e.scoreAdjust.team, e.scoreAdjust.pts);
+    });
+    return { teamA: q.teamA, teamB: q.teamB, ot: ot, hadOt: hadOt,
+             totals: { teamA: q.teamA.reduce(function(a,b){return a+b;}, 0) + ot.teamA,
+                       teamB: q.teamB.reduce(function(a,b){return a+b;}, 0) + ot.teamB } };
+  }
+
   const CARD_GROUND = '#0c0c0e';
   const readsOnCard = (c) => {
     try { return !!c && contrastRatio(c, CARD_GROUND) >= 3; } catch (e) { return false; }
@@ -312,7 +365,7 @@ function clockToAbsSeconds(quarter, clockStr){
   function render(game, branding){
     buildTeams(game, branding || {});
     const state = computeState(plays);
-    const ls = quarterScores(plays);
+    const ls = linescoreFor(plays);
 
     // VISITOR ON THE LEFT -- here, the top line. The order every scoreboard
     // and every report in this app already uses, and the order a linescore
