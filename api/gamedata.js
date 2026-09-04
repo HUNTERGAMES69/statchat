@@ -48,7 +48,34 @@ const { tenantFromKey } = require('./_tenant');
 //
 // Only 200 and 404 are cached. A 401 must always re-check the key, and a
 // 500 must never be repeated back as though it were an answer.
-const CACHE_TTL_MS = 1000;
+// TWO SECONDS, NOT ONE. Corrected 4 September 2026, an hour before kickoff.
+//
+// The first version used 1000ms and I claimed it removed ~95% of the load.
+// That was wrong, and a Network tab caught it: every overlay polls this
+// endpoint every POLL_MS = 2000ms, so a one-second entry ALWAYS expired
+// before the next poll arrived. A single overlay could never hit the
+// cache once -- every response was the full seven-query fan-out, 430-850ms.
+//
+// What this actually does is cap database reads at 1/TTL per key, however
+// many overlays are watching. So the saving is not a fixed percentage; it
+// depends on how many overlays share a feed key:
+//
+//     overlays   uncached   TTL=1s    TTL=2s
+//        1        0.50/s     0.50/s    0.50/s      0%  /  0%
+//        2        1.00/s     1.00/s    0.50/s      0%  / 50%
+//        3        1.50/s     1.00/s    0.50/s     33%  / 67%
+//        6        3.00/s     1.00/s    0.50/s     67%  / 83%
+//
+// Matching the TTL to the poll interval is the point: it makes every
+// second poll a guaranteed hit instead of a guaranteed miss.
+//
+// THE COST IN FRESHNESS IS ALMOST NOTHING, and this is why Andy agreed to
+// it. The overlay only redraws every two seconds, so its data was already
+// up to two seconds old before it reached the screen. This takes the
+// worst case from about three seconds to about four. The rule that
+// mattered -- "a scoreboard thirty seconds stale is worse than no
+// scoreboard" -- is nowhere near being tested by four.
+const CACHE_TTL_MS = 2000;
 const CACHE_MAX = 200;          // bounded: a warm Vercel instance is long-lived
 const cache = new Map();
 
