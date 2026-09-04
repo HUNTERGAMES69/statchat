@@ -11731,6 +11731,69 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     })();
 
     (function wireSpotCalc(){
+      // A FRESH PANEL HAS NEVER BEEN RETARGETED.
+      // -------------------------------------------------------------------
+      // Reported from a live test game, 3 September 2026, after about 75
+      // clean plays: the calculator read "from own 37 to own 48 = +11" in
+      // green and the play logged as NO GAIN. Undo and re-enter did the same
+      // thing; typing the yards by hand worked; every play type was affected
+      // from then on; RELOADING THE PAGE FIXED IT. That last symptom is the
+      // whole diagnosis -- the bad state was in the document, not in the data.
+      //
+      // #playPanel is a PERSISTENT element. Closing a panel sets
+      // innerHTML = '' and leaves the div itself in place, so anything
+      // written to its dataset outlives the panel that wrote it. The fake
+      // punt / fake field goal toggle writes calcTarget there to point the
+      // shared calculator at the fake's own yards box -- and untoggling is
+      // the only thing that ever put it back. Tick Fake, then Clear, or pick
+      // another play type, and calcTarget stayed 'pp_puntfake_yards' for the
+      // rest of the browser session.
+      //
+      // On every later rush or pass, yardsEl() then looked up an id that is
+      // not in that panel and got null. Every write in recompute() is
+      // guarded against a null yards box -- correctly, because the kickoff
+      // panel genuinely has none -- so the gain was computed, the readout was
+      // painted, and the number was written NOWHERE. pp_yards stayed empty
+      // and the parser read it as no gain. The one line that is not guarded
+      // is the readout, and it runs last, which is why the screen looked
+      // right while the play was wrong.
+      //
+      // Cleared HERE, at the one point that knows the panel is new, rather
+      // than at each of the teardowns -- there are several, and a list of
+      // them is a list somebody has to remember to extend. Before the wrap
+      // check, so a panel with no calculator still clears what a previous
+      // one left behind.
+      delete panel.dataset.calcTarget;
+
+      // AND THE CLOSURE ITSELF, for the same reason and on the same element.
+      // -------------------------------------------------------------------
+      // panel.__spotCalc is set at the foot of this function -- but only on a
+      // panel that HAS a calculator, because of the early return just below.
+      // On #playPanel, which outlives every panel built into it, that meant a
+      // field goal, kickoff, PAT, 2PT, safety or fumble panel inherited the
+      // PREVIOUS panel's closure, still holding the ylEl, wrap and readout
+      // that were detached when innerHTML was cleared.
+      //
+      // refreshSpotCalcContext() opens with a truthiness check on it, and the
+      // note at the interception touchdown auto-fill relies on exactly that
+      // check to keep the GENERIC auto-fill away from panels it does not suit.
+      // That auto-fill writes the distance to the goal line into pp_yards --
+      // right for a rush or a pass, wrong for anything running the other way,
+      // and wrong on a field goal panel for a different reason again, because
+      // pp_yards there is the KICK, not a run.
+      //
+      // A stale closure is truthy, so the guard did not fire. Measured: a
+      // 37-yard attempt from the opponent 20, blocked and returned for a
+      // touchdown -- the one route that reveals the field goal panel's own
+      // Touchdown toggle -- stored roles.kicker.yards = 20. The play TEXT
+      // does not carry a blocked kick's distance, so nothing on screen said
+      // so. The same shape as the calcTarget fault above: screen right,
+      // record wrong.
+      //
+      // Deleted here, before the early return, so a panel with no calculator
+      // ends up with no calculator rather than with the last one's.
+      delete panel.__spotCalc;
+
       const wrap = document.getElementById('pp_calc_wrap');
       if (!wrap) return;
       const ylEl = document.getElementById('pp_calc_yardline');
@@ -11744,7 +11807,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // Looked up on each use rather than captured once. Retargeting is
       // then a single dataset write in wireFake below, and there is no
       // stale element reference to go wrong when the fake is toggled.
-      const targetId = () => panel.dataset.calcTarget || 'pp_yards';
+      //
+      // AND THE TARGET HAS TO BE ON SCREEN TO BE THE TARGET. calcTarget is a
+      // hint from the fake toggle, not a guarantee; if it names a box this
+      // panel does not have, the default is the honest answer. The delete
+      // above is what stops it going stale, and this is what makes a stale
+      // one harmless instead of silent -- the failure mode being guarded
+      // against is not "wrong box", it is "no box", which writes nothing at
+      // all and says nothing about it.
+      //
+      // A null result is still normal and still expected: the kickoff panel
+      // has no yards field by design, so 'pp_yards' resolves to nothing
+      // there. That case is handled by the guards at each use, as before.
+      const targetId = () => {
+        const want = panel.dataset.calcTarget;
+        return (want && document.getElementById(want)) ? want : 'pp_yards';
+      };
       const yardsEl = () => document.getElementById(targetId());
       const lossBtn = () => panel.querySelector('.lossToggle[data-for="' + targetId() + '"]');
       // A SACK CANNOT GAIN YARDS, and the sack panel is the only place the
