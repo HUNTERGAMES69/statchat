@@ -293,6 +293,24 @@ function computeState(playsList){
             // an automatic first down, regardless of what down it was.
             state.down = 1;
             state.distance = state.fieldPos !== null ? Math.max(1, Math.min(10, 100 - state.fieldPos)) : 10;
+          } else if (e.lossOfDown && state.down !== null){
+            // 'ld' -- illegal touching, illegal forward pass, intentional
+            // grounding. The down that was just run is consumed, exactly as
+            // an ordinary failed down consumes it: the distance above has
+            // already moved by the penalty yardage, so only the number
+            // needs advancing.
+            //
+            // Capped at 4th rather than rolled into a turnover, matching
+            // the parser that writes the sentence -- loss of down ON an
+            // already-4th-down snap is rare enough that building a turnover
+            // path in here is more risk than it removes, and Adjust
+            // Down/Distance covers it.
+            //
+            // ADDED 5 September 2026. This effect was being written by the
+            // penalty parser's text branch and by nothing else, so the down
+            // it consumed lived in the play's prose and was lost on every
+            // replay of the log.
+            state.down = Math.min(4, state.down + 1);
           }
         }
       }
