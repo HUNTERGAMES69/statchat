@@ -1885,6 +1885,20 @@ function computeBoxScore(playsList){
       // no gain / incomplete / punt reported "no 3rd downs" rather
       // than 0 of 1.
       if (!['rush','pass','incomplete','sack','int','fumble'].includes(type)) continue;
+      // A DOWN REPLAYED BY PENALTY IS NOT AN ATTEMPT ON THAT DOWN.
+      // -----------------------------------------------------------------
+      // `settledByPenalty` marks the snap half of a play that carried an
+      // accepted foul: the runner keeps his credit to the point of legal
+      // advance, but the series outcome belongs to the penalty row that
+      // follows and the down is played again. Counting it here would
+      // charge the offense a failed third down for a snap that, as far as
+      // the chains are concerned, never happened -- and would do it twice
+      // once the down is actually replayed.
+      //
+      // Filtered on the EFFECT, not the playType: the row is a genuine
+      // rush and has to keep crediting rushing yards, which is the whole
+      // point of the correction this flag exists for.
+      if (p.effect && p.effect.settledByPenalty) continue;
       const before = computeState(playsList.slice(0, i));
       if (before.possession !== offTeam) continue;
       const down = before.down;

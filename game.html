@@ -1737,6 +1737,27 @@
   let TEAMS = { teamA: {}, teamB: {} };
   let plays = [], nextId = 1, startingPossession = 'teamA', quarterLengthSec = 720, gameLabel = '';
   let pending = null;
+  // THE FOUL ATTACHED TO THE PLAY BEING ENTERED, if there is one.
+  // ---------------------------------------------------------------------
+  // Module level rather than on `pending`, because the save handler
+  // re-parses the code line and rebuilds `pending` from scratch -- the
+  // same reason roles, reset and setDirection are carried across by hand
+  // there. This describes the scorer's selections, not game state.
+  //
+  // Cleared by collapsePlayPanel and after every save, so a foul can never
+  // outlive the play it was entered on.
+  let pendingPenalty = null;
+
+  // 'po 15 f:clipping sp:70 fd' -- the exact line the standalone Penalty
+  // utility writes. Built here so the penalty half of a tree entry goes
+  // through parseInput's proven enforcement branch rather than a second
+  // implementation of it living inside the play trees.
+  function penaltyCodeFor(pen){
+    return (pen.team === 'off' ? 'po ' : 'pd ') + (pen.yards || 0) +
+      (pen.slug ? ' f:' + pen.slug : '') +
+      (pen.spot !== null && pen.spot !== undefined ? ' sp:' + pen.spot : '') +
+      (pen.autoFirstDown ? ' fd' : '') + (pen.lossOfDown ? ' ld' : '');
+  }
   let currentUserRole = 'view';
   // When set, the next play entered is spliced back into a deleted
   // play's slot instead of being appended. Everything the engine
@@ -9833,6 +9854,8 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   })();
 
   function collapsePlayPanel(){
+    // A foul belongs to the play it was entered on and to nothing else.
+    pendingPenalty = null;
     const panel = document.getElementById('playPanel');
     if (panel){ panel.style.display = 'none'; panel.innerHTML = ''; }
     // THE ERROR GOES WITH THE TREE IT BELONGS TO.
@@ -10485,7 +10508,206 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   }).observe(document.body, { childList: true, subtree: true });
   attachPickers(document);
 
-  function renderPlayPanel(type){
+  
+  // THE CATALOG, NARROWED TO FOULS THAT HAPPEN DURING A PLAY.
+  // ---------------------------------------------------------------------
+  // penaltyOptionsFor() offers everything, which is right for the
+  // standalone utility and wrong inside a play tree. NFHS:
+  //
+  //   "On a foul by Team A, such as illegal motion, illegal shift, etc.,
+  //    the play is nullified and is not recorded (unless Team B declines
+  //    the penalty)."
+  //
+  // A pre-snap foul does not attach to a play; it erases one. Offering
+  // "False start" here would invite an entry that credits a run the manual
+  // says must not be recorded at all.
+  //
+  // Personal fouls stay: a face mask or a horse-collar during the run is
+  // exactly what this block is for. The FIRST reader of `group`, which has
+  // been carried on every entry since the catalog was written.
+  const PEN_TREE_GROUPS = ['During the play', 'Personal foul / conduct', 'Kicking plays'];
+  function penaltyOptionsForTree(side){
+    return penaltyOptionsFor(side).filter(function(o){
+      const p = PENALTIES[o.slug];
+      return p && PEN_TREE_GROUPS.indexOf(p.group) !== -1;
+    });
+  }
+
+  // POINT OF LEGAL ADVANCE.
+  // ---------------------------------------------------------------------
+  //   credited = the LESSER of (the end of the run) and (the spot of the foul)
+  //
+  // One expression, both of the manual's worked examples:
+  //   CD 1  B40, rush 15 to B25, clip at B30 -> min(15, 10) = 10
+  //   CD 2  B30, rush 10 to B20, clip at B15 -> min(10, 15) = 10
+  //
+  // Only when the foul is on the team WITH the ball. A defensive foul
+  // during a run is enforced from the spot where the run ends and the
+  // runner keeps everything he gained, so there is no point of legal
+  // advance to find.
+  //
+  // Returns null when it cannot be worked out -- no spot, no field
+  // position, an unreadable number -- and the caller then leaves the
+  // scorer's own figure alone rather than substituting a guess.
+  function pointOfLegalAdvance(runYards, foulSpotAbs, fromFieldPos, penTeam){
+    if (penTeam !== 'off') return null;
+    if (foulSpotAbs === null || foulSpotAbs === undefined) return null;
+    if (fromFieldPos === null || fromFieldPos === undefined) return null;
+    if (typeof runYards !== 'number' || isNaN(runYards)) return null;
+    return Math.min(runYards, foulSpotAbs - fromFieldPos);
+  }
+
+  // Wires the "+ Penalty on this play" block and hands back a reader.
+  // Everything it needs is inside `panel`, so a re-render replaces it
+  // wholesale and there is no state to reset.
+  function wirePenaltyTree(panel, off, def){
+    const group = panel.querySelector('#pp_pen_group');
+    if (!group) return null;
+    const body     = panel.querySelector('#pp_pen_body');
+    const accepted = panel.querySelector('#pp_pen_accepted');
+    const sel      = panel.querySelector('#pp_pen_type');
+    const ydsEl    = panel.querySelector('#pp_pen_yds');
+    const creditEl = panel.querySelector('#pp_pen_credit');
+    const spotEl   = panel.querySelector('#pp_pen_spot_yardline');
+    const readout  = panel.querySelector('#pp_pen_readout');
+    let penTeam = null, call = null, spotSide = null;
+    // The scorer's own edit wins. Once the credited box has been typed in
+    // by hand the calculator stops writing to it -- the same rule the
+    // yards box follows when the spot calculator is driving it.
+    let creditTouched = false;
+
+    const setTog = (id, on) => {
+      const cb = panel.querySelector('#' + id);
+      const btn = panel.querySelector('#' + id + '_toggle');
+      if (!cb || !btn) return;
+      cb.checked = !!on;
+      btn.classList.toggle('picked', !!on);
+    };
+    const pick = (nodes, el) => nodes.forEach(function(n){ n.classList.toggle('picked', n === el); });
+
+    function runYards(){
+      const raw = panel.querySelector('#pp_yards');
+      if (!raw) return NaN;
+      const n = parseInt(String(raw.value).replace(/[^0-9]/g, ''), 10);
+      if (isNaN(n)) return NaN;
+      const loss = panel.querySelector('.lossToggle[data-for="pp_yards"]');
+      return (loss && loss.classList.contains('picked')) ? -n : n;
+    }
+    function foulSpotAbs(){
+      if (!spotSide) return null;
+      const n = parseInt(String(spotEl.value).replace(/[^0-9]/g, ''), 10);
+      if (isNaN(n) || n < 0 || n > 50) return null;
+      return spotSide === 'own' ? n : (100 - n);
+    }
+
+    function recompute(){
+      const r = runYards();
+      const spot = foulSpotAbs();
+      const from = computeState().fieldPos;
+      const advance = pointOfLegalAdvance(r, spot, from, penTeam);
+      if (advance === null){
+        readout.style.display = 'none';
+        if (!creditTouched && !isNaN(r)) creditEl.value = String(r);
+        return;
+      }
+      if (!creditTouched) creditEl.value = String(advance);
+      // SAY THE WORKING, not just the answer. The number is the thing
+      // nobody gets right by hand at speed, and a bare figure in a box is
+      // indistinguishable from a typo.
+      readout.textContent = advance < r
+        ? ('Run of ' + r + ' — credited ' + advance + ' to the spot of the foul. ' +
+           'The ' + (r - advance) + ' beyond it do not count.')
+        : ('Run of ' + r + ' — the foul is at or beyond the end of the run, so all ' +
+           r + ' count.');
+      readout.style.display = 'block';
+    }
+
+    group.querySelectorAll('.penTreeTeam').forEach(function(b){
+      b.addEventListener('click', function(){
+        penTeam = b.dataset.team;
+        pick([].slice.call(group.querySelectorAll('.penTreeTeam')), b);
+        body.style.display = 'block';
+        const opts = penaltyOptionsForTree(penTeam);
+        sel.innerHTML = '<option value="">(not specified)</option>' +
+          opts.map(function(o){ return '<option value="' + o.slug + '">' + o.name + '</option>'; }).join('');
+        const quick = panel.querySelector('#pp_pen_quick');
+        quick.innerHTML = quickPenaltiesFor(penTeam)
+          .filter(function(q){ const c = PENALTIES[q.slug]; return c && PEN_TREE_GROUPS.indexOf(c.group) !== -1; })
+          .map(function(q){ return '<button type="button" class="ptoggle penTreeQuick" data-slug="' + q.slug + '">' + q.name + '</button>'; })
+          .join('');
+        quick.querySelectorAll('.penTreeQuick').forEach(function(q){
+          q.addEventListener('click', function(){
+            sel.value = q.dataset.slug;
+            sel.dispatchEvent(new Event('change'));
+            pick([].slice.call(quick.querySelectorAll('.penTreeQuick')), q);
+          });
+        });
+        recompute();
+      });
+    });
+
+    sel.addEventListener('change', function(){
+      const p = PENALTIES[sel.value];
+      if (p && p.yards !== undefined && p.yards !== null) ydsEl.value = String(p.yards);
+      setTog('pp_pen_fd', !!(p && p.afd));
+      setTog('pp_pen_ld', !!(p && p.lossOfDown));
+    });
+
+    group.querySelectorAll('.penTreeCall').forEach(function(b){
+      b.addEventListener('click', function(){
+        call = b.dataset.call;
+        pick([].slice.call(group.querySelectorAll('.penTreeCall')), b);
+        accepted.style.display = call === 'accept' ? 'block' : 'none';
+        recompute();
+      });
+    });
+
+    group.querySelectorAll('.penTreeSpotSide').forEach(function(b){
+      b.addEventListener('click', function(){
+        spotSide = b.dataset.side;
+        pick([].slice.call(group.querySelectorAll('.penTreeSpotSide')), b);
+        recompute();
+      });
+    });
+
+    spotEl.addEventListener('input', recompute);
+    creditEl.addEventListener('input', function(){ creditTouched = true; });
+    ['pp_pen_fd', 'pp_pen_ld'].forEach(function(id){
+      panel.querySelector('#' + id + '_toggle').addEventListener('click', function(){
+        const on = !panel.querySelector('#' + id).checked;
+        setTog(id, on);
+        // Automatic first down and loss of down are two answers to one
+        // question. Same exclusion the standalone utility applies.
+        if (on) setTog(id === 'pp_pen_fd' ? 'pp_pen_ld' : 'pp_pen_fd', false);
+      });
+    });
+    // The run's own yardage feeds the arithmetic, so the block has to
+    // recompute when it changes -- including when the spot calculator
+    // writes it rather than the scorer typing it.
+    const y = panel.querySelector('#pp_yards');
+    if (y){ y.addEventListener('input', recompute); y.addEventListener('change', recompute); }
+
+    return function read(){
+      if (!penTeam || !call) return null;
+      const slug = sel.value || '';
+      const name = slug ? ((PENALTIES[slug] && PENALTIES[slug].name) || slug.replace(/_/g, ' ')) : null;
+      const yds = parseInt(String(ydsEl.value).replace(/[^0-9]/g, ''), 10);
+      const credit = parseInt(String(creditEl.value).replace(/^\s*(-?)/, '$1').replace(/[^0-9-]/g, ''), 10);
+      return {
+        team: penTeam,
+        accepted: call === 'accept',
+        slug: slug || null,
+        name: name,
+        yards: isNaN(yds) ? 0 : yds,
+        spot: foulSpotAbs(),
+        credited: isNaN(credit) ? null : credit,
+        autoFirstDown: !!panel.querySelector('#pp_pen_fd').checked,
+        lossOfDown: !!panel.querySelector('#pp_pen_ld').checked
+      };
+    };
+  }
+
+function renderPlayPanel(type){
     // New play, new question: never carry a shared-number choice over.
     clearNameOverrides();
     const state = computeState();
@@ -10946,6 +11168,91 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       '<button type="button" id="' + id + '_toggle" data-cb="' + id + '" data-label="' + (label || 'Blocked') + '" class="pp-blocked-toggle ptoggle" style="padding:8px 12px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + (label || 'Blocked') + '</button>';
 
     let html = '';
+    // A FOUL DURING THIS PLAY.
+    // -------------------------------------------------------------------
+    // Entering the run and then the penalty as two unrelated plays gets the
+    // statistics wrong, every time, and always in the same direction: the
+    // runner keeps the whole run. NFHS credits him to the POINT OF LEGAL
+    // ADVANCE --
+    //
+    //   "the point at which the official declares the run ends determines
+    //    the point of legal advance"   -- NFHS Statisticians' Manual
+    //
+    // which works out as the LESSER of the end of the run and the spot of
+    // the foul. Its two worked examples, and both fall out of that one
+    // expression with no branching:
+    //
+    //   CD 1  ball on B40, rush 15 to B25, clipping at B30 -> 10 rushing
+    //   CD 2  ball on B30, rush 10 to B20, clipping at B15 -> 10 rushing
+    //
+    // CD 2 is the one worth reading twice: the foul is BEYOND where the run
+    // ended, and the runner keeps all of it.
+    //
+    // The number can only be worked out where both halves are known at
+    // once, which is here and nowhere else. That is the argument for this
+    // block existing rather than a better penalty utility.
+    //
+    // ONLY DURING-THE-PLAY FOULS ARE OFFERED. A pre-snap foul -- illegal
+    // motion, illegal shift, false start -- nullifies the play and is not
+    // recorded at all, and it has no play to attach to in the first place,
+    // so offering it here would invite exactly the entry the manual says
+    // must not be made. Filtered on `group`, which every catalog entry has
+    // carried since August and nothing has read until now.
+    const penaltyBlockHtml = () =>
+      '<div id="pp_pen_group" class="opt-block" style="margin-top:12px;">' +
+        '<button type="button" class="opt-toggle">+ Penalty on this play</button>' +
+        '<div class="opt-body">' +
+          '<div class="pick-row" style="margin-top:8px;">' +
+            '<button type="button" class="ptoggle penTreeTeam" data-team="off">On ' + TEAMS[off].name + '</button>' +
+            '<button type="button" class="ptoggle penTreeTeam" data-team="def">On ' + TEAMS[def].name + '</button>' +
+          '</div>' +
+          '<div id="pp_pen_body" style="display:none; margin-top:10px;">' +
+            '<div id="pp_pen_quick" class="pick-row" style="margin-bottom:8px;"></div>' +
+            '<div class="row" style="gap:8px; align-items:flex-end; flex-wrap:wrap;">' +
+              '<label class="inline" style="flex:1 1 220px; min-width:0;">Foul' +
+                '<select id="pp_pen_type" style="width:100%; padding:8px; font-size:15px; border-radius:6px; border:1px solid var(--sc-rule-strong);"></select>' +
+              '</label>' +
+              '<label class="inline">Yards <input autocomplete="off" type="text" id="pp_pen_yds" style="width:70px; display:inline-block; margin-left:6px;"></label>' +
+            '</div>' +
+            '<div class="pick-row" style="margin-top:10px;">' +
+              '<button type="button" class="ptoggle penTreeCall" data-call="accept">Accepted</button>' +
+              '<button type="button" class="ptoggle penTreeCall" data-call="decline">Declined</button>' +
+            '</div>' +
+            '<div id="pp_pen_accepted" style="display:none; margin-top:10px;">' +
+              // NO VALIDATION ON THE YARD LINE, for the same reason the
+              // standalone utility gives: the spot is routinely downfield
+              // of the line of scrimmage -- it is in both of the manual's
+              // examples -- so refusing a spot ahead of the ball would
+              // reject the ordinary case.
+              fieldLabel('Spot of the foul (optional \u2014 blank marks off from the previous spot)') +
+              '<div class="pick-row">' +
+                '<button type="button" class="ptoggle penTreeSpotSide" data-side="own">' + TEAMS[off].name + '\u2019s side</button>' +
+                '<button type="button" class="ptoggle penTreeSpotSide" data-side="opp">' + TEAMS[def].name + '\u2019s side</button>' +
+                '<input autocomplete="off" type="text" id="pp_pen_spot_yardline" placeholder="yard line" style="width:96px;">' +
+              '</div>' +
+              // THE CREDITED BOX IS PREFILLED AND STAYS EDITABLE.
+              // ---------------------------------------------------------
+              // The app computes the point of legal advance and shows its
+              // working; it does not enforce it. Same posture the rest of
+              // this page takes -- the scorer watched the play and the app
+              // did not -- and it means an edge this arithmetic gets wrong
+              // is one that can be corrected in the moment rather than
+              // after the game.
+              '<div class="row" style="margin-top:10px; gap:8px; align-items:flex-end; flex-wrap:wrap;">' +
+                '<label class="inline">Credited yards <input autocomplete="off" type="text" id="pp_pen_credit" style="width:70px; display:inline-block; margin-left:6px;"></label>' +
+              '</div>' +
+              '<div id="pp_pen_readout" style="display:none; font-size:13px; margin-top:6px; color:var(--sc-green, #1a7a4c); font-weight:600;"></div>' +
+              '<div style="margin-top:10px;">' +
+                '<input autocomplete="off" type="checkbox" id="pp_pen_fd" style="display:none;">' +
+                '<button type="button" id="pp_pen_fd_toggle" class="ptoggle">Automatic first down</button> ' +
+                '<input autocomplete="off" type="checkbox" id="pp_pen_ld" style="display:none;">' +
+                '<button type="button" id="pp_pen_ld_toggle" class="ptoggle">Loss of down</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
     if (type === 'rush') html = offBlock('carrier','Ball carrier') +
         // Two rows on purpose. The yardage question and the calculator are
         // one decision -- either / or -- so they get a row to themselves
@@ -10962,6 +11269,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         '<div id="pp_rush_safety_wrap" style="margin-bottom:6px;">' + blockedToggleHtml('pp_rush_safety', 'Safety') + '</div></div>' +
         defBlock('Tackled by (optional)') +
         '<div id="pp_rush_td_wrap">' + tdBlock + '</div>' +
+        penaltyBlockHtml() +
         '<div id="pp_rush_fumble_fields" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--sc-rule-strong);">' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_rush_fumrec" value="own"> Recovered by own team</label>' +
           '<label class="inline" style="display:block;"><input autocomplete="off" type="radio" name="pp_rush_fumrec" value="opp" checked> Recovered by opponent</label>' +
@@ -12987,6 +13295,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     })();
 
     if (type === 'rush'){
+      panel.__penTree = wirePenaltyTree(panel, off, def);
       const resetToggle = (id, label) => {
         const cb = document.getElementById(id);
         if (!cb.checked) return;
@@ -14297,8 +14606,30 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         }
       } else {
         const isRushSafety = document.getElementById('pp_rush_safety').checked;
-        code = sel.carrier + 'r ' + yds + (sel.credit ? ' ' + sel.credit : '') + (isRushSafety ? ' sf' : (td ? ' td' : ''));
-        roles = { carrier: { team: off, num: sel.carrier, yards: parseInt(yds)||0, name: sel.carrierName || undefined } };
+        // A FOUL DURING THE RUN CHANGES THE YARDAGE THAT GOES IN THE CODE.
+        // ----------------------------------------------------------------
+        // The credited figure is the point of legal advance, not the end
+        // of the run, so it is what the play is built from -- the sentence,
+        // the effect and roles.carrier.yards all come off this one number
+        // and cannot drift apart. The run's own length is kept on
+        // pendingPenalty so the log can still say what actually happened.
+        // #playPanel is PERSISTENT -- closing empties its innerHTML and
+        // leaves the div -- so the reader hung on it by renderPlayPanel is
+        // reachable from here, where the panel variable is not in scope.
+        // It is replaced wholesale on every re-render, so it can never
+        // describe a tree that is no longer on screen.
+        const penPanel = document.getElementById('playPanel');
+        const pen = (penPanel && typeof penPanel.__penTree === 'function') ? penPanel.__penTree() : null;
+        let ydsForCode = yds;
+        if (pen){
+          pen.runYards = parseInt(yds, 10) || 0;
+          if (pen.accepted && pen.credited !== null && pen.credited !== undefined){
+            ydsForCode = String(pen.credited);
+          }
+        }
+        pendingPenalty = pen;
+        code = sel.carrier + 'r ' + ydsForCode + (sel.credit ? ' ' + sel.credit : '') + (isRushSafety ? ' sf' : (td ? ' td' : ''));
+        roles = { carrier: { team: off, num: sel.carrier, yards: parseInt(ydsForCode)||0, name: sel.carrierName || undefined } };
         if (sel.credit) roles.defense = { team: def, num: sel.credit, name: sel.creditName || undefined };
       }
     } else if (type === 'pass'){
@@ -15136,6 +15467,95 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
   // with it: the handler also writes clock markers, drive events and
   // persistence, none of which may happen while a card is merely being
   // looked at. A COPY is returned; `pending` is never touched.
+  // THE SNAP HALF OF A PLAY THAT CARRIED AN ACCEPTED FOUL.
+  // ---------------------------------------------------------------------
+  // parseInput has just built an ordinary rush: it moves the ball, it
+  // advances the down, it states the resulting situation. None of that is
+  // true when a penalty was accepted -- the down is played again and the
+  // ball is marked off from the enforcement spot by the penalty row that
+  // follows -- so the ball-advancing half of the effect comes off here.
+  //
+  // WHAT STAYS is `roles`, and that is the whole correction. NFHS credits
+  // the runner to the point of legal advance; the play is NOT nullified.
+  // Only a PRE-SNAP foul nullifies, and those are not offered inside a
+  // play tree at all.
+  //
+  // `isStat` is dropped rather than kept alongside a new flag. It means
+  // "the ball-advancing math applies to this row", and here it does not.
+  // Dropping it is what makes both engines leave the row alone without
+  // being taught anything: every branch of computeState is guarded by a
+  // key it recognises, and computeBoxScore reads roles, never effect.
+  //
+  // `settledByPenalty` is therefore read in exactly one place -- the
+  // third-down loop, which counts by playType and would otherwise charge
+  // the offense a failed third down for a snap the chains never saw.
+  //
+  // Applied after EVERY parse, in showConfirm and again in the save
+  // handler, because the save handler rebuilds `pending` from the code
+  // line and would otherwise write the un-corrected version.
+  function applyPendingPenalty(){
+    const pen = pendingPenalty;
+    if (!pen || !pending || !pending.effect) return;
+    const suffix = pending.effect.situationSuffix || '';
+    const stripped = suffix && pending.text.slice(-suffix.length) === suffix
+      ? pending.text.slice(0, pending.text.length - suffix.length)
+      : pending.text;
+    const who = TEAMS[pen.team === 'off' ? computeState().possession
+                                         : otherTeam(computeState().possession)].name;
+    const label = pen.name || 'penalty';
+    if (!pen.accepted){
+      // A DECLINED PENALTY IS NOT A PENALTY. The play stands in full --
+      // every yard, its own down and distance -- and nothing reaches
+      // state.penalties, which counts what was enforced.
+      pending.text = pending.text + ' (' + label + ' on ' + who + ', declined)';
+      return;
+    }
+    // STRIP WHICHEVER TAIL THE PARSER APPENDED, by asking the effect
+    // rather than by pattern. The scrimmage branch appends exactly one of
+    // four things -- ' — TOUCHDOWN', ' — 1st down',
+    // ' — turnover on downs', or the situation -- and only the last
+    // is handed back on the effect. Guessing at the others with a regular
+    // expression would have to know that ' — ' introduces all four,
+    // which is the exact trap the situationSuffix comment warns about.
+    // The flags are unambiguous, so they are what is asked.
+    const tail = pending.effect.td ? ' \u2014 TOUCHDOWN'
+      : pending.effect.converts ? ' \u2014 1st down'
+      : pending.effect.turnoverOnDowns ? ' \u2014 turnover on downs'
+      : suffix;
+    const base = tail && pending.text.slice(-tail.length) === tail
+      ? pending.text.slice(0, pending.text.length - tail.length)
+      : stripped;
+    ['isStat', 'statYds', 'fieldDelta', 'converts', 'turnoverOnDowns',
+     'situationSuffix', 'score'].forEach(function(k){
+      delete pending.effect[k];
+    });
+    // THE TOUCHDOWN COMES OFF TOO. An accepted penalty means the play is
+    // marked off from the enforcement spot and the down is played again,
+    // so nothing was scored -- and `score` above is what would otherwise
+    // have put six points on the board for a run that did not count.
+    pending.effect.td = false;
+    pending.effect.settledByPenalty = true;
+    const run = pen.runYards;
+    const credited = pen.credited;
+    pending.text = base +
+      (typeof run === 'number' && typeof credited === 'number' && credited !== run
+        ? ' (run of ' + run + ', credited to the spot of the foul)'
+        : '');
+  }
+
+  // The penalty row this entry will write, as a play object, so the
+  // Result line can be computed over BOTH rows rather than the first one
+  // alone -- the situation the scorer is about to accept is the one that
+  // exists after the foul is marked off, not before.
+  function pendingPenaltyRow(afterRows){
+    if (!pendingPenalty || !pendingPenalty.accepted) return null;
+    const st = computeState(plays.concat(afterRows || []));
+    const parsed = parseInput(penaltyCodeFor(pendingPenalty), st);
+    if (!parsed) return null;
+    return { id: -2, text: parsed.text, effect: parsed.effect,
+             team: parsed.team || null, quarter: st.quarter };
+  }
+
   function pendingAsSaved(p){
     const effect = Object.assign({}, p.effect);
     if (p.flipEligible){
@@ -15163,7 +15583,13 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // a rush and be wrong for a punt, a penalty and a kickoff, each of
       // which sets the situation its own way. This cannot drift from what
       // the app does a second later, because it IS what the app does.
-      const after = computeState(plays.concat([pendingAsSaved(p)]));
+      // BOTH ROWS. An accepted foul writes the snap and then the penalty,
+      // and the down & distance the scorer is being asked to accept is the
+      // one that exists after the second of them.
+      const rows = [pendingAsSaved(p)];
+      const penRow = pendingPenaltyRow(rows);
+      if (penRow) rows.push(penRow);
+      const after = computeState(plays.concat(rows));
       if (!after || after.fieldPos === null || after.fieldPos === undefined){
         hideResultRow(); return;
       }
@@ -15203,6 +15629,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     if (!val) return;
     const state = computeState();
     pending = parseInput(val, state);
+    applyPendingPenalty();
     const warningEl = document.getElementById('fieldPosWarning');
     warningEl.style.display = 'none';
 
@@ -15599,6 +16026,7 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         setDirection: pending.setDirection
       });
     }
+    applyPendingPenalty();
     const preState = computeState();
     const effect = Object.assign({}, pending.effect);
     let flipHappened = false, outgoingTeam = null, incomingTeam = null;
@@ -15627,7 +16055,41 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     }
 
     const savedDirection = pending.setDirection;
+    const penAtSave = pendingPenalty;
     pushAndPersist({ id: nextId++, text: pending.text, effect, unresolved: !!pending.unresolved, team: pending.team || null, quarter: pending.quarter || computeState().quarter, roles: pending.roles || null });
+    // THE PENALTY ROW, IMMEDIATELY BEHIND THE SNAP IT HAPPENED ON.
+    // -------------------------------------------------------------------
+    // Parsed AFTER the play is on the log, against the state the play
+    // leaves behind -- which is the pre-snap state, because the snap row
+    // no longer carries isStat and moves nothing. So `sp:` and the net
+    // move it produces are measured from exactly the spot the standalone
+    // utility would measure them from, and the enforcement arithmetic is
+    // the same code with the same inputs.
+    //
+    // Two rows rather than one so that no enforcement rule is written
+    // twice. The alternative is a second implementation of spot-of-foul
+    // arithmetic living inside the play trees, which is how the sentence
+    // and the state came to disagree the first time.
+    if (penAtSave && penAtSave.accepted){
+      const penParsed = parseInput(penaltyCodeFor(penAtSave), computeState());
+      if (penParsed){
+        pushAndPersist({
+          id: nextId++,
+          text: penParsed.text,
+          // ON THE EFFECT, NOT BESIDE IT. playRow() copies a fixed list of
+          // named columns, so a sibling property is a browser-only fact
+          // that disappears on the next reload -- the same trap the
+          // warnNoReceiver note at the top of this file describes. On the
+          // effect it is stored, so the pairing survives a refresh.
+          //
+          // Inert to both engines: every branch of computeState is guarded
+          // by a key it recognises, and this is not one of them.
+          effect: Object.assign({}, penParsed.effect, { onPlayPenalty: true }),
+          team: penParsed.team || null, quarter: computeState().quarter
+        });
+      }
+    }
+    pendingPenalty = null;
     if (savedDirection){
       // After the kickoff, so the log reads in the order things happened.
       pushAndPersist({
@@ -16046,6 +16508,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // looser would start swallowing real plays that happen to sit before
     // a divider.
     const removedRows = [removed];
+    // A PLAY AND THE FOUL ON IT ARE ONE ENTRY.
+    // -------------------------------------------------------------------
+    // One Save wrote both, so one Undo has to take both. Left to itself,
+    // undoing the penalty row alone restores the down and leaves a rush
+    // credited to the point of legal advance sitting behind it -- a
+    // shortened run with nothing left in the log to explain why it was
+    // shortened, which is worse than either row alone.
+    //
+    // Narrow on purpose, exactly like the divider rule below: only a row
+    // MARKED as the second half of an entry pulls the row behind it, and
+    // only when that row is a real play rather than a marker. An ordinary
+    // penalty entered from the utility carries no mark and is untouched.
+    if (removed.effect && removed.effect.onPlayPenalty){
+      const prev = plays[plays.length - 1];
+      if (prev && !isAdminMarker(prev)) removedRows.unshift(plays.pop());
+    }
     if (removed.isDivider){
       const prev = plays[plays.length - 1];
       if (prev && isAdminMarker(prev) && prev.effect && prev.effect.clockEvent){
