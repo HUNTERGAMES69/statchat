@@ -279,6 +279,35 @@
      gold. Declared before .picked so the selected state wins. */
   button.ptoggle { background:#20272f; color:#b9c4d0; border:2px solid var(--sc-rule-strong); }
   button.picked, button.suggested { background:#ffc72c; color:#0d1117; box-shadow:inset 0 0 0 2px #8a6a00; }
+  /* THIS GAME'S ROSTER. Its own styles rather than the page's table rules:
+     this is a dense reference list, not a stat table, and it wants tighter
+     rows and a monospaced number column that lines up. */
+  .rosterTable { width:100%; border-collapse:collapse; font-size:13.5px; }
+  .rosterTable th { text-align:left; font-size:10.5px; letter-spacing:.09em;
+    text-transform:uppercase; color:var(--sc-ink-muted, #8d99a6); font-weight:700;
+    padding:0 10px 8px 0; border-bottom:1px solid #2b333d; }
+  .rosterTable td { padding:9px 10px 9px 0; border-bottom:1px solid #262e37; vertical-align:top; }
+  /* tabular-nums so a column of jerseys lines up; 46px holds three digits. */
+  .rosterTable td.rnum { font-weight:700; width:46px; font-variant-numeric:tabular-nums; }
+  .runit { display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.05em;
+    padding:2px 7px; border-radius:4px; background:#2b333d; color:#c7d0da; }
+  .runit.ru-off { background:#16321f; color:#a3d93f; }
+  .runit.ru-def { background:#2a1f16; color:#ffc27a; }
+  .runit.ru-spe { background:#152a2a; color:#8fdada; }
+  .runit.ru-una { background:#2a2a2a; color:#9aa3b2; }
+  .rflag { font-size:11.5px; font-weight:700; color:var(--sc-amber, #ffc72c); white-space:nowrap; }
+  /* The misresolving flag is the one that means something is WRONG, so it
+     gets the error colour and is allowed to wrap -- the sentence is the
+     point, and truncating it would hide the reason. */
+  .rflag.hot { color:#ff8fa3; white-space:normal; display:block; max-width:34ch; line-height:1.35; }
+  .rosterShared td { background:rgba(255,199,44,.06); }
+  .rosterHot td { background:rgba(176,0,32,.13); }
+  @media (max-width:700px){
+    /* The position column is the first thing worth losing: it is the least
+       looked-up field and the flag sentence needs the width more. */
+    .rosterTable td:nth-child(4), .rosterTable th:nth-child(4) { display:none; }
+    .rflag.hot { max-width:none; }
+  }
   .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .hidden { display:none; }
   .msg { font-size:14px; padding:10px; border-radius:6px; margin-bottom:14px; }
@@ -386,13 +415,6 @@
   #typeRail .row > button { flex:1 1 calc(50% - 2px); padding:7px 5px; font-size:12.5px; }
   #typeRail .rail-scrimmage > button { flex:1 1 100%; padding:11px 5px; font-size:15px; font-weight:700; }
   #typeRail .rail-wide > button { flex:1 1 100%; padding:7px 5px; font-size:12.5px; }
-  /* Holds the row the Manual entry button used to occupy. Same flex basis,
-     padding and font-size as a rail button so it measures identically rather
-     than to a guessed pixel height. Invisible rather than a styled
-     placeholder -- nothing there should look clickable. */
-  #typeRail .rail-wide > .manualGap { flex:1 1 100%; padding:7px 5px;
-    font-size:12.5px; line-height:normal; visibility:hidden; }
-  #typeRail .rail-wide > .manualGap::before { content:'\00a0'; }
   /* Selected state. A separate class from .picked, which the trees
      already use for their own toggles -- reusing it would have made a
      rail selection and an in-panel toggle indistinguishable to the
@@ -1105,7 +1127,6 @@
     #entryLayout { display:block; }
     #typeRail { position:static; }
     #typeRail .row > button, #typeRail .rail-scrimmage > button, #typeRail .rail-wide > button { flex:0 1 auto; padding:8px 14px; font-size:14px; }
-    #typeRail .rail-wide > .manualGap { display:none; }
     #entryStage { margin-top:10px !important; }
     #entryStage #playPanel, #entryStage #utilPanel { margin-top:10px; }
     #entryStage #confirmCard { position:static; box-shadow:none; }
@@ -1399,7 +1420,12 @@
              The `unresolved` COLUMN and everything that renders it stay: it
              is in the schema and read by seven files. Nothing creates one
              any more; anything that ever did still displays. -->
-        <div class="manualGap" aria-hidden="true"></div>
+        <!-- ROSTER. Fills the slot Manual entry left, which the comment above
+             kept empty on purpose so nothing over it would move. This is a
+             READ-ONLY view of what THIS GAME's roster snapshot says -- the
+             thing that was invisible on 4 Sep when #7 turned out to be two
+             players and nobody held #10 on offense. -->
+        <button id="rosterViewBtn" aria-expanded="false" aria-controls="rosterCard">Roster</button>
       </div>
         </div>
 
@@ -1560,6 +1586,27 @@
         <h2 style="margin:0 0 6px; font-size:15px;">Live totals</h2>
         <div id="liveBoxBody"></div>
       </div>
+    </div>
+
+    <!-- THIS GAME'S ROSTER. Below the dock and above the logs: out of the
+         entry flow entirely, so it scrolls rather than covering the field
+         strip, and it is NOT #playPanel -- that element is persistent and
+         anything left on it outlives the panel that wrote it, which has
+         caused two live bugs. This card owns its own element and its own
+         lifecycle. -->
+    <div class="card hidden" id="rosterCard">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap;">
+        <h2 style="margin:0;">This game&rsquo;s roster</h2>
+        <span id="rosterCount" style="font-size:12px; color:var(--sc-ink-muted, #8d99a6);"></span>
+      </div>
+      <p class="sub" style="margin:6px 0 12px;">One row per player per unit, from this game&rsquo;s
+        snapshot. Read only &mdash; correcting it is done from the game setup page.</p>
+      <div class="row" style="gap:8px; margin-bottom:12px;">
+        <input autocomplete="off" type="text" id="rosterSearch" placeholder="Search number or name"
+               style="flex:1 1 190px; min-width:0;">
+        <button type="button" class="secondary" id="rosterFlagBtn" aria-pressed="false">Flagged only</button>
+      </div>
+      <div id="rosterBody"></div>
     </div>
 
     <div class="card">
@@ -5626,6 +5673,174 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         defLine(t) +
         '</div>';
     }
+  }
+
+  // THIS GAME'S ROSTER — a read-only view of the snapshot.
+  // =====================================================================
+  // Built 5 September 2026, after a game where #7 turned out to be two
+  // players (a linebacker and a wide receiver) and NOBODY held #10 on
+  // offense. Both facts were true, both mattered, and neither was visible
+  // from any screen in the app. A pass credited to #10 resolved through
+  // offense -> special -> defense, found the defensive back, and put a
+  // catch on him. It took six rounds of hand-written SQL to unpick.
+  //
+  // READS ONLY WHAT buildTeams() ALREADY HOLDS. No query, no new state,
+  // nothing to fail at kickoff. TEAMS[team].rosterOffense / rosterDefense /
+  // rosterSpecialTeams / rosterUnassigned, the matching pos* maps, and the
+  // ambiguous* lists that hold everyone sharing a number inside one unit.
+  const ROSTER_UNITS = [
+    ['rosterOffense',      'posOffense',      'ambiguousOffense',      'Offense'],
+    ['rosterDefense',      'posDefense',      'ambiguousDefense',      'Defense'],
+    ['rosterSpecialTeams', 'posSpecialTeams', 'ambiguousSpecialTeams', 'Special'],
+  ];
+  // The three roles that put a stat on the OFFENSIVE side of the book.
+  // Deliberately not derived from anything: this list is the definition of
+  // "an offensive credit" for the flag below, and it should change only
+  // when somebody decides it should.
+  const ROSTER_OFFENSIVE_ROLES = ['carrier', 'passer', 'receiver'];
+  // ESCAPED LOCALLY. game.html has no shared escape helper -- pickerHtml
+  // interpolates a player's name straight into innerHTML -- and player
+  // names arrive from an uploaded CSV, so they are not ours to trust.
+  // Defined here rather than reaching for a global that does not exist,
+  // and deliberately NOT retro-fitted to pickerHtml: that is a separate
+  // change to a live entry path and belongs in its own commit.
+  function rosterEsc(v){
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function gameRosterRows(teamKey, query){
+    const team = TEAMS[teamKey];
+    if (!team) return [];
+    const rows = [];
+    ROSTER_UNITS.forEach(function(u){
+      const roster = team[u[0]] || {}, pos = team[u[1]] || {}, amb = team[u[2]] || {};
+      Object.keys(roster).forEach(function(num){
+        // ambiguous[num] already carries EVERY player on that number in
+        // that unit, including the one the plain map kept, so it replaces
+        // the plain entry rather than adding to it.
+        if (amb[num]) amb[num].forEach(function(e){
+          rows.push({ num: num, name: e.name, unit: u[3], pos: e.position || '' }); });
+        else rows.push({ num: num, name: roster[num], unit: u[3], pos: pos[num] || '' });
+      });
+    });
+    Object.keys(team.rosterUnassigned || {}).forEach(function(num){
+      rows.push({ num: num, name: team.rosterUnassigned[num], unit: 'Unassigned', pos: '' });
+    });
+
+    // How many DISTINCT people wear each number, across every unit. This is
+    // the cross-unit case the ambiguous* maps do NOT cover: #7 as a
+    // linebacker and #7 as a receiver are two entries in two different
+    // maps, and neither map knows about the other.
+    const byNum = {};
+    rows.forEach(function(r){
+      byNum[r.num] = byNum[r.num] || {};
+      byNum[r.num][r.name] = true;
+    });
+
+    // THE FLAG THAT MATTERS, and it has to be narrow or it is decoration.
+    // ------------------------------------------------------------------
+    // "No offense entry" on its own fires for every kicker and every
+    // defensive back — most of a roster — and a warning that common is one
+    // nobody reads. Measured on a real roster it lit up the kicker and an
+    // unassigned player alongside the one real fault.
+    //
+    // So it is raised ONLY when this game has ACTUALLY credited that number
+    // an offensive stat. Then it is never speculative: a play in the log is
+    // being attributed to somebody who is not on offense.
+    const creditedOnOffense = {};
+    (plays || []).forEach(function(p){
+      const r = p.roles; if (!r) return;
+      ROSTER_OFFENSIVE_ROLES.forEach(function(k){
+        if (r[k] && r[k].team === teamKey && r[k].num) creditedOnOffense[r[k].num] = true;
+      });
+    });
+    const offense = team.rosterOffense || {};
+
+    rows.sort(function(a, b){
+      return (parseInt(a.num, 10) - parseInt(b.num, 10)) ||
+             String(a.num).localeCompare(String(b.num)) ||
+             a.unit.localeCompare(b.unit) || a.name.localeCompare(b.name);
+    });
+
+    // SEARCH. One box for both, because somebody looking a player up does
+    // not want to pick which kind of thing they are typing first.
+    //
+    // A DIGITS-ONLY QUERY IS A NUMBER, never a name — typing 7 on a roster
+    // carrying a "Smith-7" must not return him.
+    //
+    // EXACT NUMBER MATCHES SORT FIRST. On a ninety-man roster, typing 7 has
+    // to put #7 at the top rather than burying it under #70 and #71.
+    //
+    // STRING COMPARE, NOT parseInt: '0', '00' and '07' are three real and
+    // different jerseys and the entry panel accepts all three. parseInt
+    // would collapse them into one.
+    const q = String(query == null ? '' : query).trim();
+    let matched = rows;
+    if (q){
+      const digits = /^[0-9]+$/.test(q), lower = q.toLowerCase();
+      matched = rows.filter(function(r){
+        return digits
+          ? (String(r.num) === q || String(r.num).indexOf(q) === 0)
+          : String(r.name || '').toLowerCase().indexOf(lower) !== -1;
+      });
+      if (digits) matched = matched.slice().sort(function(a, b){
+        const ax = String(a.num) === q ? 0 : 1, bx = String(b.num) === q ? 0 : 1;
+        if (ax !== bx) return ax - bx;
+        return (parseInt(a.num, 10) - parseInt(b.num, 10)) || a.unit.localeCompare(b.unit);
+      });
+    }
+
+    return matched.map(function(r){
+      const flags = [];
+      if (Object.keys(byNum[r.num]).length > 1) flags.push('shared');
+      if (r.unit !== 'Offense' && !offense[r.num] && creditedOnOffense[r.num]) flags.push('misresolving');
+      return { num: r.num, name: r.name, unit: r.unit, pos: r.pos, flags: flags };
+    });
+  }
+
+  let rosterFlaggedOnly = false;
+  function renderGameRoster(){
+    const body = document.getElementById('rosterBody');
+    if (!body) return;
+    const q = (document.getElementById('rosterSearch') || {}).value || '';
+    let rows = gameRosterRows('teamA', q);
+    const flaggedTotal = gameRosterRows('teamA', '').filter(function(r){ return r.flags.length; }).length;
+    if (rosterFlaggedOnly) rows = rows.filter(function(r){ return r.flags.length; });
+
+    const count = document.getElementById('rosterCount');
+    if (count) count.textContent = rows.length + (rows.length === 1 ? ' entry' : ' entries') +
+      (flaggedTotal ? ' \u00b7 ' + flaggedTotal + ' flagged' : '');
+    const fb = document.getElementById('rosterFlagBtn');
+    if (fb){
+      fb.textContent = 'Flagged only' + (flaggedTotal ? ' (' + flaggedTotal + ')' : '');
+      fb.setAttribute('aria-pressed', rosterFlaggedOnly ? 'true' : 'false');
+      fb.disabled = !flaggedTotal;
+    }
+
+    if (!rows.length){
+      body.innerHTML = '<p class="sub" style="margin:0;">' +
+        (q ? 'Nothing on this roster matches ' + rosterEsc(JSON.stringify(q)) + '.'
+           : 'This game has no roster snapshot.') + '</p>';
+      return;
+    }
+    body.innerHTML = '<table class="rosterTable"><tbody>' +
+      '<tr><th>#</th><th>Name</th><th>Unit</th><th>Pos</th><th></th></tr>' +
+      rows.map(function(r){
+        const shared = r.flags.indexOf('shared') !== -1;
+        const bad    = r.flags.indexOf('misresolving') !== -1;
+        return '<tr class="' + (bad ? 'rosterHot' : (shared ? 'rosterShared' : '')) + '">' +
+          '<td class="rnum">' + rosterEsc(r.num) + '</td>' +
+          '<td>' + rosterEsc(r.name) + '</td>' +
+          '<td><span class="runit ru-' + r.unit.slice(0,3).toLowerCase() + '">' +
+            rosterEsc(r.unit.toUpperCase()) + '</span></td>' +
+          '<td>' + rosterEsc(r.pos || '\u2014') + '</td>' +
+          '<td>' + (bad
+            ? '<span class="rflag hot">\u26a0 an offensive stat is credited to this number, ' +
+              'but nobody is on offense</span>'
+            : (shared ? '<span class="rflag">\u26a0 shared</span>' : '')) + '</td></tr>';
+      }).join('') + '</tbody></table>';
   }
 
   // CHECKS -- validateGame(), which until now only ran at finalize time.
@@ -16726,6 +16941,36 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     collapsePlayPanel();
     if (window.__railClear) window.__railClear();
   });
+
+  // THE ROSTER VIEW. Rendered on OPEN, not at boot: nothing needs it until
+  // it is asked for, and rendering into a hidden card is work nobody sees.
+  // Re-rendered on every open because `plays` moves -- the misresolving
+  // flag is computed from the log, so a card opened in the first quarter
+  // and again in the fourth must not show the first quarter's answer.
+  (function(){
+    const btn = document.getElementById('rosterViewBtn');
+    const card = document.getElementById('rosterCard');
+    const search = document.getElementById('rosterSearch');
+    const flagBtn = document.getElementById('rosterFlagBtn');
+    if (!btn || !card) return;
+    btn.addEventListener('click', function(){
+      const opening = card.classList.contains('hidden');
+      card.classList.toggle('hidden', !opening);
+      btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+      if (opening){
+        renderGameRoster();
+        // Scroll it into view: the card is below the dock and on a laptop
+        // the button that opened it is often the only part on screen.
+        try { card.scrollIntoView({ behavior:'smooth', block:'nearest' }); } catch(e){}
+        if (search) try { search.focus(); } catch(e){}
+      }
+    });
+    if (search) search.addEventListener('input', function(){ renderGameRoster(); });
+    if (flagBtn) flagBtn.addEventListener('click', function(){
+      rosterFlaggedOnly = !rosterFlaggedOnly;
+      renderGameRoster();
+    });
+  })();
 
   document.getElementById('onAirBanner').addEventListener('click', toggleOnAir);
 
