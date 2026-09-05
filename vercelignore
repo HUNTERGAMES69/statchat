@@ -1,0 +1,52 @@
+# .vercelignore -- StatChat
+#
+# Vercel serves the project root statically, so every file committed to the
+# repo is a URL. Verified live 3 Sep 2026: /GO_TO_MARKET.md returned pricing
+# and competitive analysis, /TODO.md the open-bug list, /tests/contact_check.js
+# its source. No credentials were exposed -- keys are only ever read from
+# process.env -- but none of this is meant to be public, and robots.txt does
+# not stop anyone reading a file, it only asks crawlers not to index it.
+#
+# This file also trims the deployment upload (tests/ 2.5 MB, tips/ excepted,
+# sql/ 636 KB, root .md 664 KB), but the reason it exists is the serving.
+#
+# NOT ignored, deliberately:
+#   tips/            served content -- tips.html loads 17 images from it
+#   engine.js        loaded by 17 pages
+#   billing.js releases.js team-icon.js   loaded by pages
+#   api/             the functions; ignoring api/ would take the app down
+#   package.json package-lock.json        the build reads them
+#   vercel.json robots.txt sitemap.xml    routing and SEO
+#
+# Verify after deploying:
+#   curl -sI https://www.statchat.co/tips/01-getting-started.jpg   -> 200
+#   curl -sI https://www.statchat.co/TODO.md                       -> 404
+
+# Project documentation and planning notes
+*.md
+UPLOAD_CHECKLIST.txt
+
+# Stray copies of the gitignore that were uploaded as plain files
+gitignore
+gitignore.txt
+
+# Database migrations
+sql/
+
+# Test suite and its fixtures
+tests/
+accuracy.golden.json
+
+# Developer tooling
+tools/
+
+# Check scripts that live at the repo root alongside their tests/ copies.
+# Node scripts, run by hand, referenced by no page.
+brand_mark_check.js
+contrast_check.js
+seo_check.js
+
+# Two stray files uploaded by accident. Both are served today:
+# "test" contains the word test; "download" is a third copy of the gitignore.
+test
+download
