@@ -527,10 +527,29 @@ async function run() {
         // moving the links out stripped their white text and they fell
         // back to the browser's default link colour -- purple. Named by
         // id now, so their appearance follows them.
+        //
+        // PER LINK, NOT WHITE FOR ALL THREE. Corrected 5 September 2026.
+        // This asserted rgb(255,255,255) for every one of them, which is
+        // how HELP! came to render white on a green fill and stay that
+        // way: the layout function forced #fff onto all three, and the
+        // test agreed with it. Broadcast is navy and Crew view is red, so
+        // both want white ink; Help is green and wants near-black, which
+        // is what its own stylesheet rule has said all along.
+        //
+        // The point of the check is unchanged -- these links must not
+        // fall back to the browser's default link colour when they are
+        // moved -- but "not default" is now spelled per link, so a fill
+        // and its ink can never disagree without this failing.
+        const INK = {
+          broadcastFab:   'rgb(255, 255, 255)',
+          helpFab:        'rgb(13, 17, 23)',
+          launchViewLink: 'rgb(255, 255, 255)'
+        };
         ['broadcastFab', 'helpFab', 'launchViewLink'].forEach(id => {
           const c = win.getComputedStyle(doc.getElementById(id));
-          if (c.color !== 'rgb(255, 255, 255)') {
-            fail('header:' + w + ':colour', id + ' lost its white text in the header row, got ' + c.color);
+          if (c.color !== INK[id]) {
+            fail('header:' + w + ':colour', id + ' should be ' + INK[id] +
+                 ' in the header row, got ' + c.color);
           }
           if (c.fontSize !== '13px') {
             fail('header:' + w + ':size', id + ' lost its size, got ' + c.fontSize);

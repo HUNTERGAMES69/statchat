@@ -69,14 +69,34 @@ for (const f of PAGES) {
 
   // the rail's delegated handler, lifted from the page so the test breaks
   // when the page changes
-  const guarded = /const stillOpen = !isPlayType[\s\S]{0,160}?if \(stillOpen\) btn\.classList\.add\('rail-active'\)/.test(src);
+  //
+  // IT DID BREAK, 5 September 2026, and correctly. The guard grew a second
+  // clause: a rail button carrying aria-expanded owns a card of its own and
+  // has its highlight re-asserted from the attribute after the sweep, so it
+  // is not decided here as well. Deciding it twice is what left the Roster
+  // button lit after the press that closed its card.
+  //
+  // The pattern below matches the guard by its SHAPE -- a `stillOpen` that
+  // consults __ladderOpen, and a highlight applied only when it is true --
+  // rather than by the exact opening clause, which is what went stale. What
+  // this file is protecting is the ladder rule; the aria-expanded half is
+  // driven against the real page in tests/rail_toggle_check.js, which is
+  // where a behavioural claim about it belongs.
+  const guarded = /const stillOpen =[\s\S]{0,320}?__ladderOpen\(\) === btn\.dataset\.type[\s\S]{0,120}?if \(stillOpen\) btn\.classList\.add\('rail-active'\)/.test(src);
   rail.addEventListener('click', e => {
     const btn = e.target.closest('button');
     if (!btn || !rail.contains(btn)) return;
     clearActive();
     if (!guarded) { btn.classList.add('rail-active'); return; }
+    // Modelled in the same order as the page: sweep, re-assert the
+    // self-describing toggles from their attribute, then decide the button
+    // that was actually clicked -- skipping it if the attribute already
+    // spoke for it.
+    rail.querySelectorAll('button[aria-expanded="true"]')
+        .forEach(b => b.classList.add('rail-active'));
     const isPlayType = btn.classList.contains('ptypeBtn');
-    const stillOpen = !isPlayType || w.__ladderOpen() === btn.dataset.type;
+    const stillOpen = !btn.hasAttribute('aria-expanded') &&
+      (!isPlayType || w.__ladderOpen() === btn.dataset.type);
     if (stillOpen) btn.classList.add('rail-active');
   });
 
