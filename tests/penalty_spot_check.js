@@ -13,9 +13,32 @@
 // into the log saying the down was adjusted -- so the record read as a
 // correction rather than a penalty.
 //
-// THE PLAY ITSELF IS STILL NULLIFIED. No rushing attempt, no yards, not even
-// up to the foul. The spot governs where the ball is marked off from, not
-// how much of the play survives.
+// WHAT THIS HEADER USED TO SAY, AND WHY IT WAS WRONG. Corrected 5 September
+// 2026. It read: "THE PLAY ITSELF IS STILL NULLIFIED. No rushing attempt, no
+// yards, not even up to the foul." That is the opposite of the rule.
+//
+// NFHS credits the runner to the POINT OF LEGAL ADVANCE -- "the point at
+// which the official declares the run ends determines the point of legal
+// advance" -- which works out as the lesser of the end of the run and the
+// spot of the foul. In the worked example above the runner is credited TEN,
+// not zero and not eight.
+//
+// The nullification rule is real and is a different rule, for a different
+// class of foul: "On a foul by Team A, such as illegal motion, illegal
+// shift, etc., the play is nullified and is not recorded." Pre-snap fouls.
+// Reading that sentence as the general rule for accepted penalties is the
+// mistake this comment enshrined.
+//
+// It asserted nothing, so nothing failed -- which is worse, not better: a
+// confident sentence in a test file reads as settled. The arithmetic now
+// lives in tests/penalty_in_tree_check.js, against the manual's own two
+// examples.
+//
+// THIS FILE still covers only the standalone utility's spot control, which
+// governs where the ball is marked off from. The standalone path cannot
+// apply the point of legal advance at all -- by the time the penalty is
+// entered the run is already saved -- which is the whole argument for
+// entering the foul inside the play tree.
 //
 //   node tests/penalty_spot_check.js
 
