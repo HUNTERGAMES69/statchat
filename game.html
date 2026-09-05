@@ -3129,7 +3129,12 @@ function parseInput(raw, state){
             (Math.abs(fieldDelta) === 1 ? ' yard' : ' yards')) +
         (foulSpot !== null ? ' from the spot of the foul' : '') +
         (noDownChange ? ' (no down change)' : '') +
-        (autoFirstDown ? ' (automatic first down)' : '') + downDistanceText,
+        (autoFirstDown ? ' (automatic first down)' : '') +
+        // Said out loud for the same reason the other two are. It was the
+        // only one of the three down effects with no tag, so a loss-of-down
+        // foul and an ordinary one produced sentences that read identically
+        // and resolved to different downs.
+        (lossOfDown && !autoFirstDown ? ' (loss of down)' : '') + downDistanceText,
       // fieldDelta CARRIES THE NET MOVE, not the penalty yardage.
       // ------------------------------------------------------------------
       // engine.js does `state.fieldPos += e.fieldDelta`, so this is how far
@@ -3153,7 +3158,20 @@ function parseInput(raw, state){
         // Stored as well as written into the text, so a penalty breakdown
         // by type is possible later without re-parsing prose.
         penName ? { penaltyName: penName } : {},
-        noDownChange ? { noDownChange: true } : {}, autoFirstDown ? { autoFirstDown: true } : {}),
+        noDownChange ? { noDownChange: true } : {}, autoFirstDown ? { autoFirstDown: true } : {},
+        // WRITTEN TO THE EFFECT, corrected 5 September 2026.
+        // ----------------------------------------------------------------
+        // `lossOfDown` was computed above, used to advance the down in the
+        // SENTENCE, and then left out of this object -- so the down it
+        // consumed existed only in the stored prose. Neither engine had
+        // anything to read, both left the down where it was, and
+        // validateGame's stated-vs-recomputed check reported the play as a
+        // mismatch afterwards. Live since 'ld' was added on 18 August.
+        //
+        // Its two siblings were here from the start; this one was simply
+        // missed. Both engines now handle it, in the branch that already
+        // handles the other two.
+        lossOfDown ? { lossOfDown: true } : {}),
       flipEligible: false, team
     };
   }
