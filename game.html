@@ -2751,7 +2751,23 @@ const PENALTIES = {
   illegal_kick_bat:     { name: 'Illegal kicking or batting',      side: 'both', group: 'During the play', yards: 10 },
   chop_block:           { name: 'Chop block',                      side: 'off', group: 'During the play'  },
   hurdling:             { name: 'Hurdling',                        side: 'off', group: 'During the play', yards: 15 },
-  helping_runner:       { name: 'Helping the runner',              side: 'off', group: 'During the play', yards: 15 },
+  // NAMED "AIDING", not "helping". The NFHS book term is helping the
+  // runner (9-1, signal S44) and this entry carried it -- but the list is
+  // one flat alphabetical select that jumps on first letter, so the book
+  // term filed it under H while the scorer reaching for it looks under A.
+  // Same class of problem as pass interference sorting under D: present,
+  // correct, and unfindable. Named the way it is said out loud, per Andy,
+  // 5 September 2026.
+  //
+  // THE SLUG STAYS `helping_runner`. Every play already logged with it
+  // still resolves, and the stored data does not change meaning because
+  // the label did.
+  //
+  // 5 YARDS, corrected the same day from 15. NFHS is 5 -- 15 is the
+  // pre-reduction number (the penalty went 15 -> 10 -> 5) and matches
+  // nothing current: the NFL's is 10. This was auto-filling 15 into the
+  // yards box on a live entry path.
+  helping_runner:       { name: 'Aiding the runner',               side: 'off', group: 'During the play', yards: 5 },
   ineligible_downfield: { name: 'Ineligible receiver downfield',   side: 'off', group: 'During the play', yards: 5 },
   illegal_forward_pass: { name: 'Illegal forward pass',            side: 'off', group: 'During the play', yards: 5, lossOfDown: true },
   intentional_grounding:{ name: 'Intentional grounding',           side: 'off', group: 'During the play', yards: 5, lossOfDown: true },
@@ -8742,6 +8758,29 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
       // computed against the layout the scorer ends up looking at.
       hideSpotNudge();
       clearActive();
+      // SELF-DESCRIBING TOGGLES, re-asserted after the sweep.
+      // -----------------------------------------------------------------
+      // A rail button that carries aria-expanded owns a card of its own,
+      // opened and closed independently of the ladder stage, and its own
+      // handler (target phase) has already updated the attribute by the
+      // time this bubble handler runs. So its highlight is read straight
+      // off the attribute rather than decided here, which fixes two
+      // things the ladder rule got wrong for it:
+      //
+      //   a second press left it lit -- the button handler closed the
+      //   card and this handler put the class straight back, because the
+      //   `!isPlayType` shortcut below treated every non-play-type button
+      //   as still open;
+      //
+      //   and a press somewhere ELSE on the rail cleared it, even though
+      //   its card was still open, because clearActive() sweeps the whole
+      //   rail and only the clicked button was ever re-lit.
+      //
+      // Attribute-driven rather than a list of ids, so a later toggle in
+      // the rail inherits it by declaring aria-expanded -- which it owes
+      // the screen reader anyway.
+      rail.querySelectorAll('button[aria-expanded="true"]')
+          .forEach(b => b.classList.add('rail-active'));
         // ONLY HIGHLIGHT WHAT IS ACTUALLY OPEN.
         // Two listeners fire on one click: the button's own (target phase)
         // and this one on the rail (bubble phase), in that order. On a
@@ -8753,10 +8792,16 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
         // rather than keeping a second one here that could disagree.
         // Buttons that are not play types -- Manual entry, the utilities --
         // are not in that record and highlight as before.
+        // A button carrying aria-expanded is SELF-DESCRIBING: the
+        // re-assert above has already set its highlight from the
+        // attribute, so it is not decided here as well. Deciding it
+        // twice is what left the Roster button lit after the press that
+        // closed its card -- reported 5 September 2026.
         const isPlayType = btn.classList.contains('ptypeBtn');
-        const stillOpen = !isPlayType ||
-          (typeof window.__ladderOpen === 'function' &&
-           window.__ladderOpen() === btn.dataset.type);
+        const stillOpen = !btn.hasAttribute('aria-expanded') &&
+          (!isPlayType ||
+           (typeof window.__ladderOpen === 'function' &&
+            window.__ladderOpen() === btn.dataset.type));
         if (stillOpen) btn.classList.add('rail-active');
       // EVERY PLAY TYPE LOCKS TO THE TOP OF THE FRAME. Requested
       // directly: the buttons ABOVE Penalty -- Scrimmage and Special
@@ -9521,8 +9566,22 @@ function wirePickerButtons(container, groupClass, manualInputId, onPick){
     // guessing at a cascade I cannot observe, it is set here: an inline
     // !important beats every stylesheet, so this holds whatever else is
     // declared. Cheap, and it removes a whole class of doubt.
+    //
+    // PER LINK, not one color for all three. Reported 5 September 2026:
+    // HELP! was rendering white. It was not the cascade -- #helpFab's
+    // stylesheet rule says #0d1117 and is correct -- it was this loop,
+    // which forced #fff onto every link including the one filled green.
+    // Light ink on a light fill, set by the very line written to stop the
+    // ink being wrong. Navy and red want white; green does not.
+    //
+    // THIS MAP HAS TO AGREE WITH THE #broadcastFab / #helpFab /
+    // #launchViewLink RULES near the top of this file. It is a second
+    // statement of the same fact, which is the price of overriding the
+    // stylesheet from script at all; keyed by id so the disagreement is
+    // at least visible in one place rather than spread over three.
+    const LINK_INK = { broadcastFab: '#fff', helpFab: '#0d1117', launchViewLink: '#fff' };
     links.forEach(el => {
-      el.style.setProperty('color', '#fff', 'important');
+      el.style.setProperty('color', LINK_INK[el.id] || '#fff', 'important');
       el.style.setProperty('text-decoration', 'none', 'important');
     });
     links.forEach(el => {
